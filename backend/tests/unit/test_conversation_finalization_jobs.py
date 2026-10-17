@@ -31,6 +31,8 @@ class _Ref:
         self.id = doc_id
         self.data = data
         self.has_legacy_photo = has_legacy_photo
+        self.attention_refs = {}
+        self.parent = SimpleNamespace(parent=SimpleNamespace(collection=lambda name: _Collection(self.attention_refs)))
 
     def get(self, transaction=None):
         del transaction

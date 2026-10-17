@@ -4385,6 +4385,16 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Pelan $plan anda tamat pada $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }
@@ -4392,6 +4402,11 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Pelan tahunan anda akan bermula secara automatik apabila pelan bulanan anda tamat.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Pelan $plan anda akan diperbaharui pada $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4424,6 +4439,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get continueText => 'Teruskan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Langgan semula dahulu untuk menukar pelan.';
 
   @override
   String get resubscribe => 'Langgan semula';
@@ -5039,9 +5057,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get content => 'Kandungan';
-
-  @override
-  String get noContentToDisplay => 'Tiada kandungan untuk dipaparkan';
 
   @override
   String get noSummary => 'Tiada ringkasan';
@@ -9830,9 +9845,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
 
   @override
-  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
 
@@ -12456,6 +12468,59 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reviewNoChangesBody => 'Apabila Omi mengemas nota anda, perubahan akan muncul di sini.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nama dan istilah';
+
+  @override
+  String get reviewChangesSectionTitles => 'Tajuk dan ringkasan';
+
+  @override
+  String get reviewChangesSectionOther => 'Perubahan lain';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perbualan',
+      one: '1 perbualan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tempat',
+      one: '1 tempat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Tunjukkan semua $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Buat asal semua';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Lihat bukti';
+
+  @override
+  String get reviewChangeViewConversation => 'Lihat perbualan';
+
+  @override
+  String get reviewChangeViewTask => 'Lihat tugasan';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Tidak dapat membuat asal $failed daripada $total. Cuba lagi.';
+  }
+
+  @override
   String get reviewShowMore => 'Tunjuk Lagi';
 
   @override
@@ -13456,4 +13521,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baharu';
+
+  @override
+  String get activityNeedsAttention => 'Perlu perhatian';
+
+  @override
+  String get activityRetryAll => 'Cuba semua semula';
+
+  @override
+  String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
 }

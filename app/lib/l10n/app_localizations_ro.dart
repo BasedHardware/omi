@@ -4395,12 +4395,27 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Planul tău $plan se încheie pe $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Reabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Planul dvs. anual va începe automat când planul lunar se încheie.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Planul tău $plan se va reînnoi pe $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4433,6 +4448,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get continueText => 'Continuă';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
 
   @override
   String get resubscribe => 'Reabonează-te';
@@ -5048,9 +5066,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get content => 'Conținut';
-
-  @override
-  String get noContentToDisplay => 'Nu există conținut de afișat';
 
   @override
   String get noSummary => 'Fără rezumat';
@@ -9857,9 +9872,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
 
   @override
-  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 
@@ -12484,6 +12496,59 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reviewNoChangesBody => 'Când Omi îți ordonează notițele, modificările apar aici.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nume și termeni';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titluri și rezumate';
+
+  @override
+  String get reviewChangesSectionOther => 'Alte modificări';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Conversații: $count',
+      one: '1 conversație',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Locuri: $count',
+      one: '1 loc',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Afișează tot ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Anulează tot';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Vezi dovezile';
+
+  @override
+  String get reviewChangeViewConversation => 'Vezi conversația';
+
+  @override
+  String get reviewChangeViewTask => 'Vezi sarcina';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nu s-au putut anula $failed din $total. Încearcă din nou.';
+  }
+
+  @override
   String get reviewShowMore => 'Arată mai multe';
 
   @override
@@ -13480,4 +13545,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get activityNeedsAttention => 'Necesită atenție';
+
+  @override
+  String get activityRetryAll => 'Reîncearcă tot';
+
+  @override
+  String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
 }

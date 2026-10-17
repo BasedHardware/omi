@@ -44,7 +44,8 @@ def app(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stream', [False, True])
 @pytest.mark.parametrize('identity', ['user_agent', 'explicit_headers'])
-async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monkeypatch, stream, identity):
+@pytest.mark.parametrize('model', ['gemini-2.5-flash', 'gemini-3.8-flash'])
+async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monkeypatch, stream, identity, model):
     async def forbidden(*args, **kwargs):
         pytest.fail('refused requests must not be metered or dispatched')
 
@@ -66,7 +67,7 @@ async def test_refusal_stops_before_metering_or_dispatch_and_is_quiet(app, monke
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic') as client:
         action = 'streamGenerateContent' if stream else 'generateContent'
         response = await client.post(
-            f'/proxy/gemini-2.5-flash/{action}',
+            f'/proxy/{model}/{action}',
             json=body,
             headers=headers,
         )
@@ -174,7 +175,11 @@ async def test_other_lanes_and_rollback_reach_existing_dispatch(app, monkeypatch
         monkeypatch.setattr(proxy, '_refresh_reservations', unknown)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://synthetic') as client:
         response = await client.post(f'/proxy/{model}/generateContent', json=body, headers=headers)
-    assert response.status_code == 418 and reached == [True]
+    if case in {'observe', 'unset_threshold', 'invalid_threshold'}:
+        assert response.status_code == 200 and reached == []
+        assert response.headers['x-omi-error-class'] == 'legacy_task_reservation_inactive'
+    else:
+        assert response.status_code == 418 and reached == [True]
 
 
 @pytest.mark.parametrize(
@@ -237,7 +242,7 @@ async def test_range_boundaries_and_release_channels(name, build, expected):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('control', [None, '', 'garbage', '0', '-1', '12435.0', '1e6', 'true', '2147483648'])
 @pytest.mark.parametrize('mode', ['enforce', 'observe'])
-async def test_unarmed_control_serves_and_counts_bounded_would_refuse(monkeypatch, control, mode, caplog):
+async def test_unarmed_control_still_refuses_conclusive_inactivity(monkeypatch, control, mode, caplog):
     import logging
 
     if control is None:
@@ -251,12 +256,10 @@ async def test_unarmed_control_serves_and_counts_bounded_would_refuse(monkeypatc
 
     body = json.dumps({'tools': [{'functionDeclarations': [{'name': n} for n in TASK_TOOLS]}]}).encode()
     headers = {'x-omi-workload': 'extraction', 'user-agent': 'Omi/12402 CFNetwork/1.0 Darwin/1.0'}
-    counter = POLICY_ACTIONS.labels('gemini-2.5-flash', 'inactive', 'macos_legacy_tasks', 'would_refuse', '12400_12499')
+    counter = POLICY_ACTIONS.labels('gemini-2.5-flash', 'inactive', 'macos_legacy_tasks', 'refuse', '12400_12499')
     before = counter._value.get()
     with caplog.at_level(logging.INFO):
-        assert not await should_refuse(
-            'gemini-2.5-flash', 'generateContent', body, headers, byok=False, refresh=inactive
-        )
+        assert await should_refuse('gemini-2.5-flash', 'generateContent', body, headers, byok=False, refresh=inactive)
     assert counter._value.get() == before + 1
     assert 'build_bucket=12400_12499' in caplog.text
     assert '12402' not in caplog.text and 'CFNetwork' not in caplog.text
@@ -269,7 +272,7 @@ async def test_capable_build_is_read_for_each_request(monkeypatch):
 
     body = json.dumps({'tools': [{'functionDeclarations': [{'name': n} for n in TASK_TOOLS]}]}).encode()
     headers = {'x-omi-workload': 'extraction', 'user-agent': 'Omi/12402 CFNetwork/1.0 Darwin/1.0'}
-    for value, expected in [('12435', True), ('12402', False), ('invalid', False), ('12435', True)]:
+    for value, expected in [('12435', True), ('12402', False), ('invalid', True), ('12435', True)]:
         monkeypatch.setenv(MIN_CAPABLE_BUILD_ENV, value)
         assert (
             await should_refuse('gemini-2.5-flash', 'generateContent', body, headers, byok=False, refresh=inactive)

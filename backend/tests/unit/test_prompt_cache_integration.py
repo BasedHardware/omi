@@ -110,7 +110,7 @@ def _stub_module(name: str) -> types.ModuleType:
 # --- database stubs ---
 database_mod = _stub_module("database")
 if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(BACKEND_DIR / "database")]
 for submodule in [
     "redis_db",
     "memories",
@@ -146,8 +146,6 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Alice")
 sys.modules["database.goals"].get_user_goal = MagicMock(return_value=None)
 sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
-sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
-sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
 sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
 sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
@@ -1262,7 +1260,13 @@ def test_datetime_injected_into_user_turn_not_system():
         {"role": "assistant", "content": "let me check"},
         {"role": "user", "content": "thanks, and today?"},
     ]
-    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    block = (
+        "<current_datetime>\nCurrent date time in UTC: Fri 19 Jan 2024, 14:23 UTC\n"
+        "Current date time ISO format: 2024-01-19T14:23:45+00:00\n"
+        "Tool timestamps are already converted and labelled with their zone; report them as written and do not convert them again. "
+        "Transcript times like [+H:MM:SS] are elapsed offsets, not clock times. Relative time words (morning, afternoon, evening, tonight) are in UTC.\n"
+        "</current_datetime>"
+    )
     result = agentic_mod._inject_current_datetime(list(messages), block)
 
     # The block must be attached to the LAST user message, not the earlier one.
@@ -1283,7 +1287,13 @@ def test_datetime_injected_into_list_content_user_turn():
         {"role": "assistant", "content": "ok"},
         {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "data": "..."}}]},
     ]
-    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    block = (
+        "<current_datetime>\nCurrent date time in UTC: Fri 19 Jan 2024, 14:23 UTC\n"
+        "Current date time ISO format: 2024-01-19T14:23:45+00:00\n"
+        "Tool timestamps are already converted and labelled with their zone; report them as written and do not convert them again. "
+        "Transcript times like [+H:MM:SS] are elapsed offsets, not clock times. Relative time words (morning, afternoon, evening, tonight) are in UTC.\n"
+        "</current_datetime>"
+    )
     result = agentic_mod._inject_current_datetime(list(messages), block)
 
     # No extra trailing message was appended; the last turn is still the image turn.

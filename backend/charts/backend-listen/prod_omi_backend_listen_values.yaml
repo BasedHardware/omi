@@ -91,6 +91,40 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: BATCH_PIPELINE_ENABLED
+    value: "true"
+  - name: BATCH_PIPELINE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: BATCH_PIPELINE_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_SERVING_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_WORKER_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_API_URL
+    value: "https://backend-sync-hhibjajaja-uc.a.run.app"
+  - name: BATCH_PIPELINE_WORKER_AUDIENCE
+    value: ""
+  - name: BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT
+    value: ""
+  - name: BUCKET_BATCH_PIPELINE
+    value: "based-hardware-batch-pipeline-staging"
+  - name: BATCH_PIPELINE_UNIT_SECONDS
+    value: "3600"
+  - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
+    value: "false"
+  - name: PLAYBACK_ON_DEMAND_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_REVISION_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_LLM_VERSION
+    value: "2026-10-16-v1"
+  - name: SYNC_POLL_BACKOFF_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_MODE
+    value: "off"
+  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+    value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -102,11 +136,11 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
-    value: "0"
+    value: "100"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -120,6 +154,28 @@ env:
     value: "https://us.posthog.com"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
+  - name: FIRESTORE_READ_LEVERS
+    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":100}'
+  - name: FSR_QUEUE_AGE_PUBLISHER
+    value: "1"
+  - name: FSR_QUEUE_AGE_LEASE_SECONDS
+    value: "120"
+  - name: FSR_LEADER_LEASE_TTL_SECONDS
+    value: "0"
+  - name: DELETION_WIPE_RECONCILE_INTERVAL_SECONDS
+    value: "300"
+  - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
+    value: "30"
+  - name: FSR_USAGE_MONTH_TTL_SECONDS
+    value: "60"
+  - name: FSR_SUBSCRIPTION_TTL_SECONDS
+    value: "60"
+  - name: FSR_SERVING_CONFIG_TTL_SECONDS
+    value: "60"
+  - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
+    value: "30"
+  - name: CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS
+    value: "30"
   - name: PROACTIVITY_REDIS_HOST
     valueFrom:
       configMapKeyRef:
@@ -136,6 +192,9 @@ env:
     value: cohort
   - name: POSTHOG_HOST
     value: https://us.posthog.com
+  # Public product-capture token; shared POSTHOG_PROJECT_API_KEY stays disabled to keep flag rollouts dark.
+  - name: POSTHOG_PRODUCT_CAPTURE_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
@@ -148,6 +207,10 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_MODE
+    value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
+    value: "100"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -232,7 +295,11 @@ env:
   - name: DREAM_AGENT_ENABLED
     value: 'true'
   - name: DREAM_AGENT_ELIGIBILITY
-    value: 'all'
+    value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: 'true'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -547,7 +614,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
+    value: "parakeet-window,modulate-velma-2,soniox"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://172.16.160.20/nllb"
   - name: TRANSLATION_SERVICE_MODELS

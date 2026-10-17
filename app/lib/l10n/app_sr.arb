@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "Твој план {plan} се завршава {date}.",
+    "resubscribeNowNoChargeUntil": "Претплатите се поново да бисте задржали своје предности - никаква наплата до {date}.",
     "planSetToCancelOn": "Ваш план је подешен да буде отказан дана {date}.\nПретплатите се поново да бисте задржали своје предности - никаква наплата до {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Твој план {plan} ће се обновити {date}.",
     "planRenewsOn": "Ваш план се обнављa дана {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Прво се поново претплати да промениш план.",
     "resubscribe": "Претплати се поново",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "Садржај",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "Нема садржаја за приказ",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "Нема резимеа",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Додирните дугме за снимање да започнете снимање",
-    "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.",
     "home": "Почетна",
     "failedToUpdateBaselineStatus": "Није могуће ажурирати ову успомену. Пробајте поново.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "Скорашње измене нису могле да се учитају.",
     "reviewNoChangesTitle": "Још нема измена",
     "reviewNoChangesBody": "Када Omi среди ваше белешке, измене ће се појавити овде.",
+    "reviewChangesSectionTerms": "Имена и појмови",
+    "reviewChangesSectionTitles": "Наслови и сажеци",
+    "reviewChangesSectionOther": "Друге промене",
+    "reviewChangeConversationCount": "{count, plural, =1{1 разговор} other{Разговора: {count}}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 место} other{Места: {count}}}",
+    "reviewChangeShowAll": "Прикажи све ({count})",
+    "reviewChangeUndoAll": "Поништи све",
+    "reviewChangeSeeEvidence": "Погледај доказе",
+    "reviewChangeViewConversation": "Прикажи разговор",
+    "reviewChangeViewTask": "Прикажи задатак",
+    "reviewChangesUndoPartial": "Није успело поништавање {failed} од {total}. Покушајте поново.",
     "reviewShowMore": "Прикажи више",
     "entityKeptCurrent": "Omi одржава ажурним",
     "entityNotRight": "Није тачно?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "activityNeedsAttention": "Потребна пажња",
+    "activityRetryAll": "Покушај све поново",
+    "attentionSummaryFailed": "Овај разговор није могуће сажети"
 }

@@ -60,8 +60,10 @@ class _Query:
         assert op == '<='
         return _Query(self.client, self.path, field, maximum, self.order, self.maximum_results, self.equals)
 
-    def order_by(self, field):
-        return _Query(self.client, self.path, self.field, self.maximum, field, self.maximum_results, self.equals)
+    def order_by(self, field, direction='ASCENDING'):
+        return _Query(
+            self.client, self.path, self.field, self.maximum, (field, direction), self.maximum_results, self.equals
+        )
 
     def limit(self, count):
         return _Query(self.client, self.path, self.field, self.maximum, self.order, count, self.equals)
@@ -81,8 +83,11 @@ class _Query:
             rows = [(path, value) for path, value in rows if self.field in value and value[self.field] <= self.maximum]
         if self.equals:
             rows = [(path, value) for path, value in rows if value.get(self.equals[0]) == self.equals[1]]
-        order = self.order or self.field
-        rows.sort(key=lambda row: (row[1].get(order), row[0]) if order else row[0])
+        order = self.order[0] if self.order else self.field
+        rows.sort(
+            key=lambda row: (row[1].get(order), row[0]) if order else row[0],
+            reverse=bool(self.order and self.order[1] == 'DESCENDING'),
+        )
         if getattr(self, 'cursor_id', None):
             rows = [(path, value) for path, value in rows if path[-1] > self.cursor_id]
         if self.maximum_results is not None:
@@ -140,6 +145,9 @@ def db(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'off')
     monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'test-secret')
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER', raising=False)
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER_PERCENT', raising=False)
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER_UID_ALLOWLIST', raising=False)
     monkeypatch.setattr(backfill_cutover, 'r', fakeredis.FakeRedis())
 
     def transactional(fn):
@@ -225,6 +233,35 @@ def test_waiting_jobs_run_oldest_first_and_terminal_failure_releases(db):
     assert registry.is_registered('a', 'middle', firestore_client=db)
 
 
+@pytest.mark.parametrize('sequencer', ['on', 'off'])
+def test_newest_selection_and_expected_head_fence(db, monkeypatch, sequencer):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', sequencer)
+    for job_id, stamp in [('old', 100), ('newest', 300), ('middle', 200)]:
+        _register('a', job_id, stamp, db=db)
+    assert registry.pending_head('a')['job_id'] == 'newest'
+    assert registry.claim_next('a', expected_job_id='old', now=NOW) is None
+    selected = []
+    for _ in range(3):
+        claim = registry.claim_next('a', now=NOW)
+        selected.append(claim['job_id'])
+        assert registry.finish_job('a', claim['job_id'], claim['epoch'], 'completed', now=NOW)
+    assert selected == ['newest', 'middle', 'old']
+
+
+def test_explicit_oldest_produces_identical_claim_and_persisted_state(db, monkeypatch):
+    monkeypatch.delenv('SYNC_BACKFILL_ORDER', raising=False)
+    _register('a', 'new', 300, db=db)
+    _register('a', 'old', 100, db=db)
+    before = copy.deepcopy(db.docs)
+    default_claim = registry.claim_next('a', now=NOW)
+    default_state = copy.deepcopy(db.docs)
+    db.docs = before
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'oldest')
+    assert registry.claim_next('a', now=NOW) == default_claim
+    assert db.docs == default_state
+
+
 def test_claim_sees_earlier_capture_admitted_before_transaction(db, monkeypatch):
     _register('a', 'newer', 300, db=db)
     original_transactional = registry.firestore.transactional
@@ -302,10 +339,63 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     owner = registry.get_owner('a', firestore_client=db)
     assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'lease_expired'
     assert dispatched[0]['job_id'] == 'lost'
-    assert dispatched[0]['epoch'] == first['epoch'] + 1
+    assert dispatched[0]['epoch'] == first['epoch']
+    assert dispatched[0]['dispatch_attempt'] == 1
     assert registry.finish_job('a', 'lost', dispatched[0]['epoch'], 'failed', firestore_client=db, now=expired)
     assert uid_sequencer.kick('a')
     assert dispatched[-1]['job_id'] == 'next'
+
+
+@pytest.mark.parametrize('flag', ['on', 'off'])
+@pytest.mark.parametrize('delivery', ['original', 'replacement'])
+def test_delivery_after_running_lease_survives_repeated_dispatch_redrives(db, monkeypatch, flag, delivery):
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', flag)
+    monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://sync.example.com/v2/sync-jobs/run')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+    tasks = {}
+
+    def enqueue(_queue, _url, task_id, payload, **_kwargs):
+        # Model named-task dedup, including names retained after task deletion.
+        tasks.setdefault(task_id, copy.deepcopy(payload))
+
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(uid='a', job_id='delayed', lane='backfill')
+    registry.register_job('a', 'delayed', payload, NOW.timestamp(), now=NOW)
+    _register('a', 'next', 1, db=db)
+    first = registry.claim_next('a', now=NOW)
+    uid_sequencer._dispatch(first)
+    original_name = f"delayed-s{first['epoch']}"
+    # No delivery for two hours. Each sweep previously invalidated every task
+    # already in the queue, even well before the 30-minute running lease.
+    for minute in range(6, 121, 6):
+        current = NOW + timedelta(minutes=minute)
+        assert uid_sequencer.reconcile_uid('a', registry.get_owner('a'), now=current) == 'lease_expired'
+        assert registry.get_owner('a')['active_epoch'] == first['epoch']
+        assert registry.claim_next('a', now=current) is None
+    assert len(tasks) == 21
+    replacement_name = f"{original_name}-d20"
+    assert tasks[replacement_name] == tasks[original_name]
+    # Retrying an uncertain acknowledgement is idempotent for that attempt.
+    owner = registry.get_owner('a')
+    uid_sequencer._dispatch({**first, 'dispatch_attempt': owner['dispatch_attempt']})
+    assert len(tasks) == 21
+    delivered = tasks[original_name if delivery == 'original' else replacement_name]
+    current = NOW + timedelta(seconds=registry.LEASE_SECONDS * 4 + 1)
+    assert registry.begin_job('a', 'delayed', delivered['sequencer_epoch'], now=current)
+    assert registry.get_owner('a')['lease_expires_at'] == current + timedelta(seconds=registry.LEASE_SECONDS)
+    # A stale sweeper snapshot cannot redrive a worker that just began.
+    assert registry.redrive_job('a', 'delayed', first['epoch'], now=current) is None
+    assert registry.finish_job('a', 'delayed', first['epoch'], 'completed', now=current)
+    for task in tasks.values():
+        assert not registry.begin_job('a', 'delayed', task['sequencer_epoch'], now=current)
+    assert registry.claim_next('a', now=current)['job_id'] == 'next'
 
 
 def test_flag_switch_does_not_change_persisted_owner_or_legacy_task(db, monkeypatch):
@@ -432,6 +522,55 @@ def test_expired_head_is_retired_then_live_job_claimed(retirement, monkeypatch, 
     assert 'event=sync_backfill_expired_retired' in caplog.text
     assert uid_sequencer.release_job_run_lock.call_count == 2
     uid_sequencer.release_job_run_lock.assert_any_call('expired', 'retirement-token')
+
+
+@pytest.mark.parametrize('sequencer', ['on', 'off'])
+def test_newest_sweep_retires_old_tail_without_touching_active_owner(retirement, monkeypatch, sequencer):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', sequencer)
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 100, db=retirement)
+    retirement.docs[('users', 'a', 'sync_content_ledger', 'content')] = {'job_id': 'expired', 'status': 'processing'}
+    retirement.docs[(registry.PENDING_COLLECTION, 'expired')]['payload']['content_id'] = 'content'
+    claim = registry.claim_next('a', now=NOW)
+    assert claim['job_id'] == 'live'
+    assert registry.begin_job('a', 'live', claim['epoch'], now=NOW)
+    owner = registry.get_owner('a')
+    # Keep the active owner outside this tick; the tail cleanup uses only the
+    # pending page even while the UID is busy with recent work.
+    monkeypatch.setattr(registry, 'due_owners', lambda **kwargs: [])
+    dispatch = MagicMock()
+    monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
+    assert uid_sequencer.sweep()['expired_retired'] == 1
+    assert registry.get_owner('a') == owner
+    assert (registry.PENDING_COLLECTION, 'expired') not in retirement.docs
+    ledger = retirement.docs[('users', 'a', 'sync_content_ledger', 'content')]
+    assert ledger['status'] == 'retryable' and 'job_id' not in ledger
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize('protected', ['key_present', 'run_lock', 'bound_ledger'])
+def test_newest_tail_retirement_requires_exact_absence_and_unbound_ledger(retirement, monkeypatch, protected):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 100, db=retirement)
+    registry.claim_next('a', now=NOW)
+    before_owner = registry.get_owner('a')
+    monkeypatch.setattr(registry, 'due_owners', lambda **kwargs: [])
+    if protected == 'key_present':
+        monkeypatch.setattr(uid_sequencer, 'sync_job_key_exists', lambda job_id: True)
+    elif protected == 'run_lock':
+        monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job_id: None)
+    else:
+        retirement.docs[(registry.PENDING_COLLECTION, 'expired')]['payload']['content_id'] = 'content'
+        retirement.docs[('users', 'a', 'sync_content_ledger', 'content')] = {
+            'job_id': 'expired',
+            'status': 'processing',
+            'ledger_run_epoch': 1,
+        }
+    uid_sequencer.sweep()
+    assert (registry.PENDING_COLLECTION, 'expired') in retirement.docs
+    assert registry.get_owner('a') == before_owner
 
 
 def test_redis_failure_never_retires_or_claims(retirement, monkeypatch):
@@ -927,7 +1066,7 @@ def test_301_empty_owners_cannot_crowd_out_stuck_lease_from_one_page(db, monkeyp
     outcomes = uid_sequencer.sweep(limit=100)
     assert outcomes['lease_expired'] == 1
     assert len(dispatched) == 1 and dispatched[0]['job_id'] == 'stuck-job'
-    assert dispatched[0]['epoch'] > claim['epoch']
+    assert dispatched[0]['epoch'] == claim['epoch'] + int(state == 'running')
 
 
 @pytest.mark.parametrize('release', ['finish', 'active_retire', 'pending_retire'])
@@ -1022,3 +1161,77 @@ def test_operator_window_option_reaches_shared_helper_and_rejects_zero(db, monke
     assert '"repaired_owners": 1' in capsys.readouterr().out
     with pytest.raises(ValueError, match='repair window'):
         repair_script.repair(db, repair_window=0)
+
+
+def test_sweep_defers_failing_owner_and_unblocks_healthy_owners(db, monkeypatch):
+    current = datetime.now(timezone.utc)
+    _register('failing', 'job-failing', 0, db=db)
+    registry.claim_next('failing', now=current - timedelta(hours=1))
+
+    _register('healthy', 'job-healthy', 0, db=db)
+    registry.claim_next('healthy', now=current - timedelta(hours=1))
+
+    orig_reconcile = uid_sequencer.reconcile_uid
+
+    def mock_reconcile(uid, owner, **kwargs):
+        if uid == 'failing':
+            raise RuntimeError('Firestore document missing or corrupted')
+        return orig_reconcile(uid, owner, **kwargs)
+
+    monkeypatch.setattr(uid_sequencer, 'reconcile_uid', mock_reconcile)
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+
+    # Tick 1 with limit=1: 'failing' encounters an error, but must be deferred
+    outcomes1 = uid_sequencer.sweep(limit=1)
+    assert outcomes1.get('error') == 1
+    failing_owner = registry.get_owner('failing')
+    assert failing_owner['reconcile_at'] >= current + timedelta(seconds=registry.HEARTBEAT_SECONDS - 5)
+
+    # Tick 2 with limit=1: 'failing' is now deferred, so 'healthy' is reached and processed!
+    outcomes2 = uid_sequencer.sweep(limit=1)
+    assert outcomes2.get('lease_expired') == 1
+    assert len(dispatched) == 1
+    assert dispatched[0]['job_id'] == 'job-healthy'
+
+
+def test_sweep_tolerates_due_owners_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(registry, 'due_owners', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    assert uid_sequencer.sweep() == {'due_owners_error': 1, 'pending_dispatched': 1}
+    assert dispatched[0]['job_id'] == 'job'
+
+
+def test_sweep_tolerates_due_pending_query_failure(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    monkeypatch.setattr(registry, 'due_pending', MagicMock(side_effect=RuntimeError('firestore unavailable')))
+    outcomes = uid_sequencer.sweep()
+    assert outcomes['due_pending_error'] == 1
+
+
+def test_defer_owner_tolerates_missing_document(db, monkeypatch):
+    from google.api_core.exceptions import NotFound
+
+    def failing_commit(txn):
+        raise NotFound('Document does not exist')
+
+    monkeypatch.setattr(db, 'transaction', lambda **kwargs: MagicMock())
+    monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
+    # Must not raise NotFound
+    registry.defer_owner('missing_uid', 120)
+
+
+def test_redrive_job_tolerates_missing_document(db, monkeypatch):
+    from google.api_core.exceptions import NotFound
+
+    def failing_commit(txn):
+        raise NotFound('Document does not exist')
+
+    monkeypatch.setattr(db, 'transaction', lambda **kwargs: MagicMock())
+    monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
+    # Must return None instead of raising NotFound
+    assert registry.redrive_job('missing_uid', 'job', 1) is None

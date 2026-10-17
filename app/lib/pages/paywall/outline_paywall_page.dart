@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -12,7 +13,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// catalog and the shared checkout. Black canvas, white accent, and "Use Free Plan" always visible,
 /// so nobody is blocked. Prices come from the catalog; nothing here is hardcoded.
 class OutlinePaywallPage extends StatefulWidget {
-  const OutlinePaywallPage({super.key, required this.source, this.offer, this.checkout});
+  const OutlinePaywallPage({super.key, required this.source, this.offer, this.checkout, this.onOpenPlans});
 
   final String source;
 
@@ -22,14 +23,18 @@ class OutlinePaywallPage extends StatefulWidget {
   /// Test seam: replaces [PaywallCheckout.start].
   final Future<PaywallCheckoutOutcome> Function(BuildContext context, PaywallPrice price, String tierId)? checkout;
 
+  /// Test seam: replaces opening the plans sheet when the current price is missing.
+  final VoidCallback? onOpenPlans;
+
   @override
   State<OutlinePaywallPage> createState() => _OutlinePaywallPageState();
 }
 
-class _OutlinePaywallPageState extends State<OutlinePaywallPage> {
+class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProviderStateMixin {
   bool _yearly = true;
   bool _busy = false;
   bool _dismissed = false;
+  String? _notice;
 
   @override
   void initState() {
@@ -76,15 +81,50 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> {
                 plan: tierId,
                 interval: price.interval,
                 source: widget.source,
+                surface: (message) {
+                  if (mounted) setState(() => _notice = message);
+                },
               );
       final outcome = await start(context, price, offer.tierId);
       if (!mounted) return;
+      if (outcome == PaywallCheckoutOutcome.failed && _notice == null) {
+        setState(() => _notice = context.l10n.anErrorOccurredTryAgain);
+      }
       if (outcome == PaywallCheckoutOutcome.purchased) {
         _dismissed = true;
         Navigator.of(context).pop(true);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openPlans() async {
+    final override = widget.onOpenPlans;
+    if (override != null) {
+      override();
+      return;
+    }
+    if (!mounted) return;
+    final wave = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this);
+    final notes = AnimationController(duration: const Duration(milliseconds: 36000), vsync: this);
+    final arrow = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
+    try {
+      await showOmiSheet<void>(
+        context: context,
+        padding: EdgeInsets.zero,
+        builder: (_) => PlansSheet(
+          waveController: wave,
+          notesController: notes,
+          arrowController: arrow,
+          arrowAnimation: arrow,
+          analyticsSource: widget.source,
+        ),
+      );
+    } finally {
+      wave.dispose();
+      notes.dispose();
+      arrow.dispose();
     }
   }
 
@@ -104,8 +144,16 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> {
         backgroundColor: _Graphite.background,
         body: Consumer<UsageProvider>(
           builder: (context, usage, _) {
-            final offer = widget.offer ?? PaywallOffer.fromCatalog(usage.availablePlans);
+            final subscription = usage.subscription?.subscription;
+            final cancelPending = subscription?.cancelAtPeriodEnd == true;
+            final offer = widget.offer ??
+                PaywallOffer.fromCatalog(
+                  usage.availablePlans,
+                  cancelAtPeriodEnd: cancelPending,
+                  currentPriceId: subscription?.currentPriceId,
+                );
             final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
+            final blocked = cancelPending && widget.offer == null && !loading && offer?.resubscribe != true;
             final freeMinutes = (usage.subscription?.transcriptionSecondsLimit ?? 0) ~/ 60;
             final yearly = offer?.yearly;
             final monthly = offer?.monthly;
@@ -182,9 +230,9 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> {
                           const _Skeleton(height: 74),
                           const SizedBox(height: 10),
                           const _Skeleton(height: 74),
-                        ] else if (offer == null) ...[
+                        ] else if (offer == null && !blocked) ...[
                           Text(l10n.unableToLoadPlans, style: _Graphite.body()),
-                        ] else ...[
+                        ] else if (offer != null) ...[
                           if (yearly != null)
                             _PlanOption(
                               key: const Key('outline_paywall_yearly'),
@@ -210,12 +258,35 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> {
                         ],
                         const Spacer(),
                         const SizedBox(height: 16),
-                        _Button(
-                          key: const Key('outline_paywall_cta'),
-                          label: l10n.upgradeToUnlimited,
-                          busy: _busy,
-                          onPressed: offer == null || _busy ? null : () => _purchase(offer),
-                        ),
+                        if (_notice != null) ...[
+                          Text(
+                            _notice!,
+                            key: const Key('outline_paywall_notice'),
+                            textAlign: TextAlign.center,
+                            style: _Graphite.body(size: 13, color: _Graphite.text),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (blocked) ...[
+                          Text(
+                            l10n.resubscribeFirstToChangePlans,
+                            key: const Key('outline_paywall_blocked'),
+                            textAlign: TextAlign.center,
+                            style: _Graphite.body(size: 14, color: _Graphite.text),
+                          ),
+                          const SizedBox(height: 12),
+                          _Button(
+                            key: const Key('outline_paywall_open_plans'),
+                            label: l10n.resubscribe,
+                            onPressed: _openPlans,
+                          ),
+                        ] else
+                          _Button(
+                            key: const Key('outline_paywall_cta'),
+                            label: offer?.resubscribe == true ? l10n.resubscribe : l10n.upgradeToUnlimited,
+                            busy: _busy,
+                            onPressed: offer == null || _busy ? null : () => _purchase(offer),
+                          ),
                         const SizedBox(height: 8),
                         Text(
                           l10n.paywallCancelAnytime,

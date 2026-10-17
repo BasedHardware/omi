@@ -4383,12 +4383,27 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Gói $plan của bạn kết thúc vào $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Đăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Gói của bạn được đặt để hủy vào $date.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Gói năm của bạn sẽ tự động bắt đầu khi gói tháng kết thúc.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Gói $plan của bạn sẽ gia hạn vào $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4421,6 +4436,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get continueText => 'Tiếp tục';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
 
   @override
   String get resubscribe => 'Đăng ký lại';
@@ -5034,9 +5052,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get content => 'Nội dung';
-
-  @override
-  String get noContentToDisplay => 'Không có nội dung để hiển thị';
 
   @override
   String get noSummary => 'Không có tóm tắt';
@@ -9808,9 +9823,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
 
   @override
-  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 
@@ -12427,6 +12439,59 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewNoChangesBody => 'Khi Omi sắp xếp ghi chú của bạn, các thay đổi sẽ hiện ở đây.';
 
   @override
+  String get reviewChangesSectionTerms => 'Tên và thuật ngữ';
+
+  @override
+  String get reviewChangesSectionTitles => 'Tiêu đề và tóm tắt';
+
+  @override
+  String get reviewChangesSectionOther => 'Thay đổi khác';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuộc trò chuyện',
+      one: '1 cuộc trò chuyện',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count chỗ',
+      one: '1 chỗ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Hiện tất cả $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Hoàn tác tất cả';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Xem bằng chứng';
+
+  @override
+  String get reviewChangeViewConversation => 'Xem cuộc trò chuyện';
+
+  @override
+  String get reviewChangeViewTask => 'Xem công việc';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Không thể hoàn tác $failed/$total. Hãy thử lại.';
+  }
+
+  @override
   String get reviewShowMore => 'Xem thêm';
 
   @override
@@ -13423,4 +13488,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Mới';
+
+  @override
+  String get activityNeedsAttention => 'Cần chú ý';
+
+  @override
+  String get activityRetryAll => 'Thử lại tất cả';
+
+  @override
+  String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
 }

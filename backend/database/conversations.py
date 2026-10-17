@@ -3,14 +3,12 @@ import copy
 import hashlib
 import json
 import logging
-import os
 import uuid
 import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.dream_dirty import after_write
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -43,6 +41,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -66,6 +65,8 @@ from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
+from config.repeat_work import playback_on_demand
+from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
 from .first_open_obligations import (
@@ -1304,6 +1305,62 @@ def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_clie
     )
 
 
+def discover_public_conversation_owner(conversation_id: str, cached_uid: str = '') -> str:
+    """Resolve a public owner from Firestore; cached hints never authorize access.
+
+    IDs are not globally unique. Discovery accepts exactly one stored-id match,
+    including private/deleted matches in the ambiguity check, and validates the
+    actual users/{uid}/conversations/{id} path before trusting owner_uid.
+    """
+    from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+
+    fields = ['id', 'owner_uid', 'visibility', 'deleted', 'is_locked']
+    if cached_uid:
+        snapshot = (
+            db.collection('users')
+            .document(cached_uid)
+            .collection(conversations_collection)
+            .document(conversation_id)
+            .get(field_paths=fields)
+        )
+        record_document_read(
+            FirestoreReadSite.PUBLIC_CONVERSATION_OWNER_CACHE,
+            FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+        )
+        if snapshot.exists:
+            candidates = [snapshot]
+        else:
+            candidates = []
+    else:
+        candidates = []
+    if not candidates:
+        candidates = list(
+            db.collection_group(conversations_collection)
+            .where(filter=FieldFilter('id', '==', conversation_id))
+            .select(fields)
+            .limit(2)
+            .stream()
+        )
+        record_firestore_read(FirestoreReadFamily.PUBLIC_CONVERSATION_OWNER, FirestoreReadMode.BOUNDED, len(candidates))
+    if len(candidates) != 1:
+        return ''
+    snapshot = candidates[0]
+    path = snapshot.reference.path.split('/')
+    if len(path) != 4 or path[0] != 'users' or path[2:] != [conversations_collection, conversation_id]:
+        return ''
+    raw = snapshot.to_dict() or {}
+    uid = path[1]
+    if (
+        raw.get('id') != conversation_id
+        or raw.get('owner_uid', uid) != uid
+        or raw.get('visibility') not in {'shared', 'public'}
+        or is_soft_deleted(raw)
+        or raw.get('is_locked', False)
+    ):
+        return ''
+    return uid
+
+
 def get_public_shared_conversation_bounded(
     uid: str,
     conversation_id: str,
@@ -1317,16 +1374,24 @@ def get_public_shared_conversation_bounded(
     snapshot = conversation_ref.get(
         field_paths=[
             'visibility',
+            'deleted',
             'is_locked',
             'transcript_segments_compressed',
             'transcript_segments',
             'has_transcript_corrections',
         ]
     )
+    record_document_read(
+        FirestoreReadSite.PUBLIC_SHARED_CHAT,
+        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+    )
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict()
     if not isinstance(raw, dict):
+        return None
+
+    if is_soft_deleted(raw):
         return None
 
     visibility = raw.get('visibility')
@@ -1652,6 +1717,16 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         cursor = snapshots[-1]
 
 
+def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
+    """Write opaque rollback metadata without reading or recreating the owner."""
+    ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    try:
+        ref.update({'playback_eager_epoch': epoch})
+    except NotFound:
+        return False
+    return True
+
+
 @after_write('conversations')
 def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
     """Apply ``update_data`` to a conversation.
@@ -1672,6 +1747,11 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
         return False
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
+        update_data = {
+            **update_data,
+            'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
+        }
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
@@ -1781,7 +1861,12 @@ def _finalize_audio_file_group(
         return None
 
     # Generate file ID
-    file_id = str(uuid.uuid4())
+    source_hash = source_fingerprint(chunk_group) if playback_on_demand() else None
+    file_id = (
+        str(uuid.uuid5(uuid.NAMESPACE_OID, f'{uid}/{conversation_id}/{source_hash}'))
+        if source_hash
+        else str(uuid.uuid4())
+    )
 
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
@@ -1811,6 +1896,7 @@ def _finalize_audio_file_group(
         duration = spans[-1][1] - spans[0][0]
         return AudioFile(
             id=file_id,
+            source_fingerprint=source_hash,
             uid=uid,
             conversation_id=conversation_id,
             chunk_timestamps=timestamps,
@@ -1832,6 +1918,7 @@ def _finalize_audio_file_group(
 
     return AudioFile(
         id=file_id,
+        source_fingerprint=source_hash,
         uid=uid,
         conversation_id=conversation_id,
         chunk_timestamps=timestamps,
@@ -3549,10 +3636,17 @@ def release_share_email_recipients(uid: str, conversation_id: str, emails: list[
     conversation_ref.update({_in_flight_field(email): gc_firestore.DELETE_FIELD for email in emails})
 
 
+def _visibility_patch(uid: str, visibility: str) -> dict:
+    return {
+        'visibility': visibility,
+        'owner_uid': uid if visibility in ('shared', 'public') else firestore.DELETE_FIELD,
+    }
+
+
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'visibility': visibility})
+    conversation_ref.update(_visibility_patch(uid, visibility))
 
 
 def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
@@ -3577,7 +3671,7 @@ def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
             return (False, None)
         try:
             result = conversation_ref.update(
-                {'visibility': 'shared'},
+                _visibility_patch(uid, 'shared'),
                 option=db.write_option(last_update_time=snapshot.update_time),
             )
             return (True, getattr(result, 'update_time', None))
@@ -3608,7 +3702,7 @@ def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, vis
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     try:
         conversation_ref.update(
-            {'visibility': visibility},
+            _visibility_patch(uid, visibility),
             option=db.write_option(last_update_time=last_update_time),
         )
         return True
@@ -3781,7 +3875,17 @@ def store_conversation_photos(
 
 
 @set_data_protection_level(data_arg_name='incoming')
-def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, target_id=None, firestore_client=None):
+def assign_sync_conversation(
+    uid: str,
+    incoming: dict,
+    *,
+    candidate_id=None,
+    target_id=None,
+    firestore_client=None,
+    before_assign: Callable[[Any], None] | None = None,
+    validate_plan: Callable[[Any, dict], None] | None = None,
+    after_assign: Callable[[Any, tuple], None] | None = None,
+):
     """Atomically choose, create or append a sync conversation across workers."""
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
@@ -3812,34 +3916,17 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
         score_snapshots.clear()
+        # Optional batch projection hooks share the exact legacy transaction.
+        # Guards/plan validation may only read; after_assign may only write.
+        if before_assign is not None:
+            before_assign(transaction)
 
         def encode(payload):
-            current = score_snapshots.get(payload.get('id'))
-            if current and current.get('has_transcript_corrections'):
-                from utils.agent_capabilities.transcripts import load_entries, preserves_correction_anchors
-                from utils.sync.assignment_errors import SyncAssignmentConflict
-
-                captured = decode_transcript_segments_verified(
-                    uid, current.get('transcript_segments') or [], bool(current.get('transcript_segments_compressed'))
-                )
-                corrections = load_entries(uid, payload['id'], firestore_client=client, transaction=transaction)
-                if not preserves_correction_anchors(captured, payload.get('transcript_segments') or [], corrections):
-                    raise SyncAssignmentConflict('sync append changed corrected speech', subtype='other')
-            encoded = _prepare_conversation_for_write(
-                payload,
-                uid,
-                payload.get('data_protection_level') or 'enhanced',
-                preserve_transcript_identity=bool(current and current.get('has_transcript_corrections')),
+            if validate_plan is not None:
+                validate_plan(transaction, payload)
+            return encode_sync_assignment_plan(
+                uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
             )
-            guard_match_score_size(encoded, current)
-            if (
-                current
-                and match_scores.FIELD in current
-                and match_scores.FIELD not in encoded
-                and current.get('data_protection_level') != payload.get('data_protection_level')
-            ):
-                encoded[match_scores.FIELD] = firestore.DELETE_FIELD
-            return encoded
 
         planned = assign_in_transaction(
             transaction,
@@ -3854,18 +3941,13 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
+        if after_assign is not None:
+            after_assign(transaction, planned)
         return planned
 
-    def run_assignment(full_ids):
-        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
-            return run_transactional(client, assign, full_ids=full_ids)
-        return run_with_transaction_contention_retry(
-            client.transaction,
-            lambda transaction: run_transactional(client, assign, full_ids=full_ids, initial_transaction=transaction),
-            operation_name='sync_assignment',
-        )
-
-    result = run_with_size_limit_backstop(run_assignment, lambda: attempted.get('canonical'))
+    result = run_with_size_limit_backstop(
+        lambda full_ids: run_sync_assignment(client, assign, full_ids), lambda: attempted.get('canonical')
+    )
     invalidate_people_stats_cache(uid)
     conversation = result[0]
     for donor_id in conversation.get('sync_merged_from') or []:

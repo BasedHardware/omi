@@ -273,7 +273,7 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
 
     result = tools.search_historical_facts.invoke(
         {"query": "Boston", "limit": 8},
-        config={"configurable": {"user_id": "u1"}},
+        config={"configurable": {"user_id": "u1", "user_timezone": "Asia/Ho_Chi_Minh"}},
     )
 
     assert "historical-fact" in result
@@ -286,8 +286,8 @@ def test_search_historical_facts_is_fact_only_owner_scoped_and_partial(monkeypat
     assert "historical-legacy" in result
     assert "fact/legacy-migrated" in result
     assert "historical-passive" not in result
-    assert "valid_at=2026-08-23T12:00:00+00:00" in result
-    assert "invalid_at=2026-08-23T12:00:00+00:00" in result
+    assert "valid_at=Sun 23 Aug 2026, 19:00 Asia/Ho_Chi_Minh (UTC+07:00)" in result
+    assert "invalid_at=Sun 23 Aug 2026, 19:00 Asia/Ho_Chi_Minh (UTC+07:00)" in result
     assert "Partial historical search" in result
     assert "not exhaustive" in result
     assert "offset=8" in result
@@ -315,11 +315,27 @@ def test_historical_fact_renderer_hard_cap_preserves_both_disclosures():
     )
 
     assert len(result) <= tools.MAX_KNOWLEDGE_RESULT_CHARACTERS
-    assert tools.HISTORICAL_OUTPUT_TRUNCATION_NOTICE in result
+    assert "historical facts; more were omitted, not absent" in result
     assert tools.HISTORICAL_PROVIDER_PARTIAL_NOTICE in result
     assert "offset=20" in result
     assert tools.HISTORICAL_LIVE_WINDOW_NOTICE in result
     assert tools.HISTORICAL_REJECTED_AUDIT_NOTICE in result
+
+
+def test_historical_fact_dates_are_local_and_labelled():
+    instant = datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc)
+    row = _memory("zoned-fact", kind=MemoryKind.fact, valid_at=instant)
+
+    result = tools._format_historical_fact_results(
+        [row],
+        query="fact",
+        truncated=False,
+        next_offset=None,
+        include_rejected=False,
+        clock=tools.DisplayClock.from_name("Asia/Ho_Chi_Minh"),
+    )
+
+    assert "Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)" in result
 
 
 def test_search_historical_facts_rejects_unsearchable_and_oversized_requests(monkeypatch):
@@ -417,4 +433,5 @@ def test_read_playbook_bounds_malformed_stored_content(monkeypatch):
 
     assert "d" * tools.MAX_PLAYBOOK_DESCRIPTION_CHARACTERS in result
     assert "d" * (tools.MAX_PLAYBOOK_DESCRIPTION_CHARACTERS + 1) not in result
-    assert result.endswith("b" * tools.MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS)
+    assert ("b" * tools.MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS) in result
+    assert "playbook body characters" in result

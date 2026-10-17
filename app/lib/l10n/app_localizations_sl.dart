@@ -4378,6 +4378,16 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Vaš načrt $plan se konča $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Prekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Vaš načrt je nastavljen na preklic $date.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
   }
@@ -4385,6 +4395,11 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Vaš letni načrt se bo samodejno začel, ko se bo vaš mesečni načrt končal.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Vaš načrt $plan se bo obnovil $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4417,6 +4432,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get continueText => 'Nadaljujte';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Najprej se ponovno naročite, da zamenjate načrt.';
 
   @override
   String get resubscribe => 'Ponovno se prijavite';
@@ -5033,9 +5051,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get content => 'Vsebina';
-
-  @override
-  String get noContentToDisplay => 'Ni vsebine za prikaz';
 
   @override
   String get noSummary => 'Brez povzetka';
@@ -9839,9 +9854,6 @@ class AppLocalizationsSl extends AppLocalizations {
       'Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.';
 
   @override
-  String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.';
 
@@ -12458,6 +12470,59 @@ class AppLocalizationsSl extends AppLocalizations {
   String get reviewNoChangesBody => 'Ko bo Omi uredil vaše zapiske, se bodo spremembe pojavile tukaj.';
 
   @override
+  String get reviewChangesSectionTerms => 'Imena in izrazi';
+
+  @override
+  String get reviewChangesSectionTitles => 'Naslovi in povzetki';
+
+  @override
+  String get reviewChangesSectionOther => 'Druge spremembe';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pogovori: $count',
+      one: '1 pogovor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Mesta: $count',
+      one: '1 mesto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Prikaži vse ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Razveljavi vse';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Prikaži dokaze';
+
+  @override
+  String get reviewChangeViewConversation => 'Prikaži pogovor';
+
+  @override
+  String get reviewChangeViewTask => 'Prikaži opravilo';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Razveljavitev $failed od $total ni uspela. Poskusite znova.';
+  }
+
+  @override
   String get reviewShowMore => 'Pokaži več';
 
   @override
@@ -13456,4 +13521,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Novo';
+
+  @override
+  String get activityNeedsAttention => 'Potrebna je pozornost';
+
+  @override
+  String get activityRetryAll => 'Poskusi vse znova';
+
+  @override
+  String get attentionSummaryFailed => 'Tega pogovora ni bilo mogoče povzeti';
 }

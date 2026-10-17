@@ -4385,6 +4385,16 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Вашият план $plan приключва на $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Абонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Планът ви е настроен да се отмени на $date.\nАбонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
   }
@@ -4392,6 +4402,11 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Годишният ви план ще започне автоматично, когато месечният ви план приключи.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Вашият план $plan ще се поднови на $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4424,6 +4439,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get continueText => 'Продължи';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Първо се абонирайте отново, за да смените плана.';
 
   @override
   String get resubscribe => 'Повторен абонамент';
@@ -5041,9 +5059,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get content => 'Съдържание';
-
-  @override
-  String get noContentToDisplay => 'Няма съдържание за показване';
 
   @override
   String get noSummary => 'Няма резюме';
@@ -9847,9 +9862,6 @@ class AppLocalizationsBg extends AppLocalizations {
       'Преобразуването на реч в текст не е налично в момента. Проверете интернет връзката и настройките за разпознаване на реч на устройството си, след което опитайте отново.';
 
   @override
-  String get processingTakingLonger => 'Все още работи — отнема повече време от обичайното.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди.';
 
@@ -12475,6 +12487,59 @@ class AppLocalizationsBg extends AppLocalizations {
   String get reviewNoChangesBody => 'Когато Omi подреди бележките ви, промените ще се появят тук.';
 
   @override
+  String get reviewChangesSectionTerms => 'Имена и термини';
+
+  @override
+  String get reviewChangesSectionTitles => 'Заглавия и обобщения';
+
+  @override
+  String get reviewChangesSectionOther => 'Други промени';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговора',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count места',
+      one: '1 място',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Покажи всички ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Отмени всички';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Виж доказателствата';
+
+  @override
+  String get reviewChangeViewConversation => 'Виж разговора';
+
+  @override
+  String get reviewChangeViewTask => 'Виж задачата';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не успяхме да отменим $failed от $total. Опитайте отново.';
+  }
+
+  @override
   String get reviewShowMore => 'Покажи още';
 
   @override
@@ -13473,4 +13538,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ново';
+
+  @override
+  String get activityNeedsAttention => 'Изисква внимание';
+
+  @override
+  String get activityRetryAll => 'Опитай всички отново';
+
+  @override
+  String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';
 }

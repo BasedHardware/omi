@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "Vaš načrt {plan} se konča {date}.",
+    "resubscribeNowNoChargeUntil": "Prekvalificira se sedaj, da obdržite prednosti - brez napolnitve do {date}.",
     "planSetToCancelOn": "Vaš načrt je nastavljen na preklic {date}.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Vaš načrt {plan} se bo obnovil {date}.",
     "planRenewsOn": "Vaš načrt se obnavlja {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Najprej se ponovno naročite, da zamenjate načrt.",
     "resubscribe": "Ponovno se prijavite",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "Vsebina",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "Ni vsebine za prikaz",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "Brez povzetka",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Tapnite gumb za snemanje za začetek snemanja",
-    "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
     "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
     "home": "Domov",
     "failedToUpdateBaselineStatus": "Tega spomina ni bilo mogoče posodobiti. Poskusite znova.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "Nedavnih sprememb ni bilo mogoče naložiti.",
     "reviewNoChangesTitle": "Še ni sprememb",
     "reviewNoChangesBody": "Ko bo Omi uredil vaše zapiske, se bodo spremembe pojavile tukaj.",
+    "reviewChangesSectionTerms": "Imena in izrazi",
+    "reviewChangesSectionTitles": "Naslovi in povzetki",
+    "reviewChangesSectionOther": "Druge spremembe",
+    "reviewChangeConversationCount": "{count, plural, =1{1 pogovor} other{Pogovori: {count}}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 mesto} other{Mesta: {count}}}",
+    "reviewChangeShowAll": "Prikaži vse ({count})",
+    "reviewChangeUndoAll": "Razveljavi vse",
+    "reviewChangeSeeEvidence": "Prikaži dokaze",
+    "reviewChangeViewConversation": "Prikaži pogovor",
+    "reviewChangeViewTask": "Prikaži opravilo",
+    "reviewChangesUndoPartial": "Razveljavitev {failed} od {total} ni uspela. Poskusite znova.",
     "reviewShowMore": "Pokaži več",
     "entityKeptCurrent": "Posodablja Omi",
     "entityNotRight": "Ni prav?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "Še ni dejavnosti",
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
-    "activityNewItem": "Novo"
+    "activityNewItem": "Novo",
+    "activityNeedsAttention": "Potrebna je pozornost",
+    "activityRetryAll": "Poskusi vse znova",
+    "attentionSummaryFailed": "Tega pogovora ni bilo mogoče povzeti"
 }

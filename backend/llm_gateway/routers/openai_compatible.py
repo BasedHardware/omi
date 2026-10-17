@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import re
 from typing import Any, cast
@@ -27,6 +27,7 @@ from llm_gateway.gateway.accounting import (
 from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_request
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.dream_usage import with_dream_usage
+from llm_gateway.gateway.dream_lanes import DREAM_LANES
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import (
@@ -510,7 +511,8 @@ async def _prepared_streaming_iterator(
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
-    for provider_ref in [route.primary, *route.fallbacks]:
+    refs = [route.primary] if route.lane_id in DREAM_LANES else [route.primary, *route.fallbacks]
+    for provider_ref in refs:
         if max_provider_attempts is not None and len(attempt_trace.attempts) >= max_provider_attempts:
             raise GatewayInvalidRequestError('JIT provider attempt budget exhausted')
         provider = provider_registry.provider_for(provider_ref.provider)
@@ -546,6 +548,9 @@ async def _prepared_streaming_iterator(
         except ProviderFailure as exc:
             last_error = _map_provider_failure(exc, credentials, provider_ref)
             attempt_trace.record(
+                lane_id=route.lane_id,
+                cache_policy=provider_request.get('_gateway_cache_policy'),
+                metadata=exc.accounting,
                 provider=provider_ref.provider,
                 configured_model=provider_ref.model,
                 route_artifact_id=route.route_artifact_id,
@@ -619,6 +624,7 @@ async def _stream_with_terminal_metrics(
                 route, prepared.fallback_reason, outcome='recovered' if outcome == 'success' else 'exhausted'
             )
         trace.record(
+            lane_id=route.lane_id,
             provider=prepared.provider,
             configured_model=prepared.model,
             route_artifact_id=route.route_artifact_id,
@@ -689,6 +695,17 @@ async def _stream_with_terminal_metrics(
                     cache_requested=prepared.cache_requested,
                 )
                 if observed_usage is not None:
+                    if usage_metadata is not None and '_gateway_cache_receipt' not in payload:
+                        observed_usage = replace(
+                            observed_usage,
+                            lane_id=usage_metadata.lane_id,
+                            resolved_model=usage_metadata.resolved_model,
+                            cache_mode=usage_metadata.cache_mode,
+                            cacheable_prefix_tokens=usage_metadata.cacheable_prefix_tokens,
+                            cache_write_tokens=usage_metadata.cache_write_tokens,
+                            cache_storage_token_seconds=usage_metadata.cache_storage_token_seconds,
+                            cache_operation_usage_complete=usage_metadata.cache_operation_usage_complete,
+                        )
                     usage_metadata = observed_usage
             completion_characters += _stream_completion_character_count(data)
             observed_finish_reason = _stream_finish_reason(data)

@@ -19,18 +19,26 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      service:
+        description: 'Select the GPU service to deploy'
+        required: true
+        default: 'diarizer'
+        type: choice
+        options:
+          - diarizer
+          - batch-pipeline-worker
       release_version:
         description: 'Release version (optional)'
         required: false
         default: ''
 
-# Serialize Helm writers to this environment's diarizer release.
+# Serialize Helm writers per GPU service and environment.
 concurrency:
-  group: deploy-gke-diarizer-${{ github.event.inputs.environment }}
+  group: deploy-gke-${{ github.event.inputs.service || 'diarizer' }}-${{ github.event.inputs.environment }}
   cancel-in-progress: false
 
 env:
-  SERVICE: diarizer
+  SERVICE: ${{ github.event.inputs.service || 'diarizer' }}
   REGION: us-central1
 
 jobs:
@@ -55,6 +63,69 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          fetch-depth: 0
+
+      - name: Select merged production source and image tag
+        id: vars
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          DEPLOY_REF: ${{ github.event.inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            source_sha=$(git rev-parse origin/main)
+            if [[ "$DEPLOY_REF" != main ]]; then
+              [[ "$DEPLOY_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "Production source must be main or a full merged SHA" >&2; exit 1; }
+              source_sha="$DEPLOY_REF"
+            fi
+            git merge-base --is-ancestor "$source_sha" origin/main
+            git checkout --detach "$source_sha"
+          fi
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve deployment target
+        id: target
+        shell: bash
+        env:
+          DEPLOY_ENV: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          if [[ "$DEPLOY_ENV" != "dev" && "$DEPLOY_ENV" != "prod" ]]; then
+            echo "Invalid deployment environment variable: $DEPLOY_ENV"
+            exit 1
+          fi
+          case "$SERVICE" in
+            diarizer)
+              image_name=diarizer
+              dockerfile=backend/diarizer/Dockerfile
+              chart=backend/charts/diarizer
+              values_file="backend/charts/diarizer/${DEPLOY_ENV}_omi_diarizer_values.yaml"
+              ;;
+            batch-pipeline-worker)
+              image_name=batch-pipeline-worker
+              dockerfile=backend/diarizer/Dockerfile.batch-pipeline
+              chart=backend/charts/batch-pipeline-worker
+              values_file="backend/charts/batch-pipeline-worker/${DEPLOY_ENV}_omi_batch-pipeline-worker_values.yaml"
+              ;;
+            *)
+              echo "Unsupported service: $SERVICE"
+              exit 1
+              ;;
+          esac
+          if [[ ! -f "$dockerfile" || ! -f "$values_file" ]]; then
+            echo "Deployment inputs are missing for $SERVICE in $DEPLOY_ENV"
+            exit 1
+          fi
+          {
+            echo "dockerfile=$dockerfile"
+            echo "chart=$chart"
+            echo "values_file=$values_file"
+            echo "release_name=${DEPLOY_ENV}-omi-${SERVICE}"
+            echo "image_repository=gcr.io/${GCP_PROJECT_ID}/${image_name}"
+          } >> "$GITHUB_OUTPUT"
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.
@@ -81,12 +152,23 @@ jobs:
       - run: gcloud auth configure-docker
 
       - name: Build and Push Docker image
+        id: build
+        env:
+          IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
+          DOCKERFILE: ${{ steps.target.outputs.dockerfile }}
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/${{ env.SERVICE }}/Dockerfile .
-          python3 backend/scripts/runtime_image_contracts.py smoke \
-            --dockerfile backend/diarizer/Dockerfile \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+          image="${IMAGE_REPOSITORY}:${{ steps.vars.outputs.short_sha }}"
+          docker build -t "$image" -f "$DOCKERFILE" .
+          python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile "$DOCKERFILE" --image "$image"
+          docker push "$image"
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            image_digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+            if [[ ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "Registry did not return a valid image digest for $image"
+              exit 1
+            fi
+            echo "image_digest=$image_digest" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -96,21 +178,41 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy Diarizer to GKE cluster using Helm
+        env:
+          DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
+          TARGET_CHART: ${{ steps.target.outputs.chart }}
+          TARGET_VALUES: ${{ steps.target.outputs.values_file }}
+          TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
+              -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest }}"
+          else
+            helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
+              -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
+          fi
 
       - name: Verify rollout
+        env:
+          DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
+          DEPLOY_ENV: ${{ vars.ENV }}
+          TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
         run: |
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout=600s; then
-            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }} || true
+          rollout_timeout=600s
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            rollout_timeout=1800s
+          fi
+          if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout="$rollout_timeout"; then
+            python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
             exit 1
           fi
-          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }}
+          python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-summary
+        uses: BasedHardware/omi/.github/actions/deployment-summary@979b573718fd74b31edab3530adf2ed6082622dc
         with:
+          deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
@@ -118,8 +220,9 @@ jobs:
 
       - name: Notify deployment status on Telegram
         if: always() && github.event.inputs.environment == 'prod'
-        uses: ./.github/actions/deployment-notifier
+        uses: BasedHardware/omi/.github/actions/deployment-notifier@979b573718fd74b31edab3530adf2ed6082622dc
         with:
+          deployment_tag: ${{ steps.vars.outputs.short_sha || 'unadmitted' }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}

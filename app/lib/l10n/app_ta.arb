@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "உங்கள் {plan} திட்டம் {date} அன்று முடிவடைகிறது.",
+    "resubscribeNowNoChargeUntil": "உங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
     "planSetToCancelOn": "உங்கள் திட்டம் {date} இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "உங்கள் {plan} திட்டம் {date} அன்று புதுப்பிக்கப்படும்.",
     "planRenewsOn": "உங்கள் திட்டம் {date} இல் புதுப்பிக்கப்படும்.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.",
     "resubscribe": "மீண்டும் சந்தா செய்யவும்",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "உள்ளடக்கம்",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "காட்ட உள்ளடக்கம் இல்லை",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "சுருக்கம் இல்லை",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "பதிவைத் தொடங்க பதிவு பொத்தானைத் தட்டவும்",
-    "processingTakingLonger": "இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.",
     "speechProfileEnrollmentPrompt": "Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.",
     "home": "முகப்பு",
     "failedToUpdateBaselineStatus": "இந்த நினைவை புதுப்பிக்க முடியவில்லை. மீண்டும் முயலவும்.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "சமீபத்திய மாற்றங்களை ஏற்ற முடியவில்லை.",
     "reviewNoChangesTitle": "இன்னும் மாற்றங்கள் இல்லை",
     "reviewNoChangesBody": "Omi உங்கள் குறிப்புகளை ஒழுங்குபடுத்தும்போது, மாற்றங்கள் இங்கே தோன்றும்.",
+    "reviewChangesSectionTerms": "பெயர்கள் மற்றும் சொற்கள்",
+    "reviewChangesSectionTitles": "தலைப்புகள் மற்றும் சுருக்கங்கள்",
+    "reviewChangesSectionOther": "பிற மாற்றங்கள்",
+    "reviewChangeConversationCount": "{count, plural, =1{1 உரையாடல்} other{{count} உரையாடல்கள்}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 இடம்} other{{count} இடங்கள்}}",
+    "reviewChangeShowAll": "அனைத்து {count}-ஐயும் காட்டு",
+    "reviewChangeUndoAll": "அனைத்தையும் செயல்தவிர்",
+    "reviewChangeSeeEvidence": "ஆதாரத்தைப் பார்",
+    "reviewChangeViewConversation": "உரையாடலைப் பார்",
+    "reviewChangeViewTask": "பணியைப் பார்",
+    "reviewChangesUndoPartial": "செயல்தவிர்க்க முடியவில்லை: {failed}/{total}. மீண்டும் முயலவும்.",
     "reviewShowMore": "மேலும் காட்டு",
     "entityKeptCurrent": "Omi புதுப்பித்து வைத்துள்ளது",
     "entityNotRight": "சரியில்லையா?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "இதுவரை எந்தச் செயல்பாடும் இல்லை",
     "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
     "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
-    "activityNewItem": "புதியது"
+    "activityNewItem": "புதியது",
+    "activityNeedsAttention": "கவனம் தேவை",
+    "activityRetryAll": "அனைத்தையும் மீண்டும் முயலவும்",
+    "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை"
 }

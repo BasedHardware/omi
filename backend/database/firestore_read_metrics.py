@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class FirestoreReadFamily(StrEnum):
+    PUBLIC_CONVERSATION_OWNER = 'public_conversation_owner'
     ACTION_ITEMS_LIST = 'action_items_list'
     ACTION_ITEMS_VISIBLE_IDS = 'action_items_visible_ids'
     LISTEN_MONTHLY_USAGE = 'listen_monthly_usage'
@@ -56,6 +57,8 @@ class FirestoreReadSite(StrEnum):
     RAG_HYDRATION = 'rag_hydration'
     TRANSCRIPT_CHUNK_HYDRATION = 'transcript_chunk_hydration'
     USER_DELETION_WIPE_STATUS = 'user_deletion_wipe_status'
+    PUBLIC_CONVERSATION_OWNER_CACHE = 'public_conversation_owner_cache'
+    PUBLIC_SHARED_CHAT = 'public_shared_chat'
     SMART_MERGE = 'smart_merge'
     UNATTRIBUTED = 'unattributed'
 

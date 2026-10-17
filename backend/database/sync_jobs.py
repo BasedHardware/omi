@@ -5,7 +5,8 @@ Jobs are ephemeral — they exist only long enough for the app to reconcile
 results. Redis is the right store: no Firestore costs, automatic TTL cleanup.
 
 Key format: sync_job:{job_id}
-TTL: 24 hours (refreshed on each update)
+TTL: 24 hours (refreshed on each update), with opt-in shorter retention for
+successful results and metric-only deduplication. See the runtime getters.
 
 The TTL governs how long a finished job's result stays queryable. The client
 uploads audio, marks the recording "uploaded", and reconciles it against this
@@ -41,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 JOB_KEY_PREFIX = 'sync_job:'
 JOB_TTL_SECONDS = 86400  # 24 hours — reconcile window (see module docstring)
+COMPLETED_TTL_ENV = 'SYNC_JOB_COMPLETED_TTL_SECONDS'
+METRIC_ONCE_TTL_ENV = 'SYNC_JOB_METRIC_ONCE_TTL_SECONDS'
 STALE_THRESHOLD_SECONDS = 600  # 10 minutes — if processing exceeds this, treat as failed
 # Cloud Tasks dispatch is near-immediate and its named task is created before
 # the 202 returns. A cloud_tasks job still 'queued' this long has lost its task
@@ -88,6 +91,28 @@ ONCE_KEY_PREFIX = 'sync_job_once:'
 def _key(key: str) -> str:
     """Keep prod's existing job and run-lease keys; isolate shared Redis in dev."""
     return sync_stage.redis_key(key)
+
+
+def _retention_seconds(env_name: str) -> int:
+    """Land dark; bad or out-of-range config preserves today's 24h retention.
+
+    Only allow reductions with a minimum one-hour recovery/observability
+    window. Read at the write boundary so tests and runtime configuration do
+    not depend on import order. Never print the environment value.
+    """
+    try:
+        seconds = int(os.getenv(env_name, str(JOB_TTL_SECONDS)))
+    except ValueError:
+        seconds = JOB_TTL_SECONDS
+    return seconds if 3600 <= seconds <= JOB_TTL_SECONDS else JOB_TTL_SECONDS
+
+
+def _job_retention_seconds(job: Dict[str, Any]) -> int:
+    # Failed/partial results still own retry/dead-letter recovery material;
+    # queued/processing jobs must survive dispatch delays and retries.
+    if job.get('status') == 'completed':
+        return _retention_seconds(COMPLETED_TTL_ENV)
+    return JOB_TTL_SECONDS
 
 
 class FencedSyncJobMutationOutcome(str, Enum):
@@ -203,6 +228,15 @@ def create_sync_job(
     }
     key = _key(f'{JOB_KEY_PREFIX}{job_id}')
     r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    try:
+        r.zadd(index_key, {job_id: now})
+        r.zremrangebyrank(index_key, 0, -101)
+        r.expire(index_key, JOB_TTL_SECONDS)
+    except Exception:
+        record_fallback(
+            component='sync_dispatch', from_mode='redis', to_mode='none', reason='other', outcome='degraded'
+        )
     return job
 
 
@@ -453,7 +487,7 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
                 key,
                 current_raw,
                 next_raw,
-                JOB_TTL_SECONDS,
+                _job_retention_seconds(next_job),
             )
         )
         if mutation.outcome is FencedSyncJobMutationOutcome.APPLIED:
@@ -609,7 +643,7 @@ def fenced_update_sync_job(
                 run_lock_token,
                 current_raw,
                 next_raw,
-                JOB_TTL_SECONDS,
+                _job_retention_seconds(next_job),
             )
         )
         if mutation.outcome is not FencedSyncJobMutationOutcome.CONFLICT:
@@ -1191,8 +1225,45 @@ def try_mark_once(job_id: str, tag: str) -> bool:
     own fail-open posture — better to occasionally double-count than to
     silently never count.
     """
+    # Billing/fair-use and unknown future guards retain the full job window.
+    # Short metric retention may duplicate telemetry on a delayed retry but
+    # cannot repeat usage charging or customer-visible processing.
+    metric_only = tag == 'terminal_outcome_metric' or tag.startswith('segment_outcome:')
+    ttl = _retention_seconds(METRIC_ONCE_TTL_ENV) if metric_only else JOB_TTL_SECONDS
     try:
-        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=JOB_TTL_SECONDS))
+        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=ttl))
     except Exception as e:
         logger.warning('try_mark_once failed for %s:%s: %s', job_id, tag, e)
         return True
+
+
+def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
+    """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
+    from datetime import datetime, timezone
+
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    ids = r.zrevrange(index_key, 0, 99) or []
+    result = []
+    for raw_id in ids:
+        job_id = raw_id.decode() if isinstance(raw_id, bytes) else raw_id
+        job = get_sync_job(job_id)
+        if not job or job.get('uid') != uid or job.get('status') not in {'queued', 'processing'}:
+            r.zrem(index_key, job_id)
+            continue
+        start = job.get('started_at') or job['created_at']
+        job_result = job.get('result') or {}
+        conversations = sorted(
+            set(job_result.get('new_memories') or []) | set(job_result.get('updated_memories') or [])
+        )
+        result.append(
+            {
+                'id': 'sync:' + job_id,
+                'kind': 'sync_job',
+                'state': 'queued' if job['status'] == 'queued' else 'transcribing',
+                'conversation_ids': conversations,
+                'started_at': datetime.fromtimestamp(start, timezone.utc),
+                'duration_seconds': 0,
+                'updated_at': datetime.fromtimestamp(job['updated_at'], timezone.utc),
+            }
+        )
+    return result

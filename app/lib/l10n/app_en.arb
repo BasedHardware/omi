@@ -5114,6 +5114,30 @@
             }
         }
     },
+    "yourPlanEndsOn": "Your {plan} plan ends {date}.",
+    "@yourPlanEndsOn": {
+        "description": "Pending cancellation shown beside the current plan",
+        "placeholders": {
+            "plan": {
+                "type": "String",
+                "example": "Plus"
+            },
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
+    "resubscribeNowNoChargeUntil": "Resubscribe now to keep your plan. No charge until {date}.",
+    "@resubscribeNowNoChargeUntil": {
+        "description": "Reassurance under a pending cancellation that resubscribing is not charged until the end date",
+        "placeholders": {
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
+    },
     "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5127,6 +5151,20 @@
     "annualPlanStartsAutomatically": "Your annual plan will start automatically when your monthly plan ends.",
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
+    },
+    "yourPlanWillRenewOn": "Your {plan} plan will renew on {date}.",
+    "@yourPlanWillRenewOn": {
+        "description": "Confirmation after resubscribing a plan that was set to cancel",
+        "placeholders": {
+            "plan": {
+                "type": "String",
+                "example": "Plus"
+            },
+            "date": {
+                "type": "String",
+                "example": "Nov 3, 2026"
+            }
+        }
     },
     "planRenewsOn": "Your plan renews on {date}.",
     "@planRenewsOn": {
@@ -5173,6 +5211,10 @@
     "continueText": "Continue",
     "@continueText": {
         "description": "Continue button text"
+    },
+    "resubscribeFirstToChangePlans": "Resubscribe first to change plans.",
+    "@resubscribeFirstToChangePlans": {
+        "description": "Why another price is refused while cancellation is pending"
     },
     "resubscribe": "Resubscribe",
     "@resubscribe": {
@@ -6014,10 +6056,6 @@
     "content": "Content",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "No content to display",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "No summary",
     "@noSummary": {
@@ -11675,10 +11713,6 @@
     "@speechToTextUnavailableDesc": {
         "description": "Error dialog body when neither the server transcriber nor on-device speech recognition is available for the speech profile recording"
     },
-    "processingTakingLonger": "Still working — this is taking longer than usual.",
-    "@processingTakingLonger": {
-        "description": "Shown on the homepage processing card after ~2 minutes with a Retry action (#5481)."
-    },
     "speechProfileEnrollmentPrompt": "So Omi knows which voice is yours — talk for about 5 seconds about anything.",
     "@speechProfileEnrollmentPrompt": {
         "description": "First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration."
@@ -14881,6 +14915,73 @@
     "@reviewNoChangesBody": {
         "description": "Empty state body"
     },
+    "reviewChangesSectionTerms": "Names and terms",
+    "@reviewChangesSectionTerms": {
+        "description": "Recent changes section: spelling fixes to names and terms"
+    },
+    "reviewChangesSectionTitles": "Titles and summaries",
+    "@reviewChangesSectionTitles": {
+        "description": "Recent changes section: conversation titles and summaries"
+    },
+    "reviewChangesSectionOther": "Other changes",
+    "@reviewChangesSectionOther": {
+        "description": "Recent changes section: changes that fit no other section"
+    },
+    "reviewChangeConversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
+    "@reviewChangeConversationCount": {
+        "description": "How many conversations one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangePlaceCount": "{count, plural, =1{1 place} other{{count} places}}",
+    "@reviewChangePlaceCount": {
+        "description": "How many places in transcripts one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeShowAll": "Show all {count}",
+    "@reviewChangeShowAll": {
+        "description": "Button opening every place a change landed",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeUndoAll": "Undo all",
+    "@reviewChangeUndoAll": {
+        "description": "Button undoing every instance of one change"
+    },
+    "reviewChangeSeeEvidence": "See evidence",
+    "@reviewChangeSeeEvidence": {
+        "description": "Button showing the conversation evidence behind a change"
+    },
+    "reviewChangeViewConversation": "View conversation",
+    "@reviewChangeViewConversation": {
+        "description": "Button opening the conversation a change came from"
+    },
+    "reviewChangeViewTask": "View task",
+    "@reviewChangeViewTask": {
+        "description": "Button opening the tasks list from a task change"
+    },
+    "reviewChangesUndoPartial": "Couldn’t undo {failed} of {total}. Try again.",
+    "@reviewChangesUndoPartial": {
+        "description": "Undo all finished with some failures",
+        "placeholders": {
+            "failed": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "reviewShowMore": "Show More",
     "@reviewShowMore": {
         "description": "Button (Title Case)"
@@ -16164,5 +16265,17 @@
     "activityNewItem": "New",
     "@activityNewItem": {
         "description": "Screen reader suffix for an Activity row added since the last visit"
+    },
+    "activityNeedsAttention": "Needs attention",
+    "@activityNeedsAttention": {
+        "description": "Activity section header for work that could not finish and needs the user"
+    },
+    "activityRetryAll": "Retry all",
+    "@activityRetryAll": {
+        "description": "Button in Activity's Needs attention section that retries every failed item once"
+    },
+    "attentionSummaryFailed": "Couldn't summarize this conversation",
+    "@attentionSummaryFailed": {
+        "description": "Needs attention row: the server gave up summarizing a conversation"
     }
 }

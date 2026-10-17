@@ -1,4 +1,5 @@
-# Apply alongside the existing monitoring release, after Cloud Run metric export is verified.
+# Optional GKE rules. Production Cloud Run uses backend/deploy/messaging/alert-policies.json.
+# PrometheusRule installation alone does not establish notification delivery.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:

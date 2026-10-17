@@ -4382,12 +4382,27 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsu $plan plāns beidzas $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Jūsu plāns ir iestatīts atcelšanai $date.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Jūsu gada plāns automātiski sāksies, kad beigsies jūsu mēneša plāns.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsu $plan plāns atjaunosies $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4420,6 +4435,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get continueText => 'Turpināt';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Lai mainītu plānu, vispirms abonējiet vēlreiz.';
 
   @override
   String get resubscribe => 'Atkārtoti abonēt';
@@ -5031,9 +5049,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get content => 'Saturs';
-
-  @override
-  String get noContentToDisplay => 'Nav satura, ko parādīt';
 
   @override
   String get noSummary => 'Nav kopsavilkuma';
@@ -9835,9 +9850,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
 
   @override
-  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 
@@ -12457,6 +12469,59 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reviewNoChangesBody => 'Kad Omi sakārtos jūsu piezīmes, izmaiņas parādīsies šeit.';
 
   @override
+  String get reviewChangesSectionTerms => 'Vārdi un termini';
+
+  @override
+  String get reviewChangesSectionTitles => 'Nosaukumi un kopsavilkumi';
+
+  @override
+  String get reviewChangesSectionOther => 'Citas izmaiņas';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sarunas: $count',
+      one: '1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vietas: $count',
+      one: '1 vieta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Rādīt visus ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Atsaukt visu';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Skatīt pierādījumus';
+
+  @override
+  String get reviewChangeViewConversation => 'Skatīt sarunu';
+
+  @override
+  String get reviewChangeViewTask => 'Skatīt uzdevumu';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Neizdevās atsaukt $failed no $total. Mēģiniet vēlreiz.';
+  }
+
+  @override
   String get reviewShowMore => 'Rādīt vairāk';
 
   @override
@@ -13454,4 +13519,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Jauns';
+
+  @override
+  String get activityNeedsAttention => 'Nepieciešama uzmanība';
+
+  @override
+  String get activityRetryAll => 'Mēģināt visu vēlreiz';
+
+  @override
+  String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
 }

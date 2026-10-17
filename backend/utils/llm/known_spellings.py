@@ -158,6 +158,11 @@ def reuse_people_for_spellings(uid: str, people) -> None:
         cache[uid] = _trusted_people_spellings(people)
 
 
+def trusted_people_spellings(people) -> list[dict[str, Any]]:
+    """Names with stored user evidence. The verifier and the spelling prompt share this filter."""
+    return _trusted_people_spellings(people)
+
+
 def _trusted_people_spellings(people) -> list[dict[str, Any]]:
     """Accept stored user evidence, never inferred confidence or creation timestamps."""
     spellings = []

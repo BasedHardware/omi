@@ -4390,6 +4390,16 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆ $date ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'ನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
   }
@@ -4397,6 +4407,11 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'ನಿಮ್ಮ ಮಾಸಿಕ ಯೋಜನೆ ಕೊನೆಗೊಂಡಾಗ ನಿಮ್ಮ ವಾರ್ಷಿಕ ಯೋಜನೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪ್ರಾರಂಭ ಆಗುತ್ತದೆ.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'ನಿಮ್ಮ $plan ಯೋಜನೆ $date ರಂದು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4429,6 +4444,9 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get continueText => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.';
 
   @override
   String get resubscribe => 'ಮರುಸದಸ್ಯಗೊಳಿಸಿ';
@@ -5044,9 +5062,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get content => 'ವಿಷಯವಸ್ತು';
-
-  @override
-  String get noContentToDisplay => 'ತೋರಿಸಲು ವಿಷಯವಸ್ತು ಇಲ್ಲ';
 
   @override
   String get noSummary => 'ಯಾವುದೇ ಸಾರಾಂಶ ಇಲ್ಲ';
@@ -9842,9 +9857,6 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಮಾತನ್ನು ಪಠ್ಯಕ್ಕೆ ಪರಿವರ್ತಿಸುವ ಸೌಲಭ್ಯ ಸದ್ಯ ಲಭ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಮತ್ತು ಸಾಧನದ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
-  String get processingTakingLonger => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.';
 
@@ -12466,6 +12478,59 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಜೋಡಿಸಿದಾಗ, ಬದಲಾವಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
 
   @override
+  String get reviewChangesSectionTerms => 'ಹೆಸರುಗಳು ಮತ್ತು ಪದಗಳು';
+
+  @override
+  String get reviewChangesSectionTitles => 'ಶೀರ್ಷಿಕೆಗಳು ಮತ್ತು ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get reviewChangesSectionOther => 'ಇತರ ಬದಲಾವಣೆಗಳು';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಂಭಾಷಣೆಗಳು',
+      one: '1 ಸಂಭಾಷಣೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸ್ಥಳಗಳು',
+      one: '1 ಸ್ಥಳ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'ಎಲ್ಲಾ $count ತೋರಿಸಿ';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'ಎಲ್ಲವನ್ನೂ ರದ್ದುಮಾಡಿ';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ಸಾಕ್ಷ್ಯ ನೋಡಿ';
+
+  @override
+  String get reviewChangeViewConversation => 'ಸಂಭಾಷಣೆ ನೋಡಿ';
+
+  @override
+  String get reviewChangeViewTask => 'ಕಾರ್ಯ ನೋಡಿ';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'ರದ್ದುಮಾಡಲಾಗಲಿಲ್ಲ: $failed/$total. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  }
+
+  @override
   String get reviewShowMore => 'ಇನ್ನಷ್ಟು ತೋರಿಸಿ';
 
   @override
@@ -13464,4 +13529,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get activityNewItem => 'ಹೊಸದು';
+
+  @override
+  String get activityNeedsAttention => 'ಗಮನ ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get activityRetryAll => 'ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 }

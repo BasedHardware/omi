@@ -4409,12 +4409,27 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'உங்கள் $plan திட்டம் $date அன்று முடிவடைகிறது.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'உங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'உங்கள் திட்டம் $date இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'உங்கள் மாசிக திட்டம் முடிந்தவுடன் உங்கள் ஆண்டு திட்டம் தானாக தொடங்கும்.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'உங்கள் $plan திட்டம் $date அன்று புதுப்பிக்கப்படும்.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4447,6 +4462,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get continueText => 'தொடரவும்';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.';
 
   @override
   String get resubscribe => 'மீண்டும் சந்தா செய்யவும்';
@@ -5064,9 +5082,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get content => 'உள்ளடக்கம்';
-
-  @override
-  String get noContentToDisplay => 'காட்ட உள்ளடக்கம் இல்லை';
 
   @override
   String get noSummary => 'சுருக்கம் இல்லை';
@@ -9883,9 +9898,6 @@ class AppLocalizationsTa extends AppLocalizations {
       'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
 
   @override
-  String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.';
 
@@ -12515,6 +12527,59 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi உங்கள் குறிப்புகளை ஒழுங்குபடுத்தும்போது, மாற்றங்கள் இங்கே தோன்றும்.';
 
   @override
+  String get reviewChangesSectionTerms => 'பெயர்கள் மற்றும் சொற்கள்';
+
+  @override
+  String get reviewChangesSectionTitles => 'தலைப்புகள் மற்றும் சுருக்கங்கள்';
+
+  @override
+  String get reviewChangesSectionOther => 'பிற மாற்றங்கள்';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள்',
+      one: '1 உரையாடல்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count இடங்கள்',
+      one: '1 இடம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'அனைத்து $count-ஐயும் காட்டு';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'அனைத்தையும் செயல்தவிர்';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ஆதாரத்தைப் பார்';
+
+  @override
+  String get reviewChangeViewConversation => 'உரையாடலைப் பார்';
+
+  @override
+  String get reviewChangeViewTask => 'பணியைப் பார்';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'செயல்தவிர்க்க முடியவில்லை: $failed/$total. மீண்டும் முயலவும்.';
+  }
+
+  @override
   String get reviewShowMore => 'மேலும் காட்டு';
 
   @override
@@ -13517,4 +13582,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'புதியது';
+
+  @override
+  String get activityNeedsAttention => 'கவனம் தேவை';
+
+  @override
+  String get activityRetryAll => 'அனைத்தையும் மீண்டும் முயலவும்';
+
+  @override
+  String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
 }

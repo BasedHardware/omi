@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "Ваш план {plan} заканчваецца {date}.",
+    "resubscribeNowNoChargeUntil": "Падпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да {date}.",
     "planSetToCancelOn": "Ваш план пастаўлены на скасаванне {date}.\nПадпішыцеся яшчэ раз, каб сахаваць свае прывілеі - плата адсуцная да {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Ваш план {plan} будзе падаўжацца {date}.",
     "planRenewsOn": "Ваш план адновіцца {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Спачатку падпішыцеся зноў, каб змяніць план.",
     "resubscribe": "Падпішыцеся яшчэ раз",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "Змест",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "Нема зместу для адлюстравання",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "Нема рэзюмэ",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "Націсніце кнопку запісу, каб пачаць запіс",
-    "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
     "home": "Галоўная",
     "failedToUpdateBaselineStatus": "Не атрымалася абнавіць гэты ўспамін. Паспрабуйце яшчэ раз.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "Не ўдалося загрузіць нядаўнія змены.",
     "reviewNoChangesTitle": "Змен пакуль няма",
     "reviewNoChangesBody": "Калі Omi наведзе парадак у нататках, змены з’явяцца тут.",
+    "reviewChangesSectionTerms": "Імёны і тэрміны",
+    "reviewChangesSectionTitles": "Назвы і зводкі",
+    "reviewChangesSectionOther": "Іншыя змены",
+    "reviewChangeConversationCount": "{count, plural, =1{1 размова} other{Размоў: {count}}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 месца} other{Месцаў: {count}}}",
+    "reviewChangeShowAll": "Паказаць усе ({count})",
+    "reviewChangeUndoAll": "Адрабіць усё",
+    "reviewChangeSeeEvidence": "Паказаць доказы",
+    "reviewChangeViewConversation": "Адкрыць размову",
+    "reviewChangeViewTask": "Адкрыць задачу",
+    "reviewChangesUndoPartial": "Не ўдалося адрабіць {failed} з {total}. Паспрабуйце яшчэ раз.",
     "reviewShowMore": "Паказаць больш",
     "entityKeptCurrent": "Актуальнасць падтрымлівае Omi",
     "entityNotRight": "Не так?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "Пакуль няма актыўнасці",
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
-    "activityNewItem": "Новае"
+    "activityNewItem": "Новае",
+    "activityNeedsAttention": "Патрабуе ўвагі",
+    "activityRetryAll": "Паўтарыць усё",
+    "attentionSummaryFailed": "Не ўдалося падсумаваць гэту размову"
 }

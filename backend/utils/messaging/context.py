@@ -5,6 +5,7 @@ import logging
 from typing import Any
 import copy
 import json
+import time
 
 from database.chat_context import ChatContextStore
 from database.chat_history_window import cache_aligned_history_limit
@@ -12,6 +13,8 @@ from utils.executors import db_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
 from utils.messaging.history import summarize, recent_activity
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
+from utils.messaging.metrics import CONTEXT_TURNS, CONTEXT_READS
+from utils.messaging.projection import surface_runtime
 
 SUMMARY_CHARS = 2400
 DIGEST_CHARS = 3200
@@ -21,6 +24,24 @@ DIGEST_SECONDS = 0.075
 REFRESH_SECONDS = 60
 _REFRESHING = set()
 logger = logging.getLogger(__name__)
+
+
+def context_surface():
+    runtime = surface_runtime.get()
+    channel = runtime.channel if runtime is not None else None
+    return channel if channel in ('telegram', 'imessage') else 'app'
+
+
+async def measured(phase, operation, *, timeout=None):
+    start = time.monotonic()
+    try:
+        return await asyncio.wait_for(operation, timeout) if timeout is not None else await operation
+    except Exception as error:
+        # Metadata only: never stringify exceptions or log their locals/payloads.
+        setattr(error, 'shaped_context_phase', phase)
+        raise
+    finally:
+        CONTEXT_READS.labels(context_surface(), phase).observe(time.monotonic() - start)
 
 
 def bounded_messages(messages):
@@ -52,16 +73,16 @@ async def refresh(uid, session_id, message_ids, *, store=None, summary=None, gua
         return
     summary = summary or summarize
     store = store or await run_blocking(db_executor, ChatContextStore)
-    state = await run_blocking(db_executor, store.load, uid, session_id)
-    original = dict(state)
+    state = await measured('refresh_load', run_blocking(db_executor, store.load, uid, session_id))
+    original: dict[str, Any] = dict(state)
     anchor = message_ids[0]
     if state.get('anchor') != anchor:
         cursor = state.get('cursor')
         rolling = state.get('summary', '')
         more = True
         while more:
-            rows, next_cursor, more = await run_blocking(
-                db_executor, store.source_page, uid, session_id, anchor, cursor
+            rows, next_cursor, more = await measured(
+                'source_page', run_blocking(db_executor, store.source_page, uid, session_id, anchor, cursor)
             )
             text = '\n'.join(r['role'] + ': ' + r['content'] for r in rows)
             for offset in range(0, len(text), SUMMARY_SOURCE_CHARS):
@@ -78,7 +99,7 @@ async def refresh(uid, session_id, message_ids, *, store=None, summary=None, gua
                 if not isinstance(rolling, str) or not rolling.strip():
                     raise ValueError('Empty rolling summary')
                 if len(rolling) > SUMMARY_CHARS:
-                    degraded(ValueError('Summary truncated'))
+                    degraded(ValueError('Summary truncated'), phase='summary_truncated')
                     rolling = rolling[:SUMMARY_CHARS]
             cursor = next_cursor
             if more:
@@ -93,13 +114,30 @@ async def refresh(uid, session_id, message_ids, *, store=None, summary=None, gua
         await run_blocking(db_executor, store.save, uid, session_id, state, original['revision'])
 
 
-def degraded(error):
-    logger.warning('Optional shaped context unavailable error_type=%s', type(error).__name__)
+def degraded(error, *, phase='refresh'):
+    phase = getattr(error, 'shaped_context_phase', phase)
+    site = 'deadline' if isinstance(error, TimeoutError) else 'unknown'
+    trace = error.__traceback__
+    while trace is not None:
+        filename = trace.tb_frame.f_code.co_filename
+        if '/database/' in filename or '/utils/' in filename:
+            site = '/'.join(filename.split('/')[-2:]) + ':' + trace.tb_frame.f_code.co_name + ':' + str(trace.tb_lineno)
+        trace = trace.tb_next
+    reason = 'timeout' if isinstance(error, TimeoutError) else 'connection_error'
+    if isinstance(error, PermissionError):
+        reason = 'auth_error'
+    logger.warning(
+        'Optional shaped context unavailable surface=%s phase=%s error_type=%s code_site=%s',
+        context_surface(),
+        phase,
+        type(error).__name__,
+        site,
+    )
     record_fallback(
         component='other',
         from_mode='enhanced_context',
         to_mode='history_window',
-        reason='timeout' if isinstance(error, TimeoutError) else 'connection_error',
+        reason=reason,
         outcome='degraded',
     )
 
@@ -108,29 +146,39 @@ async def prepare(uid, session_id, message_ids, *, store=None):
     """Read optional stored continuity only, with a hard send-path budget; never summarize."""
     empty = {'summary': '', 'digest': ''}
     if not session_id or not message_ids:
+        CONTEXT_TURNS.labels(context_surface(), 'unscoped').inc()
         return empty
 
-    async def read():
+    async def continuity():
         context_store = store or await run_blocking(db_executor, ChatContextStore)
-        state = await run_blocking(db_executor, context_store.load, uid, session_id)
-        digest = ''
-        try:
-            activity = await asyncio.wait_for(
-                run_blocking(db_executor, recent_activity, uid, '', session_id), DIGEST_SECONDS
-            )
-            digest = digest_text(activity)
-        except Exception as error:
-            degraded(error)
-        return {
-            'summary': state.get('summary', '')[:SUMMARY_CHARS] if isinstance(state.get('summary', ''), str) else '',
-            'digest': digest,
-        }
+        return await run_blocking(db_executor, context_store.load, uid, session_id)
 
-    try:
-        return await asyncio.wait_for(read(), PREPARE_SECONDS)
-    except Exception as error:
-        degraded(error)
-        return empty
+    async def activity_digest():
+        activity = await run_blocking(db_executor, recent_activity, uid, '', session_id)
+        return digest_text(activity)
+
+    # Independent deadlines run concurrently. A slow digest cannot discard a
+    # successful summary, and neither read borrows the other's remaining budget.
+    results = await asyncio.gather(
+        measured('summary_load', continuity(), timeout=PREPARE_SECONDS),
+        measured('digest', activity_digest(), timeout=min(DIGEST_SECONDS, PREPARE_SECONDS)),
+        return_exceptions=True,
+    )
+    state, digest = results
+    failed = False
+    for result in results:
+        if isinstance(result, BaseException):
+            if not isinstance(result, Exception):
+                raise result
+            failed = True
+            degraded(result)
+    summary = state.get('summary', '') if isinstance(state, dict) else ''
+    outcome = 'degraded' if failed else 'summary' if summary else 'empty'
+    CONTEXT_TURNS.labels(context_surface(), outcome).inc()
+    return {
+        'summary': summary[:SUMMARY_CHARS] if isinstance(summary, str) else '',
+        'digest': digest if isinstance(state, dict) and isinstance(digest, str) else '',
+    }
 
 
 def schedule_refresh(uid, session_id, message_ids):

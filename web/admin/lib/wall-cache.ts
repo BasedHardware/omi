@@ -134,6 +134,10 @@ export async function wallPayload(
     if (timer) clearTimeout(timer);
   }
 }
+/** Resolves once no snapshot refresh is running; background series reads yield to it. */
+export function wallRefreshSettled(): Promise<unknown> {
+  return flight ? flight.catch(() => undefined) : Promise.resolve();
+}
 export function resetWallCache() {
   cached = null;
   flight = null;

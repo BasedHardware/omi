@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "మీ {plan} ప్లాన్ {date}న ముగుస్తుంది.",
+    "resubscribeNowNoChargeUntil": "మీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "planSetToCancelOn": "మీ ప్లాన్ {date} న రద్దు చేయడానికి సెట్ చేయబడింది.\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "మీ {plan} ప్లాన్ {date}న పునరుద్ధరించబడుతుంది.",
     "planRenewsOn": "మీ ప్లాన్ {date} న పునరుద్ధరించబడుతుంది.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.",
     "resubscribe": "మళ్లీ సబ్‌స్క్రిప్ట్ చేయండి",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "సামగ్రి",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "చూపించడానికి సామగ్రి లేదు",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "సారాంశం లేదు",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "రికార్డింగ్ ప్రారంభించడానికి రికార్డ్ బటన్ నొక్కండి",
-    "processingTakingLonger": "ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.",
     "speechProfileEnrollmentPrompt": "Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.",
     "home": "హోమ్",
     "failedToUpdateBaselineStatus": "ఈ జ్ఞాపకాన్ని అప్‌డేట్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "ఇటీవలి మార్పులను లోడ్ చేయలేకపోయాం.",
     "reviewNoChangesTitle": "ఇంకా మార్పులు లేవు",
     "reviewNoChangesBody": "Omi మీ నోట్స్‌ను చక్కబెట్టినప్పుడు, మార్పులు ఇక్కడ కనిపిస్తాయి.",
+    "reviewChangesSectionTerms": "పేర్లు మరియు పదాలు",
+    "reviewChangesSectionTitles": "శీర్షికలు మరియు సారాంశాలు",
+    "reviewChangesSectionOther": "ఇతర మార్పులు",
+    "reviewChangeConversationCount": "{count, plural, =1{1 సంభాషణ} other{{count} సంభాషణలు}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 చోటు} other{{count} చోట్ల}}",
+    "reviewChangeShowAll": "మొత్తం {count} చూపించు",
+    "reviewChangeUndoAll": "అన్నీ రద్దు చేయి",
+    "reviewChangeSeeEvidence": "ఆధారం చూడండి",
+    "reviewChangeViewConversation": "సంభాషణ చూడండి",
+    "reviewChangeViewTask": "పనిని చూడండి",
+    "reviewChangesUndoPartial": "రద్దు చేయలేకపోయాం: {failed}/{total}. మళ్లీ ప్రయత్నించండి.",
     "reviewShowMore": "మరిన్ని చూపండి",
     "entityKeptCurrent": "Omi ద్వారా తాజాగా ఉంచబడింది",
     "entityNotRight": "సరిగా లేదా?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
     "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
     "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
-    "activityNewItem": "కొత్తది"
+    "activityNewItem": "కొత్తది",
+    "activityNeedsAttention": "శ్రద్ధ అవసరం",
+    "activityRetryAll": "అన్నింటినీ మళ్లీ ప్రయత్నించండి",
+    "attentionSummaryFailed": "ఈ సంభాషణను సంగ్రహించలేకపోయాం"
 }

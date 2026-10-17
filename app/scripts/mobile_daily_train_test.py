@@ -3,9 +3,9 @@
 
 The self-driving posture (2026-10-14): iOS submits AFTER_APPROVAL with the
 phased-release brake (pausable in App Store Connect), Android writes a staged
-production rollout at 5% (haltable in Play Console). Apple strips the
-appStoreVersion relationship from items of COMPLETED review submissions, so
-the replace-path lookup reads items?include=appStoreVersion over REST.
+production rollout at 5% (haltable in Play Console). An approved but
+unreleased iOS version blocks the train for a human: Apple refuses to cancel
+its COMPLETE review submission.
 """
 
 from __future__ import annotations
@@ -105,7 +105,6 @@ class PlanTests(unittest.TestCase):
         plan = train.plan_ios(self.state(in_flight=(train.IOSVersion("v", "1.0.554", "WAITING_FOR_REVIEW"),)))
         self.assertEqual(plan.action, "hold")
         self.assertIsNone(plan.submit)
-        self.assertIsNone(plan.reject)
 
     def test_no_newer_build_does_nothing(self):
         self.assertEqual(train.plan_ios(self.state(candidate=None)).action, "nothing")
@@ -114,18 +113,21 @@ class PlanTests(unittest.TestCase):
         pending = train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         plan = train.plan_ios(self.state(pending=(pending,), candidate_version_id="pend"))
         self.assertEqual(plan.action, "leave")
-        self.assertIsNone(plan.reject)
+        self.assertIsNone(plan.submit)
 
-    def test_pending_with_older_build_is_replaced(self):
+    def test_pending_with_older_build_blocks_for_a_human(self):
+        # Apple 409s a cancel of the approved version's COMPLETE submission and
+        # has no developer-reject API, so the train must stop, not replace.
         pending = train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         plan = train.plan_ios(self.state(pending=(pending,), candidate_version_id=None))
-        self.assertEqual(plan.action, "replace")
-        self.assertEqual(plan.reject, pending)
-        self.assertEqual(plan.submit, self.candidate)
+        self.assertEqual(plan.action, "blocked")
+        self.assertIsNone(plan.submit)
+        self.assertIn("ACTION REQUIRED", plan.reason)
+        self.assertIn("releases 1.0.554 or rejects its binary", plan.reason)
 
-    def test_pending_newer_than_testflight_is_never_rejected(self):
+    def test_pending_newer_than_testflight_is_never_offered_for_rejection(self):
         pending = train.IOSVersion("pend", "1.0.560", "PENDING_DEVELOPER_RELEASE")
-        with self.assertRaisesRegex(train.TrainError, "refusing to reject"):
+        with self.assertRaisesRegex(train.TrainError, "never reject it"):
             train.plan_ios(self.state(pending=(pending,)))
 
     def test_two_pending_versions_need_a_human(self):
@@ -370,113 +372,34 @@ class RunIOSTests(unittest.TestCase):
         with self.assertRaisesRegex(promote.PromotionError, "MANUAL or AFTER_APPROVAL"):
             promote.submit_ios(build, "- n", locales=["en-US"], release_type="WHENEVER")
 
-    def test_replace_cancels_the_completed_submission_before_submitting(self):
+    def test_paused_brake_holds_instead_of_asking_for_a_release(self):
         pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
-        get_states = iter(["PENDING_DEVELOPER_RELEASE", "DEVELOPER_REJECTED", "WAITING_FOR_REVIEW"])
-        order = []
-
-        def build_version(args):
-            # Candidate build 1335 was never submitted (the pending version carries 1334);
-            # after the submission it is attached to the new App Store version.
-            return {"id": "v-new", "attributes": {}} if "submit" in order else None
-
-        def rest_items(request, headers=None, timeout=60):
-            # Apple strips the item relationship on COMPLETED submissions; the
-            # include=appStoreVersion REST lookup is the only surviving linkage.
-            url = request.full_url if hasattr(request, "full_url") else request
-
-            class Response:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *exc):
-                    return False
-
-                def read(self):
-                    # rs-new sorts first (newest submittedDate) and carries the pending version
-                    body = (
-                        {"included": [{"type": "appStoreVersions", "id": "pend"}]}
-                        if "rs-new" in url
-                        else {"included": [{"type": "appStoreVersions", "id": "older"}]}
-                    )
-                    return json.dumps(body).encode()
-
-            return Response()
-
         asc = FakeASC(
             live_responses(
                 states={"PENDING_DEVELOPER_RELEASE": [pending]},
                 builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
-                extra={
-                    ("builds", "app-store-version"): build_version,
-                    ("apps", "list-review-submissions"): [
-                        {"id": "rs-old", "attributes": {"state": "COMPLETE", "submittedDate": "2026-09-01T00:00:00Z"}},
-                        {"id": "rs-new", "attributes": {"state": "COMPLETE", "submittedDate": "2026-10-01T00:00:00Z"}},
-                    ],
-                    ("review-submissions", "cancel"): {"id": "rs-new", "attributes": {"state": "CANCELING"}},
-                    ("app-store-versions", "get"): lambda args: {"id": args[-1], "attributes": {"appStoreState": next(get_states)}},
-                }
+                extra={("builds", "app-store-version"): None},
             )
         )
+        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=True):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        self.assertTrue(summary.startswith("ios=hold (live 1.0.553 phased rollout is PAUSED"))
 
-        def fake_run(command, **kwargs):
-            order.append("submit")
-            return Mock(returncode=0)
-
-        original_call = asc.__call__
-
-        def recording_call(*args):
-            if args[:2] == ("review-submissions", "cancel"):
-                order.append("cancel")
-            return original_call(*args)
-
-        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
-            train.urllib.request, "urlopen", side_effect=rest_items
-        ), patch.object(
-            train, "_asc_rest_token", return_value="faketoken"
-        ), patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"):
-            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=recording_call)
-        self.assertEqual(order, ["cancel", "submit"])
-        self.assertIn(("review-submissions", "cancel", "rs-new"), asc.calls)
-        self.assertNotIn(("review-submissions", "cancel", "rs-old"), asc.calls)
-        self.assertTrue(summary.startswith("ios=replace 1.0.554 (1335)"))
-
-    def test_review_submission_lookup_follows_pagination(self):
+    def test_blocked_pending_version_touches_nothing(self):
+        pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
         asc = FakeASC(
-            {
-                ("apps", "list-review-submissions"): [
-                    {"id": "rs", "attributes": {"state": "COMPLETE", "submittedDate": "x"}}
-                ],
-            }
+            live_responses(
+                states={"PENDING_DEVELOPER_RELEASE": [pending]},
+                builds={"1.0.554": [build("b1335", "1335"), build("b1334", "1334")]},
+                extra={("builds", "app-store-version"): None},
+            )
         )
-
-        def rest_items(request, headers=None, timeout=60):
-            url = request.full_url if hasattr(request, "full_url") else request
-
-            class Response:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *exc):
-                    return False
-
-                def read(self):
-                    if "page=2" not in url:
-                        # First page holds a different version; the target is on page 2.
-                        return json.dumps(
-                            {
-                                "included": [{"type": "appStoreVersions", "id": "other"}],
-                                "links": {"next": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions/rs/items?include=appStoreVersion&limit=200&page=2"},
-                            }
-                        ).encode()
-                    return json.dumps({"included": [{"type": "appStoreVersions", "id": "target"}]}).encode()
-
-            return Response()
-
-        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
-            train, "_asc_rest_token", return_value="faketoken"
-        ):
-            self.assertEqual(train.review_submission_for_version(asc, "target"), "rs")
+        with patch.object(promote.subprocess, "run") as run, patch.object(train, "ios_phased_release_paused", return_value=False):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        self.assertTrue(summary.startswith("ios=blocked (ACTION REQUIRED: 1.0.554 is approved"))
+        self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
 
     def _generate_openssl_ec_pem(self) -> str:
         result = subprocess.run(
@@ -525,8 +448,7 @@ class RunIOSTests(unittest.TestCase):
         # Some CI OpenSSL builds import fine and then raise at key-load time
         # (unsupported key type / explicit EC parameters) — observed live on the
         # Codemagic train 2026-10-15. The fallback must catch ANY cryptography
-        # failure, not only ImportError, or the replace path fails closed with
-        # an approved-but-unreleased version stuck in review.
+        # failure, not only ImportError, or every REST read fails closed.
         pem = self._generate_openssl_ec_pem()
         real_run = subprocess.run
 
@@ -643,34 +565,6 @@ class RunIOSTests(unittest.TestCase):
             self._restore_cryptography(saved)
         self.assertIn("cryptography", str(ctx.exception))
         self.assertIn("openssl", str(ctx.exception))
-
-    def test_rejection_that_does_not_reach_developer_rejected_fails_loudly(self):
-        asc = FakeASC(
-            {
-                ("apps", "list-review-submissions"): [{"id": "rs", "attributes": {"state": "COMPLETE", "submittedDate": "x"}}],
-                ("review-submissions", "cancel"): {"id": "rs", "attributes": {}},
-                ("app-store-versions", "get"): {"id": "pend", "attributes": {"appStoreState": "PENDING_DEVELOPER_RELEASE"}},
-            }
-        )
-
-        def rest_items(url, headers=None, timeout=60):
-            class Response:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *exc):
-                    return False
-
-                def read(self):
-                    return json.dumps({"included": [{"type": "appStoreVersions", "id": "pend"}]}).encode()
-
-            return Response()
-
-        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
-            train, "_asc_rest_token", return_value="faketoken"
-        ), patch.object(train, "STATE_POLL_ATTEMPTS", 2), patch.object(train.time, "sleep"):
-            with self.assertRaisesRegex(train.TrainError, "did not reach DEVELOPER_REJECTED"):
-                train.reject_pending_ios(asc, train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE"))
 
     def test_missing_credentials_fail_before_any_store_call(self):
         asc = FakeASC({})
@@ -1207,7 +1101,7 @@ class AscKeyNormalizationTest(unittest.TestCase):
 
     Live 2026-10-15: on the Codemagic train both cryptography and `openssl dgst`
     rejected the key text the same machine's publishing CLI accepts, so the
-    iOS replace path failed closed with an approved-but-unreleased version stuck.
+    iOS REST surface (phased-release brake reads) failed closed.
     """
 
     @classmethod

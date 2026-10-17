@@ -512,9 +512,99 @@ class ReviewChangeRef {
   final String label;
 }
 
+/// One place a change landed: the edited span with the speech around it.
+class ReviewChangeOccurrence {
+  const ReviewChangeOccurrence({this.contextBefore = '', this.before = '', this.after = '', this.contextAfter = ''});
+  final String contextBefore;
+  final String before;
+  final String after;
+  final String contextAfter;
+
+  bool get isEmpty => contextBefore.isEmpty && before.isEmpty && after.isEmpty && contextAfter.isEmpty;
+
+  static ReviewChangeOccurrence? fromJson(Map<String, dynamic> json, {String before = '', String after = ''}) {
+    final value = ReviewChangeOccurrence(
+      contextBefore: _text(json['context_before']),
+      before: _str(json['before']) ?? before,
+      after: json['after'] is String ? json['after'] as String : after,
+      contextAfter: _text(json['context_after']),
+    );
+    return value.isEmpty ? null : value;
+  }
+}
+
+String _text(Object? v) => v is String ? v : '';
+
+Map<String, dynamic> _withAdditive(Map<String, dynamic> generated, Object? raw) => {
+      ...generated,
+      if (raw is Map<String, dynamic>) ...{
+        for (final key in const ['diff', 'group_key'])
+          if (raw.containsKey(key)) key: raw[key],
+      },
+    };
+
+/// The server-extracted change itself: what the text was, what it is now, and where. Every field
+/// is optional; journal rows written before the diff existed simply omit it.
+class ReviewChangeDiff {
+  const ReviewChangeDiff({
+    this.targetLabel,
+    this.field,
+    this.before,
+    this.after,
+    this.occurrences = const [],
+    this.occurrenceCount = 0,
+    this.sourceTitle,
+    this.sourceStartedAt,
+  });
+  final String? targetLabel;
+  final String? field;
+  final String? before;
+
+  /// Empty means the item was removed; null means the server did not say.
+  final String? after;
+
+  /// Each place in context. Holds one entry built from the top-level context when the server
+  /// sends only a count.
+  final List<ReviewChangeOccurrence> occurrences;
+
+  /// How many places the change touched in this source, at least one.
+  final int occurrenceCount;
+  final String? sourceTitle;
+  final DateTime? sourceStartedAt;
+
+  static ReviewChangeDiff? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final before = _str(json['before']);
+    final after = json['after'] is String ? json['after'] as String : null;
+    final raw = json['occurrences'];
+    final listed = raw is List
+        ? _maps(raw)
+            .map((o) => ReviewChangeOccurrence.fromJson(o, before: before ?? '', after: after ?? ''))
+            .whereType<ReviewChangeOccurrence>()
+            .toList(growable: false)
+        : const <ReviewChangeOccurrence>[];
+    final top = ReviewChangeOccurrence.fromJson(json, before: before ?? '', after: after ?? '');
+    final occurrences = listed.isNotEmpty ? listed : [if (top != null) top];
+    final count = raw is num && raw > 0 ? raw.toInt() : (listed.isNotEmpty ? listed.length : 1);
+    final diff = ReviewChangeDiff(
+      targetLabel: _str(json['target_label']),
+      field: _str(json['field']),
+      before: before,
+      after: after,
+      occurrences: occurrences,
+      occurrenceCount: count,
+      sourceTitle: _str(json['source_title']),
+      sourceStartedAt: _date(json['source_started_at']),
+    );
+    return before == null && after == null && occurrences.isEmpty ? null : diff;
+  }
+}
+
 class ReviewChange {
-  factory ReviewChange.fromGenerated(wire.GeneratedReviewChange generated) {
-    final value = fromJson(generated.toJson());
+  /// [raw] is the same change as JSON. It carries additive fields (`diff`, `group_key`) through
+  /// before the generated wire knows them.
+  factory ReviewChange.fromGenerated(wire.GeneratedReviewChange generated, {Map<String, dynamic>? raw}) {
+    final value = fromJson(_withAdditive(generated.toJson(), raw));
     if (value == null) throw const FormatException('Malformed ReviewChange');
     return value;
   }
@@ -532,6 +622,8 @@ class ReviewChange {
     this.context,
     this.refs = const [],
     this.undone = false,
+    this.diff,
+    this.groupKey,
   });
   final String changeId;
   final ReviewChangeKind kind;
@@ -545,6 +637,11 @@ class ReviewChange {
   final List<ReviewChangeRef> refs;
   final DateTime createdAt;
   final bool undone;
+  final ReviewChangeDiff? diff;
+
+  /// Stable across conversations for the same change, such as one term respelled everywhere. The
+  /// server sends it as `diff.group_key`; a top-level `group_key` is also accepted.
+  final String? groupKey;
 
   ReviewChange copyWith({bool? undone}) => ReviewChange(
         changeId: changeId,
@@ -559,6 +656,8 @@ class ReviewChange {
         refs: refs,
         createdAt: createdAt,
         undone: undone ?? this.undone,
+        diff: diff,
+        groupKey: groupKey,
       );
 
   static ReviewChange? fromJson(Map<String, dynamic> json) {
@@ -589,13 +688,23 @@ class ReviewChange {
           .toList(growable: false),
       createdAt: createdAt,
       undone: json['undone'] == true,
+      diff: ReviewChangeDiff.fromJson(_map(json['diff'])),
+      groupKey: _str(json['group_key']) ?? _str(_map(json['diff'])?['group_key']),
     );
   }
 }
 
 class ReviewChangesPage {
-  factory ReviewChangesPage.fromGenerated(wire.GeneratedReviewChangesResponse generated) {
-    return fromJson(generated.toJson());
+  factory ReviewChangesPage.fromGenerated(wire.GeneratedReviewChangesResponse generated, {Map<String, dynamic>? raw}) {
+    final json = generated.toJson();
+    final rawChanges = raw?['changes'];
+    final changes = json['changes'];
+    if (rawChanges is List && changes is List && rawChanges.length == changes.length) {
+      json['changes'] = [
+        for (var i = 0; i < changes.length; i++) _withAdditive(changes[i] as Map<String, dynamic>, rawChanges[i]),
+      ];
+    }
+    return fromJson(json);
   }
 
   const ReviewChangesPage({required this.changes, this.nextCursor});

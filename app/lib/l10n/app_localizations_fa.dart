@@ -4374,12 +4374,27 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'طرح $plan شما در $date به پایان می‌رسد.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'همین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'طرح شما برای لغو در تاریخ $date برنامه‌ریزی شده است.\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا $date هیچ هزینه‌ای نخواهید داشت.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'طرح سالانه شما به‌طور خودکار هنگام پایان طرح ماهانه شما شروع خواهد شد.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'طرح $plan شما در $date تمدید می‌شود.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4412,6 +4427,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get continueText => 'ادامه';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'برای تغییر طرح، ابتدا دوباره مشترک شوید.';
 
   @override
   String get resubscribe => 'مجددا مشترک شوید';
@@ -5023,9 +5041,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get content => 'محتوا';
-
-  @override
-  String get noContentToDisplay => 'محتوایی برای نمایش نیست';
 
   @override
   String get noSummary => 'بدون خلاصه';
@@ -9805,9 +9820,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.';
 
   @override
-  String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
 
@@ -12425,6 +12437,59 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewNoChangesBody => 'وقتی Omi یادداشت‌های شما را مرتب کند، تغییرات اینجا نمایش داده می‌شود.';
 
   @override
+  String get reviewChangesSectionTerms => 'نام‌ها و اصطلاحات';
+
+  @override
+  String get reviewChangesSectionTitles => 'عنوان‌ها و خلاصه‌ها';
+
+  @override
+  String get reviewChangesSectionOther => 'تغییرات دیگر';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو',
+      one: '۱ گفتگو',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'نمایش همه ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'لغو همه';
+
+  @override
+  String get reviewChangeSeeEvidence => 'مشاهده شواهد';
+
+  @override
+  String get reviewChangeViewConversation => 'مشاهده گفتگو';
+
+  @override
+  String get reviewChangeViewTask => 'مشاهده کار';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'لغو $failed از $total ممکن نشد. دوباره امتحان کنید.';
+  }
+
+  @override
   String get reviewShowMore => 'نمایش بیشتر';
 
   @override
@@ -13420,4 +13485,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'جدید';
+
+  @override
+  String get activityNeedsAttention => 'نیاز به توجه';
+
+  @override
+  String get activityRetryAll => 'تلاش دوباره برای همه';
+
+  @override
+  String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';
 }

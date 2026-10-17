@@ -129,8 +129,8 @@ repo variable `GRAFANA_URL` pointing at the direct Cloud Run URL.
 
 `omi-tv-v2` is a separate UID. Its source is `build_wall_dashboard.py`, called
 by `build_dashboards.py`; the three legacy board files retain their existing
-contract. `apply_omi_tv_dashboard.py` accepts the new UID and still preserves
-live layout on subsequent applies. This slice does not switch `/dashboard`.
+contract. `apply_omi_tv_dashboard.py` publishes only the legacy UIDs and preserves
+live layout. The private monitoring provisioning workflow owns v2 publication.
 
 The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
@@ -162,20 +162,78 @@ The 180-day lookback, denominator and observation windows remain unchanged. Coun
 entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.
 
-Each metric is one native **Canvas** panel, backed by Infinity as the only
-external plugin. Canvas's SVG-icon element renders a data-only card through
-Grafana's built-in SVG sanitizer. The card's background/border encloses the
-label, scope chip, value, delta, platform splits, complete-period sparkline and
-footnote. There are no floating subpanels, HTML overrides or custom JavaScript.
-Responsive constraints keep the complete card inside narrow laptop columns.
+### v3 presentation (same uid, same metric definitions)
 
-Healthy live aggregates use full contrast. Stale, partial, explicitly material-gap
-proxies and all synthetic fixtures are dimmed. A proxy label alone does not dim
-an otherwise healthy audited aggregate. Fixture cards always say **FIXTURE**.
-Cohort-rate deltas use percentage points; count and monetary deltas use relative
-percent change. Scope chips say all or macOS; entry/primary attribution is in the
-panel description and diagnostics. Money is compact at thousands, without cents
-above $100. Full source reasons and versions remain in the diagnostics table.
+The board keeps uid `omi-tv-v2` and file `dashboards/omi-tv-v2.json` (the private
+provisioning allowlist and embed links depend on them); `build_wall_dashboard.py`
+is its source. Five story columns read Growth → Activation → Retention → Revenue
+→ Health. Each starts with one native **stat** panel (headline values) and a
+one-row delta strip: the series API's prior-period change, in percentage points
+for rates and relative % for counts and money (Grafana's native percent change is
+relative only). Invisible tone markers in the text color it green/red; cost up is
+red. Native charts below are chosen per question: stacked weekly bars for
+platform composition and growth accounting, lines for rates, a W0–W8 cohort
+retention `trend`, an L1–L7 power-user histogram, activation by first-week capture source, an MRR-by-plan
+stack, Shopify weekly bars and a daily all-in cost stack against revenue. Titles say "users" in plain
+English; definitions (qualified use, deduplicated persons, qualified vs any-event
+MAU) live in panel descriptions. Platform hues
+are fixed everywhere (macOS, Mobile, Other, MCP-only). Metrics with no defensible
+source are listed in the compact **Coverage gaps** table, not drawn as empty
+charts. The primary view fits 1920×1080 kiosk without scrolling; titles fit 1440.
+
+Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
+(`headline`, `growth`, `activation`, `retention`, `revenue`, `health`;
+`lib/wall-series.ts`). The series reuse the v2 snapshot and its definitions:
+
+- The snapshot's complete periods (now carrying per-period splits) win on every
+  date they cover, so each chart's latest point is the stat above it. Only older
+  periods and chart-only shapes are queried: 26 trailing 7-day growth periods
+  (one HogQL period per read; the qualified-actor CTE chain is shared with the
+  snapshot's activity query), cohort/established history periods 6–11, nine
+  weekly W0–W8 cohorts, and 30-day MAU at earlier week ends. Growth starts at the
+  first period after mobile allowlist events began (week of 2026-05-04).
+- MRR history is the FinOps Stripe-book snapshot table (deduplicated by
+  `snapshot_date`, known unmapped-price/JPY gaps disclosed); the final point is
+  the live book, never a fixture. The MRR/ARPMAU deltas use the same-source FinOps
+  change. Cost is all-in (`lib/wall-cost.ts`, shared with the snapshot's
+  `cost.net_day` / `cost.per_mau_month`): GCP net of committed-use credits minus
+  one-time incident excess (a service-day ≥2× and ≥$500 over its 14-day median),
+  Vertex LLM, OpenAI and Anthropic invoices, STT at $5.3K/month from the
+  Soniox console (October 2026, read 2026-10-16; no invoice feed yet, labelled
+  "STT est.") and SaaS at a fixed $4.8K/month ("SaaS est."), both amber. Unsourced lines are named in the reason, never dropped.
+- Cold-load rules match the wall and converge across Cloud Run instances
+  (`lib/wall-series-store.ts`). Each leg's last-good value, retry schedule and
+  the day's successful reads live in one doc in the admin Firestore payload cache
+  (`admin_stats_payload_cache`, keys `wall-series:v1:leg:<leg>`), so any instance
+  serves the shared value at once. One instance fills a leg under a fenced
+  lease (`wall-series:v1:lease:<leg>`: holder, token, expiry; 3 min, renewed by
+  the holder). A timed-out, failed or contended lease call never counts as
+  ownership; the instance serves last-good instead. Every leg-doc write is a
+  transaction that checks the lease still carries the writer's token, and merges
+  the day's reads by SQL hash (newer wins), so a stale or slow writer can neither
+  land nor drop completed reads. A failed renewal or refused write stops the fill
+  at its next read; the final write is awaited (inside `after()`) before the
+  token-checked release. A fill an instance abandons resumes from its persisted
+  reads. Only after the store fails 5 times within 10 minutes does an instance
+  fill from process memory, still single-flight. A cold request answers within
+  five seconds; failed legs keep their last good value (≤24h, marked stale);
+  partial legs retry only their missing reads after two minutes with
+  exponential backoff; PostHog reads run one at a time per instance after any
+  snapshot refresh. 30-day MAU is split into `mauRecent` (headline) and
+  `mauHistory` (charts) so a slow older window never holds back the headline.
+  Request-path store calls are bounded at 2 s.
+- Observability: one `wall_series_leg` log line per leg attempt (leg, outcome
+  `ok|partial:<class>|timeout|http_<status>|error|lease_lost|store_unavailable`, error class, duration_ms,
+  rows, failures, served_stale, instance = revision + process id) and one
+  `wall_series_read` line per PostHog read. Aggregates only: no SQL, no ids.
+- The headline payload's `status` (and the first row of the "Data & coverage"
+  table) gives the oldest leg's data-through day (UTC) across every series and
+  how many legs are still filling, so the TV shows stale-but-real data with a
+  visible date instead of waiting. A daily BigQuery materialization of per-person
+  qualified days remains the long-term replacement for these PostHog reads.
+
+The legacy `/api/omi/stats/wall` payload (Canvas card SVGs, diagnostics) is
+unchanged and still served.
 
 MAU keeps two completed 30-day periods to stay within PostHog's query budget;
 other usage/cohort trends retain six completed periods. Cohort anchors are still
@@ -193,8 +251,9 @@ eval "$(~/machine-config/scripts/container-runtime.zsh env)"
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 python3 web/admin/grafana/verify_wall_local.py serve  # keep foreground in one terminal
 python3 web/admin/grafana/verify_wall_local.py provision  # another terminal, same Docker env
+python3 web/admin/grafana/verify_wall_local.py reload     # after rebuilding the board JSON
 # Python environment with playwright + Chromium installed:
-python3 web/admin/grafana/verify_wall_local.py screens
+python3 web/admin/grafana/verify_wall_local.py screens [--out DIR]
 ```
 
 `serve` reads only the authorized PostHog key and Shopify fields from the supplied
@@ -211,7 +270,7 @@ The provisioned board rewrites the proxy URL only in its local copy.
 Run records and screenshots are written only to
 `/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
 never commit that workspace run directory in the public repository. The local
-verifier uses the `omi-tv-v2-prod-fix-rev1-1440.png` / `-1920.png` screenshot names.
+verifier writes `omi-tv-v3-1920.png` / `omi-tv-v3-1440.png` (default `build-screens/`).
 Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
@@ -276,3 +335,5 @@ Regularity statistics remain inside HogQL; no raw identities leave the aggregate
 This is a daily approximation of the threshold evidence. **Cross-day and separated
 burst regularity detection is deferred**; client names alone never establish intent.
 Activity metrics and derived MAU units carry the MCP schema-2 definition revision.
+
+Private monitor.omi.me cutover, JWT prerequisites and kiosk limits: [platform runbook](../../../backend/charts/monitoring/grafana/README.md).

@@ -30,3 +30,8 @@ def record_deletion(uid: str, conversation_id: str) -> None:
     except AlreadyExists:
         # A retried delete after hard cleanup must preserve the original binding.
         pass
+    # Intent remains durable if storage cleanup fails, and retry runs the purge
+    # again even when the original tombstone already exists.
+    from database.batch_pipeline_purge import purge_batch_owner
+
+    purge_batch_owner(uid, conversation_id=conversation_id)
