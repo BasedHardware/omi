@@ -5180,7 +5180,16 @@ filter on the existing query. A bounded process-local document-ID cursor advance
 past held/capped/running rows and wraps on an empty page, without a second query
 or document lookup. The durable prepared/running token forbids repeated
 paid STT after timeout, lost reply or process death. `failed_held` needs separate
-operator disposition; no automated reset or second paid attempt is introduced.
+operator disposition; no automatic reset or second paid attempt is permitted.
+
+`BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED=false` keeps the existing CPU
+recovery selector. When enabled, strict-VAD-positive empty units use Modulate
+once within their paid intent, avoiding another Parakeet call for unset intake
+language. Existing strict-VAD silence evidence remains required for silence.
+The separate historical operator is dry-run default, owner/census/digest-bound
+and capped at 67 units in an explicitly approved paid epoch 2; it preserves epoch
+1 and only reconciles running calls. Valid results use normal sibling release
+and upload completion. See [recovery and rollback](batch-pipeline-serving.md).
 
 `BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED=false` enables no counters by default.
 When enabled, existing committed transitions emit
