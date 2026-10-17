@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
@@ -238,7 +239,10 @@ def update_announcement(announcement_id: str, updates: Dict[str, Any]) -> Option
     if not getattr(doc, "exists", False):
         return None
 
-    doc_ref.update(updates)
+    try:
+        doc_ref.update(updates)
+    except NotFound:
+        return None
     return get_announcement_by_id(announcement_id)
 
 
@@ -260,7 +264,10 @@ def deactivate_announcement(announcement_id: str) -> bool:
     if not getattr(doc, "exists", False):
         return False
 
-    doc_ref.update({"active": False})
+    try:
+        doc_ref.update({"active": False})
+    except NotFound:
+        return False
     return True
 
 
