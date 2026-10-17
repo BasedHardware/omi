@@ -21,9 +21,8 @@ from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
 from prometheus_client import Counter
 
-from services import summary_debt_repair
 from utils.conversations import summary_delivery
-from config.summary_guarantee import enabled as summary_enabled, deadline_seconds, repair_enabled
+from config.summary_guarantee import enabled as summary_enabled, deadline_seconds
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
@@ -395,9 +394,6 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
     if not owns_runtime():
         return counts
 
-    if repair_enabled():
-
-        summary_debt_repair.tick(now=current)
     binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     client = get_firestore_client()

@@ -43,7 +43,7 @@ this PR does not bulk-enroll previously unmarked conversations. A separately
 reviewed, owner-scoped migration is required to establish provenance for those
 rows. Enabling the new flag alone is not a historical backlog drain.
 
-The existing sync repair owner scans indexed overdue `summary_due_at` rows,
+Only the existing scheduled two-minute sequencer sweep scans indexed overdue `summary_due_at` rows,
 including completed kept minimums. A global Firestore cursor/lease permits one
 page per 120 seconds, at most 100 documents and **10 admission attempts** per
 winning tick. Cursor rotation passes blocked rows instead of permanently
@@ -55,8 +55,9 @@ revision is manufactured. The original backfill worker binding is retained.
 
 Worst-case document-read budget, excluding transaction retries: 100 scan reads
 + 1 cursor claim + 1 cursor finish + 10 × 8 admission reads = **182 per winning
-tick, 131,040/day** at a continuous two-minute cadence. Losing invocations use one
-cursor read each; their rate is the existing repair caller rate, not a new timer.
+tick, 131,040/day** at the existing scheduled two-minute cadence. Duplicate
+scheduler deliveries cost one cursor read each and are refused by the durable
+lease/next-tick fence. Batch pump invocations never run the scan or read its cursor.
 Queries may additionally bill bounded index-entry batches because the cursor
 orders by timestamp and document name. Empty/short pages reduce cost. Both gates
 off incur **zero additional repair reads**. There is one minimal content-free
@@ -101,7 +102,7 @@ emission can lose a Prometheus observation; the durable metadata remains truth.
    at writes, mark/claims and repair. Keep demand/lazy/tool and repeat-work flags
    unchanged during this qualification.
 3. For the same canary set `SUMMARY_DEBT_REPAIR_ENABLED=true` on existing repair
-   owners (backend-sync and any batch projection pump host). Produce synthetic
+   owner (backend-sync; the existing two-minute sequencer endpoint). Produce synthetic
    ended/continuous-append uploads, kill a synthetic worker after minimum commit,
    and verify the same generation gets a real persisted/rendered summary.
    Confirm manual/deleted/local-only/BYOK rows never run managed repair.

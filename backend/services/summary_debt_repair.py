@@ -1,4 +1,4 @@
-"""Bounded completed-minimum repair, invoked by the existing sync outbox sweep.
+"""Bounded completed-minimum repair, invoked by the existing scheduled sync sequencer sweep.
 
 Only server-provenance debt is indexed. Historical rows without provenance are
 not guessed from their nonempty title. The durable cursor rotates past blocked
