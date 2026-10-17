@@ -1184,6 +1184,17 @@ export interface ChartDataset {
   label: string;
 }
 
+export interface ChatAtCap {
+  body: string;
+  reset_at: number;
+  reset_line: string;
+  state?: "paused";
+  title: string;
+  trigger?: "usage_budget";
+  upgrade_label?: string | null;
+  upgrade_plan?: string | null;
+}
+
 export interface ChatEvidenceEnvelope {
   references?: Array<ChatEvidenceReference>;
   request_id?: string | null;
@@ -1252,6 +1263,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  chat_at_cap?: ChatAtCap | null;
   is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
@@ -1260,6 +1272,7 @@ export interface ChatUsageQuota {
   reset_at?: number | null;
   unit: ChatQuotaUnit;
   used: number;
+  uses_shared_budget?: boolean;
 }
 
 export interface CheckVerificationRequest {
@@ -1753,6 +1766,7 @@ export interface CreateConversationTranscriptSegment {
   speaker?: string | null;
   speaker_id?: number | null;
   start: number;
+  stt_provider?: string | null;
   text: string;
 }
 
@@ -2906,6 +2920,21 @@ export interface HasSpeechProfileResponse {
   has_profile: boolean;
 }
 
+export interface HeldAudioRecording {
+  id: string;
+  seconds: number;
+  started_at: number;
+}
+
+export interface HeldAudioSummary {
+  count?: number;
+  recordings?: Array<HeldAudioRecording>;
+  reset_at: number;
+  retain_live: boolean;
+  seconds: number;
+  state?: "paused" | "recovering";
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -3964,6 +3993,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
@@ -5119,6 +5149,15 @@ export interface StoreRecordingPermissionResponse {
   store_recording_permission: boolean;
 }
 
+export interface StorefrontCapChoice {
+  body: string;
+  dont_ask_again_label: string;
+  on_device_label: string;
+  on_device_upgrade_line: string;
+  title: string;
+  upgrade_label: string;
+}
+
 export interface StorefrontCurrent {
   cancel_at_period_end?: boolean;
   interval?: "month" | "year" | null;
@@ -5132,6 +5171,7 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_lines?: Array<string> | null;
   cta_label?: string | null;
   currency: string;
   headline: string;
@@ -5143,7 +5183,9 @@ export interface StorefrontPrice {
 }
 
 export interface StorefrontResponse {
+  at_cap?: StorefrontCapChoice | null;
   catalog_revision: number;
+  chat_at_cap?: ChatAtCap | null;
   current?: StorefrontCurrent | null;
   header?: string | null;
   schema_version?: 2;
@@ -5169,8 +5211,11 @@ export interface StorefrontTier {
 }
 
 export interface StorefrontUsage {
+  hours_left?: number | null;
   kind?: "usage_budget" | "transcription" | "unavailable";
+  mcp_cap_reached?: boolean;
   meter_line?: string | null;
+  more_label?: string | null;
   nudge_line?: string | null;
   percent?: number | null;
   period_id?: string | null;
@@ -5934,6 +5979,7 @@ export interface UserSubscriptionResponse {
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
@@ -6337,6 +6383,7 @@ export interface OmiApiSchemas {
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
+  "ChatAtCap": ChatAtCap;
   "ChatEvidenceEnvelope": ChatEvidenceEnvelope;
   "ChatEvidenceReference": ChatEvidenceReference;
   "ChatFirstSubject": ChatFirstSubject;
@@ -6554,6 +6601,8 @@ export interface OmiApiSchemas {
   "HTTPValidationError": HTTPValidationError;
   "HarnessEdit": HarnessEdit;
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
+  "HeldAudioRecording": HeldAudioRecording;
+  "HeldAudioSummary": HeldAudioSummary;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -6858,6 +6907,7 @@ export interface OmiApiSchemas {
   "StoreMeetingRequest": StoreMeetingRequest;
   "StoreMeetingResponse": StoreMeetingResponse;
   "StoreRecordingPermissionResponse": StoreRecordingPermissionResponse;
+  "StorefrontCapChoice": StorefrontCapChoice;
   "StorefrontCurrent": StorefrontCurrent;
   "StorefrontPrice": StorefrontPrice;
   "StorefrontResponse": StorefrontResponse;

@@ -38,6 +38,7 @@ from config.plan_catalog import PAID_PLAN_TYPES, PlanType, WIRE_PLAN_ALIASES
 from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.llm.model_config import get_all_configured_features, get_byok_provider, get_provider
 from utils.subscription import request_has_llm_byok_key
+from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,9 @@ DECISION_REASONS: frozenset[str] = frozenset(
         'byok_not_validated',
         'byok_not_enrolled',
         'plan_paid',
+        'ladder_pro_required',
+        'usage_budget_exhausted',
+        'ladder_budget_available',
         'basic_not_entitled',
         'plan_unknown_fail_open',
         'authorization_unavailable',
@@ -183,6 +187,8 @@ def _identified_plan(plan: Any) -> PlanType | None:
     for member in PlanType:
         if member.value == plan:
             return member
+    if plan == 'pro' and ladder_v1.policy.enabled('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED'):
+        return None
     return WIRE_PLAN_ALIASES.get(plan)
 
 
@@ -371,6 +377,21 @@ def _authorize_byok(
                 plan=None,
                 plan_resolved=False,
             )
+        gate = (
+            ladder_v1.feature_allowed(uid, feature)
+            if subscription is _UNRESOLVED
+            else ladder_v1.feature_allowed(uid, feature, subscription)
+        )
+        if gate is False:
+            plan, plan_resolved = _plan_if_already_read(subscription)
+            return _decision(
+                allowed=False,
+                reason='ladder_pro_required',
+                feature=feature,
+                funding_owner='byok',
+                plan=plan,
+                plan_resolved=plan_resolved,
+            )
     except Exception as exc:
         logger.warning('managed compute authorization unavailable: %s', type(exc).__name__)
         return _decision(
@@ -423,6 +444,44 @@ def _authorize_omi(uid: str, feature: str, *, subscription: Any) -> Decision:
             funding_owner='omi',
             plan=None,
             plan_resolved=False,
+        )
+    try:
+        gate = (
+            ladder_v1.feature_allowed(uid, feature, subscription)
+            if subscription is not _UNRESOLVED
+            else ladder_v1.feature_allowed(uid, feature)
+        )
+        if gate is False:
+            return _decision(
+                allowed=False,
+                reason='ladder_pro_required',
+                feature=feature,
+                funding_owner='omi',
+                plan=plan,
+                plan_resolved=plan_resolved,
+            )
+        budget = (
+            ladder_v1.budget_snapshot(uid)
+            if subscription is _UNRESOLVED
+            else ladder_v1.budget_snapshot(uid, subscription)
+        )
+        if budget is not None:
+            return _decision(
+                allowed=budget['budget_percent'] < 100,
+                reason='ladder_budget_available' if budget['budget_percent'] < 100 else 'usage_budget_exhausted',
+                feature=feature,
+                funding_owner='omi',
+                plan=plan,
+                plan_resolved=plan_resolved,
+            )
+    except Exception:
+        return _decision(
+            allowed=False,
+            reason='authorization_unavailable',
+            feature=feature,
+            funding_owner='omi',
+            plan=plan,
+            plan_resolved=plan_resolved,
         )
     if plan in PAID_PLAN_TYPES:
         return _decision(

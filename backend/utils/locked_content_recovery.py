@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from typing import Callable
 
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
 from utils.locked_content_flags import reset_recovery_enabled
 
 logger = logging.getLogger(__name__)

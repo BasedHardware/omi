@@ -13204,19 +13204,19 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'பரிந்துரைக்கப்பட்டது';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'அனைத்து திட்டங்களையும் காண்க';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'திட்டங்களைப் பார்';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'உங்கள் திட்டம்';
 
   @override
   String get paywallNotNow => 'Not now';
@@ -13872,4 +13872,364 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'இந்த உரையாடலைச் சுருக்கும்போது ஏதோ தவறு நடந்தது.';
+
+  @override
+  String get noContentToDisplay => 'காட்ட உள்ளடக்கம் இல்லை';
+
+  @override
+  String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
+
+  @override
+  String get onDeviceAtCapTitle => 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள்';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Omi இன்னும் பதிவுசெய்கிறது. இந்த மாதத்தின் மீதியை எப்படி உரையாக்குவது என்று தேர்வுசெய்யவும்.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'உங்கள் பயன்பாடு $date அன்று மீட்டமைக்கப்படும்.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'இந்த ஃபோனிலேயே உரையாக்கு';
+
+  @override
+  String get onDeviceIncluded => 'உள்ளடங்கியது';
+
+  @override
+  String get onDeviceOptionChargingBody => 'தொலைபேசி சார்ஜ் ஆகும்போது இயங்கும்.';
+
+  @override
+  String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+
+  @override
+  String get onDeviceAtCapFooter => 'எந்த வழியிலும் எதுவும் இழக்கப்படாது. இதை அமைப்புகள் › பேச்சு என்பதில் மாற்றலாம்.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'படி $step / $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi பேச்சு மாதிரியை ஒருமுறை பதிவிறக்கும். அதன் பிறகு உங்கள் பதிவுகள் இங்கேயே உரையாக மாறும், உங்கள் பயன்பாட்டில் கணக்கிடப்படாமல்.';
+
+  @override
+  String get onDeviceSpeechModel => 'பேச்சு மாதிரி';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fi மூலம் பதிவிறக்குகிறது · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'பதிவிறக்குகிறது · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'சுமார் $time மீதம்';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi-க்காகக் காத்திருக்கிறது';
+
+  @override
+  String get onDeviceDownloadFailed => 'பதிவிறக்கம் முடியவில்லை';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'பதிவிறக்கப்படவில்லை';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'நிறுவப்பட்டது · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'இந்த ஃபோனில் இன்னும் கிடைக்கவில்லை';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'பதிவிறக்கம் நடக்கும்போதும் பதிவுசெய்யலாம். இதற்காக எதுவும் காத்திருக்காது.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'உரையாக்கப்படும் வரை ஆடியோ உங்கள் ஃபோனிலேயே இருக்கும்.';
+
+  @override
+  String get onDeviceWifiOnly => 'Wi-Fi-இல் மட்டும் பதிவிறக்கு';
+
+  @override
+  String get onDeviceDownloadModel => 'பேச்சு மாதிரியைப் பதிவிறக்கு';
+
+  @override
+  String get onDeviceScheduleTitle => 'எப்போது உரையாக்குவது';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi எப்போது உரையாக்க வேண்டும்?';
+
+  @override
+  String get onDeviceScheduleBody => 'இதை எப்போது வேண்டுமானாலும் மாற்றலாம்.';
+
+  @override
+  String get onDeviceScheduleCharging => 'சார்ஜ் ஆகும்போது';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'சார்ஜரில் இணைத்த பிறகு, பொதுவாக இரவில், உரைப்பதிவுகள் தோன்றும்.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'பேட்டரி: கிட்டத்தட்ட இல்லை';
+
+  @override
+  String get onDeviceScheduleHours => 'சில மணிநேரங்களுக்கு ஒருமுறை';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'பேட்டரியில் சிறு இடைவெளிகளில் ஈடுசெய்வதால், உரைப்பதிவுகள் அரிதாகவே சில மணிநேரங்களுக்கு மேல் தாமதமாகும்.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'பேட்டரி: நாளுக்கு சுமார் $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'நீங்கள் பேசும்போதே';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi திறந்திருக்கும் போது தொடர்ந்து உரையாக மாற்றுகிறது.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'பேட்டரி: ஒரு மணிநேர உரையாடலுக்கு சுமார் $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration உரையாக்கக் காத்திருக்கிறது';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'ஃபோனை சார்ஜரில் இணைத்த பிறகு இவை தயாராகும். பதிவு வழக்கம்போல் தொடரும்.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi சில மணிநேரங்களுக்கு ஒருமுறை ஈடுசெய்யும். பதிவு வழக்கம்போல் தொடரும்.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'பேட்டரி குறைவாக உள்ளதால் சார்ஜருக்காகக் காத்திருக்கிறது. பதிவு வழக்கம்போல் தொடரும்.';
+
+  @override
+  String get onDeviceTranscribeNow => 'இப்போது உரையாக்கு';
+
+  @override
+  String get onDeviceUsesBattery => 'பேட்டரியைப் பயன்படுத்தும்';
+
+  @override
+  String get onDeviceTranscribing => 'உரையாக்குகிறது…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'சார்ஜருக்காகக் காத்திருக்கிறது';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'உரையாக்கக் காத்திருக்கிறது';
+
+  @override
+  String get onDeviceWaitingForSetup => 'சேமிக்கப்பட்டது, அமைப்புக்காகக் காத்திருக்கிறது';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'இந்த iPhone-இல் உரையாக்கப்பட்டது';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'இந்த ஃபோனில் உரையாக்கப்பட்டது';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'இந்த iPhone-இல் உரையாக்கப்பட்டு சுருக்கப்பட்டது';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud சுருக்கியது';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'இது ஏன் உங்கள் ஃபோனில் செய்யப்பட்டது';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => 'இந்த மாத வரம்பை அடைந்தீர்கள், எனவே Omi இதை உங்கள் தொலைபேசியில் உரையாக்கியது.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'பயன்பாட்டைச் சேமிக்க இந்தத் தொலைபேசியில் உரையாக்கத் தேர்ந்தெடுத்தீர்கள்.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'சுருக்கமும் இந்த iPhone-இலேயே எழுதப்பட்டது.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'எல்லாவற்றையும் இந்த ஃபோனிலேயே வைத்திருப்பதால், சுருக்கம் இல்லை.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'இந்தச் சுருக்கத்தை Omi Cloud ஏன் எழுதியது';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'இந்த iPhone தானாகச் சுருக்க முடியாது (அதற்கு iPhone 15 Pro அல்லது அதற்குப் பிந்தையது தேவை). உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் பயன்பாட்டில் கணக்கிடப்படாது.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'இந்த ஃபோன் தானாகச் சுருக்க முடியாது. உரைப்பதிவு உங்கள் ஃபோனில் உருவாக்கப்பட்டது, அதன் உரை மட்டுமே சுருக்குவதற்காக Omi-க்கு அனுப்பப்பட்டது. இது உங்கள் பயன்பாட்டில் கணக்கிடப்படாது.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloud மூலம் மீண்டும் செய்';
+
+  @override
+  String get onDeviceRedoHint => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
+
+  @override
+  String get onDeviceKeepEverything => 'எல்லாவற்றையும் இந்த ஃபோனிலேயே வை';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'உரைப்பதிவுகள் மட்டும், சுருக்கங்கள் இல்லை';
+
+  @override
+  String get onDeviceAfterLiveHours => 'உங்கள் வரம்பை அடையும்போது';
+
+  @override
+  String get onDeviceWhen => 'எப்போது';
+
+  @override
+  String get onDeviceSummaries => 'சுருக்கங்கள்';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'இந்த iPhone-இல்';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud மூலம்';
+
+  @override
+  String get onDeviceSaveLiveHours => 'எப்போதும் இந்தத் தொலைபேசியில் உரையாக்கு';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'உங்கள் பயன்பாட்டைச் சேமிக்கும். பேசுபவர் குறிகள் இல்லை.';
+
+  @override
+  String get onDeviceOnThisPhone => 'இந்த ஃபோனில்';
+
+  @override
+  String get onDeviceAudioWaiting => 'ஃபோனில் காத்திருக்கும் ஆடியோ';
+
+  @override
+  String get onDeviceRemoveModel => 'பேச்சு மாதிரியை அகற்று';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'பேச்சு மாதிரியை அகற்றவா?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'நீங்கள் அதை மீண்டும் பதிவிறக்கும் வரை அல்லது பயன்பாடு மீட்டமைக்கப்படும் வரை பதிவுகள் இந்தத் தொலைபேசியில் காத்திருக்கும்.';
+
+  @override
+  String get onDeviceRemove => 'அகற்று';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'உரைப்பதிவுகளைப் பார்க்க அமைப்பை முடிக்கவும்';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். Omi இன்னும் உங்கள் தொலைபேசியில் ஒலியைப் பதிவுசெய்து சேமிக்கிறது. பேச்சு மாதிரியைப் பதிவிறக்கவும், அது பின்தங்கியதை நிறைவு செய்யும்.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size பதிவிறக்கம்';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'இந்தத் தொலைபேசி இன்னும் பேச்சு மாதிரியை இயக்க முடியாது. பயன்பாடு மீட்டமைக்கப்படும் வரை அல்லது நீங்கள் மேம்படுத்தும் வரை ஒலி சேமிக்கப்படும்.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'வரம்பை அடையும்போது இந்தத் தொலைபேசியில் உரையாக்குங்கள்';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% பயன்படுத்தப்பட்டது · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% பயன்படுத்தப்பட்டது · சுமார் $hours மணி நேர பதிவு மீதம் · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'மேலும் பயன்பாட்டைப் பெறுங்கள்';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'பேச்சு தயாராகிறது · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். உங்கள் பதிவுகள் சேமிக்கப்பட்டு, வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'புதிய பதிவுகள் இந்த தொலைபேசியில் எழுதப்படும். காத்திருக்கும் பதிவுகள் வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'பதிவு, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · எழுத காத்திருக்கிறது';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'மேக எழுத்துப்படிப்பு இடைநிறுத்தப்பட்டது';
+
+  @override
+  String get heldAudioLiveBody => 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். Omi பதிவைத் தொடர்கிறது.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'வரம்புக்குப் பின் $minutes நிமிடம் பதிவாகியுள்ளது';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration காத்திருக்கிறது';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration உரையாக்கக் காத்திருக்கிறது';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'மேலும் $count',
+      one: 'மேலும் 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'காத்திருக்கும் உங்கள் பதிவுகள் எழுத்தாக்கப்படுகின்றன';
 }

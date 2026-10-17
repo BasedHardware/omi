@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Any, Callable, Mapping, Sequence
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.batch_pipeline import empty_asr_recovery_enabled, empty_asr_disposition_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig

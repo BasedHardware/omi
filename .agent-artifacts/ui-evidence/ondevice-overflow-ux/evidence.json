@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-at-cap-sheet.png",
+      "platform": "mobile-ios",
+      "description": "At-cap choice sheet: Transcribe on this phone (Included) or Upgrade to Pro",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-setup-not-downloaded.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 1: speech model not downloaded, Download Speech Model, Wi-Fi only",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-setup-downloading.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 1: downloading on Wi-Fi at 62% with time left and Cancel",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-setup-installed.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 1: model installed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-schedule.png",
+      "platform": "mobile-ios",
+      "description": "Schedule with qualitative battery copy; charging is the default",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-conversations-waiting.png",
+      "platform": "mobile-ios",
+      "description": "Conversations: waiting banner with Transcribe Now, Waiting for charger chips, provenance chips",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-conversations-transcribing.png",
+      "platform": "mobile-ios",
+      "description": "Conversations: a run in progress, Transcribing chips",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-summary-on-iphone.png",
+      "platform": "mobile-ios",
+      "description": "Local summary provenance; unavailable cloud audio re-transcription action is hidden",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-summary-by-omi-cloud.png",
+      "platform": "mobile-ios",
+      "description": "Cloud text summary provenance and transcript-only privacy choice; no audio redo action",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-settings-top.png",
+      "platform": "mobile-ios",
+      "description": "On-Device Transcription settings: live-hours meter and after-hours options",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-settings-on-this-phone.png",
+      "platform": "mobile-ios",
+      "description": "On-Device Transcription settings: model, waiting audio, Remove Speech Model",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-conversations-unsupported.png",
+      "platform": "mobile-ios",
+      "description": "iPhone without an on-device model yet, at cap: audio stays saved, Get More Live Hours",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-conversations-waiting-light.png",
+      "platform": "mobile-ios",
+      "description": "Conversations waiting banner and chips in light appearance",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-finish-setup.png",
+      "platform": "mobile-android",
+      "description": "Android at cap without a model: finish setup banner, Saved, waiting for setup chip",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-finish-setup-downloading.png",
+      "platform": "mobile-android",
+      "description": "Android finish setup banner while the model downloads",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-summary-by-omi-cloud.png",
+      "platform": "mobile-android",
+      "description": "Android summary by Omi Cloud with provenance and keep-everything switch",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-ios-ios26-setup-no-download.png",
+      "platform": "mobile-ios",
+      "description": "iOS 26 setup with OS-managed assets and no Omi model download",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-ios26-os-asset-installing.png",
+      "platform": "mobile-ios",
+      "description": "Apple asset installation progress",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-ios-ios17-parakeet-setup.png",
+      "platform": "mobile-ios",
+      "description": "Older supported iOS downloads Parakeet v2: 443 MB and Wi-Fi-only option",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-free-user-at-cap.png",
+      "platform": "mobile-ios",
+      "description": "Free monthly allowance exhausted: same on-device choice",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-ios-transcribing-on-phone-progress.png",
+      "platform": "mobile-ios",
+      "description": "On-phone transcription progress",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-ios-ios15-lower-quality-fallback.png",
+      "platform": "mobile-ios",
+      "description": "Legacy Apple native speech with lower-quality warning and no Omi download",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-ios-local-speech-permission.png",
+      "platform": "mobile-ios",
+      "description": "Actual shared local speech recovery notice with SF Pro and iOS platform; same component as READY, synthetic UI fixture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-mobile-ios-local-speech-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Actual shared local speech recovery notice with SF Pro and iOS platform; same component as READY, synthetic UI fixture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

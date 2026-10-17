@@ -7502,6 +7502,68 @@
         "title": "ChartDataset",
         "type": "object"
       },
+      "ChatAtCap": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "reset_line": {
+            "title": "Reset Line",
+            "type": "string"
+          },
+          "state": {
+            "const": "paused",
+            "default": "paused",
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "const": "usage_budget",
+            "default": "usage_budget",
+            "title": "Trigger",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Label"
+          },
+          "upgrade_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Plan"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "reset_at",
+          "reset_line"
+        ],
+        "title": "ChatAtCap",
+        "type": "object"
+      },
       "ChatEvidenceEnvelope": {
         "description": "Versioned transport envelope for supplemental chat evidence.",
         "properties": {
@@ -7954,6 +8016,16 @@
             "title": "Allowed",
             "type": "boolean"
           },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "is_overage_plan": {
             "default": false,
             "title": "Is Overage Plan",
@@ -8000,6 +8072,11 @@
           "used": {
             "title": "Used",
             "type": "number"
+          },
+          "uses_shared_budget": {
+            "default": false,
+            "title": "Uses Shared Budget",
+            "type": "boolean"
           }
         },
         "required": [
@@ -11150,6 +11227,18 @@
             "description": "Start time in seconds (e.g., 0.0, 1.5, 60.2)",
             "title": "Start",
             "type": "number"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
           },
           "text": {
             "description": "The text spoken in this segment",
@@ -18089,6 +18178,76 @@
         "title": "HasSpeechProfileResponse",
         "type": "object"
       },
+      "HeldAudioRecording": {
+        "description": "One recording the server is keeping until reset or upgrade. No audio bytes.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "seconds"
+        ],
+        "title": "HeldAudioRecording",
+        "type": "object"
+      },
+      "HeldAudioSummary": {
+        "description": "Additive held-audio totals. Absent until funded-STT dispatch enforcement is holding audio.\n\n``count`` is the exact number of holds, including ones past the newest page.\n``recordings`` is that page, newest first.",
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "recordings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HeldAudioRecording"
+            },
+            "title": "Recordings",
+            "type": "array"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "retain_live": {
+            "title": "Retain Live",
+            "type": "boolean"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "state": {
+            "default": "paused",
+            "enum": [
+              "paused",
+              "recovering"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seconds",
+          "reset_at",
+          "retain_live"
+        ],
+        "title": "HeldAudioSummary",
+        "type": "object"
+      },
       "IgnoredVoice": {
         "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
         "properties": {
@@ -24564,6 +24723,16 @@
               }
             ],
             "title": "Desktop Grandfather Until"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",
@@ -31180,6 +31349,44 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
+      "StorefrontCapChoice": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "dont_ask_again_label": {
+            "title": "Dont Ask Again Label",
+            "type": "string"
+          },
+          "on_device_label": {
+            "title": "On Device Label",
+            "type": "string"
+          },
+          "on_device_upgrade_line": {
+            "title": "On Device Upgrade Line",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "title": "Upgrade Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "upgrade_label",
+          "on_device_label",
+          "dont_ask_again_label",
+          "on_device_upgrade_line"
+        ],
+        "title": "StorefrontCapChoice",
+        "type": "object"
+      },
       "StorefrontCurrent": {
         "properties": {
           "cancel_at_period_end": {
@@ -31255,6 +31462,20 @@
           "amount_minor": {
             "title": "Amount Minor",
             "type": "integer"
+          },
+          "confirm_lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Lines"
           },
           "cta_label": {
             "anyOf": [
@@ -31339,9 +31560,29 @@
       },
       "StorefrontResponse": {
         "properties": {
+          "at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCapChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "catalog_revision": {
             "title": "Catalog Revision",
             "type": "integer"
+          },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current": {
             "anyOf": [
@@ -31496,6 +31737,17 @@
       },
       "StorefrontUsage": {
         "properties": {
+          "hours_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Left"
+          },
           "kind": {
             "default": "unavailable",
             "enum": [
@@ -31505,6 +31757,11 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "mcp_cap_reached": {
+            "default": false,
+            "title": "Mcp Cap Reached",
+            "type": "boolean"
           },
           "meter_line": {
             "anyOf": [
@@ -31516,6 +31773,17 @@
               }
             ],
             "title": "Meter Line"
+          },
+          "more_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "More Label"
           },
           "nudge_line": {
             "anyOf": [
@@ -36386,6 +36654,16 @@
               }
             ],
             "title": "Desktop Grandfather Until"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",

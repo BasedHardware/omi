@@ -350,3 +350,39 @@ def display_equivalents(
         'recording_hours': float(remaining / recording_hour) if recording_hour else 0.0,
         'chat_messages': float(remaining / chat) if chat else 0.0,
     }
+
+
+@lru_cache(maxsize=1)
+def _recording_rate_card() -> dict[str, Any]:
+    """Versioned presentation rates; v1 event pricing and historical identities stay intact."""
+    raw = Path(__file__).with_name('rate_card_v2.json').read_bytes()
+    if hashlib.sha256(raw).hexdigest() != RATE_CARD_SHA256['v2']:
+        raise ValueError('recording card changed: publish a new version file')
+    card = json.loads(raw)
+    if card['version'] != 'v2' or card['unit_usd_micros'] != 1000:
+        raise ValueError('invalid recording rate card')
+    return card
+
+
+def recording_rate_card() -> dict[str, Any]:
+    from copy import deepcopy
+
+    return deepcopy(_recording_rate_card())
+
+
+def recording_units_per_hour(lane: str | None = None) -> Decimal:
+    recording = recording_rate_card()['recording']
+    rates = recording['units_per_recorded_hour']
+    if lane == 'on_device':
+        return _d(recording['on_device_transcription_units_per_hour'])
+    live, batch = _d(rates['live']), _d(rates['batch'])
+    if live <= 0 or batch <= 0:
+        raise ValueError('cloud recording rates must be positive')
+    if lane in {'live', 'batch'}:
+        return live if lane == 'live' else batch
+    if lane is not None:
+        raise ValueError('unknown recording lane')
+    background = _d(recording['background_share'])
+    if background > 1:
+        raise ValueError('background share must be at most one')
+    return live * (1 - background) + batch * background

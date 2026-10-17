@@ -207,6 +207,22 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
         return j
 
 
+class SttCapLiveHeldEvent(MessageEvent):
+    """Session-scoped UI receipt. Seconds count only durably held live PCM."""
+
+    event_type: str = "stt_cap_live_held"
+    session_id: str
+    held_seconds: int
+    paused: bool
+    reset_at: int
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
 class FreemiumThresholdReachedEvent(MessageEvent):
     event_type: str = "freemium_threshold_reached"
     remaining_seconds: int

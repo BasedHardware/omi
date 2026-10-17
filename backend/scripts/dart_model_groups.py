@@ -513,6 +513,8 @@ SCHEMA_GROUPS = {
             'SubscriptionPlan',
             'PhoneCallQuota',
             'TranscriptionAllowanceSnapshot',
+            'HeldAudioRecording',
+            'HeldAudioSummary',
             'UserSubscriptionResponse',
             'UsageStats',
             'UsageHistoryPoint',

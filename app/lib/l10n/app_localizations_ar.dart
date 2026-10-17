@@ -13041,19 +13041,19 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'موصى به';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'عرض كل الخطط';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'عرض الخطط';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'خطتك';
 
   @override
   String get paywallNotNow => 'Not now';
@@ -13699,4 +13699,362 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'حدث خطأ ما أثناء تلخيص هذه المحادثة.';
+
+  @override
+  String get noContentToDisplay => 'لا يوجد محتوى للعرض';
+
+  @override
+  String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
+
+  @override
+  String get onDeviceAtCapTitle => 'لقد وصلت إلى حد هذا الشهر';
+
+  @override
+  String get onDeviceAtCapBody => 'لا يزال Omi يسجّل. اختر طريقة نسخ ما تبقى من هذا الشهر.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'يُعاد تعيين استخدامك في $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'النسخ على هذا الهاتف';
+
+  @override
+  String get onDeviceIncluded => 'مشمول';
+
+  @override
+  String get onDeviceOptionChargingBody => 'يعمل أثناء شحن هاتفك.';
+
+  @override
+  String get onDeviceUpgradeBody => 'قم بالترقية إلى Pro لفصل المتحدثين ودقة أعلى';
+
+  @override
+  String get onDeviceAtCapFooter => 'لن يضيع شيء في الحالتين. يمكنك تغيير ذلك من الإعدادات › النسخ.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'الخطوة $step من $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'يُنزّل Omi نموذج كلام مرة واحدة. بعد ذلك تتحوّل تسجيلاتك إلى نص هنا مباشرة، دون أن تُحتسب ضمن استخدامك.';
+
+  @override
+  String get onDeviceSpeechModel => 'نموذج الكلام';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'جارٍ التنزيل عبر Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'جارٍ التنزيل · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'يتبقى نحو $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'في انتظار Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'لم يكتمل التنزيل';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'غير مُنزَّل';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'مثبَّت · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'غير متاح على هذا الهاتف بعد';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'واصل التسجيل أثناء التنزيل. لا شيء ينتظر اكتماله.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'يبقى الصوت على هاتفك حتى يتم نسخه.';
+
+  @override
+  String get onDeviceWifiOnly => 'التنزيل عبر Wi-Fi فقط';
+
+  @override
+  String get onDeviceDownloadModel => 'تنزيل نموذج الكلام';
+
+  @override
+  String get onDeviceScheduleTitle => 'وقت النسخ';
+
+  @override
+  String get onDeviceScheduleHeadline => 'متى يجب أن ينسخ Omi؟';
+
+  @override
+  String get onDeviceScheduleBody => 'يمكنك تغيير ذلك في أي وقت.';
+
+  @override
+  String get onDeviceScheduleCharging => 'أثناء الشحن';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'تظهر النصوص بعد توصيل الشاحن، عادةً خلال الليل.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'البطارية: شبه معدوم';
+
+  @override
+  String get onDeviceScheduleHours => 'كل بضع ساعات';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'يلحق بالمتأخر على دفعات قصيرة أثناء العمل بالبطارية، لذا نادرًا ما تتأخر النصوص أكثر من بضع ساعات.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'البطارية: نحو $percent% يوميًا';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'أثناء حديثك';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'يحوّل الكلام إلى نص بانتظام أثناء فتح Omi.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'البطارية: نحو $percent% لكل ساعة محادثة';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration بانتظار النسخ';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'ستكون جاهزة بعد توصيل هاتفك بالشاحن. يستمر التسجيل كالمعتاد.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'يلحق Omi بالمتأخر كل بضع ساعات. يستمر التسجيل كالمعتاد.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'في انتظار الشاحن لأن البطارية منخفضة. يستمر التسجيل كالمعتاد.';
+
+  @override
+  String get onDeviceTranscribeNow => 'انسخ الآن';
+
+  @override
+  String get onDeviceUsesBattery => 'يستهلك البطارية';
+
+  @override
+  String get onDeviceTranscribing => 'جارٍ النسخ…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'في انتظار الشاحن';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'بانتظار النسخ';
+
+  @override
+  String get onDeviceWaitingForSetup => 'محفوظ، بانتظار الإعداد';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'تم النسخ على هذا iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'تم النسخ على هذا الهاتف';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'تم النسخ والتلخيص على هذا iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'لخّصه Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'لماذا تمّ ذلك على هاتفك';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => 'وصلت إلى حد هذا الشهر، لذلك نسخ Omi هذا على هاتفك.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'اخترت النسخ على هذا الهاتف لتوفير استخدامك.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'كُتب الملخص أيضًا على هذا iPhone.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'تحتفظ بكل شيء على هذا الهاتف، لذا لا يوجد ملخص.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'لماذا كتب Omi Cloud هذا الملخص';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'لا يستطيع هذا iPhone التلخيص بمفرده (يتطلب ذلك iPhone 15 Pro أو أحدث). أُنشئ النص على هاتفك، ولم يُرسل إلى Omi سوى نصه لتلخيصه. لا يُحتسب ذلك ضمن استخدامك.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'لا يستطيع هذا الهاتف التلخيص بمفرده. أُنشئ النص على هاتفك، ولم يُرسل إلى Omi سوى نصه لتلخيصه. لا يُحتسب ذلك ضمن استخدامك.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'إعادة المعالجة عبر Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'قم بالترقية إلى Pro لفصل المتحدثين ودقة أعلى';
+
+  @override
+  String get onDeviceKeepEverything => 'الاحتفاظ بكل شيء على هذا الهاتف';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'نصوص فقط، بدون ملخصات';
+
+  @override
+  String get onDeviceAfterLiveHours => 'عند بلوغ حدك';
+
+  @override
+  String get onDeviceWhen => 'التوقيت';
+
+  @override
+  String get onDeviceSummaries => 'الملخصات';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'على هذا iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'عبر Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'انسخ دائمًا على هذا الهاتف';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'يوفّر استخدامك. بلا تسميات للمتحدثين.';
+
+  @override
+  String get onDeviceOnThisPhone => 'على هذا الهاتف';
+
+  @override
+  String get onDeviceAudioWaiting => 'صوت بانتظار النسخ على الهاتف';
+
+  @override
+  String get onDeviceRemoveModel => 'إزالة نموذج الكلام';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'إزالة نموذج الكلام؟';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'ستنتظر التسجيلات على هذا الهاتف حتى تُنزّله مرة أخرى أو يُعاد تعيين استخدامك.';
+
+  @override
+  String get onDeviceRemove => 'إزالة';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'أكمل الإعداد لرؤية نصوصك';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'لقد وصلت إلى حد هذا الشهر. ما زال Omi يسجّل ويحفظ الصوت على هاتفك. نزّل نموذج الكلام وسيلحق بالتسجيلات.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'تنزيل بحجم $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'هذا الهاتف لا يستطيع تشغيل نموذج الكلام بعد. يبقى الصوت محفوظًا حتى يُعاد تعيين استخدامك أو تقوم بالترقية.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'عند بلوغ حدك، انسخ على هذا الهاتف';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% مستخدم · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% مستخدم · حوالي $hours ساعات تسجيل متبقية · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'احصل على المزيد من الاستخدام';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'جارٍ تجهيز الكلام · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'لقد بلغت حد هذا الشهر. تسجيلاتك محفوظة وسيتم تفريغها بعد إعادة تعيين حدك في $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'التسجيلات الجديدة ستُفرغ على هذا الهاتف. التسجيلات المنتظرة ستُفرغ بعد إعادة تعيين حدك في $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'تسجيل، $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · في انتظار التفريغ';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'تم إيقاف التفريغ السحابي مؤقتا';
+
+  @override
+  String get heldAudioLiveBody => 'لقد بلغت حد هذا الشهر. يواصل Omi التسجيل.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes د مسجلة منذ بلوغ الحد';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'تُفرغ بعد إعادة تعيين حدك في $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration في الانتظار';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'تُفرغ بعد إعادة تعيين حدك في $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration بانتظار النسخ';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'و$count أخرى',
+      one: 'و1 أخرى',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'جارٍ تحويل تسجيلاتك المنتظرة إلى نص';
 }

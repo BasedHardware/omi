@@ -90,7 +90,7 @@ class OmiBleForegroundService : Service() {
          *  foreground service alive past app close so native can keep storing audio. */
         fun isBatchModeEnabled(context: Context): Boolean =
             context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-                .getBoolean("flutter.batchModeEnabled", false)
+                .let { it.getBoolean("flutter.batchModeEnabled", false) || it.getBoolean("flutter.onDeviceOverflowActive", false) }
 
         /** True when the service must persist past app close (sticky) — either for
          *  background streaming or batch capture. */

@@ -17,6 +17,7 @@ from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
+    configured_ladder_prices,
     DESKTOP_ENTITLED_PLAN_TYPES,
     MOBILE_PLAN_TYPES,
     PAID_PLAN_TYPES,
@@ -35,6 +36,8 @@ from utils.plan_wire_capabilities import understands_plan_identity
 from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
+from config import ladder_v1 as ladder_policy
+from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,9 @@ def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = N
     subs without the field set are treated as legacy until their next webhook
     populates the field).
     """
+    if ladder_policy.enabled('LADDER_V1_PRO_GATES_ENABLED') and subscription is not None:
+        if ladder_policy.entitlements(subscription) is not None:
+            return plan != PlanType.basic
     if plan in DESKTOP_ENTITLED_PLAN_TYPES:
         return True
     if plan == PlanType.unlimited and subscription is not None:
@@ -143,6 +149,9 @@ def grants_cloud_screen_vectors(uid: str) -> bool:
     `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
     user's screen search. The failure mode is a small overspend, not a lost capability.
     """
+    ladder_allowed = ladder_v1.feature_allowed(uid, 'screen_context')
+    if ladder_allowed is not None:
+        return ladder_allowed
     cached = _screen_vector_entitlement_cache.get(uid)
     if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
         return cached[0]
@@ -814,7 +823,10 @@ def price_ids_match_plan_and_interval(
     except ValueError:
         return False
 
-    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id)
+    configured_intervals = {price: row['interval'] for price, row in configured_ladder_prices().items()}
+    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id) or configured_intervals.get(
+        target_price_id
+    )
     for definition in get_paid_plan_definitions():
         if target_price_id == definition['monthly_price_id']:
             target_interval = 'month'
@@ -826,7 +838,9 @@ def price_ids_match_plan_and_interval(
         return False
 
     if not current_interval:
-        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id)
+        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id) or configured_intervals.get(
+            current_price_id
+        )
     if not current_interval:
         for definition in get_paid_plan_definitions():
             if current_price_id == definition['monthly_price_id']:
@@ -857,6 +871,8 @@ def is_purchasable_price_id(price_id: str) -> bool:
     """
     if not price_id:
         return False
+    if price_id in configured_ladder_prices():
+        return os.getenv('STOREFRONT_LADDER_V1_ENABLED', 'false') == 'true'
     for definition in get_paid_plan_definitions():
         if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
             return True
@@ -1093,10 +1109,19 @@ def get_chat_quota_snapshot(
     desktop callers can be paywalled; mobile callers fall through to the
     real plan logic.
     """
+    # Flagged quota display and admission share the same authority, including
+    # Free accounts whose older desktop trial status is exhausted.
+    enforcing = ladder_policy.budget_enforcement_enabled()
+    subscription = None
+    shared_budget = None
+    if enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(
+    if shared_budget is None and is_trial_paywalled(
         uid,
         platform,
         firestore_client=firestore_client,
@@ -1116,7 +1141,9 @@ def get_chat_quota_snapshot(
             'reset_at': usage['reset_at'],
         }
 
-    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    if not enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
@@ -1137,7 +1164,7 @@ def get_chat_quota_snapshot(
     if limit_value is not None:
         allowed = used < limit_value
 
-    return {
+    result = {
         'plan': plan,
         'unit': unit,
         'used': used,
@@ -1145,6 +1172,17 @@ def get_chat_quota_snapshot(
         'allowed': allowed,
         'reset_at': usage['reset_at'],
     }
+    if shared_budget is not None:
+        # Preserve the installed-client unit enum; the v2 sheet owns the shared meter.
+        result['allowed'] = shared_budget['budget_percent'] < 100
+        result['reset_at'] = shared_budget['reset_at']
+        result['is_overage_plan'] = False
+        result['uses_shared_budget'] = True
+        if not result['allowed']:
+            from utils.storefront_copy import chat_at_cap
+
+            result['chat_at_cap'] = chat_at_cap(shared_budget['plan_id'], shared_budget['reset_at'])
+    return result
 
 
 def enforce_chat_quota(
@@ -1158,7 +1196,8 @@ def enforce_chat_quota(
 ) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
-    - BYOK users with an LLM key attached: always allowed, no Omi-side cost —
+    - Flagged ladder/Free shared budgets pause chat at 100%, including BYOK.
+    - Otherwise BYOK users with an LLM key attached: allowed, no Omi-side cost —
       unless ``byok_exempt`` is False, for surfaces that only ever spend Omi's
       own key regardless of the user's (the realtime hub mints platform tokens).
     - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
@@ -1171,6 +1210,10 @@ def enforce_chat_quota(
     # all — never paywall it, or the gate hard-blocks its own deploys once the
     # probe's turns exhaust the Free cap.
     if uid == RELEASE_PROBE_UID:
+        return
+
+    # The flagged shared budget pauses chat on every ladder tier, including Free.
+    if ladder_v1.enforce_chat_budget(uid, firestore_client=firestore_client):
         return
 
     # Paywall test override — bypass BYOK + plan checks so the same 402
@@ -1501,6 +1544,9 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
         tuple: (can_pay: bool, reason: str)
     """
     subscription = users_db.get_user_valid_subscription(uid)
+    if target_price_id in configured_ladder_prices() and subscription is not None:
+        if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
+            return False, "Legacy subscriptions keep their current plan"
 
     # If no subscription or basic plan, check Stripe as source of truth
     # to guard against Firestore read-after-write lag
@@ -1681,6 +1727,7 @@ def resolve_transcription_allowance(
     usage: Any = _UNRESOLVED,
     byok_active: Any = _UNRESOLVED,
     omi_funded: bool = False,
+    usage_cache: Any = None,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1729,6 +1776,18 @@ def resolve_transcription_allowance(
             subscription = users_db.get_user_valid_subscription(uid)
         if not subscription:
             return _closed('subscription_inactive')
+        budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription, **budget_kwargs)
+        if ladder_budget is not None:
+            exhausted = ladder_budget['budget_percent'] >= 100
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_ON_DEVICE if exhausted else TRANSCRIPTION_MODE_MANAGED,
+                0 if exhausted else None,
+                'usage_budget_exhausted' if exhausted else 'usage_budget_available',
+                limit_seconds=None,
+                remaining_units=max(0, ladder_budget['budget_units'] - ladder_budget['used_units']),
+                budget_units=ladder_budget['budget_units'],
+            )
         allowance = transcription_allowance_seconds(subscription.plan)
         known_limit_seconds = allowance
         # The catalog's explicit unlimited marker projects to None. A finite
@@ -1834,6 +1893,11 @@ def resolve_conversation_processing_allowance(
             subscription = users_db.get_user_valid_subscription(uid)
         if not subscription:
             return _processing_closed('subscription_inactive')
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription)
+        if ladder_budget is not None:
+            if ladder_budget['budget_percent'] >= 100:
+                return _processing_closed('usage_budget_exhausted')
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'usage_budget_available')
         allowance = transcription_allowance_seconds(subscription.plan)
         if allowance is None:
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'plan_unlimited')
@@ -1976,3 +2040,8 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         logger.error(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
 
     return subscription
+
+
+def get_usage_units(uid: str) -> dict:
+    """Storefront display projection; enforcement remains separately flagged."""
+    return ladder_v1.usage_snapshot(uid) or {}

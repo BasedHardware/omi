@@ -329,6 +329,48 @@ class PhoneCallQuota {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
+class HeldAudioRecording {
+  final String id;
+  final int startedAt;
+  final int seconds;
+
+  const HeldAudioRecording({required this.id, required this.startedAt, required this.seconds});
+
+  factory HeldAudioRecording.fromGenerated(wire.GeneratedHeldAudioRecording generated) {
+    return HeldAudioRecording(id: generated.id, startedAt: generated.startedAt, seconds: generated.seconds);
+  }
+}
+
+class HeldAudioSummary {
+  final String state;
+  bool get isRecovering => state == 'recovering';
+  final int seconds;
+  final int resetAt;
+  final bool retainLive;
+  final int count;
+  final List<HeldAudioRecording> recordings;
+
+  const HeldAudioSummary({
+    this.state = 'paused',
+    required this.seconds,
+    required this.resetAt,
+    required this.retainLive,
+    this.count = 0,
+    this.recordings = const [],
+  });
+
+  factory HeldAudioSummary.fromGenerated(wire.GeneratedHeldAudioSummary generated) {
+    return HeldAudioSummary(
+      state: generated.state,
+      seconds: generated.seconds,
+      resetAt: generated.resetAt,
+      retainLive: generated.retainLive,
+      count: generated.count,
+      recordings: generated.recordings.map(HeldAudioRecording.fromGenerated).toList(),
+    );
+  }
+}
+
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -347,6 +389,7 @@ class UserSubscriptionResponse {
   final int? chatQuotaResetAt;
   final PhoneCallQuota? phoneCallQuota;
   final TranscriptionAllowanceSnapshot? transcriptionAllowance;
+  final HeldAudioSummary? heldAudio;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -365,6 +408,7 @@ class UserSubscriptionResponse {
     this.chatQuotaResetAt,
     this.phoneCallQuota,
     this.transcriptionAllowance,
+    this.heldAudio,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
@@ -391,6 +435,7 @@ class UserSubscriptionResponse {
       transcriptionAllowance: generated.transcriptionAllowance == null
           ? null
           : TranscriptionAllowanceSnapshot.fromGenerated(generated.transcriptionAllowance!),
+      heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
     );
   }
 
@@ -412,6 +457,22 @@ class UserSubscriptionResponse {
       chatQuotaResetAt: chatQuotaResetAt,
       phoneCallQuota: phoneCallQuota?.toGenerated(),
       transcriptionAllowance: transcriptionAllowance?.toGenerated(),
+      heldAudio: heldAudio == null
+          ? null
+          : wire.GeneratedHeldAudioSummary(
+              state: heldAudio!.state,
+              recordings: heldAudio!.recordings
+                  .map((row) => wire.GeneratedHeldAudioRecording(
+                        id: row.id,
+                        seconds: row.seconds,
+                        startedAt: row.startedAt,
+                      ))
+                  .toList(),
+              resetAt: heldAudio!.resetAt,
+              retainLive: heldAudio!.retainLive,
+              seconds: heldAudio!.seconds,
+              count: heldAudio!.count,
+            ),
     );
   }
 
