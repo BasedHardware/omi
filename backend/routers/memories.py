@@ -540,6 +540,8 @@ async def create_memory(
         logger.exception("MemoryService create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
+    if getattr(created, 'visibility', None) == 'public':
+        submit_with_context(postprocess_executor, update_personas_async, uid)
     _finish_memory_parity_capture(parity_capture, [created])
     record_product_event('memory_created', request=request, uid=uid, source='client')
     return created
@@ -1151,7 +1153,10 @@ def review_memory(
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
-    service.review(uid, memory_id, value)
+    try:
+        service.review(uid, memory_id, value)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
     # Discarding a memory is this surface's thumbs-down. `user_review` on the
     # memory is a mutable flag with no timestamp, so the ledger row is what
     # gives the verdict a time and lands it in the daily report.
@@ -1243,7 +1248,10 @@ def update_memory_visibility(
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
+    try:
+        MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
     submit_with_context(postprocess_executor, update_personas_async, uid)
     record_product_event('memory_updated', request=http_request, op='visibility')
     return {'status': 'ok'}
@@ -1288,6 +1296,9 @@ def update_memory_baseline(
 
     db_client = getattr(db_client_module, 'db', None)
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    MemoryService(db_client=db_client).update_baseline(uid, memory_id, value)
+    try:
+        MemoryService(db_client=db_client).update_baseline(uid, memory_id, value)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
     record_product_event('memory_updated', request=http_request, op='baseline')
     return {'status': 'ok'}
