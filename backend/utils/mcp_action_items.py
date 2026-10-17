@@ -263,4 +263,4 @@ def search_action_items(uid: str, query: Optional[str], limit: int = 10) -> List
     # does not guarantee ordering.
     order = {aid: i for i, aid in enumerate(ids)}
     items.sort(key=lambda it: order.get(it.get("id", ""), len(ids)))
-    return [clean_action_item(it) for it in items if not it.get("deleted", False)]
+    return [clean_action_item(it) for it in items if not it.get("deleted", False) and not it.get("is_locked", False)]
