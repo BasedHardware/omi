@@ -176,6 +176,21 @@ final class MemoryReconcileRetryScheduler {
     generation += 1
   }
 
+  /// Report the active run (an in-flight attempt or a pending retry) through
+  /// `report` — with its pre-reset token and attempt count — and then end the
+  /// run exactly like `end()`. Used by the owner-switch reset, which must
+  /// carry the dying run's `aborted_owner_changed` terminal signal even
+  /// though the reset itself invalidates that token: the report fires before
+  /// the generation bump, and a later completion from the superseded run is
+  /// dropped by the token fence. A run that already terminated (or no run)
+  /// reports nothing.
+  func abortActiveRun(report: (MemoryReconcileRunToken, Int) -> Void) {
+    if inFlight || pendingTask != nil, let key = runKey {
+      report(MemoryReconcileRunToken(key: key, generation: generation), max(attempt, 1))
+    }
+    end()
+  }
+
   static let taskSleeper: Sleeper = { delay in
     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
   }
@@ -244,6 +259,17 @@ extension MemoriesViewModel {
   /// report comes from a run an owner switch already superseded.
   func reconcileRunAbortedByOwnerChange(run: MemoryReconcileRunToken) {
     finishReconcileRun(run: run, truncated: false, pruned: 0, outcome: .abortedOwnerChanged)
+  }
+
+  /// Owner-switch reset (`resetSessionState`): carry the dying run's
+  /// `aborted_owner_changed` terminal signal before the reset invalidates its
+  /// token, so a real account switch shows up on the reconcile telemetry
+  /// instead of vanishing when the reset drops the run without a report.
+  func endRunReportingOwnerChange() {
+    reconcileRetry.abortActiveRun { [weak self] run, _ in
+      self?.finishReconcileRun(
+        run: run, truncated: false, pruned: 0, outcome: .abortedOwnerChanged)
+    }
   }
 
   /// The reconcile threw: no in-launch retry (the policy covers truncation,

@@ -368,14 +368,76 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       fallbacks[0], to: "in-launch-retry", outcome: "degraded", attempt: 2)
   }
 
+  /// The owner-switch reset (`resetSessionState` → `endRunReportingOwnerChange`)
+  /// must carry the dying run's `aborted_owner_changed` terminal signal — with
+  /// its pre-reset attempt count — before the reset invalidates the token: the
+  /// reset used to drop an active run silently, so a real account switch never
+  /// showed up on the reconcile telemetry this run outcome was created to
+  /// surface. A reset with no active run reports nothing.
+  func testOwnerSwitchResetReportsAbortedOwnerChangedForTheDyingRun() async throws {
+    let present = makeMemory(id: "reset-report-row", tier: .longTerm)
+    try await MemoryStorage.shared.syncServerMemories([present])
+
+    // Park one run mid-backoff: the first pull truncates and schedules a
+    // retry whose sleeper holds the run in the pending-retry state.
+    let sleepGate = AsyncGate()
+    let enteredBackoff = expectation(description: "retry backoff entered")
+    let viewModel = MemoriesViewModel(reconcileRetrySleeper: { _ in
+      enteredBackoff.fulfill()
+      await sleepGate.wait()
+    })
+    viewModel.reconcilePageFetch = { [self] _, _, _ in
+      page([present], truncated: true)
+    }
+    var events: [[String: Any]] = []
+    MemoryCacheReconcileTelemetry.captureForTests = { _, properties in
+      events.append(properties)
+    }
+
+    await viewModel.reconcileCacheIfNeeded()
+    await fulfillment(of: [enteredBackoff], timeout: 5)
+    XCTAssertTrue(viewModel.reconcileRetry.hasPendingRetry)
+    XCTAssertEqual(viewModel.reconcileRetry.attempt, 1)
+    XCTAssertEqual(events.count, 0, "a pending backoff has not reached a terminal outcome")
+
+    // The owner switch: the dying run reports before the reset drops it.
+    let reported = expectation(description: "dying run reported aborted_owner_changed")
+    MemoryCacheReconcileTelemetry.captureForTests = { _, properties in
+      events.append(properties)
+      reported.fulfill()
+    }
+    viewModel.endRunReportingOwnerChange()
+    await fulfillment(of: [reported], timeout: 5)
+
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events[0]["outcome"] as? String, "aborted_owner_changed")
+    XCTAssertEqual(events[0]["attempts"] as? Int, 1)
+
+    // The reset completed: the new owner's run starts clean.
+    XCTAssertNil(viewModel.reconcileRetry.runKey)
+    XCTAssertEqual(viewModel.reconcileRetry.attempt, 0)
+    XCTAssertFalse(viewModel.reconcileRetry.hasPendingRetry)
+
+    // A reset with no active run reports nothing.
+    MemoryCacheReconcileTelemetry.captureForTests = { _, properties in
+      events.append(properties)
+    }
+    viewModel.endRunReportingOwnerChange()
+    XCTAssertEqual(events.count, 1, "no active run — no report")
+
+    sleepGate.open()
+  }
+
   /// The race the run token fences: owner A's retry pull is still awaiting
   /// when an account switch resets the scheduler (the owner-change path's
   /// `end()`) and owner B is admitted. B's run truncates and schedules its own
   /// pending retry; A's pull then resumes and reports the owner-fence abort
-  /// for its superseded run. That late report must be ignored — B's pending
-  /// retry is not cancelled, B's attempt counter is not reset, and A's dead
-  /// run emits no terminal telemetry — and B's run must still exercise its
-  /// full retry budget instead of being treated as exhausted.
+  /// for its superseded run. A's run is reported `aborted_owner_changed` at
+  /// the reset itself (the owner-switch reset carries the dying run's terminal
+  /// signal); the late owner-fence report from A's suspended pull is then
+  /// dropped by the token fence. B's pending retry is not cancelled, B's
+  /// attempt counter is not reset, and B's run still exercises its full retry
+  /// budget instead of being treated as exhausted.
   func testSupersededRunLateAbortDoesNotCancelLiveRunRetryOrCounter() async throws {
     guard let ownerA = testUserId else {
       XCTFail("setUp did not produce a signed-in user")
@@ -414,10 +476,15 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       return page([aMemory])
     }
     var events: [[String: Any]] = []
-    let terminal = expectation(description: "a reconcile run reached a terminal outcome")
+    let aAborted = expectation(description: "A's dying run reported aborted_owner_changed")
+    let bExhausted = expectation(description: "B's run exhausted its retries")
     MemoryCacheReconcileTelemetry.captureForTests = { _, properties in
       events.append(properties)
-      terminal.fulfill()
+      if properties["outcome"] as? String == "aborted_owner_changed" {
+        aAborted.fulfill()
+      } else if properties["outcome"] as? String == "truncated_exhausted" {
+        bExhausted.fulfill()
+      }
     }
     let fallbackBaseline = try memoriesCacheFallbackSnapshots().count
 
@@ -433,13 +500,19 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     XCTAssertEqual(viewModel.reconcileRetry.attempt, 2)
     XCTAssertFalse(viewModel.reconcileRetry.hasPendingRetry)
 
-    // The account switch: the owner-change path resets the scheduler, B signs
-    // in, and B's own reconcile is admitted, truncates, and schedules its
-    // pending retry (parked on the gate above).
+    // The account switch: the owner-change path reports A's dying run
+    // (attempt 2, mid-pull) as aborted_owner_changed, then resets the
+    // scheduler; B signs in, and B's own reconcile is admitted, truncates,
+    // and schedules its pending retry (parked on the gate above).
     RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
     RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: ownerB)
     RewindStorageTestIsolation.signInForTests(userId: ownerB)
     viewModel.resetSessionState()
+    await fulfillment(of: [aAborted], timeout: 5)
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events[0]["outcome"] as? String, "aborted_owner_changed")
+    XCTAssertEqual(events[0]["attempts"] as? Int, 2)
+
     await viewModel.reconcileCacheIfNeeded()
     XCTAssertEqual(viewModel.reconcileRetry.runKey, ownerB)
     XCTAssertEqual(viewModel.reconcileRetry.attempt, 1)
@@ -457,17 +530,19 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       viewModel.reconcileRetry.attempt, 1,
       "a superseded run's late abort must not reset the live run's attempt counter")
     XCTAssertEqual(viewModel.reconcileRetry.runKey, ownerB)
-    XCTAssertTrue(events.isEmpty, "a superseded run must not emit terminal run telemetry")
+    XCTAssertEqual(
+      events.count, 1,
+      "A's abort was already reported at the reset; the superseded run's late report must be dropped")
 
     // Released, B's run spends its full retry budget and exhausts unlatched.
     bSleepGate.open()
-    await fulfillment(of: [terminal], timeout: 5)
+    await fulfillment(of: [bExhausted], timeout: 5)
 
     XCTAssertEqual(aFetches, 2, "A's truncated pull plus its suspended retry pull")
     XCTAssertEqual(bFetches, 4, "B's initial pull plus three bounded retries")
-    XCTAssertEqual(events.count, 1)
-    XCTAssertEqual(events[0]["outcome"] as? String, "truncated_exhausted")
-    XCTAssertEqual(events[0]["attempts"] as? Int, 4)
+    XCTAssertEqual(events.count, 2)
+    XCTAssertEqual(events[1]["outcome"] as? String, "truncated_exhausted")
+    XCTAssertEqual(events[1]["attempts"] as? Int, 4)
 
     let fallbacks = Array(try memoriesCacheFallbackSnapshots().dropFirst(fallbackBaseline))
     XCTAssertEqual(fallbacks.count, 5, "A degraded once; B degraded three times then exhausted")

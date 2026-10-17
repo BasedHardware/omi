@@ -710,8 +710,12 @@ class MemoriesViewModel: ObservableObject {
     // owner's server rows after the switch reopens the session.
     deferredDeleteRetry.cancelAll()
     // Same fence for a truncated-reconcile retry: it re-checks the owner
-    // anyway, but the new owner's own reconcile owns the next run.
-    reconcileRetry.end()
+    // anyway, but the new owner's own reconcile owns the next run. The dying
+    // run still reports `aborted_owner_changed` — with its pre-reset token and
+    // attempt count, before the reset invalidates them — so real owner
+    // switches stay visible on the reconcile telemetry instead of vanishing
+    // when the reset drops the run without a terminal report.
+    endRunReportingOwnerChange()
     // Fence late cache/API completions from the previous signed-in owner.
     bumpScopeGeneration()
     memories = []
