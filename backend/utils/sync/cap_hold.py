@@ -131,7 +131,7 @@ def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | No
     return body
 
 
-def _summary_after(current: dict | None, delta_seconds: int, delta_count: int) -> dict:
+def _summary_after(current: dict | None, delta_seconds: float, delta_count: int) -> dict:
     data = current or {}
     return {
         'version': 2,
