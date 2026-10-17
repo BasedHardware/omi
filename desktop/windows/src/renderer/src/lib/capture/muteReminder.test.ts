@@ -165,4 +165,39 @@ describe('muteReminder (#20215)', () => {
     expect(reminders[1].playAttentionCue).toBe(true)
     expect(reminders[1].title).toContain('1h 15m')
   })
+
+  it('updating only urgency mid-mute preserves the running interval countdown', () => {
+    const reminders: MuteReminderNotificationPayload[] = []
+    const controller = createMuteReminderController({
+      onRemind: (payload) => reminders.push(payload)
+    })
+
+    controller.update({
+      signedIn: true,
+      onboarded: true,
+      continuousRecording: false,
+      urgency: 'standard',
+      intervalMinutes: 30
+    })
+
+    // Advance 20 minutes (10 minutes remaining)
+    vi.advanceTimersByTime(20 * 60_000)
+    expect(reminders).toHaveLength(0)
+
+    // Urgency changes to 'high', but interval stays 30 min
+    controller.update({
+      signedIn: true,
+      onboarded: true,
+      continuousRecording: false,
+      urgency: 'high',
+      intervalMinutes: 30
+    })
+
+    // Advance remaining 10 minutes -> should fire reminder with high urgency at 30 min mark
+    vi.advanceTimersByTime(10 * 60_000)
+    expect(reminders).toHaveLength(1)
+    expect(reminders[0].urgency).toBe('high')
+    expect(reminders[0].mutedMinutes).toBe(30)
+  })
 })
+

@@ -154,7 +154,7 @@ export function createMuteReminderController(
       const payload = buildMuteReminderPayload(mutedMinutes, currentUrgency, reminderCount)
       options.onRemind(payload)
       // Rearm for persistent periodic reminders while still muted.
-      if (armed && currentUrgency !== 'off' && mutedSinceMs !== null) {
+      if (armed && mutedSinceMs !== null) {
         scheduleNextTick()
       }
     }, currentIntervalMs)
@@ -191,7 +191,7 @@ export function createMuteReminderController(
       return
     }
 
-    if (intervalChanged || urgencyChanged || !armed) {
+    if (intervalChanged || !armed) {
       scheduleNextTick()
     }
   }
