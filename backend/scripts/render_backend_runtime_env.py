@@ -15,6 +15,7 @@ if str(ROOT / 'backend') not in sys.path:
     sys.path.insert(0, str(ROOT / 'backend'))
 
 from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E402
+from scripts.runtime_env_compat import normalize_runtime_manifest  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -23,6 +24,45 @@ _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029
 # pinned to an attached runtime identity drops them in the same deploy: its runtime SA deliberately
 # cannot read the key secret, so a lingering ref would fail revision creation.
 KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
+
+# The literal --remove-env-vars list every Cloud Run service deploy action already carries. The
+# manifest's forbidden_env may only append keys missing from it: gcloud rejects a key named twice.
+RETIRED_ENV_NAMES = (
+    'MEMORY_ENABLED_USERS',
+    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+    'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+    'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+    'BASIC_TIER_MINUTES_LIMIT_PER_MONTH',
+    'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH',
+    'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH',
+    'BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH',
+    'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST',
+    'DEEPGRAM_SELF_HOSTED_ENABLED',
+    'DEEPGRAM_SELF_HOSTED_URL',
+)
+# Only the API service talks to the pusher; every other service drops its URL.
+PUSHER_CLIENT_SERVICES = frozenset({'backend'})
+FIRESTORE_READ_RUNTIME_ENV_NAMES = (
+    'FIRESTORE_READ_LEVERS',
+    'FSR_QUEUE_AGE_PUBLISHER',
+    'FSR_QUEUE_AGE_LEASE_SECONDS',
+    'FSR_LEADER_LEASE_TTL_SECONDS',
+    'DELETION_WIPE_RECONCILE_INTERVAL_SECONDS',
+    'FSR_DELETION_NEGATIVE_TTL_SECONDS',
+    'FSR_USAGE_MONTH_TTL_SECONDS',
+    'FSR_SUBSCRIPTION_TTL_SECONDS',
+    'FSR_SERVING_CONFIG_TTL_SECONDS',
+    'ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS',
+    'CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS',
+)
+
+
+def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    listed: set[str] = set(RETIRED_ENV_NAMES)
+    if service not in PUSHER_CLIENT_SERVICES:
+        listed.add('HOSTED_PUSHER_API_URL')
+    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -112,6 +152,20 @@ def main() -> int:
         # sidecar guard must not force those callers to supply it, so stop here
         # unless a backend render was also asked for.
         if not args.state_output and not args.job:
+            desktop_env = {
+                entry['name']: entry['value'] for entry in desktop_state['services']['desktop-backend']['env']
+            }
+            missing_firestore_read_env = sorted(set(FIRESTORE_READ_RUNTIME_ENV_NAMES) - desktop_env.keys())
+            if missing_firestore_read_env:
+                raise ValueError(
+                    'desktop-backend runtime env is missing Firestore read bindings: '
+                    + ', '.join(missing_firestore_read_env)
+                )
+            firestore_read_env_vars = '\n'.join(
+                f'{name}={_escape_deploy_cloud_run_env_value(desktop_env[name])}'
+                for name in FIRESTORE_READ_RUNTIME_ENV_NAMES
+            )
+            _emit_output('firestore_read_env_vars', firestore_read_env_vars)
             cohort = next(
                 entry['value']
                 for entry in desktop_state['services']['desktop-backend']['env']
@@ -163,6 +217,8 @@ def main() -> int:
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
+                    (f'{output_prefix}_forbidden_env_names', ','.join(sorted(service_config.get('forbidden_env', [])))),
+                    (f'{output_prefix}_remove_env_extra', _remove_env_extra(service, service_config)),
                 )
             )
     for job, raw_job_config in selected_jobs.items():
@@ -193,7 +249,7 @@ def _load_yaml(path: Path) -> ConfigDict:
         loaded = yaml.safe_load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
-    return cast(ConfigDict, loaded)
+    return normalize_runtime_manifest(cast(ConfigDict, loaded))
 
 
 def _render_env_entries(env_entries: ConfigDict) -> list[ConfigDict]:

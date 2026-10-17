@@ -419,7 +419,10 @@ def get_shared_conversation_screenshots(conversation_id: str):
     if not uid:
         return EMPTY_FRAME_SET
 
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    try:
+        conversation = conversations_db.get_conversation(uid, conversation_id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     if conversation is None or conversations_db.is_soft_deleted(conversation):
         return EMPTY_FRAME_SET
 

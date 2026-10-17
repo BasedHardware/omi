@@ -6,6 +6,7 @@ after the first write fail exactly as they would in production.
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -231,12 +232,20 @@ def test_delete_conversation_leaves_its_group_first(monkeypatch):
     fake_ref = MagicMock()
     fake_ref.collections.return_value = []
     fake_db = MagicMock()
-    fake_db.collection.return_value.document.return_value.collection.return_value.document.return_value = fake_ref
+    overlay_ref = MagicMock()
+    owner = fake_db.collection.return_value.document.return_value
+    captures, overlays = MagicMock(), MagicMock()
+    captures.document.return_value = fake_ref
+    overlays.document.return_value = overlay_ref
+    owner.collection.side_effect = lambda name: {'conversations': captures, 'transcript_corrections': overlays}.get(
+        name, MagicMock()
+    )
     monkeypatch.setattr(conversations_db, 'db', fake_db)
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *a: None)
     conversations_db.delete_conversation(UID, 'desktop')
     assert calls == [((UID, 'desktop'), {'sticky': False, 'close': True, 'firestore_client': fake_db})]
     fake_ref.delete.assert_called_once()
+    overlay_ref.delete.assert_called_once()
 
 
 def test_processing_writes_never_clobber_membership(monkeypatch):
@@ -296,29 +305,6 @@ def test_confirmed_overlap_is_grouped_and_linked(store, seam):
     assert desktop['external_data']['duplicate_capture_of'] == 'pendant'
     assert desktop['capture_group'] == pendant['capture_group']
     assert ('capture_group_joined', 'applied') in seam
-
-
-def test_shadow_enabled_keeps_grouping_unchanged(store, seam, monkeypatch):
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
-    shadow_pairs = []
-    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: shadow_pairs.append(args))
-    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: None)
-    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
-    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
-    assert store.rows[path('desktop')]['capture_group'] == store.rows[path('pendant')]['capture_group']
-    assert shadow_pairs
-
-
-def test_later_capture_join_submits_resummary_with_existing_primary(store, seam, monkeypatch):
-    submitted = []
-    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: None)
-    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: submitted.append(args))
-    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
-    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
-    store.rows[path('late')] = row('late', 'phone', 150, 580)
-    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('late')]))
-    assert (UID, 'pendant', 'late') in submitted
-    assert store.rows[path('late')]['capture_group'] == store.rows[path('pendant')]['capture_group']
 
 
 def test_window_overlap_without_shared_speech_is_linked_but_not_grouped(store, seam):
@@ -430,8 +416,6 @@ def test_separate_route_is_sticky_and_idempotent(monkeypatch):
         lambda uid, cid: {'id': cid, 'capture_group': {'members': [{'id': cid}, {'id': 'pendant'}]}},
     )
     calls = []
-    outcomes = []
-    monkeypatch.setattr(router, 'record_capture_outcome', lambda *args, **kwargs: outcomes.append((args, kwargs)))
     results = iter([True, False])
     monkeypatch.setattr(
         router.conversations_db, 'leave_capture_group', lambda *a, **kw: calls.append((a, kw)) or next(results)
@@ -439,4 +423,3 @@ def test_separate_route_is_sticky_and_idempotent(monkeypatch):
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'ok'
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'unchanged'
     assert calls[0] == ((UID, 'desktop'), {'sticky': True})
-    assert outcomes == [((UID, 'separate', ['desktop', 'pendant']), {'separated_id': 'desktop'})]

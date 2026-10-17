@@ -416,9 +416,8 @@ void main() {
     await tester.tap(buys.hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Change Plan').hitTestable());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    // Resubscribe is the action. It must not ask the reader to confirm a plan change.
+    expect(find.text('Change Plan'), findsNothing);
     expect(usage.sessionPrice, price.id);
     expect(usage.checkedOutPrice, price.id);
     expect(usage.upgradedPrice, isNull);

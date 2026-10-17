@@ -582,6 +582,51 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 
 
 @pytest.mark.anyio
+async def test_worker_acknowledges_owner_contention_without_spending_retry_budget(monkeypatch):
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda uid: False)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *a, **kw: {
+            'status': 'claimed',
+            'lease_epoch': 1,
+            'attempt_count': 4,
+        },
+    )
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda job_id: {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'attempt_count': 4,
+        },
+    )
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+    monkeypatch.setattr(
+        finalization_router,
+        'finalize_persisted_conversation',
+        AsyncMock(
+            return_value=ConversationFinalizationDisposition.deferred,
+        ),
+    )
+    retry, complete = AsyncMock(), MagicMock()
+    monkeypatch.setattr(finalization_router, '_retry_or_dead_letter', retry)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', complete)
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 1}),
+        task_retry_count=99,
+    )
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred'}
+    retry.assert_not_called()
+    complete.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_worker_retries_processing_failure_before_final_attempt(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')

@@ -32,6 +32,7 @@ def _load_playback(request):
         "get_or_create_merged_audio",
         "get_playback_artifact_signed_url",
         "is_playback_unavailable",
+        "list_audio_chunks",
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()

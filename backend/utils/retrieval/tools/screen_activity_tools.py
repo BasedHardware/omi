@@ -7,16 +7,22 @@ import json
 import math
 import os
 import re
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
-from zoneinfo import ZoneInfo
+from utils.model_text import (
+    UNTRUSTED_LEGEND,
+    count_header,
+    format_instant,
+    truncation_note,
+    untrusted_block,
+)
+from utils.user_clock import clock_for_config
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.screen_activity as screen_activity_db
 import database.vector_db as vector_db
-import database.notifications as notification_db
 from database._client import db as firestore_db
 from utils.llm.clients import gemini_embed_query
 import logging
@@ -234,6 +240,55 @@ def _bounded_evidence_text(value: Any, limit: int) -> str:
     return ' '.join(value.split()).strip()[:limit]
 
 
+def _format_screen_untrusted_fields(
+    *,
+    ocr_text: str,
+    raw_ocr: Any,
+    window_title: str,
+    raw_window_title: Any,
+    lookup_failed: bool,
+) -> Tuple[str, bool]:
+    """Format OCR and title excerpts, returning whether a trust legend is needed."""
+    result = ""
+    has_untrusted = False
+    if window_title:
+        has_untrusted = True
+        result += f"  Window: {untrusted_block('screen window title', window_title)}\n"
+        if isinstance(raw_window_title, str):
+            normalized_title = ' '.join(raw_window_title.split()).strip()
+            if len(normalized_title) > len(window_title):
+                result += (
+                    "  "
+                    + truncation_note(
+                        shown=len(window_title),
+                        total=len(normalized_title),
+                        unit="window-title characters",
+                        how_to_get_more="Ask about a specific screen record to inspect the full title.",
+                    )
+                    + "\n"
+                )
+    if ocr_text:
+        has_untrusted = True
+        preview = ocr_text[:200]
+        if isinstance(raw_ocr, str) and len(raw_ocr) > 200:
+            preview += "..."
+        result += f"  Text: {untrusted_block('screen OCR text', preview)}\n"
+        if isinstance(raw_ocr, str) and len(raw_ocr) > 200:
+            result += (
+                "  "
+                + truncation_note(
+                    shown=200,
+                    total=len(raw_ocr),
+                    unit="OCR characters",
+                    how_to_get_more="Narrow the query to inspect the full screen record.",
+                )
+                + "\n"
+            )
+    elif lookup_failed:
+        result += "  Text: OCR text unavailable (lookup failed).\n"
+    return result, has_untrusted
+
+
 def _append_screen_evidence_reference(
     evidence_references: Optional[List[Any]],
     *,
@@ -320,26 +375,15 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
             result = clipped
         truncated = True
     if truncated:
-        result += (
-            "\n\n[Only a subset of the observed apps and windows is shown here to stay within limits; more may exist. "
-            "Summarize what is shown and tell the user they can ask about a specific app or a "
-            "narrower date range for the rest.]"
+        shown = len(re.findall(r"(?m)^\*\*.*\*\* — \d+ observations$", result))
+        result += "\n\n" + truncation_note(
+            shown=shown,
+            total=None,
+            cut=True,
+            unit="app records",
+            how_to_get_more="Ask about a specific app or a narrower date range.",
         )
     return result
-
-
-def _resolve_display_tz(uid: str) -> tzinfo:
-    # Render timestamps in the user's timezone so a chat answer shows screen-activity matches in the
-    # same timezone as conversation matches (conversation_tools renders in the user's timezone too).
-    # Fall back to UTC on any failure: no timezone set, an invalid IANA name, or a Firestore error
-    # reading it (a transient lookup error must not fail an otherwise successful search).
-    try:
-        tz_name = notification_db.get_user_time_zone(uid)
-        if tz_name:
-            return ZoneInfo(tz_name)
-    except Exception:
-        logger.warning("search_screen_activity_tool - could not resolve user timezone, using UTC")
-    return timezone.utc
 
 
 @tool
@@ -373,14 +417,19 @@ def get_screen_activity_tool(
     uid = _get_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
+    clock = clock_for_config(config or _agent_config(), uid)
 
     try:
         start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
         end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    except ValueError as e:
-        return f"Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM. Details: {e}"
+    except ValueError:
+        return "Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM."
 
-    summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
+    try:
+        summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
+    except Exception:
+        logger.error("get_screen_activity_tool - summary query failed uid=%s", uid, exc_info=True)
+        return "Error retrieving screen activity summary. Please try again."
 
     apps_dict: Dict[str, Dict[str, Any]] = cast(Dict[str, Dict[str, Any]], summary['apps'])
     if not apps_dict:
@@ -400,12 +449,19 @@ def get_screen_activity_tool(
     )
     if rows_truncated:
         result += (
-            f"Partial query: only the earliest {total} observations are summarized; later observations exist. "
-            "Narrow the date range to inspect the rest.\n"
+            truncation_note(
+                shown=total,
+                total=None,
+                cut=True,
+                unit="observations",
+                how_to_get_more="Only the earliest observations were summarized; narrow the date range to inspect the rest.",
+            )
+            + "\n"
         )
     if coverage.get('first_observed_at') and coverage.get('last_observed_at'):
         result += (
-            f"Summarized observations (UTC): {coverage['first_observed_at']} to {coverage['last_observed_at']}. "
+            f"Summarized observations: {format_instant(coverage['first_observed_at'], clock)} to "
+            f"{format_instant(coverage['last_observed_at'], clock)}. "
             "These bounds do not establish continuous activity or current capture status.\n"
         )
     result += "\n"
@@ -423,8 +479,17 @@ def get_screen_activity_tool(
     total_apps = len(sorted_apps)
     sorted_apps, apps_truncated = _cap_apps_for_llm(sorted_apps)
     if apps_truncated:
-        result += f"(showing {len(sorted_apps)} of {total_apps} apps, ranked by observation count)\n\n"
+        result += (
+            count_header(
+                "Apps by observation count",
+                shown=len(sorted_apps),
+                total=total_apps,
+                order="most observations first",
+            )
+            + "\n\n"
+        )
 
+    has_untrusted = False
     for app_name, data in sorted_apps:
         count = data['count']
         titles = data.get('window_titles', [])
@@ -433,11 +498,43 @@ def get_screen_activity_tool(
 
         result += f"**{app_name}** — {count} observations\n"
         if first and last:
-            result += f"  Observed (UTC): {first} to {last}\n"
+            result += f"  Observed: {format_instant(first, clock)} to {format_instant(last, clock)}\n"
         if titles:
-            result += f"  Sampled windows: {', '.join(titles[:5])}\n"
+            normalized_titles = [' '.join(title.split()).strip() for title in titles if isinstance(title, str)]
+            shown_titles = normalized_titles[:5]
+            if shown_titles:
+                has_untrusted = True
+                result += "  Sampled windows:\n"
+                for title in shown_titles:
+                    result += (
+                        "  " + untrusted_block("screen window title", title[:MAX_SCREEN_EVIDENCE_TITLE_CHARS]) + "\n"
+                    )
+                    if len(title) > MAX_SCREEN_EVIDENCE_TITLE_CHARS:
+                        result += (
+                            "  "
+                            + truncation_note(
+                                shown=MAX_SCREEN_EVIDENCE_TITLE_CHARS,
+                                total=len(title),
+                                unit="window-title characters",
+                                how_to_get_more="Ask about a specific window title for a narrower excerpt.",
+                            )
+                            + "\n"
+                        )
+                if len(normalized_titles) > len(shown_titles):
+                    result += (
+                        "  "
+                        + truncation_note(
+                            shown=len(shown_titles),
+                            total=len(normalized_titles),
+                            unit="window titles",
+                            how_to_get_more="Ask about a specific app to inspect its other sampled windows.",
+                        )
+                        + "\n"
+                    )
         result += "\n"
 
+    if has_untrusted:
+        result += "\n" + UNTRUSTED_LEGEND
     return _bounded_screen_activity_result(result.strip(), apps_truncated)
 
 
@@ -628,9 +725,18 @@ def search_screen_activity_tool(
     ts_by_id = {sid: m.get('timestamp', 0) for sid, m in zip(screenshot_ids, valid_matches)}
 
     docs_by_id = {m['screenshot_id']: m['keyword_doc'] for m in valid_matches if 'keyword_doc' in m}
-    display_tz = _resolve_display_tz(uid)
+    clock = clock_for_config(config or _agent_config(), uid)
     evidence_references = _evidence_references(config)
-    result = f"Found {len(valid_matches)} screen activity matches for '{query}':\n\n"
+    result = (
+        count_header(
+            f"Screen activity matches for '{query}'",
+            shown=len(valid_matches),
+            order="screen search rank order",
+            more_may_exist=len(valid_matches) >= limit,
+        )
+        + "\n\n"
+    )
+    has_untrusted = False
 
     for sid in screenshot_ids:
         score = scores_by_id.get(sid, 0)
@@ -641,7 +747,7 @@ def search_screen_activity_tool(
             ts_str = 'Unknown'
         else:
             try:
-                ts_str = datetime.fromtimestamp(captured_at_ms / 1000, tz=display_tz).strftime('%Y-%m-%d %H:%M:%S')
+                ts_str = format_instant(captured_at_ms / 1000, clock)
             except (OverflowError, OSError, ValueError):
                 ts_str = 'Unknown'
 
@@ -649,11 +755,14 @@ def search_screen_activity_tool(
         ocr_text = ''
         ocr_preview = ''
         window_title = ''
+        raw_ocr: Any = None
+        raw_window_title: Any = None
+        ocr_lookup_failed = False
         try:
-            from database.read_boundary import parse_snapshot_or_none
-
             doc_data = docs_by_id.get(sid)
             if doc_data is None:
+                from database.read_boundary import parse_snapshot_or_none
+
                 doc = (
                     firestore_db.collection('users')
                     .document(uid)
@@ -664,19 +773,27 @@ def search_screen_activity_tool(
                 doc_data = parse_snapshot_or_none(dict, doc)
             if doc_data is not None:
                 raw_ocr = doc_data.get('ocrText')
+                raw_window_title = doc_data.get('windowTitle')
                 # Keep the legacy text result's 200-character behavior; the normalized, longer
                 # preview is only for the structured evidence reference.
                 ocr_text = raw_ocr[:200] if isinstance(raw_ocr, str) else ''
                 ocr_preview = _bounded_evidence_text(raw_ocr, MAX_SCREEN_EVIDENCE_SUMMARY_CHARS)
-                window_title = _bounded_evidence_text(doc_data.get('windowTitle'), MAX_SCREEN_EVIDENCE_TITLE_CHARS)
+                window_title = _bounded_evidence_text(raw_window_title, MAX_SCREEN_EVIDENCE_TITLE_CHARS)
         except Exception:
-            pass
+            ocr_lookup_failed = True
 
         result += (
             f"- **{ts_str}** | {app_name} (relevance: {score if score == 'keyword' else _bounded_relevance(score)})\n"
         )
-        if ocr_text:
-            result += f"  Text: {ocr_text[:200]}...\n"
+        untrusted_fields, match_has_untrusted = _format_screen_untrusted_fields(
+            ocr_text=ocr_text,
+            raw_ocr=raw_ocr,
+            window_title=window_title,
+            raw_window_title=raw_window_title,
+            lookup_failed=ocr_lookup_failed,
+        )
+        result += untrusted_fields
+        has_untrusted = has_untrusted or match_has_untrusted
         result += "\n"
 
         _append_screen_evidence_reference(
@@ -688,4 +805,14 @@ def search_screen_activity_tool(
             ocr_preview=ocr_preview,
         )
 
+    if has_untrusted:
+        result += "\n" + UNTRUSTED_LEGEND
+    if len(valid_matches) >= limit:
+        result += "\n" + truncation_note(
+            shown=len(valid_matches),
+            total=None,
+            cut=True,
+            unit="screen activity matches",
+            how_to_get_more="Narrow the date range or use a more specific query to inspect additional matches.",
+        )
     return result.strip()

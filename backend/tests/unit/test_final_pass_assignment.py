@@ -236,6 +236,7 @@ def test_sync_adapter_uses_absolute_audio_evidence_and_rebases_persisted_clock(m
         handle.setframerate(16000)
         handle.writeframes(b'\x01\x00' * 160000)
     monkeypatch.setattr(sync, 'speaker_embedding_configured', lambda: False)
+    monkeypatch.setattr(sync, '_reserve_budget', lambda seconds: True)
     result = DiarizationResult(
         turns=[{'start': start, 'end': end, 'speaker': 'x'}],
         centroids={'x': {'embedding': [1, 0], 'evidence_seconds': 10}},
@@ -329,12 +330,12 @@ def test_http_adapter_stream_contract_and_remaining_deadline(monkeypatch):
         calls.append((url, kwargs))
         return SimpleNamespace(raise_for_status=lambda: None, json=result.model_dump)
 
-    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://fixture.invalid/')
+    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://fixture.invalid/diarizer-batch/')
     monkeypatch.setattr(diarization.httpx, 'post', post)
     output = diarization.HttpDiarizer('pyannote').diarize(b'\x01\x00', deadline=time.monotonic() + 10)
     assert output == result
     url, request = calls[0]
-    assert url == 'http://fixture.invalid/v2/diarization'
+    assert url == 'http://fixture.invalid/diarizer-batch/v2/diarization'
     assert request['content'] == b'\x01\x00'
     assert request['headers'] == {'Content-Type': 'audio/pcm'}
     assert 0 < request['timeout'].read <= 10

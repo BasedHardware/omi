@@ -207,7 +207,7 @@
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 72 until the next weekly audit",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1178,7 +1178,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1187,7 +1187,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Planning budget increased from 5 to 15 minutes for pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes; the trigger now also spans resilience.json and the GMP frontend overlay; main/dev or explicit prod only, not a measured p50.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1196,7 +1196,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
@@ -1205,7 +1205,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Planning budget increased from 5 to 7 minutes for canary-first import/readback and live-STT coverage; the trigger now spans both resilience.json and the GMP frontend overlay; no PR execution and no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1286,7 +1286,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 20,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1295,7 +1295,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual diarizer or batch GPU worker release; conservatively allow a 20-minute p50 for the worker model image build until measured.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1412,7 +1412,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_frontend.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1421,7 +1421,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Plan 6-minute p50 (previously 5) for the local package install and consumer rebuild. Package-only note-shared edits now trigger the existing main/development or manual frontend deployment; expected PR runs/day stays zero, with no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1523,13 +1523,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual logging rollout and one recorded-image recovery per day; no automatic triggers or new runners; retains the 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1664,36 +1664,29 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/provision": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
-      "if": null,
+      "if": "github.ref == 'refs/heads/main'",
       "matrix": {
-        "include": [
-          {
-            "environment": "prod",
-            "url": "https://monitor.omi.me"
-          },
-          {
-            "environment": "dev",
-            "url": "https://monitor.omiapi.com"
-          }
+        "environment": [
+          "${{ github.event.inputs.environment || 'dev' }}"
         ]
       },
-      "matrix_size": 2,
+      "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Provision runs a 2-env matrix only when dashboard JSON changes on main; API POST + read-back per board.",
+      "rationale": "Planning budget raised to 6 minutes for exclusive dashboard/alert backups with complete readback plus the prod-only Business board and ACL step; matrix narrows to one selected environment, main auto-dev and explicit protected prod only.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 2
+        "linux": 1
       },
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/validate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1702,7 +1695,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the Grafana provisioning workflow added with auto-provision; validate is a JSON lint.",
+      "rationale": "Planning budget increased to 6 minutes for dashboard JSON plus combined/split alert lint; triggers now also cover the Business board JSON and both dashboard provisioners; no PR execution or new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2207,13 +2200,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; dispatch-only, no extra runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2497,6 +2490,24 @@
       },
       "runs_on": "windows-latest"
     },
+    "reid_onboarding_vercel.yml/deploy": {
+      "budget_p50_minutes": 8,
+      "display_name": "Build web and deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "kodjima33",
+      "rationale": "Flutter SDK setup plus a release web build of a small prototype and one Vercel CLI upload; runs only on main pushes touching the prototype, roughly a few times a month",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "release-eligibility.yml/release-eligibility": {
       "budget_p50_minutes": 7,
       "display_name": "Release Eligibility",
@@ -2759,7 +2770,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 1-minute p50 and 13 PR runs/day: note-shared changes select the existing app build after the source move; package edits previously lived under consumer paths, so no additional job or steady-state run volume is expected.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2795,7 +2806,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 2-minute p50 and 4 PR runs/day: note-shared changes select the existing frontend consumer after the source move; no new job or steady-state run volume is expected.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3961,7 +3972,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now span the GMP frontend overlay and resilience.json, and render/query-path gates add work without adding runners or PR events.",
       "triggers": {
         "push": {
           "branches": [
@@ -3971,7 +3982,9 @@
             "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
             "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
             "backend/charts/monitoring/alerts/live-stt.json",
+            "backend/charts/monitoring/alerts/resilience.json",
             "backend/charts/monitoring/live-alert-gate.json",
+            "backend/charts/monitoring/gmp/frontend-values.prod.yaml",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]
         },
@@ -4092,7 +4105,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual dispatch now selects either the diarizer release or the dedicated batch GPU worker release.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4115,6 +4128,16 @@
               "default": "",
               "description": "Release version (optional)",
               "required": "false"
+            },
+            "service": {
+              "default": "diarizer",
+              "description": "Select the GPU service to deploy",
+              "options": [
+                "diarizer",
+                "batch-pipeline-worker"
+              ],
+              "required": "true",
+              "type": "choice"
             }
           }
         }
@@ -4242,7 +4265,7 @@
     "gcp_frontend.yml": {
       "name": "Deploy Frontend to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "The frontend depends on @omi/note-shared; package-only edits must trigger its existing main/development deployment. No new PR event or runner. Allow one extra p50 minute for the local package install and consumer rebuild.",
       "triggers": {
         "push": {
           "branches": [
@@ -4251,6 +4274,7 @@
           ],
           "paths": [
             "web/frontend/**",
+            "web/packages/note-shared/**",
             "config/public-build-*.json",
             ".github/actions/deploy-public-build/**",
             ".github/actions/prepare-public-build/**",
@@ -4411,7 +4435,7 @@
     "gcp_nllb_translation.yml": {
       "name": "Deploy NLLB Translation to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4429,6 +4453,11 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "rollback_digest": {
+              "default": "",
+              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
+              "required": "false"
             },
             "release_version": {
               "default": "",
@@ -4679,7 +4708,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Register the Grafana provisioning workflow; runs on dashboard JSON merges to main.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix.",
       "triggers": {
         "push": {
           "branches": [
@@ -4687,7 +4716,14 @@
           ],
           "paths": [
             "backend/charts/monitoring/dashboards/**",
-            ".github/workflows/grafana_dashboard_provisioning.yml"
+            "backend/charts/monitoring/alerts/**",
+            "backend/charts/monitoring/alert-rules.json",
+            "backend/scripts/provision_monitoring_alerts.py",
+            "backend/scripts/provision_grafana_dashboards.py",
+            ".github/workflows/grafana_dashboard_provisioning.yml",
+            ".github/scripts/provision_grafana_dashboards.py",
+            ".github/scripts/grafana_business.py",
+            "web/admin/grafana/dashboards/omi-tv-v2.json"
           ]
         },
         "workflow_dispatch": {
@@ -4697,8 +4733,7 @@
               "description": "Select the Grafana to provision",
               "options": [
                 "prod",
-                "dev",
-                "both"
+                "dev"
               ],
               "required": "true",
               "type": "choice"
@@ -4888,19 +4923,24 @@
     "mobile_daily_train.yml": {
       "name": "Mobile daily train",
       "owner": "CI maintainers",
-      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
+      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; they add no runs (same single gated dispatch per day).",
       "triggers": {
-        "schedule": [
-          {
-            "cron": "0 14 * * *"
-          }
-        ],
         "workflow_dispatch": {
           "inputs": {
             "dry_run": {
               "default": "false",
               "description": "Read store state and print the plan without submitting or drafting",
               "type": "boolean"
+            },
+            "pin_android": {
+              "default": "",
+              "description": "Audited Android candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin",
+              "type": "string"
+            },
+            "pin_ios": {
+              "default": "",
+              "description": "Audited iOS candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin",
+              "type": "string"
             }
           }
         }
@@ -5155,6 +5195,23 @@
             ".github/workflows/publish_omi_cli.yml"
           ]
         }
+      }
+    },
+    "reid_onboarding_vercel.yml": {
+      "name": "Deploy Reid onboarding prototype to Vercel",
+      "owner": "kodjima33",
+      "rationale": "Publishes prototypes/device_first_onboarding to omi-reid-onboarding.vercel.app (the reid arm of the onboarding-variant flag) only when that path changes on main; Vercel cannot build Flutter",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "prototypes/device_first_onboarding/**",
+            ".github/workflows/reid_onboarding_vercel.yml"
+          ]
+        },
+        "workflow_dispatch": ""
       }
     },
     "release-eligibility.yml": {

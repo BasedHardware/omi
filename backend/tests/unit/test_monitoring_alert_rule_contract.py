@@ -146,6 +146,65 @@ def test_alert_uids_are_short_enough_for_grafana_to_accept():
         assert not over, f"{export_name}: Grafana will reject these UIDs at create time: {over}"
 
 
+# The prod Grafana Loki datasource UID, carried by the held raw-line rules.
+# Referenced here so a rule that names the datasource only by UID cannot slip
+# past the type check below.
+LOG_DATASOURCE_UIDS = {"aet29e27cgmwwc"}
+LOG_DATASOURCE_TYPES = {"loki", "cloudlogging"}
+
+
+def test_live_alert_rules_never_query_log_datasources():
+    """No unpaused rule may query a log datasource (Loki, Cloud Logging).
+
+    A raw-line alert query re-scans log lines on every 60s tick, blows the 30s
+    datasource timeout, drops evaluation ticks, and has twice loaded the
+    alerting plane into Grafana 502s: 2026-10-13 via Cloud Logging (#21390)
+    and 2026-10-14 via Loki on {namespace="prod-omi-backend"} (196 failures in
+    3h from one rule alone). Held rules stay paused through
+    ``metric-inventory.prod.json`` ``admission_holds``; re-admission requires a
+    bounded counter metric, never a log datasource.
+    """
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            if rule.get("isPaused"):
+                continue
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                ds_type = (model.get("datasource") or {}).get("type", "")
+                ds_uid = node.get("datasourceUid") or ""
+                if ds_type in LOG_DATASOURCE_TYPES or ds_uid in LOG_DATASOURCE_UIDS:
+                    offenders.setdefault(uid, set()).add(export_name)
+    assert not offenders, (
+        "live alert rules query a log datasource for raw lines "
+        f"(2026-10-13/#21390 failure class): {sorted(offenders)}; "
+        "pause the rule and record an admission hold, or move it to a bounded counter metric"
+    )
+
+
+CORRUPTED_STREAM_LOG_RULE = "df2a40h2fbjswe"
+CORRUPTED_STREAM_METRIC_RULE = "omi-listen-audio-decode-failures"
+CORRUPTED_STREAM_METRIC_EXPR = (
+    'sum(increase(omi_listen_audio_decode_failures_total{job="backend-listen-metrics"}[15m])) or vector(0)'
+)
+
+
+def test_retired_corrupted_stream_log_rule_keeps_the_decode_failures_counter():
+    """The retired raw-log rule must retain bounded decode-failure coverage.
+
+    The old definition is archived in retired-loki-alerts.json for a reviewed,
+    manual cleanup. Canonical exports must keep the Prometheus replacement.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        assert CORRUPTED_STREAM_LOG_RULE not in rules, export_name
+        replacement = rules[CORRUPTED_STREAM_METRIC_RULE]
+        assert replacement["isPaused"] is False, export_name
+        assert replacement["data"][0]["model"]["expr"] == CORRUPTED_STREAM_METRIC_EXPR, export_name
+        assert replacement["data"][0]["datasourceUid"] == "prometheus", export_name
+        assert replacement["noDataState"] == "OK", export_name
+        assert replacement["for"] == "5m", export_name
+
+
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
     """Managed GKE must not page on control-plane targets it cannot expose.
 
@@ -1542,3 +1601,13 @@ def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
         assert page["data"][2]["model"]["expression"] == "$A >= 50 && $B > 0.5", export_name
         assert page["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
         assert "capacity_full" not in page["data"][1]["model"]["expr"], export_name
+
+
+def test_retired_loki_alerts_cannot_reenter_canonical_sources():
+    retired = json.loads((MONITORING / "retired-loki-alerts.json").read_text())
+    retired_uids = {rule["uid"] for rule in retired["rules"]}
+    assert retired_uids == {"afd0krbk1bugwf", "fewwk2goqfklcf", "devzd05c0bocgc", "df2a40h2fbjswe"}
+    holds = json.loads((MONITORING / "metric-inventory.prod.json").read_text())["admission_holds"]
+    assert retired_uids.isdisjoint(holds)
+    for export_name, rules in _all_rule_exports().items():
+        assert retired_uids.isdisjoint(rules), export_name

@@ -8355,6 +8355,18 @@ abstract class AppLocalizations {
   /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
   String planEndedOn(String date);
 
+  /// Pending cancellation shown beside the current plan
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan ends {date}.'**
+  String yourPlanEndsOn(String plan, String date);
+
+  /// Reassurance under a pending cancellation that resubscribing is not charged until the end date
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe now to keep your plan. No charge until {date}.'**
+  String resubscribeNowNoChargeUntil(String date);
+
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:
@@ -8366,6 +8378,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your annual plan will start automatically when your monthly plan ends.'**
   String get annualPlanStartsAutomatically;
+
+  /// Confirmation after resubscribing a plan that was set to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Your {plan} plan will renew on {date}.'**
+  String yourPlanWillRenewOn(String plan, String date);
 
   /// Message showing plan renewal date
   ///
@@ -8426,6 +8444,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get continueText;
+
+  /// Why another price is refused while cancellation is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe first to change plans.'**
+  String get resubscribeFirstToChangePlans;
 
   /// Button to resubscribe
   ///
@@ -9548,12 +9572,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Content'**
   String get content;
-
-  /// Message when there is no content available
-  ///
-  /// In en, this message translates to:
-  /// **'No content to display'**
-  String get noContentToDisplay;
 
   /// Message when no summary is available
   ///
@@ -18267,12 +18285,6 @@ abstract class AppLocalizations {
   /// **'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.'**
   String get speechToTextUnavailableDesc;
 
-  /// Shown on the homepage processing card after ~2 minutes with a Retry action (#5481).
-  ///
-  /// In en, this message translates to:
-  /// **'Still working — this is taking longer than usual.'**
-  String get processingTakingLonger;
-
   /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
   ///
   /// In en, this message translates to:
@@ -22185,6 +22197,24 @@ abstract class AppLocalizations {
   /// **'Recent Changes'**
   String get reviewRecentChanges;
 
+  /// Label for the resulting value in an applied Review change
+  ///
+  /// In en, this message translates to:
+  /// **'After'**
+  String get reviewChangeAfter;
+
+  /// Label for the original value in an applied Review change
+  ///
+  /// In en, this message translates to:
+  /// **'Before'**
+  String get reviewChangeBefore;
+
+  /// Reversible retirement or dismissal in an applied change; Undo restores the item
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from the active list'**
+  String get reviewChangeRemoved;
+
   /// Intro line on Recent Changes
   ///
   /// In en, this message translates to:
@@ -22220,6 +22250,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'When Omi tidies your notes, the changes appear here.'**
   String get reviewNoChangesBody;
+
+  /// Recent changes section: spelling fixes to names and terms
+  ///
+  /// In en, this message translates to:
+  /// **'Names and terms'**
+  String get reviewChangesSectionTerms;
+
+  /// Recent changes section: conversation titles and summaries
+  ///
+  /// In en, this message translates to:
+  /// **'Titles and summaries'**
+  String get reviewChangesSectionTitles;
+
+  /// Recent changes section: changes that fit no other section
+  ///
+  /// In en, this message translates to:
+  /// **'Other changes'**
+  String get reviewChangesSectionOther;
+
+  /// How many conversations one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
+  String reviewChangeConversationCount(int count);
+
+  /// How many places in transcripts one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 place} other{{count} places}}'**
+  String reviewChangePlaceCount(int count);
+
+  /// Button opening every place a change landed
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count}'**
+  String reviewChangeShowAll(int count);
+
+  /// Button undoing every instance of one change
+  ///
+  /// In en, this message translates to:
+  /// **'Undo all'**
+  String get reviewChangeUndoAll;
+
+  /// Button showing the conversation evidence behind a change
+  ///
+  /// In en, this message translates to:
+  /// **'See evidence'**
+  String get reviewChangeSeeEvidence;
+
+  /// Button opening the conversation a change came from
+  ///
+  /// In en, this message translates to:
+  /// **'View conversation'**
+  String get reviewChangeViewConversation;
+
+  /// Button opening the tasks list from a task change
+  ///
+  /// In en, this message translates to:
+  /// **'View task'**
+  String get reviewChangeViewTask;
+
+  /// Undo all finished with some failures
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t undo {failed} of {total}. Try again.'**
+  String reviewChangesUndoPartial(int failed, int total);
 
   /// Button (Title Case)
   ///
@@ -23642,6 +23738,786 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copy details for support'**
   String get syncDetailsCopy;
+
+  /// Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Operator and Architect'**
+  String get chatAppsChannelPlanRequired;
+
+  /// Chat apps row subtitle when all seats for the channel are taken; app is iMessage or Telegram
+  ///
+  /// In en, this message translates to:
+  /// **'{app} is at capacity'**
+  String chatAppsAtCapacity(String app);
+
+  /// Chat apps chip to join the waitlist for a full channel
+  ///
+  /// In en, this message translates to:
+  /// **'Join Waitlist'**
+  String get chatAppsJoinWaitlist;
+
+  /// Chat apps row subtitle once the person is on the channel waitlist
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the waitlist'**
+  String get chatAppsOnWaitlist;
+
+  /// Confirmation after joining a chat app channel waitlist
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the waitlist. We\'ll let you know when there\'s room.'**
+  String get chatAppsWaitlistJoined;
+
+  /// Activation: congratulations title with the user's first name
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re all set, {name}'**
+  String onboardingActCongratsTitle(String name);
+
+  /// Activation slide illustration: example summary line
+  ///
+  /// In en, this message translates to:
+  /// **'Lunch with Sam, who\'s moving to Lisbon in June. You want to send the deck to your team by Friday and grab milk on the way home.'**
+  String get onboardingActDemoSummary;
+
+  /// Activation slide illustration: example task
+  ///
+  /// In en, this message translates to:
+  /// **'Send the deck to the team by Friday'**
+  String get onboardingActDemoTask1;
+
+  /// Activation slide illustration: example task
+  ///
+  /// In en, this message translates to:
+  /// **'Grab milk on the way home'**
+  String get onboardingActDemoTask2;
+
+  /// Activation slide illustration: example note title
+  ///
+  /// In en, this message translates to:
+  /// **'Lunch with Sam'**
+  String get onboardingActDemoTitle;
+
+  /// Activation: line under the dictation title
+  ///
+  /// In en, this message translates to:
+  /// **'Say it your way. Omi handles the rest.'**
+  String get onboardingActDictateBody;
+
+  /// Onboarding dictation subtitle when the words come from the connected Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Just talk. Your Omi is listening.'**
+  String get onboardingActDictateBodyOmi;
+
+  /// Activation: faded example in the dictation card (casual tone; keep 'Remind me' so Omi keeps it; Sam and Lisbon are example names)
+  ///
+  /// In en, this message translates to:
+  /// **'Just had lunch with Sam, she\'s moving to Lisbon in June! Remind me to send the deck to my team by Friday, and to grab milk on the way home.'**
+  String get onboardingActDictateExample;
+
+  /// Activation: hint in the dictation bar next to the check button
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the check when you\'re done'**
+  String get onboardingActDictateHint;
+
+  /// Activation: dictation step title
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi about your day'**
+  String get onboardingActDictateTitle;
+
+  /// Activation: animated line before the demo slides
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s try Omi.'**
+  String get onboardingActIntro;
+
+  /// Time label on the first note Omi wrote in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get onboardingActJustNow;
+
+  /// Activation: button that shows the microphone system prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Microphone'**
+  String get onboardingActMicAllow;
+
+  /// Activation: why the microphone is needed
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi can hear you when you talk to it.'**
+  String get onboardingActMicBody;
+
+  /// Onboarding microphone ask when the connected Omi is not streaming
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi isn\'t sending audio yet. Use your phone for now.'**
+  String get onboardingActMicFallbackBody;
+
+  /// Activation: microphone pre-permission title (phone users)
+  ///
+  /// In en, this message translates to:
+  /// **'Omi needs your microphone'**
+  String get onboardingActMicTitle;
+
+  /// Onboarding dictation hint after a while with no words from the Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t hear your Omi. Make sure it\'s on and close by.'**
+  String get onboardingActNoAudioOmi;
+
+  /// Onboarding dictation hint after a while with no words from the phone microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t hear you yet. Try speaking a little louder.'**
+  String get onboardingActNoAudioPhone;
+
+  /// Activation: small label above the generated summary
+  ///
+  /// In en, this message translates to:
+  /// **'Your day, summarized'**
+  String get onboardingActNotesLabel;
+
+  /// Activation: which microphone is listening (phone)
+  ///
+  /// In en, this message translates to:
+  /// **'Phone microphone'**
+  String get onboardingActPhoneMic;
+
+  /// Activation: rating ask on the congratulations screen
+  ///
+  /// In en, this message translates to:
+  /// **'Enjoying Omi so far?'**
+  String get onboardingActRateTitle;
+
+  /// Line above the summary title at the end of the onboarding dictation
+  ///
+  /// In en, this message translates to:
+  /// **'Omi remembers so you don\'t have to'**
+  String get onboardingActRemembers;
+
+  /// Confirmation under the to-dos Omi found in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to your tasks'**
+  String get onboardingActSavedToTasks;
+
+  /// Activation: small label above the generated tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Omi caught your to-dos'**
+  String get onboardingActTasksLabel;
+
+  /// Activation: shown while Omi processes the dictation
+  ///
+  /// In en, this message translates to:
+  /// **'Summarizing…'**
+  String get onboardingActWriting;
+
+  /// Activation: fallback label when no summary could be made
+  ///
+  /// In en, this message translates to:
+  /// **'Here\'s what you said'**
+  String get onboardingActYourWords;
+
+  /// Onboarding connect step title; Omi is the brand name of the wearable
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Omi'**
+  String get onboardingConnectOmi;
+
+  /// Connect Omi onboarding step, under the title once an Omi is found nearby
+  ///
+  /// In en, this message translates to:
+  /// **'Tap your Omi to connect.'**
+  String get onboardingConnectTapToConnect;
+
+  /// Onboarding connect step: small prompt for people without their Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t have your Omi yet?'**
+  String get onboardingNoOmiYet;
+
+  /// Onboarding connect step: choice for people who have not ordered an Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Not ordered yet'**
+  String get onboardingOmiNotOrdered;
+
+  /// Onboarding connect step: choice for people whose Omi device is on its way
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve ordered mine'**
+  String get onboardingOmiOrdered;
+
+  /// Onboarding permissions: shown on a denied permission card; tapping opens Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to fix'**
+  String get onboardingPermissionTapToFix;
+
+  /// Home row title while recordings are still turning into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations on the way'**
+  String get homePendingTitle;
+
+  /// Home row title when a long backlog of recordings is still being processed
+  ///
+  /// In en, this message translates to:
+  /// **'Catching up on earlier audio'**
+  String get homePendingCatchingUp;
+
+  /// Title of the page listing recordings not yet turned into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'On the Way'**
+  String get onTheWayTitle;
+
+  /// Section header: recordings being transcribed or summarized
+  ///
+  /// In en, this message translates to:
+  /// **'Almost ready'**
+  String get onTheWayAlmostReady;
+
+  /// Empty state of the Activity page
+  ///
+  /// In en, this message translates to:
+  /// **'No activity yet'**
+  String get activityEmpty;
+
+  /// Screen reader label for the Activity bell when it has new items
+  ///
+  /// In en, this message translates to:
+  /// **'Activity, new items'**
+  String get activityNewSemantics;
+
+  /// Activity page: one or more sources failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load all of your activity'**
+  String get activityLoadFailed;
+
+  /// Screen reader suffix for an Activity row added since the last visit
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get activityNewItem;
+
+  /// Activity section header for work that could not finish and needs the user
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get activityNeedsAttention;
+
+  /// Button in Activity's Needs attention section that retries every failed item once
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get activityRetryAll;
+
+  /// Needs attention row: the server gave up summarizing a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t summarize this conversation'**
+  String get attentionSummaryFailed;
+
+  /// Headline at the top of the Connect an Agent screen
+  ///
+  /// In en, this message translates to:
+  /// **'Use your Omi memory in ChatGPT and your AI agents'**
+  String get connectAgentHeadline;
+
+  /// Intro under the Connect an Agent headline
+  ///
+  /// In en, this message translates to:
+  /// **'Connect once. Then ask them about your conversations, memories, and tasks.'**
+  String get connectAgentIntro;
+
+  /// Section header for apps that connect with one tap (ChatGPT)
+  ///
+  /// In en, this message translates to:
+  /// **'One Tap'**
+  String get connectAgentOneTap;
+
+  /// Section header for AI agents that run on their own computer (Grok Bot, Muse, Instinct)
+  ///
+  /// In en, this message translates to:
+  /// **'Agents With Their Own Computer'**
+  String get connectAgentComputerAgents;
+
+  /// Explains how agents with their own computer are connected
+  ///
+  /// In en, this message translates to:
+  /// **'Copy one prompt. Omi makes a key just for that agent and sends it securely.'**
+  String get connectAgentComputerAgentsSubtitle;
+
+  /// Row for any other AI agent not listed by name
+  ///
+  /// In en, this message translates to:
+  /// **'Other Agent'**
+  String get connectAgentOtherAgent;
+
+  /// Status under an agent that holds an Omi key
+  ///
+  /// In en, this message translates to:
+  /// **'Key active'**
+  String get connectAgentKeyActive;
+
+  /// When an agent last used its Omi key; time is a localized timestamp
+  ///
+  /// In en, this message translates to:
+  /// **'Last used {time}'**
+  String connectAgentLastUsed(String time);
+
+  /// Link at the bottom of Connect an Agent that opens the web developer page
+  ///
+  /// In en, this message translates to:
+  /// **'MCP and API keys for developers'**
+  String get connectAgentDevelopers;
+
+  /// Error when connected apps and keys fail to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your connections.'**
+  String get connectAgentLoadFailed;
+
+  /// Error when connecting, disconnecting or revoking fails
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong. Try again.'**
+  String get connectAgentActionFailed;
+
+  /// Title of the sheet that connects ChatGPT to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Connect ChatGPT'**
+  String get connectChatGptTitle;
+
+  /// Subtitle of the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Takes about 30 seconds. You approve it inside ChatGPT, and it works on your phone and computer.'**
+  String get connectChatGptSubtitle;
+
+  /// Step 1 title in the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'We open Omi in ChatGPT'**
+  String get connectChatGptStepOpen;
+
+  /// Step 1 detail in the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'ChatGPT opens straight to the Omi app page.'**
+  String get connectChatGptStepOpenBody;
+
+  /// Step 2 title in the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Connect, then sign in to Omi'**
+  String get connectChatGptStepApprove;
+
+  /// Step 2 detail in the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Use the same account you use here.'**
+  String get connectChatGptStepApproveBody;
+
+  /// Step 3 title in the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Come back to Omi'**
+  String get connectChatGptStepReturn;
+
+  /// Step 3 detail in the Connect ChatGPT sheet
+  ///
+  /// In en, this message translates to:
+  /// **'We check the connection automatically.'**
+  String get connectChatGptStepReturnBody;
+
+  /// Button that opens ChatGPT
+  ///
+  /// In en, this message translates to:
+  /// **'Open ChatGPT'**
+  String get openChatGpt;
+
+  /// Status on the ChatGPT page once connected
+  ///
+  /// In en, this message translates to:
+  /// **'Connected on phone and computer'**
+  String get chatGptConnectedEverywhere;
+
+  /// Section header above example questions to ask ChatGPT
+  ///
+  /// In en, this message translates to:
+  /// **'Try Asking ChatGPT'**
+  String get tryAskingChatGpt;
+
+  /// Footer under the example questions
+  ///
+  /// In en, this message translates to:
+  /// **'Tap one to open ChatGPT with it filled in.'**
+  String get tryAskingChatGptFooter;
+
+  /// Example question a person can ask ChatGPT about their Omi data
+  ///
+  /// In en, this message translates to:
+  /// **'What did I agree to in yesterday\'s meetings?'**
+  String get chatGptExampleMeetings;
+
+  /// Example question a person can ask ChatGPT about their Omi data
+  ///
+  /// In en, this message translates to:
+  /// **'Turn my open Omi tasks into a plan for this week.'**
+  String get chatGptExampleTasks;
+
+  /// Example question a person can ask ChatGPT about their Omi data
+  ///
+  /// In en, this message translates to:
+  /// **'What does Omi know about my goals?'**
+  String get chatGptExampleGoals;
+
+  /// Destructive button that removes ChatGPT's access to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect ChatGPT'**
+  String get disconnectChatGpt;
+
+  /// Confirm dialog title before removing ChatGPT's access
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect ChatGPT?'**
+  String get disconnectChatGptQuestion;
+
+  /// Confirm dialog message before removing ChatGPT's access
+  ///
+  /// In en, this message translates to:
+  /// **'ChatGPT will no longer be able to read your Omi memories, conversations, or tasks.'**
+  String get disconnectChatGptMessage;
+
+  /// Sheet title for connecting a named AI agent; name is a product name such as Muse
+  ///
+  /// In en, this message translates to:
+  /// **'Connect {name}'**
+  String connectAgentNamed(String name);
+
+  /// Subtitle of the sheet that connects an AI agent; name is the agent's product name
+  ///
+  /// In en, this message translates to:
+  /// **'Paste one prompt. {name} sets up Omi on its own computer.'**
+  String connectAgentPromptSubtitle(String name);
+
+  /// Subtitle of the sheet that connects an unnamed AI agent
+  ///
+  /// In en, this message translates to:
+  /// **'Paste one prompt. Your agent sets up Omi on its own computer.'**
+  String get connectAgentGenericPromptSubtitle;
+
+  /// Notice that an Omi key was created for an agent; name is the key's name
+  ///
+  /// In en, this message translates to:
+  /// **'Key “{name}” created'**
+  String connectAgentKeyCreated(String name);
+
+  /// Explains the one-time secure link in the prompt
+  ///
+  /// In en, this message translates to:
+  /// **'The prompt has a one-time link, not the key itself. It opens once and expires in 1 hour. Revoke the key here anytime.'**
+  String get connectAgentKeyCreatedBody;
+
+  /// Shown while the app creates a key and a one-time link
+  ///
+  /// In en, this message translates to:
+  /// **'Making a key and a secure link…'**
+  String get connectAgentPreparing;
+
+  /// Error when the key or the one-time link cannot be created
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t make the key. Check your connection and try again.'**
+  String get connectAgentPrepareFailed;
+
+  /// Button that copies the setup prompt for an AI agent
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Prompt'**
+  String get copyPrompt;
+
+  /// Button that creates a fresh key and one-time link
+  ///
+  /// In en, this message translates to:
+  /// **'Link Expired? Make a New One'**
+  String get connectAgentNewLink;
+
+  /// Sheet title for an agent that holds an Omi key; name is the agent's product name
+  ///
+  /// In en, this message translates to:
+  /// **'{name} Is Connected'**
+  String connectAgentActiveTitle(String name);
+
+  /// Explains an agent's active key and how to remove it
+  ///
+  /// In en, this message translates to:
+  /// **'{name} holds an Omi key. Revoke it to cut off access. You can connect again anytime.'**
+  String connectAgentActiveBody(String name);
+
+  /// Confirm dialog title before deleting an agent's Omi key
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke {name}\'s Key?'**
+  String revokeAgentKeyQuestion(String name);
+
+  /// Confirm dialog message before deleting an agent's Omi key
+  ///
+  /// In en, this message translates to:
+  /// **'{name} loses access to your Omi memory right away.'**
+  String revokeAgentKeyMessage(String name);
+
+  /// Menu item and sheet title for asking ChatGPT about a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Ask About This Conversation'**
+  String get askAboutConversation;
+
+  /// Explains the ask-about-this-conversation sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Opens ChatGPT with your question ready. It looks the conversation up through Omi, so you don\'t paste the transcript.'**
+  String get askAboutConversationSubtitle;
+
+  /// Label of the question field in the ask sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Your question'**
+  String get askYourQuestion;
+
+  /// Suggested question about a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Draft a follow-up email from this conversation.'**
+  String get askSuggestFollowUp;
+
+  /// Suggested question about a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'What did I commit to in this conversation?'**
+  String get askSuggestCommitments;
+
+  /// Suggested question about a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Turn this conversation into a short doc.'**
+  String get askSuggestDoc;
+
+  /// Button that opens ChatGPT with the question
+  ///
+  /// In en, this message translates to:
+  /// **'Ask ChatGPT'**
+  String get askInChatGpt;
+
+  /// Button that copies the question so it can be pasted into any AI app
+  ///
+  /// In en, this message translates to:
+  /// **'Copy for Any App'**
+  String get copyForAnyApp;
+
+  /// Shown in the ask sheet when ChatGPT is not connected yet
+  ///
+  /// In en, this message translates to:
+  /// **'Connect ChatGPT once to ask it about your conversations.'**
+  String get askConnectChatGptFirst;
+
+  /// Button that connects an app (ChatGPT) again so it gets the access it is missing
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get reconnect;
+
+  /// Status under ChatGPT when it is connected but was approved without access to some Omi data
+  ///
+  /// In en, this message translates to:
+  /// **'Needs more access. Reconnect to fix.'**
+  String get chatGptNeedsReconnect;
+
+  /// Status under an AI agent whose Omi key was made but has not been used yet (the prompt was not pasted or not run)
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the agent to use its key'**
+  String get connectAgentWaiting;
+
+  /// Sheet title for an agent whose Omi key has never been used; name is the agent's product name such as Muse
+  ///
+  /// In en, this message translates to:
+  /// **'{name} Hasn\'t Connected Yet'**
+  String connectAgentWaitingTitle(String name);
+
+  /// Title of the card shown on a conversation that has no summary yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not summarized yet'**
+  String get summaryNotSummarizedYet;
+
+  /// Body of the card shown on a conversation that has no summary yet. Omi is the product name; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi can turn this conversation into an overview, key points and action items.'**
+  String get summaryEmptyStateBody;
+
+  /// Button that summarizes the conversation with Omi's built-in summary. Omi is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with Omi'**
+  String get summaryWithOmi;
+
+  /// Button that summarizes the conversation with the named summary template.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with {name}'**
+  String summaryWithTemplate(String name);
+
+  /// Button that opens the list of summary templates to pick another one.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Different Template'**
+  String get summaryUseDifferentTemplate;
+
+  /// Small section header above a quoted excerpt of the conversation transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'From the transcript'**
+  String get summaryFromTheTranscript;
+
+  /// Link that switches to the full transcript tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Read Full Transcript'**
+  String get summaryReadFullTranscript;
+
+  /// Title of the sheet that lists the ways (Omi, templates) to summarize a conversation; the rows below complete the phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with'**
+  String get summarySheetTitle;
+
+  /// Subtitle of the built-in Omi summary row, describing what it produces.
+  ///
+  /// In en, this message translates to:
+  /// **'Overview, key points and action items'**
+  String get summaryOmiTemplateSubtitle;
+
+  /// Section header for the summary templates the user has added.
+  ///
+  /// In en, this message translates to:
+  /// **'Your templates'**
+  String get summaryYourTemplates;
+
+  /// Section header for summary templates suggested for this conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested for this conversation'**
+  String get summarySuggestedTemplates;
+
+  /// Row that opens the catalog of summary templates.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse Templates'**
+  String get summaryBrowseTemplates;
+
+  /// Row that opens the editor to create a custom summary template.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Your Own'**
+  String get summaryCreateYourOwn;
+
+  /// Checkbox label in the summary template sheet: remember the chosen template (or Omi) as the default this device offers first.
+  ///
+  /// In en, this message translates to:
+  /// **'Make this my default'**
+  String get summaryUseForNewConversations;
+
+  /// Inline message when the user's summary templates could not be loaded; the built-in Omi summary still works.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your templates. Omi still works.'**
+  String get summaryTemplatesLoadFailed;
+
+  /// Inline message when the user has no summary templates.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t added any templates yet. Browse a few or make your own.'**
+  String get summaryNoTemplatesYet;
+
+  /// Progress label while the conversation is being summarized with Omi or the named template. Keep the single ellipsis character.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarizing with {name}…'**
+  String summarySummarizingWith(String name);
+
+  /// Heading when the named summary template failed to produce a summary.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} couldn\'t finish'**
+  String summaryTemplateFailedTitle(String name);
+
+  /// Body when a summary template failed to produce a summary.
+  ///
+  /// In en, this message translates to:
+  /// **'The template didn\'t return a summary for this conversation.'**
+  String get summaryTemplateFailedBody;
+
+  /// Button that falls back to Omi's built-in summary after a template failed. Omi is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with Omi Instead'**
+  String get summaryWithOmiInstead;
+
+  /// Heading when the conversation is already being processed and a new summary cannot start.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing'**
+  String get summaryBusyTitle;
+
+  /// Body when the conversation is already being processed. Omi is the product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
+  String get summaryBusyBody;
+
+  /// Button that re-reads the conversation to see if processing finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get summaryCheckAgain;
+
+  /// Heading when the user has regenerated too many summaries recently.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary limit reached'**
+  String get summaryLimitTitle;
+
+  /// Body when the user hit the hourly limit on regenerating summaries.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve regenerated several summaries in the last hour. Try again later.'**
+  String get summaryLimitBody;
+
+  /// Heading when summarizing the conversation failed for an unknown reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t summarize'**
+  String get summaryFailedTitle;
+
+  /// Body when summarizing the conversation failed for an unknown reason.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while summarizing this conversation.'**
+  String get summaryFailedBody;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -88,7 +88,9 @@ def bounded_transcript_segments(
     bounded: List[Dict[str, Any]] = []
     used_chars = 0
     truncated = False
-    allowed_keys = ("id", "text", "speaker_id", "is_user", "person_id", "start", "end") + tuple(extra_keys)
+    allowed_keys = ("id", "text", "original_text", "speaker_id", "is_user", "person_id", "start", "end") + tuple(
+        extra_keys
+    )
 
     for index, segment in enumerate(source):
         if index >= max_segments or used_chars >= max_chars:
@@ -103,6 +105,8 @@ def bounded_transcript_segments(
                 text = text[:remaining_chars]
             truncated = True
         item = {key: segment.get(key) for key in allowed_keys if key in segment}
+        if item.get('original_text') is not None:
+            item['original_text'] = str(item['original_text'])[:remaining_chars]
         item["text"] = text
         bounded.append(item)
         used_chars += len(text)

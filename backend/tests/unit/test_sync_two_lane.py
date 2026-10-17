@@ -11,6 +11,7 @@ from google.cloud import firestore
 from database import sync_ledger, user_usage
 from scripts import render_cloud_run_clone_env
 from scripts.render_cloud_run_clone_env import clone_environment
+from scripts.render_backend_runtime_env import _render_env_vars
 from utils.sync import backfill, capture_manifest, content_id, lanes
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -319,6 +320,18 @@ def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep()
     assert "DURATION='600s'" in action
 
 
+def test_sequencer_scheduler_alerts_page_only_on_sustained_failure():
+    # Live prod policies (set by the alert owner on 2026-10-15/16) wait 10 minutes for
+    # both kinds; the deploy verifier must expect the same, or every prod deploy fails.
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    step = action.split('Provision backfill sequencer Scheduler execution alerts', 1)[1]
+    step = step.split('\n    - name:', 1)[0]
+    assert step.count("DURATION='600s'") == 2
+    assert "DURATION='0s'" not in step
+    assert step.count('DURATION_SECONDS=600') == 2
+    assert 'DURATION_SECONDS=0' not in step
+
+
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     root = REPOSITORY_ROOT
     action = (root / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
@@ -349,25 +362,24 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
-    # Dispatch concurrency must equal the worker's max instances: offering more
+    # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
     # instance keeps a scale-from-zero poke from being rejected outright.
     assert '--min-instances=3' in action
-    assert '--max-instances=18' in action
-    assert '--max=18' in action
+    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in action
+    assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
     assert '--cpu=2' in action
     assert '--memory=8Gi' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
-    # backend-sync is instance-billed and ran pinned at its old max of 25 in the
-    # evening peak; the cap is owned by code so a deploy cannot drift it back.
+    # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
-    assert '--max-instances=50' in sync_step
+    assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=40' in action
-    assert '--max-dispatches-per-second=10' in action
+    assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
+    assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
@@ -404,10 +416,16 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     assert 'dispatch' in abort['if'] and 'platform' in abort['if']
     assert "provision_budget_alerts == 'true'" in abort['if']
 
+    resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
+    assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
+    assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
+    assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
+        '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
+    )
     run = queue['run']
     for flag in (
-        '--max-concurrent-dispatches=40',
-        '--max-dispatches-per-second=10',
+        '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"',
+        '--max-dispatches-per-second=15',
         '--min-backoff=5s',
         '--max-backoff=60s',
     ):
@@ -1142,3 +1160,38 @@ def test_redis_failure_does_not_authorize_owner_takeover(monkeypatch):
     with pytest.raises(ConnectionError):
         sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client)
     assert transaction.writes == []
+
+
+def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
+    manifest = yaml.load((REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    env = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']['env']
+    stages = json.loads((REPOSITORY_ROOT / 'config/diarization-cohort-stages.json').read_text())
+    expected = {key: env[key]['value'] for key in stages['A']}
+    assert expected in stages.values()
+    action = yaml.load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
+    )
+    steps = action['runs']['steps']
+    clone_step = next(step for step in steps if step.get('id') == 'backfill-runtime')
+    deploy_step = next(step for step in steps if step.get('id') == 'deploy-backend-sync-backfill')
+    assert '${{ inputs.backfill_env_vars }}' in clone_step['env']['ENV_OVERLAY']
+    assert deploy_step['with']['env_vars'] == '${{ steps.backfill-runtime.outputs.env_vars }}'
+    assert (
+        'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}'
+        in DEPLOY_BACKEND_STACK_ACTION.read_text()
+    )
+    source = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [{'env': [{'name': name, 'value': value} for name, value in stages['A'].items()]}]
+                }
+            }
+        }
+    }
+    cohort_env = {key: env[key] for key in expected}
+    values, _ = clone_environment(source, _render_env_vars(cohort_env), '', clone_step['env']['REMOVE_ENV_VARS'])
+    rendered = dict(line.split('=', 1) for line in values.splitlines())
+    assert {key: rendered[key] for key in expected} == expected
+    assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
+    assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))

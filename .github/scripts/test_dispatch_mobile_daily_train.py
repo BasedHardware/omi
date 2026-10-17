@@ -23,6 +23,32 @@ class DispatchTests(unittest.TestCase):
         with self.assertRaises(dispatcher.DispatchError):
             dispatcher.build_payload("", dry_run=False)
 
+    def test_payload_carries_the_gate_pins_when_supplied(self):
+        payload = dispatcher.build_payload("app-1", dry_run=False, pin_ios="1.0.554/1334", pin_android="1.0.554/1340")
+        self.assertEqual(
+            payload["environment"]["variables"],
+            {"TRAIN_DRY_RUN": "false", "TRAIN_PIN_IOS": "1.0.554/1334", "TRAIN_PIN_ANDROID": "1.0.554/1340"},
+        )
+        # Pins are optional: an unpinned dispatch keeps the variables non-empty-only.
+        bare = dispatcher.build_payload("app-1", dry_run=False)
+        self.assertNotIn("TRAIN_PIN_IOS", bare["environment"]["variables"])
+        self.assertNotIn("TRAIN_PIN_ANDROID", bare["environment"]["variables"])
+
+    def test_payload_accepts_none_as_an_audited_no_candidate(self):
+        payload = dispatcher.build_payload("app-1", dry_run=False, pin_android="none")
+        self.assertEqual(payload["environment"]["variables"]["TRAIN_PIN_ANDROID"], "none")
+        with self.assertRaisesRegex(dispatcher.DispatchError, "X.Y.Z/build, none, or empty"):
+            dispatcher.build_payload("app-1", dry_run=False, pin_ios="1.0.554")
+
+    def test_dispatch_passes_pins_through_to_the_build(self):
+        with patch.object(dispatcher, "_api_post", return_value={"buildId": "b-1"}) as post:
+            self.assertEqual(
+                dispatcher.dispatch("app-1", "token", dry_run=False, pin_ios="1.0.554/1334"),
+                "b-1",
+            )
+        self.assertEqual(post.call_args.args[2]["environment"]["variables"]["TRAIN_PIN_IOS"], "1.0.554/1334")
+        self.assertNotIn("TRAIN_PIN_ANDROID", post.call_args.args[2]["environment"]["variables"])
+
     def test_dispatch_requires_a_build_id(self):
         with patch.object(dispatcher, "_api_post", return_value={"buildId": "b-1"}) as post:
             self.assertEqual(dispatcher.dispatch("app-1", "token", dry_run=True), "b-1")

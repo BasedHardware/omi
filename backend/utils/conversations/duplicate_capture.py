@@ -6,27 +6,40 @@ windows are primary; equal windows use the document ID for stable ordering.
 
 A window match is only a proposal. When both captures also share speech
 (``shared_speech``), they join one capture group (``database.capture_groups``),
-which clients present as one event. Grouping is metadata only.
+which records their shared event identity. Grouping is metadata only.
+The default-off desktop-call path accepts complementary speech under its
+meeting-role and window contract, and pins the desktop primary.
 """
 
 from __future__ import annotations
 
 import logging
+import json
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from config.desktop_pendant_call_link import call_link_mode, call_pair
+from config.capture_shared_speech import shared_speech_mode
+from utils.conversations.desktop_pendant_call_link import link_call_pair, reserved_for_call
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
+from database.capture_speech import get_shared_speech_snapshot
 from utils.conversations.capture_containment import (
     capture_group_containment_mode,
     measure_capture_containment,
     record_capture_containment,
 )
 from utils.conversations.shared_speech import measure_shared_speech
-from utils.conversations.capture_jev_shadow import submit_resummary, submit_same_scene
+from utils.conversations.overlap_shared_speech import (
+    measure_overlap_shared_speech,
+    pair_category,
+    shared_speech_group_guard,
+    VERSION,
+)
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
 
@@ -36,6 +49,7 @@ MIN_WINDOW_COVERAGE = 0.5
 CANDIDATE_PAGE_LIMIT = 100
 # Each confirmation re-reads one decrypted transcript; bound the work per finalization.
 MAX_CONTENT_CHECKS = 6
+MAX_SHARED_SPEECH_CHECKS = 12
 
 
 @dataclass(frozen=True)
@@ -98,6 +112,7 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
     candidate = capture_record(conversation)
     if candidate is None:
         return
+    speech_mode = shared_speech_mode(uid)
     try:
         seconds = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', MIN_OVERLAP_SECONDS)
         ratio = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', MIN_WINDOW_COVERAGE, 1.0)
@@ -106,11 +121,25 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         )
         if len(rows) == CANDIDATE_PAGE_LIMIT:
             _record_degraded()
+        # The selected on cohort requires shared sentences even for call pairs.
+        # Off/shadow retain the incumbent complementary-call policy unchanged.
+        if speech_mode != 'on':
+            link_call_pair(uid, candidate.conversation_id, rows, saturated=len(rows) == CANDIDATE_PAGE_LIMIT)
+        link_mode = call_link_mode(uid) if speech_mode != 'on' else 'off'
+        by_id = {row['id']: row for row in rows if row.get('id')} if link_mode == 'on' else {}
+        own = by_id.get(candidate.conversation_id) or {}
+        if link_mode == 'on' and not own:
+            own = conversation if isinstance(conversation, Mapping) else vars(conversation)
         # Largest windows first, so a secondary with several matches gets the
         # most complete observed capture. Existing pointers are idempotent.
         others = sorted(filter(None, map(capture_record, rows)), key=lambda row: row.primary_rank)
         matches = []
         for other in others:
+            other_row = by_id.get(other.conversation_id) or {}
+            if link_mode == 'on' and (
+                call_pair(own, other_row) or reserved_for_call(own) or reserved_for_call(other_row)
+            ):
+                continue
             match = overlap_match(candidate, other, seconds=seconds, ratio=ratio)
             if match is None:
                 continue
@@ -127,21 +156,22 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         # Exception strings can carry request data; keep telemetry content-free.
         _record_degraded()
         return
-    _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
-    # The shadow sees overlapping candidates even when source, window threshold,
-    # or content threshold kept the shipped rule from grouping them.
-    shadow_candidates = 0
-    for other in others:
-        if other.conversation_id == candidate.conversation_id:
-            continue
-        overlap = (
-            min(candidate.finished_at, other.finished_at) - max(candidate.started_at, other.started_at)
-        ).total_seconds()
-        if overlap > 0:
-            submit_same_scene(uid, candidate.conversation_id, other.conversation_id)
-            shadow_candidates += 1
-            if shadow_candidates >= MAX_CONTENT_CHECKS:
-                break
+    if speech_mode != 'on':
+        _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
+    if speech_mode != 'off':
+        overlapping = [
+            other
+            for other in others
+            if other.conversation_id != candidate.conversation_id
+            and min(candidate.finished_at, other.finished_at) > max(candidate.started_at, other.started_at)
+        ]
+        _group_with_overlap_speech(
+            uid,
+            candidate,
+            overlapping[:MAX_CONTENT_CHECKS],
+            mode=speech_mode,
+            legacy_ids={other.conversation_id for other in matches[:MAX_CONTENT_CHECKS]},
+        )
 
 
 def _segments_of(record: Any):
@@ -150,6 +180,137 @@ def _segments_of(record: Any):
         if isinstance(record, Mapping)
         else getattr(record, 'transcript_segments', None)
     )
+
+
+def _group_with_overlap_speech(
+    uid: str, candidate: CaptureRecord, matches: list[CaptureRecord], *, mode: str, legacy_ids: set[str]
+) -> None:
+    """Observe or apply bounded same-sentence decisions through the fenced writer.
+
+    Shadow adds at most seven decrypted reads, no new writes. On replaces all
+    automatic grouping policies for the cohort and keeps existing groups intact.
+    """
+    if not matches:
+        return
+    snapshots = {}
+
+    def load(cid):
+        if cid not in snapshots:
+            if len(snapshots) >= MAX_CONTENT_CHECKS + 1:
+                return None, None
+            snapshots[cid] = get_shared_speech_snapshot(uid, cid)
+        return snapshots[cid]
+
+    remaining_checks = MAX_SHARED_SPEECH_CHECKS
+
+    def confirms(first, second):
+        nonlocal remaining_checks
+        if remaining_checks <= 0:
+            return None
+        remaining_checks -= 1
+        return measure_overlap_shared_speech(first, second)
+
+    try:
+        own, own_fingerprint = load(candidate.conversation_id)
+    except Exception:
+        _record_degraded(to_mode='separate_captures')
+        return
+    for other in matches:
+        try:
+            row, fingerprint = load(other.conversation_id)
+            if not row:
+                break  # exhausted read budget or absent snapshot; never infer a fold
+            started = time.perf_counter()
+            decision = confirms(own, row)
+            if decision is None:
+                break
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            incumbent = False
+            if other.conversation_id in legacy_ids:
+                if any(
+                    record.get('has_transcript_corrections')
+                    or record.get('transcript_correction_overlay') is not None
+                    or record.get('_shared_speech_rejection')
+                    for record in (own or {}, row)
+                ):
+                    incumbent = None  # no mutable overlay reads to simulate the incumbent
+                else:
+                    incumbent = measure_shared_speech(_segments_of(own), _segments_of(row)).confirms()
+                    if not incumbent and capture_group_containment_mode() == 'on':
+                        containment = measure_capture_containment(own, row, mode='on')
+                        incumbent = containment.would_join and containment.basis == 'full'
+            own_group = (own or {}).get('capture_group') or {}
+            other_group = (row or {}).get('capture_group') or {}
+            already_grouped = bool(own_group.get('id') and own_group.get('id') == other_group.get('id'))
+            windows = {r.conversation_id: (r.started_at, r.finished_at) for r in (candidate, other)}
+            fingerprints = {candidate.conversation_id: own_fingerprint, other.conversation_id: fingerprint}
+            existing = own_group if own_group.get('id') else other_group
+            expected_revision = int(existing.get('revision') or 0)
+            would_join, reason = decision.would_join, decision.reason
+            if would_join and not already_grouped:
+                # Shared speech is not transitive: a long A containing scenes B
+                # and C must not fold B and C through A. Confirm the new entrant
+                # against every existing member, within the same read/CPU budget.
+                if own_group.get('id') and other_group.get('id'):
+                    would_join, reason = False, 'different_groups'
+                else:
+                    entrant = row if own_group.get('id') else own
+                    for member in existing.get('members') or []:
+                        cid = member['id']
+                        if cid in fingerprints:
+                            continue
+                        member_row, member_fingerprint = load(cid)
+                        record = capture_record(member_row)
+                        if record is None:
+                            would_join, reason = False, 'group_unconfirmed'
+                            break
+                        confirmation = confirms(entrant, member_row)
+                        if confirmation is None or not confirmation.would_join:
+                            would_join, reason = False, 'group_unconfirmed'
+                            break
+                        windows[cid] = (record.started_at, record.finished_at)
+                        fingerprints[cid] = member_fingerprint
+            outcome = 'shadow' if mode == 'shadow' else 'none'
+            if mode == 'on' and would_join:
+                group_id = capture_groups_db.join_capture_group(
+                    uid,
+                    candidate.conversation_id,
+                    other.conversation_id,
+                    decision.evidence(),
+                    expected_windows=windows,
+                    expected_fingerprints=fingerprints,
+                    expected_group_revision=expected_revision,
+                    join_guard=shared_speech_group_guard,
+                )
+                outcome = 'applied' if group_id else 'conflict'
+                record_product_event('capture_group_joined', outcome=outcome)
+            logger.info(
+                'capture_shared_speech %s',
+                json.dumps(
+                    {
+                        'event': 'capture_shared_speech',
+                        'version': VERSION,
+                        'mode': mode,
+                        'uid': uid,
+                        'first_id': candidate.conversation_id,
+                        'second_id': other.conversation_id,
+                        'category': pair_category(own, row),
+                        'current_would_join': incumbent,
+                        'already_grouped': already_grouped,
+                        'would_join': would_join,
+                        'reason': reason,
+                        'pair_would_join': decision.would_join,
+                        'outcome': outcome,
+                        'matcher_ms': round(elapsed_ms, 3),
+                        **decision.evidence(),
+                    },
+                    sort_keys=True,
+                    separators=(',', ':'),
+                ),
+            )
+        except Exception:
+            logger.warning('event=capture_shared_speech outcome=error')
+            _record_degraded(to_mode='separate_captures')
 
 
 def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRecord, matches: list) -> None:
@@ -177,7 +338,7 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
             if containment_mode != 'off':
                 try:
                     containment = measure_capture_containment(own_row or {}, other_row or {}, mode=containment_mode)
-                    record_capture_containment(containment, mode=containment_mode, phase='rule')
+                    record_capture_containment(containment, mode=containment_mode)
                 except Exception:
                     logger.warning('capture_group_containment detector failed')
                     _record_degraded(to_mode='separate_captures')
@@ -208,25 +369,6 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                 },
             )
             record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')
-            own_group = (
-                own_row.get('capture_group')
-                if isinstance(own_row, Mapping)
-                else getattr(own_row, 'capture_group', None)
-            ) or {}
-            other_group = (
-                other_row.get('capture_group')
-                if isinstance(other_row, Mapping)
-                else getattr(other_row, 'capture_group', None)
-            ) or {}
-            if group_id and own_group.get('id') != other_group.get('id'):
-                if own_group.get('id') == group_id:
-                    submit_resummary(
-                        uid, own_group.get('primary_id') or candidate.conversation_id, other.conversation_id
-                    )
-                elif other_group.get('id') == group_id:
-                    submit_resummary(
-                        uid, other_group.get('primary_id') or other.conversation_id, candidate.conversation_id
-                    )
             if group_id and isinstance(own_row, dict):
                 primary = min((candidate, other), key=lambda row: row.primary_rank)
                 own_row['capture_group'] = {'id': group_id, 'primary_id': primary.conversation_id}

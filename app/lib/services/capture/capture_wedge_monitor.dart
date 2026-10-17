@@ -203,6 +203,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     }
   }
 
+  /// Batch owns transcription while BLE ingress still needs liveness checks.
+  /// A live handback starts a fresh transcript deadline without inventing text.
+  void setTranscriptExpected(int handle, bool expected) {
+    final session = _openSessions[handle];
+    if (session == null || session.expectsTranscript == expected) return;
+    session.expectsTranscript = expected;
+    session.bytesSinceTranscript = 0;
+    session.transcriptRequiredSince = expected ? _now() : null;
+    session.watchdogDeclared = false;
+  }
+
   /// Records an actual transcript outcome for every currently open socket for
   /// this device. Transport bytes alone are not proof that transcription is
   /// alive; this signal is deliberately separate from binary-byte accounting.
@@ -210,6 +221,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     for (final session in _openSessions.values) {
       if (session.deviceId == deviceId) {
         session.transcriptObserved = true;
+        session.transcriptRequiredSince = null;
         session.bytesSinceTranscript = 0;
         session.lastTranscriptAt = _now();
         session.lastIngressByteAt = session.lastTranscriptAt;
@@ -236,7 +248,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       _resolveIfActive(session.deviceId, state);
       return;
     }
-    if (intentional) return;
+    if (intentional || !session.expectsTranscript) return;
     final now = _now();
     if (binaryBytesSent > 0) {
       final ends = state.noTranscriptSessionEnds;
@@ -350,8 +362,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final now = _now();
     for (final session in _openSessions.values) {
       if (session.watchdogDeclared) continue;
-      if (session.bytesSinceTranscript > 0) {
-        final progressAt = session.lastTranscriptAt ?? session.connectedAt;
+      if (session.expectsTranscript && session.bytesSinceTranscript > 0) {
+        final progressAt = session.transcriptRequiredSince ?? session.lastTranscriptAt ?? session.connectedAt;
         if (now.difference(progressAt) < connectedNoTranscriptWindow) continue;
         session.watchdogDeclared = true;
         final state = _stateFor(session.deviceId);
@@ -709,6 +721,8 @@ class _OpenCaptureSession {
   final String source;
   final DateTime connectedAt;
   bool transcriptObserved = false;
+  bool expectsTranscript = true;
+  DateTime? transcriptRequiredSince;
   DateTime? lastTranscriptAt;
   int bytesSinceTranscript = 0;
   int ingressBytes = 0;

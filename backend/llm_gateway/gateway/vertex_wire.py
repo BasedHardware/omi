@@ -144,7 +144,19 @@ def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
                 cast(Mapping[str, Any], json_schema['schema'])
             )
 
-    payload: dict[str, Any] = {'contents': contents}
+    # Gemini requires alternating user/model turns. OpenAI tool responses each
+    # translate to a user Content, and Dream can append user text after them;
+    # those parts belong to one turn. Explicit cache splitting happens against
+    # the original messages before this builder is called for each side, so
+    # coalescing here cannot cross a cache prefix boundary.
+    coalesced_contents: list[dict[str, Any]] = []
+    for content in contents:
+        if coalesced_contents and coalesced_contents[-1]['role'] == content['role']:
+            coalesced_contents[-1]['parts'].extend(content['parts'])
+        else:
+            coalesced_contents.append(content)
+
+    payload: dict[str, Any] = {'contents': coalesced_contents}
     if system_parts:
         payload['systemInstruction'] = {'parts': system_parts}
     if generation_config:
@@ -219,7 +231,12 @@ def _vertex_tools(value: Any) -> list[dict[str, Any]] | None:
             declaration['description'] = description
         parameters = function.get('parameters')
         if isinstance(parameters, Mapping) and parameters:
-            declaration['parameters'] = dict(cast(Mapping[str, Any], parameters))
+            if '$defs' in parameters or '$ref' in parameters:
+                # Agent tools share nested Pydantic contracts. Vertex's Schema arm
+                # cannot represent local refs; its JSON Schema arm can.
+                declaration['parametersJsonSchema'] = vertex_response_json_schema(parameters)
+            else:
+                declaration['parameters'] = dict(cast(Mapping[str, Any], parameters))
         declarations.append(declaration)
     return [{'functionDeclarations': declarations}]
 
@@ -479,6 +496,8 @@ def _vertex_to_openai_stream_chunk(
     }
     if usage is not None:
         body['usage'] = _openai_usage_payload(usage)
+    if isinstance(response.get('_gateway_cache_receipt'), Mapping):
+        body['_gateway_cache_receipt'] = response['_gateway_cache_receipt']
     return _openai_sse(body), finish_reason is not None
 
 

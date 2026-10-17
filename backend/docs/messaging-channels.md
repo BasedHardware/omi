@@ -86,7 +86,7 @@ but carry a FIFO settlement marker so new messages can proceed.
 Inbox claims transactionally retire running heads older than five minutes (measured
 from `started_at`, or `created_at` for pre-migration rows). They retain encrypted
 reconciliation evidence and gain `fifo_settled_at`; they never replay a possibly sent
-reply. Pending rows older than thirty minutes are retired with content-free tombstones.
+reply. Pending rows older than thirty minutes become `expired`; recovery claims a one-time resend notice within the provider reply window, then removes their payload.
 A new wake claims the identity's oldest eligible pending row, and each worker drains
 the following rows in order after success or settled failure. Fresh running heads
 remain exclusive. The periodic recovery loop handles lost wakes.
@@ -103,7 +103,7 @@ head age; `omi_messaging_queue_events_total{reason}` counts `non_head`, `head_re
 `stale_running`, `stale_pending`, and `stale_lease` decisions (transaction retries may
 count a decision more than once).
 
-No data migration or queue reset is required. Old rows/leases use `created_at`; existing
+Launch requires a one-time content-free inbox metadata backfill before collection-group recovery; see the launch runbook. No queue reset is required. Old rows/leases use `created_at`; existing
 settlement markers remain respected. Recovery requires a pending wake or periodic drain.
 Review stale-running evidence before any manual replay; accepted external delivery is
 not inferred from inbox status. Already admitted external requests or synchronous tool
@@ -128,9 +128,11 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 | `channel_link_proofs/{sha256(proof)}` | uid, audience, kind, expires_at. Raw proof never persisted. |
 | `users/{uid}/channel_link_proofs/{proof_id}` | Cleanup inventory for pending proofs. |
 | `channel_identities/{identity_id}/inbox/{dedup_id}` | Encrypted normalized payload, created_at, pending/running/done. Done removes the payload. |
-| `users/{uid}/chat_sessions/{surface_hash}` | Existing session fields plus surface, channel, channel_link_id, link_generation; reserved plugin_id `__channel__` keeps default app histories separate. |
+| `users/{uid}/chat_sessions/{surface_hash}` | Existing session fields plus surface, channel, channel_link_id, link_generation, current_session_id for rotated sessions; reserved plugin_id `__channel__` keeps default app histories separate. |
 | `users/{uid}/messages/{id}` | Existing chat fields plus surface, channel_link_id, data_usage=`user_serving_only`; channel text is encrypted using existing per-user encryption. |
-| `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted append-only model events: id, kind, at, role, content. Digests and re-entry evidence are hidden from message listing. |
+| `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Re-entry evidence is hidden from message listing; this log is not shaped model context. |
+| `channel_capacity/{channel}` / `members/{uid}` | Initialized count of distinct linked users and each member's linked identity IDs; transactional seat admission and release. |
+| `users/{uid}/channel_waitlist/{channel}` | Content-free waitlist with updated_at and expires_at; no proactive notification. |
 | `users/{uid}/channel_turn_leases/{surface_hash}` | token and created_at; fail-closed serialization. |
 
 Both proof types are authenticated-app minted, ten-minute, high-entropy, audience-bound
@@ -161,8 +163,7 @@ session. Account deletion calls `MessagingStore.delete_account` in
 and the user tree. It removes reverse indexes and pending proof records; recursive user
 wipe removes mirrors, session events and leases. Deletion markers block further channel
 admission. External provider retention/deletion is an adapter-specific Stage B obligation.
-Unconsumed expired proofs and anonymous inbox tombstones need a bounded TTL janitor before
-public rollout; this foundation does not deploy a Firestore TTL policy.
+The hourly Cloud Run messaging-maintenance job bounds cleanup of expired proofs, unknown identities, completed inbox markers and waitlists; it sends nothing.
 
 ## Cross-surface continuity and cache behavior
 
@@ -171,20 +172,62 @@ merges the selected channel sessions into the session list; no channel transcrip
 silently mirrored into the default app conversation. Linking visibility does not grant
 another account access. Existing app sessions logically have `surface=app`.
 
-A returning surface appends hidden activity from other sessions since its last event.
-Activity comes from the existing decrypted message iterator, paging until the surface
-watermark (100 messages per page). Under 800 tokens it is verbatim; larger activity uses a cheap `chat_graph` model
-through a one-turn shaped mount. The resulting digest is persisted once. It never edits
-an earlier event. The stable mount prefix and all earlier serialized model messages
-remain byte-identical across a surface switch. Enabled linked app turns use the same
-append-only event log; the default mobile history-window contract is unchanged when off.
-`search_chat_history` searches across history, returning the newest 20 matches.
-These paginated scans are not a new full-text index; large accounts may need an index.
+Shaped app, Telegram and iMessage turns load authoritative messages through the same
+cache-aligned 10–17 visible-message window. Its start advances by eight messages;
+within an epoch, the history prefix remains stable. Channel runtime evidence contributes
+only the current request (including forwarded/media evidence), never the event log.
 
-A surface event log has a 500 KB ceiling. Exhaustion fails closed and requires an explicit
-new session; silently truncating/re-summarizing the cached prefix is forbidden. Long-lived
-session epoch rollover and a full-history search index are extension points before wide
-rollout. No historical messages are rewritten or migrated.
+When the window advances, owner/session-scoped source pages feed a cheap `chat_graph`
+rolling summary, capped at 2,400 characters. The encrypted summary lives on the session
+and appears immediately after the system prefix. Original messages remain reachable via
+`search_chat_history`; summarization is lossy, so exact details should be retrieved.
+Summaries refresh in a tracked background task after the turn, with a 60-second
+budget and at most two concurrent sessions per process. The answer uses stored
+continuity (or none); missing indexes and model/Firestore/CAS errors only degrade
+optional context and never gate streaming. For shaped app/channel turns, summary
+and digest reads start before router metadata and agentic prompt/tool setup, with
+a one-second background window in the dedicated four-worker context pool. It accepts
+no queued work; saturation skips context and cannot occupy setup's `db_executor`.
+Running calls retain their slots after caller cancellation. Every request-context RPC
+has an explicit timeout and an always-false Retry predicate. The model samples ready
+components, then validates session/account/deletion/link and generation/revision fences
+with one projected BatchGet, capped at 150 ms. Failed, late or saturated validation
+omits both summary and digest; it never injects an unchecked snapshot. Over-long model summaries
+are clipped before persistence (an informational event); empty summaries leave
+the source checkpoint unchanged.
+Reported, cleared and revised messages erase affected session summary ciphertext
+and increment a generation in the same atomic write;
+derived summaries rebuild from surviving source rows. CAS revisions and link/deletion
+checks prevent stale writes from resurrecting removed sessions.
+
+Current activity elsewhere inspects at most twenty newest message candidates and
+is capped at 3,200 characters. Active-session rows are skipped before decryption;
+there is no paginated digest scan. Its RPC has a one-second timeout with retries
+disabled, matching the overlapping read window. Digest failures or a digest still
+pending at model start omit only the digest when the summary read succeeded. It is request-local, not appended to permanent events. Activity, app request scope and the original channel request clock appear only
+inside the final user message. The app's existing current datetime stays there too.
+
+GPT-5.6 explicit caching uses at most two breakpoints: the system block and one
+at the end of the epoch-stable history prefix (the first nine historical messages,
+after any summary). That endpoint stays fixed as the tail grows. Prefixes below the 1,024-token minimum are not expected to
+hit. The provider examines its first two and latest fifty explicit boundaries and can
+write at most four caches per call; the bounded history stays within that lookback.
+`OMI_CHAT_PROMPT_CACHE_TTL` defaults to `30m`; the current gateway/provider supports only
+that value. Unsupported TTL values log and disable explicit cache options and
+breakpoints for the turn. Other resolved models omit these GPT-5.6 options.
+
+Surface events remain an encrypted forty-event audit/awareness tail with numeric sequences
+and separate deterministic content-free fences. Pruning does not remove replay fences.
+Legacy events receive a one-time sequence/fence migration before pruning. They are no
+longer shaped model context. `/new` or `new chat` starts a fresh surface session without
+copying summary state, preserving owner-scoped older history.
+
+`chat_agent` usage records input, cache-read and cache-write tokens for app/Telegram/iMessage
+in daily feature/model and surface/model buckets plus hashed per-turn child documents.
+Streaming gateway receipts preserve cache-write fields that LangChain otherwise drops.
+Prometheus `omi_chat_agent_tokens_total{surface,kind}` exposes input/cache_read/cache_write;
+these labels never contain uid, session or content.
+
 
 ## Tool and workspace compatibility
 
@@ -215,8 +258,9 @@ cannot use re-entry to bypass expiry, link revocation or channel reply windows.
 `get_user_valid_subscription(..., provision=False)` authority fail closed. Admission uses
 `is_paid_plan(subscription.plan)` for every paid catalog plan, rather than copying billing
 or expiry logic. Basic/free and expired subscriptions are rejected by the existing
-subscription authority. Production config enables only David's exact uid on Cloud Run
-`backend`; other services and environments retain their default-off behavior.
+subscription authority. Production config enables all valid paid users on Telegram and only David's exact
+uid on iMessage, on Cloud Run `backend`; other services and environments retain
+their default-off behavior.
 
 The knowledge-base README's “no implementation authorized” and undecided defaults are
 superseded by this brief. Its early calendar-off policy is also superseded: channels
@@ -263,10 +307,9 @@ Generic `Open in Omi` navigation is removed; iMessage attaches item-specific nav
 
 ### Stacked messages and iMessage item previews
 
-Each distinct fresh user message is a separate FIFO turn, including trivial pings;
-this implementation does not coalesce questions or fold pings. Duplicate provider
-messages are deduplicated, and pendings over thirty minutes old are retired without
-answering. Admission atomically writes the encrypted inbox row and a content-free
+Each distinct fresh user message is a separate FIFO turn, including trivial pings. Telegram media albums alone coalesce in a bounded durable
+debounce; questions and pings remain distinct. Duplicate provider
+messages are deduplicated, and pendings over thirty minutes old are retired with one guarded resend-notice attempt. Admission atomically writes the encrypted inbox row and a content-free
 per-chat newest-inbound pointer. Late older webhooks and duplicates cannot move the
 pointer backward; Telegram message IDs break ties in its one-second provider clock
 (other equal-clock arrivals use admission order). Callback clicks do not become
@@ -306,3 +349,37 @@ Open Graph metadata and `web/` are unchanged.
 
 Provider contracts: [Linq sending messages](https://docs.linqapp.com/channel/imessage/guides/messaging/sending-messages/)
 and [rich link previews](https://docs.linqapp.com/channel/imessage/guides/messaging/rich-link-previews/).
+
+## Paid messaging launch policy
+
+`OMI_MESSAGING_CHANNEL_POLICY` overrides legacy uid admission per channel. Telegram's
+`cohort:"*"` admits all valid paid plans; iMessage defaults to Operator/Architect and
+180 distinct linked users. Cohorts, plans and seat caps are configurable. Explicit `seat_cap:"off"` retains
+legacy all-paid admission without capacity IO; prod uses it for David-only iMessage. Atomic link
+redemption and per-user member records own seat accounting; unlink/deletion release the
+last member link. Legacy env-only deployments behave as before. Optional cached remote
+channel switches, shared Redis Telegram pacing, typed waitlist errors, retention jobs
+and metric/alert deployment steps are in the [runbook](runbooks/messaging-channels.md#paid-launch-preparation-and-seat-operations).
+
+
+## Inbound modality matrix (Brief S)
+
+| Type | Telegram before → after | iMessage before → after |
+| --- | --- | --- |
+| Voice / audio files | OGG passed encoded / audio omitted → decoded PCM + STT | `voice_memo` encoded; audio `media` rejected → MIME/extension detection + decoded PCM + STT |
+| Photos / HEIC / HEIF | JPEG photo → JPEG/photo documents; HEIC → converted JPEG | JPEG/PNG; HEIC rejected → oriented JPEG conversion |
+| Photo albums | Separate turns → one durable debounced turn | Multiple parts → one turn (retained) |
+| Video / round video | Omitted → audio-track STT | File upload rejected → audio-track STT |
+| PDF / text / CSV | Existing uploader → retained | Existing uploader → retained |
+| DOCX / XLSX / PPTX | Existing supported uploader → explicitly advertised/tested | Existing supported uploader → explicitly advertised/tested |
+| Location / venue | Empty turn → bounded text evidence | Unknown part → text evidence when supplied as location |
+| Contact / vCard | Omitted/rejected → bounded text evidence | vCard rejected → bounded text evidence |
+| Sticker / GIF / emoji-only | Empty/model turn → lightweight acknowledgement | Unsupported/model turn → GIF/emoji/tagged-sticker acknowledgement; unmarked Linq stickers remain images |
+| Quoted replies | No quote context → bounded quote evidence | No quote context → bounded same-session accepted-event resolution |
+| Reactions / polls / dice / games / payments / services | Empty/model turn → silently ignored | Non-message events ignored; unknown parts → explicit ignore or supported-format reply |
+| Unsupported attachment | Generic worker apology → one specific supported-format reply | Generic worker apology → one specific supported-format reply |
+
+Limits, incident evidence, exact prod policy, and manual launch steps are in the
+[runbook](runbooks/messaging-channels.md#approved-all-paid-telegram-configuration-brief-s).
+No client binary or app code change is required; PostHog entry visibility must be
+expanded by the operator for the paid Telegram audience.

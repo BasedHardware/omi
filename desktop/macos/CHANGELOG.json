@@ -2,6 +2,99 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.497",
+      "date": "2026-10-17",
+      "changes": [
+        "Fixed stray citation brackets, parentheses and separators in older notes and app summaries while preserving transcript sources and code examples"
+      ]
+    },
+    {
+      "version": "0.12.496",
+      "date": "2026-10-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.495",
+      "date": "2026-10-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.494",
+      "date": "2026-10-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.493",
+      "date": "2026-10-16",
+      "changes": [
+        "A plan set to cancel now shows when it ends, and Resubscribe confirms the renewal"
+      ]
+    },
+    {
+      "version": "0.12.492",
+      "date": "2026-10-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.491",
+      "date": "2026-10-16",
+      "changes": [
+        "Fixed the Memories list showing every memory when the selected category has no memories",
+        "Fixed a deleted memory staying in the Memories list while a search or category filter was active",
+        "The assistant no longer asks you to approve Messages, Mail or AppleScript actions it cannot run yet; it says the action is not available and carries on"
+      ]
+    },
+    {
+      "version": "0.12.490",
+      "date": "2026-10-16",
+      "changes": [
+        "Screen intelligence requests now stop promptly when the server deadline is reached."
+      ]
+    },
+    {
+      "version": "0.12.489",
+      "date": "2026-10-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.488",
+      "date": "2026-10-15",
+      "changes": [
+        "Fixed memories that refused to disappear: memories deleted everywhere else (or on emptied accounts) no longer linger on the desktop, stuck unsynced local memories are cleared after 30 days, and a delayed server delete now retries in the background instead of popping back"
+      ]
+    },
+    {
+      "version": "0.12.487",
+      "date": "2026-10-15",
+      "changes": [
+        "Transcript corrections preserve the original recording text and remain reversible"
+      ]
+    },
+    {
+      "version": "0.12.486",
+      "date": "2026-10-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.485",
+      "date": "2026-10-14",
+      "changes": [
+        "Saved conversations waiting on your allowance show a waiting state instead of a padlock"
+      ]
+    },
+    {
       "version": "0.12.484",
       "date": "2026-10-14",
       "changes": [

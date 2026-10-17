@@ -4385,6 +4385,16 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Pelan $plan anda tamat pada $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Langgan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }
@@ -4392,6 +4402,11 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Pelan tahunan anda akan bermula secara automatik apabila pelan bulanan anda tamat.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Pelan $plan anda akan diperbaharui pada $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4424,6 +4439,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get continueText => 'Teruskan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Langgan semula dahulu untuk menukar pelan.';
 
   @override
   String get resubscribe => 'Langgan semula';
@@ -5039,9 +5057,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get content => 'Kandungan';
-
-  @override
-  String get noContentToDisplay => 'Tiada kandungan untuk dipaparkan';
 
   @override
   String get noSummary => 'Tiada ringkasan';
@@ -9830,9 +9845,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
 
   @override
-  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
 
@@ -12428,6 +12440,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reviewRecentChanges => 'Perubahan Terkini';
 
   @override
+  String get reviewChangeAfter => 'Selepas';
+
+  @override
+  String get reviewChangeBefore => 'Sebelum';
+
+  @override
+  String get reviewChangeRemoved => 'Dikeluarkan daripada senarai aktif';
+
+  @override
   String get reviewChangesIntro =>
       'Apa yang Omi ubah sendiri dalam 30 hari lepas. Buat asal apa-apa yang nampak salah.';
 
@@ -12445,6 +12466,59 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Apabila Omi mengemas nota anda, perubahan akan muncul di sini.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Nama dan istilah';
+
+  @override
+  String get reviewChangesSectionTitles => 'Tajuk dan ringkasan';
+
+  @override
+  String get reviewChangesSectionOther => 'Perubahan lain';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perbualan',
+      one: '1 perbualan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tempat',
+      one: '1 tempat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Tunjukkan semua $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Buat asal semua';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Lihat bukti';
+
+  @override
+  String get reviewChangeViewConversation => 'Lihat perbualan';
+
+  @override
+  String get reviewChangeViewTask => 'Lihat tugasan';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Tidak dapat membuat asal $failed daripada $total. Cuba lagi.';
+  }
 
   @override
   String get reviewShowMore => 'Tunjuk Lagi';
@@ -13306,4 +13380,431 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Salin butiran untuk sokongan';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Tersedia pada Operator dan Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app sudah penuh';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Sertai senarai menunggu';
+
+  @override
+  String get chatAppsOnWaitlist => 'Anda dalam senarai menunggu';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Anda dalam senarai menunggu. Kami akan maklumkan apabila ada tempat.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Semua sudah sedia, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Makan tengah hari dengan Sam, yang berpindah ke Lisbon pada Jun. Anda mahu hantar dek kepada pasukan sebelum Jumaat dan beli susu dalam perjalanan pulang.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Hantar deck kepada pasukan sebelum Jumaat';
+
+  @override
+  String get onboardingActDemoTask2 => 'Beli susu dalam perjalanan pulang';
+
+  @override
+  String get onboardingActDemoTitle => 'Makan tengah hari dengan Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Cakap dengan cara anda. Omi uruskan selebihnya.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Cakap sahaja. Omi anda sedang mendengar.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Baru makan tengah hari dengan Sam, dia akan pindah ke Lisbon bulan Jun! Ingatkan saya hantar deck kepada pasukan sebelum Jumaat, dan beli susu dalam perjalanan pulang.';
+
+  @override
+  String get onboardingActDictateHint => 'Ketik tanda semak apabila selesai';
+
+  @override
+  String get onboardingActDictateTitle => 'Ceritakan hari anda kepada Omi';
+
+  @override
+  String get onboardingActIntro => 'Jom cuba Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Baru sahaja';
+
+  @override
+  String get onboardingActMicAllow => 'Benarkan Mikrofon';
+
+  @override
+  String get onboardingActMicBody => 'Supaya Omi dapat mendengar anda bercakap.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi anda belum menghantar audio. Gunakan telefon anda buat masa ini.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi perlukan mikrofon anda';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi anda tidak kedengaran. Pastikan ia dihidupkan dan dekat.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Suara anda belum kedengaran. Cuba bercakap lebih kuat sedikit.';
+
+  @override
+  String get onboardingActNotesLabel => 'Hari anda, diringkaskan';
+
+  @override
+  String get onboardingActPhoneMic => 'Mikrofon telefon';
+
+  @override
+  String get onboardingActRateTitle => 'Suka Omi setakat ini?';
+
+  @override
+  String get onboardingActRemembers => 'Omi ingat supaya anda tidak perlu';
+
+  @override
+  String get onboardingActSavedToTasks => 'Disimpan ke tugasan anda';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi menangkap tugasan anda';
+
+  @override
+  String get onboardingActWriting => 'Meringkaskan…';
+
+  @override
+  String get onboardingActYourWords => 'Ini yang anda katakan';
+
+  @override
+  String get onboardingConnectOmi => 'Sambungkan Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Ketik Omi anda untuk menyambung.';
+
+  @override
+  String get onboardingNoOmiYet => 'Belum ada Omi lagi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Belum memesan';
+
+  @override
+  String get onboardingOmiOrdered => 'Saya sudah memesannya';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Ketik untuk membetulkan';
+
+  @override
+  String get homePendingTitle => 'Perbualan sedang diproses';
+
+  @override
+  String get homePendingCatchingUp => 'Mengejar audio terdahulu';
+
+  @override
+  String get onTheWayTitle => 'Dalam perjalanan';
+
+  @override
+  String get onTheWayAlmostReady => 'Hampir siap';
+
+  @override
+  String get activityEmpty => 'Belum ada aktiviti';
+
+  @override
+  String get activityNewSemantics => 'Aktiviti, item baharu';
+
+  @override
+  String get activityLoadFailed => 'Tidak dapat memuatkan semua aktiviti anda';
+
+  @override
+  String get activityNewItem => 'Baharu';
+
+  @override
+  String get activityNeedsAttention => 'Perlu perhatian';
+
+  @override
+  String get activityRetryAll => 'Cuba semua semula';
+
+  @override
+  String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
+
+  @override
+  String get connectAgentHeadline => 'Gunakan memori Omi anda dalam ChatGPT dan ejen AI anda';
+
+  @override
+  String get connectAgentIntro => 'Sambung sekali. Kemudian tanya mereka tentang perbualan, kenangan dan tugas anda.';
+
+  @override
+  String get connectAgentOneTap => 'Satu Ketikan';
+
+  @override
+  String get connectAgentComputerAgents => 'Ejen dengan Komputer Sendiri';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Salin satu gesaan. Omi membuat kunci khas untuk ejen itu dan menghantarnya dengan selamat.';
+
+  @override
+  String get connectAgentOtherAgent => 'Ejen Lain';
+
+  @override
+  String get connectAgentKeyActive => 'Kunci aktif';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Kali terakhir digunakan $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Kunci MCP dan API untuk pembangun';
+
+  @override
+  String get connectAgentLoadFailed => 'Tidak dapat memuatkan sambungan anda.';
+
+  @override
+  String get connectAgentActionFailed => 'Ada yang tidak kena. Cuba lagi.';
+
+  @override
+  String get connectChatGptTitle => 'Sambungkan ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Mengambil masa kira-kira 30 saat. Anda meluluskannya dalam ChatGPT, dan ia berfungsi pada telefon serta komputer anda.';
+
+  @override
+  String get connectChatGptStepOpen => 'Kami buka Omi dalam ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT terus dibuka pada halaman aplikasi Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Ketik \"Sambung\", kemudian log masuk ke Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Gunakan akaun yang sama yang anda gunakan di sini.';
+
+  @override
+  String get connectChatGptStepReturn => 'Kembali ke Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Kami menyemak sambungan secara automatik.';
+
+  @override
+  String get openChatGpt => 'Buka ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Disambungkan pada telefon dan komputer';
+
+  @override
+  String get tryAskingChatGpt => 'Cuba Tanya ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Ketik satu untuk membuka ChatGPT dengan soalan itu sudah diisi.';
+
+  @override
+  String get chatGptExampleMeetings => 'Apakah yang saya persetujui dalam mesyuarat semalam?';
+
+  @override
+  String get chatGptExampleTasks => 'Jadikan tugas Omi saya yang belum selesai sebagai pelan untuk minggu ini.';
+
+  @override
+  String get chatGptExampleGoals => 'Apa yang Omi tahu tentang matlamat saya?';
+
+  @override
+  String get disconnectChatGpt => 'Putuskan Sambungan ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Putuskan sambungan ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT tidak lagi dapat membaca kenangan, perbualan atau tugas Omi anda.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Sambungkan $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Tampal satu gesaan. $name menyediakan Omi pada komputernya sendiri.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Tampal satu gesaan. Ejen anda menyediakan Omi pada komputernya sendiri.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Kunci “$name” dicipta';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Gesaan mengandungi pautan sekali guna, bukan kunci itu sendiri. Ia dibuka sekali dan tamat tempoh dalam 1 jam. Batalkan kunci di sini bila-bila masa.';
+
+  @override
+  String get connectAgentPreparing => 'Membuat kunci dan pautan selamat…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Tidak dapat membuat kunci. Semak sambungan anda dan cuba lagi.';
+
+  @override
+  String get copyPrompt => 'Salin Gesaan';
+
+  @override
+  String get connectAgentNewLink => 'Pautan Tamat Tempoh? Buat yang Baharu';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name Disambungkan';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name memegang kunci Omi. Batalkan kunci untuk memutuskan akses. Anda boleh sambung semula bila-bila masa.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Batalkan Kunci $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name serta-merta hilang akses kepada memori Omi anda.';
+  }
+
+  @override
+  String get askAboutConversation => 'Tanya Tentang Perbualan Ini';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Membuka ChatGPT dengan soalan anda sedia. Ia mencari perbualan melalui Omi, jadi anda tidak perlu menampal transkrip.';
+
+  @override
+  String get askYourQuestion => 'Soalan anda';
+
+  @override
+  String get askSuggestFollowUp => 'Draf e-mel susulan daripada perbualan ini.';
+
+  @override
+  String get askSuggestCommitments => 'Apakah yang saya janjikan dalam perbualan ini?';
+
+  @override
+  String get askSuggestDoc => 'Jadikan perbualan ini sebagai dokumen ringkas.';
+
+  @override
+  String get askInChatGpt => 'Tanya ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Salin untuk Mana-mana Aplikasi';
+
+  @override
+  String get askConnectChatGptFirst => 'Sambungkan ChatGPT sekali untuk bertanya tentang perbualan anda.';
+
+  @override
+  String get reconnect => 'Sambung semula';
+
+  @override
+  String get chatGptNeedsReconnect => 'Perlukan akses tambahan. Sambung semula untuk membetulkan.';
+
+  @override
+  String get connectAgentWaiting => 'Menunggu ejen menggunakan kuncinya';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name Belum Disambungkan';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Belum diringkaskan';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi boleh menukar perbualan ini kepada gambaran keseluruhan, perkara utama dan item tindakan.';
+
+  @override
+  String get summaryWithOmi => 'Ringkaskan dengan Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Ringkaskan dengan $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Guna templat lain';
+
+  @override
+  String get summaryFromTheTranscript => 'Daripada transkrip';
+
+  @override
+  String get summaryReadFullTranscript => 'Baca transkrip penuh';
+
+  @override
+  String get summarySheetTitle => 'Ringkaskan dengan';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Gambaran keseluruhan, perkara utama dan item tindakan';
+
+  @override
+  String get summaryYourTemplates => 'Templat anda';
+
+  @override
+  String get summarySuggestedTemplates => 'Dicadangkan untuk perbualan ini';
+
+  @override
+  String get summaryBrowseTemplates => 'Layari templat';
+
+  @override
+  String get summaryCreateYourOwn => 'Cipta sendiri';
+
+  @override
+  String get summaryUseForNewConversations => 'Jadikan ini lalai saya';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Tidak dapat memuatkan templat anda. Omi masih berfungsi.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Anda belum menambah sebarang templat. Layari beberapa atau cipta sendiri.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Meringkaskan dengan $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name tidak dapat diselesaikan';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Templat tidak memulangkan ringkasan untuk perbualan ini.';
+
+  @override
+  String get summaryWithOmiInstead => 'Ringkaskan dengan Omi sahaja';
+
+  @override
+  String get summaryBusyTitle => 'Masih diproses';
+
+  @override
+  String get summaryBusyBody =>
+      'Omi sedang memproses perbualan ini. Ringkasan akan dipaparkan di sini apabila selesai.';
+
+  @override
+  String get summaryCheckAgain => 'Semak semula';
+
+  @override
+  String get summaryLimitTitle => 'Had ringkasan dicapai';
+
+  @override
+  String get summaryLimitBody => 'Anda telah menjana semula beberapa ringkasan dalam sejam yang lalu. Cuba lagi nanti.';
+
+  @override
+  String get summaryFailedTitle => 'Tidak dapat meringkaskan';
+
+  @override
+  String get summaryFailedBody => 'Sesuatu tidak kena semasa meringkaskan perbualan ini.';
 }

@@ -20,9 +20,10 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
-import 'package:omi/services/experiments/onboarding_webview_gate.dart';
+import 'package:omi/services/experiments/onboarding_variant_gate.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
@@ -201,6 +202,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // account on a fresh install — sees the consent screen at least
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
+            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
@@ -244,17 +246,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
-  /// Marks first-run onboarding complete and routes home. Shared by the native completion screen
-  /// and the web onboarding page, so only the wrapper ever owns completion.
-  Future<void> _finishOnboarding() async {
-    if (_finishing) return;
+  /// Marks first-run onboarding complete and routes home. Shared by the native completion screen,
+  /// the web onboarding page and Yinka's flow, so only the wrapper ever owns completion. False when
+  /// the save failed (the step stays, so the reader can tap again). [paywallShown] skips the
+  /// end-of-onboarding paywall placement when the arm already offered a plan.
+  Future<bool> _finishOnboarding({bool paywallShown = false}) async {
+    if (_finishing) return false;
     _finishing = true;
     final saved = await OnboardingSyncRuntime.enqueue(completed: true);
     _finishing = false;
-    if (!mounted || !context.mounted) return;
+    if (!mounted || !context.mounted) return false;
     if (!saved) {
       OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      return;
+      return false;
     }
     SharedPreferencesUtil().onboardingCompleted = true;
     SharedPreferencesUtil().permissionsCompleted = true;
@@ -263,9 +267,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _completeOnboardingTelemetry();
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
-    await _maybeShowOnboardingPaywall();
-    if (!mounted) return;
+    if (!paywallShown) await _maybeShowOnboardingPaywall();
+    if (!mounted) return true;
     routeToPage(context, const HomePageWrapper(), replace: true);
+    return true;
   }
 
   /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
@@ -276,21 +281,31 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
-  /// Enters the steps after sign-in and consent: the web onboarding page when its flag names one,
-  /// otherwise the native step the reader left off at. A page that falls back lands on that same
-  /// native step.
+  /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
+  /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
+  /// falls back lands on that same native step.
   Future<void> _enterSteps() async {
-    final url = await OnboardingWebviewGate.resolve();
+    final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
-    if (url != null) {
-      const TypedEvents().emit(const OnboardingWebviewShown());
-      final result = await routeToPage(context, WebOnboardingPage(url: url));
-      if (!mounted) return;
-      if (result == WebOnboardingResult.completed) {
-        const TypedEvents().emit(const OnboardingWebviewCompleted());
-        await _finishOnboarding();
+    PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
+      'variant': arm.variant.wireName,
+      '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
+    });
+    switch (arm.variant) {
+      case OnboardingVariant.yinka:
+        await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));
         return;
-      }
+      case OnboardingVariant.reid:
+        const TypedEvents().emit(const OnboardingWebviewShown());
+        final result = await routeToPage(context, WebOnboardingPage(url: arm.webUrl!));
+        if (!mounted) return;
+        if (result == WebOnboardingResult.completed) {
+          const TypedEvents().emit(const OnboardingWebviewCompleted());
+          await _finishOnboarding();
+          return;
+        }
+      case OnboardingVariant.control:
+        break;
     }
     _controller!.animateTo(_resumeStep());
   }
@@ -430,6 +445,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
+    OnboardingVariantGate.invalidate();
     _voiceController?.dispose();
     _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -550,6 +566,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
+            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);

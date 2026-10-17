@@ -956,8 +956,32 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        final_record = authoritative_for(uid) and all(
-            (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
+        # Persisted authority survives flag rollback and mixed live/WAL appends.
+        # Without compatible centroids we cannot safely regroup any of this
+        # conversation across the authoritative batch boundary. Manual receipts
+        # above and below still apply; anonymous identity is an explicit abstention.
+        batch_record = any(
+            (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
+        )
+        if batch_record:
+            # Reuse owner-safe abstention for unrelated legacy scopes without
+            # reclustering batch voices. Manual receipts still win below.
+            trusted = _capture_trusted(conversation.transcript_segments)
+            _without_resolution(conversation, 'batch_authoritative', force_unavailable=not trusted)
+            resolution = conversation.speaker_resolution
+            if trusted and resolution is not None:
+                resolution.participant_speaker_ids = significant_capture_speaker_ids(
+                    [
+                        segment
+                        for segment in conversation.transcript_segments
+                        if segment.speaker_match_source != 'batch_abstention'
+                    ]
+                )
+        final_record = batch_record or (
+            authoritative_for(uid)
+            and all(
+                (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
+            )
         )
         if resolution_enabled() and not final_record:
             _resolve(
@@ -985,7 +1009,9 @@ def resolve_speakers_for_processing(
             conversation.id,
             type(error).__name__,
         )
-        if resolution_enabled():
+        if resolution_enabled() and not any(
+            (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
+        ):
             _without_resolution(conversation, 'failed')
     finally:
         for segment, labels in preserved:

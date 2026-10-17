@@ -33,6 +33,37 @@ class McpApi {
     }
   }
 
+  /// OAuth grants live on the identity plane, which stays production even when mobile Beta serves
+  /// product traffic from the development API (`Env.authApiBaseUrl`); ChatGPT's directory app
+  /// grants there.
+  static String get _grantsUrl => '${Env.authApiBaseUrl}v1/mcp/oauth/grants';
+
+  /// The OAuth grants apps such as ChatGPT hold on this account, newest first. Each is a raw map
+  /// (`id`, `client_id`, `scopes`, `revoked_at`, `status`, ...), revoked ones included.
+  static Future<List<Map<String, dynamic>>> getOauthGrants() async {
+    final response = await makeApiCall(url: _grantsUrl, headers: {}, body: '', method: 'GET');
+
+    if (response != null && response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      final grants = body is Map ? body['grants'] : null;
+      if (grants is! List) return const [];
+      return [
+        for (final grant in grants)
+          if (grant is Map<String, dynamic>) grant
+      ];
+    } else {
+      throw Exception('Failed to load OAuth grants: ${response?.statusCode}');
+    }
+  }
+
+  static Future<void> revokeOauthGrant(String grantId) async {
+    final response = await makeApiCall(url: '$_grantsUrl/$grantId', headers: {}, body: '', method: 'DELETE');
+
+    if (response == null || response.statusCode != 204) {
+      throw Exception('Failed to revoke OAuth grant: ${response?.statusCode}');
+    }
+  }
+
   static Future<void> deleteMcpApiKey(String keyId) async {
     final response = await makeApiCall(url: '$_baseUrl/keys/$keyId', headers: {}, body: '{}', method: 'DELETE');
 

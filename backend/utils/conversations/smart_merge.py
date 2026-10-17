@@ -52,6 +52,8 @@ from config.conversation_smart_merge import (
     smart_merge_wallclock_gap_mode,
 )
 from config.jev_decisions import JEV_MODEL
+from config.desktop_pendant_call_link import call_link_mode, capture_windows, desktop_meeting, without_capture_metadata
+from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -130,6 +132,8 @@ async def smart_merge_step(
     ``initial_row`` is the finalizer's pre-processing read, used only for the
     free donor check, so ``off`` stays I/O-free.
     """
+    if initial_row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        return False
     if is_donor(initial_row):
         await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True
@@ -399,6 +403,149 @@ def _wallclock_shadow(
     _wallclock_shadow_emit(would, reason, p_same, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id)
 
 
+def _continue_call_group(
+    uid: str,
+    new_row: Mapping[str, Any],
+    predecessor: Mapping[str, Any],
+    context: Sequence[Mapping[str, Any]],
+    *,
+    mode: SmartMergeMode,
+) -> None:
+    """Join a Jev-confirmed continuation; never absorb a grouped transcript.
+
+    Relax only automatic capture metadata, after verifying every member. All
+    other eligibility checks run unchanged, and stored transcript fingerprints,
+    windows and group revision fence the decision in the join transaction.
+    """
+    link_mode = call_link_mode(uid)
+    if link_mode == 'off':
+        return
+    predecessor_id, new_id = str(predecessor['id']), str(new_row['id'])
+    snapshots = {}
+    fingerprints = {}
+    for cid in (predecessor_id, new_id):
+        row, fingerprint = conversations_db.get_conversation_for_capture_check(uid, cid)
+        if not row:
+            return
+        snapshots[cid] = dict(row, id=cid)
+        fingerprints[cid] = fingerprint
+    previous, new = snapshots[predecessor_id], snapshots[new_id]
+    expected_windows = capture_windows(previous, new)
+    if expected_windows is None:
+        return
+    group = previous.get('capture_group') or {}
+    members = {m['id'] for m in group.get('members', [])}
+    if not group.get('id') or predecessor_id not in members or new_id in members:
+        return
+    for cid in sorted(members - {predecessor_id}):
+        row = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+        if not row:
+            return
+        snapshots[cid] = dict(row, id=cid)
+    desktops = [cid for cid in members if desktop_meeting(snapshots[cid])]
+    if len(desktops) != 1 or any(snapshots[cid].get('source') != 'omi' for cid in members - set(desktops)):
+        return
+    desktop_id = desktops[0]
+
+    def guard(row: Mapping[str, Any]) -> bool:
+        cid = str(row.get('id'))
+        # Only verified original group members may ignore automatic pointers.
+        pointer = (row.get('external_data') or {}).get('duplicate_capture_of')
+        if cid in members and pointer and pointer not in members:
+            return False
+        checked = without_capture_metadata(row) if cid in members else row
+        # Fence the metadata that informed the pre-Jev policy as well as text.
+        policy_fields = (
+            'source',
+            'client_device_id',
+            'is_locked',
+            'uses_custom_stt',
+            'created_at',
+            'relevance_decision',
+            'smart_merge',
+            'sync_content_revision',
+            'sync_merged_from',
+        )
+        if cid in (predecessor_id, new_id) and any(row.get(key) != snapshots[cid].get(key) for key in policy_fields):
+            return False
+        return (
+            not user_managed(checked)
+            and not row.get('deleted')
+            and not row.get('discarded')
+            and row.get('status') == 'completed'
+        )
+
+    def join_guard(current_rows: Mapping[str, Any], transaction: Any, client: Any) -> bool:
+        return all(
+            guard(dict(row or {}, id=cid)) for cid, row in current_rows.items()
+        ) and not smart_merge_db.has_intervening_discarded(
+            uid, current_rows[predecessor_id], current_rows[new_id], transaction=transaction, firestore_client=client
+        )
+
+    if not all(guard(row) for row in snapshots.values()):
+        return
+    previous_plain = without_capture_metadata(previous)
+    previous_segments, new_segments = _segments(previous), _segments(new)
+    if new_conversation_skip(new, new_segments, capture_end=True) is not None:
+        return
+    if smart_merge_db.has_intervening_discarded(uid, previous, new):
+        return
+    wall_mode = smart_merge_wallclock_gap_mode()
+    check = check_pair(
+        previous_plain, previous_segments, new, new_segments, wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON
+    )
+    if check.reason is not None:
+        if wall_mode is SmartMergeWallclockGapMode.SHADOW:
+            _wallclock_shadow(
+                uid,
+                new_id,
+                previous_plain,
+                previous_segments,
+                new,
+                new_segments,
+                context,
+                predecessor_id,
+                check.gap_seconds,
+                lambda: None,
+            )
+        return
+    built = _pair_state(
+        uid,
+        new,
+        new_segments,
+        previous_plain,
+        previous_segments,
+        context,
+        predecessor_id,
+        same_recording=check.same_recording,
+        last_fragment_row=None,
+    )
+    p_same = _normalize_p_same(_ask(built[0])) if built else None
+    same = p_same is not None and p_same >= MERGE_THRESHOLD
+    decision, reason = 'keep', 'jev_unavailable' if p_same is None else 'jev_different'
+    if same:
+        decision, reason = 'would_link', 'jev_same'
+        if link_mode == 'on' and mode is SmartMergeMode.MERGE:
+            joined = capture_groups_db.join_capture_group(
+                uid,
+                predecessor_id,
+                new_id,
+                {'method': 'desktop_pendant_call_continuation'},
+                expected_windows=expected_windows,
+                expected_fingerprints=fingerprints,
+                call_primary_id=desktop_id,
+                continuation_from=predecessor_id,
+                expected_group_revision=group.get('revision'),
+                join_guard=join_guard,
+            )
+            decision, reason = ('linked', 'jev_same') if joined else ('keep', 'conflict')
+    logger.info(
+        'event=desktop_pendant_call_link role=omi overlap_seconds=0.0 overlap_ratio=0.000 candidate_count=1 decision=%s reason=%s',
+        decision,
+        reason,
+    )
+
+
 def _decide(
     uid: str, conversation_id: str, *, mode: SmartMergeMode, trigger: ProcessingTrigger, owner: str
 ) -> Optional[_MergePlan]:
@@ -424,6 +571,19 @@ def _decide(
     survivor_meta = next((row for row in rows if partition(row) == partition(new_row)), None)
     if survivor_meta is None:
         _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
+        return None
+    if survivor_meta.get('capture_group') and call_link_mode(uid) != 'off':
+        try:
+            _continue_call_group(uid, new_row, survivor_meta, rows, mode=mode)
+        except Exception:
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='duplicate_capture_check',
+                to_mode='separate_captures',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
         return None
     reason = predecessor_status_skip(survivor_meta)
     if reason is not None:
@@ -914,7 +1074,10 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) ->
             raise SmartMergeIncomplete('processing_checkpoint_fenced')
     try:
         # Reprocess never re-embeds; the merged occasion must be findable as a whole.
-        save_structured_vector(uid, processed)
+        from utils.conversations.demand_processing import lazy_enrichment_enabled
+
+        if not lazy_enrichment_enabled(uid):
+            save_structured_vector(uid, processed)
     except Exception as error:
         logger.warning(
             'event=smart_merge outcome=vector_failed exception_type=%s uid=%s survivor=%s',

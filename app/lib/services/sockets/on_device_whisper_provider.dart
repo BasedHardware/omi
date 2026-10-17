@@ -7,6 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/audio/whisper_pcm.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
@@ -24,7 +27,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
     if (_isInitialized) return;
     try {
       if (!await File(modelPath).exists()) {
-        throw Exception('Model file not found at $modelPath');
+        throw const LocalSttFailure('model_missing');
       }
 
       final dir = p.dirname(modelPath);
@@ -101,8 +104,56 @@ class OnDeviceWhisperProvider implements ISttProvider {
     return pcmBytes / (sampleRate * 2);
   }
 
+  /// Each plugin call allocates and frees a fresh whisper_context. Never pass
+  /// more than 30 seconds, including when retained polling audio grows on retry.
+  @visibleForTesting
+  static Iterable<Uint8List> boundedAudioChunks(Uint8List bytes) sync* {
+    if (audioDurationSeconds(bytes) <= 30) {
+      yield bytes;
+      return;
+    }
+    final header = ByteData.sublistView(bytes);
+    final rate = header.getUint32(24, Endian.little);
+    final pcmSize = header.getUint32(40, Endian.little);
+    if (rate == 0 ||
+        header.getUint16(22, Endian.little) != 1 ||
+        header.getUint16(34, Endian.little) != 16 ||
+        pcmSize > bytes.length - 44 ||
+        pcmSize.isOdd) {
+      throw const FormatException('Expected canonical mono 16-bit PCM WAV');
+    }
+    final limit = 44 + pcmSize;
+    final chunkBytes = rate * 2 * 30;
+    for (var start = 44; start < limit; start += chunkBytes) {
+      final end = (start + chunkBytes).clamp(0, limit);
+      yield WavBytes.fromPcm(Uint8List.sublistView(bytes, start, end), sampleRate: rate, numChannels: 1).asBytes();
+    }
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(
+    Uint8List audioData, {
+    double audioOffsetSeconds = 0,
+    String? language,
+  }) async {
+    final normalized = WhisperPcm.normalize(audioData);
+    final segments = <SttSegment>[];
+    final text = <String>[];
+    var offset = audioOffsetSeconds;
+    for (final chunk in boundedAudioChunks(normalized.wav)) {
+      final result = await transcribeChunk(chunk, audioOffsetSeconds: offset, language: language);
+      if (result != null) {
+        segments.addAll(result.segments);
+        if (result.rawText?.isNotEmpty == true) text.add(result.rawText!);
+      }
+      offset += audioDurationSeconds(chunk);
+    }
+    return SttTranscriptionResult(
+        segments: segments, rawText: text.join(' '), audioEndSeconds: audioOffsetSeconds + normalized.duration);
+  }
+
+  @visibleForTesting
+  Future<SttTranscriptionResult?> transcribeChunk(
     Uint8List audioData, {
     double audioOffsetSeconds = 0,
     String? language,
@@ -159,7 +210,10 @@ class OnDeviceWhisperProvider implements ISttProvider {
       }
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceWhisper', 'Transcription error: $e');
-      return null;
+      final message = e.toString();
+      if (message.contains('OMI_STT_PERMANENT_INPUT:')) throw const LocalSttFailure('invalid_audio');
+      if (message.contains('OMI_STT_MODEL_UNAVAILABLE:')) throw const LocalSttFailure('model_invalid');
+      rethrow; // Transient decoder failures retain the complete polling buffer.
     }
   }
 

@@ -4393,12 +4393,27 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Вашиот план $plan завршува на $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Претплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Вашиот план е поставен да се откаже на $date.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Вашиот годишен план ќе почне автоматски кога ќе заврши месечниот план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Вашиот план $plan ќе се обнови на $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4431,6 +4446,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get continueText => 'Продолжи';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Прво претплатете се повторно за да го смените планот.';
 
   @override
   String get resubscribe => 'Претплати се повторно';
@@ -5047,9 +5065,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get content => 'Содржина';
-
-  @override
-  String get noContentToDisplay => 'Нема содржина за приказ';
 
   @override
   String get noSummary => 'Нема резиме';
@@ -9858,9 +9873,6 @@ class AppLocalizationsMk extends AppLocalizations {
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
 
   @override
-  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.';
 
@@ -12462,6 +12474,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reviewRecentChanges => 'Неодамнешни промени';
 
   @override
+  String get reviewChangeAfter => 'По';
+
+  @override
+  String get reviewChangeBefore => 'Пред';
+
+  @override
+  String get reviewChangeRemoved => 'Отстрането од активната листа';
+
+  @override
   String get reviewChangesIntro => 'Што Omi сам го промени во последните 30 дена. Вратете сè што изгледа погрешно.';
 
   @override
@@ -12478,6 +12499,59 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Кога Omi ќе ги среди вашите белешки, промените ќе се појават овде.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Имиња и поими';
+
+  @override
+  String get reviewChangesSectionTitles => 'Наслови и резимеа';
+
+  @override
+  String get reviewChangesSectionOther => 'Други промени';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговори',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count места',
+      one: '1 место',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Прикажи ги сите ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Поништи ги сите';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Види докази';
+
+  @override
+  String get reviewChangeViewConversation => 'Види разговор';
+
+  @override
+  String get reviewChangeViewTask => 'Види задача';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не успеа поништувањето на $failed од $total. Обидете се повторно.';
+  }
 
   @override
   String get reviewShowMore => 'Прикажи повеќе';
@@ -13336,4 +13410,431 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Копирај ги деталите за поддршка';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Достапно со Operator и Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app е пополнет';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Приклучи се на листата на чекање';
+
+  @override
+  String get chatAppsOnWaitlist => 'Вие сте на листата на чекање';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Вие сте на листата на чекање. Ќе ве известиме кога ќе има место.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Сè е подготвено, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Ручек со Сем, која во јуни се сели во Лисабон. Сакате да ја испратите презентацијата до тимот до петок и да купите млеко на пат кон дома.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Да ја пратам презентацијата на тимот до петок';
+
+  @override
+  String get onboardingActDemoTask2 => 'Да купам млеко на пат кон дома';
+
+  @override
+  String get onboardingActDemoTitle => 'Ручек со Сем';
+
+  @override
+  String get onboardingActDictateBody => 'Кажете го на свој начин. Omi ќе се погрижи за останатото.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Само зборувајте. Вашиот Omi слуша.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Штотуку ручав со Сем, се сели во Лисабон во јуни! Потсети ме да ја пратам презентацијата на тимот до петок и да купам млеко на пат кон дома.';
+
+  @override
+  String get onboardingActDictateHint => 'Допрете ја штиклата кога ќе завршите';
+
+  @override
+  String get onboardingActDictateTitle => 'Кажете му на Omi за вашиот ден';
+
+  @override
+  String get onboardingActIntro => 'Да го пробаме Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Токму сега';
+
+  @override
+  String get onboardingActMicAllow => 'Дозволи микрофон';
+
+  @override
+  String get onboardingActMicBody => 'За Omi да ве слуша кога зборувате со него.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi сè уште не испраќа звук. Засега користете го телефонот.';
+
+  @override
+  String get onboardingActMicTitle => 'На Omi му треба микрофонот';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Не се слуша Omi. Проверете дали е вклучен и блиску.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Сè уште не ве слушаме. Обидете се да зборувате малку погласно.';
+
+  @override
+  String get onboardingActNotesLabel => 'Вашиот ден, накратко';
+
+  @override
+  String get onboardingActPhoneMic => 'Микрофон на телефонот';
+
+  @override
+  String get onboardingActRateTitle => 'Ви се допаѓа Omi досега?';
+
+  @override
+  String get onboardingActRemembers => 'Omi памети наместо вас';
+
+  @override
+  String get onboardingActSavedToTasks => 'Зачувано во вашите задачи';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi ги фати вашите задачи';
+
+  @override
+  String get onboardingActWriting => 'Сумираме…';
+
+  @override
+  String get onboardingActYourWords => 'Еве што рековте';
+
+  @override
+  String get onboardingConnectOmi => 'Поврзете Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Допрете го вашиот Omi за да се поврзете.';
+
+  @override
+  String get onboardingNoOmiYet => 'Сè уште немате Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Сè уште не сум нарачал';
+
+  @override
+  String get onboardingOmiOrdered => 'Го нарачав';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Допрете за да поправите';
+
+  @override
+  String get homePendingTitle => 'Разговори на пат';
+
+  @override
+  String get homePendingCatchingUp => 'Ги обработуваме претходните аудиозаписи';
+
+  @override
+  String get onTheWayTitle => 'На пат';
+
+  @override
+  String get onTheWayAlmostReady => 'Речиси готово';
+
+  @override
+  String get activityEmpty => 'Сè уште нема активност';
+
+  @override
+  String get activityNewSemantics => 'Активност, нови ставки';
+
+  @override
+  String get activityLoadFailed => 'Не можевме да ја вчитаме целата ваша активност';
+
+  @override
+  String get activityNewItem => 'Ново';
+
+  @override
+  String get activityNeedsAttention => 'Потребно е внимание';
+
+  @override
+  String get activityRetryAll => 'Обиди ги сите повторно';
+
+  @override
+  String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
+
+  @override
+  String get connectAgentHeadline => 'Користете ја вашата Omi меморија во ChatGPT и вашите AI агенти';
+
+  @override
+  String get connectAgentIntro => 'Поврзете се еднаш. Потоа прашајте ги за вашите разговори, спомени и задачи.';
+
+  @override
+  String get connectAgentOneTap => 'Со еден допир';
+
+  @override
+  String get connectAgentComputerAgents => 'Агенти со сопствен компјутер';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Копирајте еден промпт. Omi создава клуч само за тој агент и безбедно го испраќа.';
+
+  @override
+  String get connectAgentOtherAgent => 'Друг агент';
+
+  @override
+  String get connectAgentKeyActive => 'Клучот е активен';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Последно користен: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP и API клучеви за програмери';
+
+  @override
+  String get connectAgentLoadFailed => 'Не можеа да се вчитаат вашите врски.';
+
+  @override
+  String get connectAgentActionFailed => 'Нешто тргна наопаку. Обидете се повторно.';
+
+  @override
+  String get connectChatGptTitle => 'Поврзи ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Трае околу 30 секунди. Го одобрувате во ChatGPT и работи на вашиот телефон и компјутер.';
+
+  @override
+  String get connectChatGptStepOpen => 'Го отвораме Omi во ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT се отвора директно на страницата на апликацијата Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Допрете „Поврзи“, потоа најавете се во Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Користете ја истата сметка што ја користите тука.';
+
+  @override
+  String get connectChatGptStepReturn => 'Вратете се во Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Врската ја проверуваме автоматски.';
+
+  @override
+  String get openChatGpt => 'Отвори ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Поврзано на телефон и компјутер';
+
+  @override
+  String get tryAskingChatGpt => 'Обидете се да го прашате ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Допрете едно за да го отворите ChatGPT со веќе внесено прашање.';
+
+  @override
+  String get chatGptExampleMeetings => 'Со што се согласив на вчерашните состаноци?';
+
+  @override
+  String get chatGptExampleTasks => 'Претвори ги моите отворени Omi задачи во план за оваа недела.';
+
+  @override
+  String get chatGptExampleGoals => 'Што знае Omi за моите цели?';
+
+  @override
+  String get disconnectChatGpt => 'Исклучи ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Да се исклучи ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT веќе нема да може да ги чита вашите Omi спомени, разговори или задачи.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Поврзи $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Залепете еден промпт. $name го поставува Omi на својот компјутер.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Залепете еден промпт. Вашиот агент го поставува Omi на својот компјутер.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Клучот „$name“ е создаден';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Промптот содржи врска за еднократна употреба, а не самиот клуч. Се отвора еднаш и истекува за 1 час. Клучот можете да го одозовете тука во секое време.';
+
+  @override
+  String get connectAgentPreparing => 'Создаваме клуч и безбедна врска…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Клучот не можеше да се создаде. Проверете ја врската и обидете се повторно.';
+
+  @override
+  String get copyPrompt => 'Копирај промпт';
+
+  @override
+  String get connectAgentNewLink => 'Врската истече? Создајте нова';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name е поврзан';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name има Omi клуч. Одозовете го за да го прекинете пристапот. Можете повторно да се поврзете во секое време.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Да се одозове клучот на $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name веднаш го губи пристапот до вашата Omi меморија.';
+  }
+
+  @override
+  String get askAboutConversation => 'Прашај за овој разговор';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Го отвора ChatGPT со подготвено прашање. Го наоѓа разговорот преку Omi, па не мора да го залепувате транскриптот.';
+
+  @override
+  String get askYourQuestion => 'Вашето прашање';
+
+  @override
+  String get askSuggestFollowUp => 'Подготви нацрт на следбена е-порака врз основа на овој разговор.';
+
+  @override
+  String get askSuggestCommitments => 'Што ветив во овој разговор?';
+
+  @override
+  String get askSuggestDoc => 'Претвори го овој разговор во краток документ.';
+
+  @override
+  String get askInChatGpt => 'Прашај го ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Копирај за која било апликација';
+
+  @override
+  String get askConnectChatGptFirst => 'Поврзете го ChatGPT еднаш за да го прашувате за вашите разговори.';
+
+  @override
+  String get reconnect => 'Поврзи повторно';
+
+  @override
+  String get chatGptNeedsReconnect => 'Потребен е повеќе пристап. Поврзи повторно за да поправиш.';
+
+  @override
+  String get connectAgentWaiting => 'Се чека агентот да го употреби својот клуч';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name сè уште не е поврзан';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Сè уште не е сумирано';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi може да го претвори овој разговор во преглед, клучни точки и задачи.';
+
+  @override
+  String get summaryWithOmi => 'Сумирај со Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Сумирај со $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Користи друг шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'Од транскриптот';
+
+  @override
+  String get summaryReadFullTranscript => 'Прочитај го целиот транскрипт';
+
+  @override
+  String get summarySheetTitle => 'Сумирај со';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Преглед, клучни точки и задачи';
+
+  @override
+  String get summaryYourTemplates => 'Ваши шаблони';
+
+  @override
+  String get summarySuggestedTemplates => 'Предложени за овој разговор';
+
+  @override
+  String get summaryBrowseTemplates => 'Прегледај шаблони';
+
+  @override
+  String get summaryCreateYourOwn => 'Создај свој';
+
+  @override
+  String get summaryUseForNewConversations => 'Постави како мој стандарден';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Не може да се вчитаат вашите шаблони. Omi сè уште работи.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Сè уште немате додадено шаблони. Прегледајте неколку или создајте свој.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Се сумира со $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name не можеше да заврши';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблонот не врати резиме за овој разговор.';
+
+  @override
+  String get summaryWithOmiInstead => 'Наместо тоа, сумирај со Omi';
+
+  @override
+  String get summaryBusyTitle => 'Сè уште се обработува';
+
+  @override
+  String get summaryBusyBody => 'Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.';
+
+  @override
+  String get summaryCheckAgain => 'Провери повторно';
+
+  @override
+  String get summaryLimitTitle => 'Достигнато е ограничувањето за резимеа';
+
+  @override
+  String get summaryLimitBody =>
+      'Во последниот час повеќе пати повторно генериравте резимеа. Обидете се повторно подоцна.';
+
+  @override
+  String get summaryFailedTitle => 'Не може да се сумира';
+
+  @override
+  String get summaryFailedBody => 'Нешто тргна наопаку при сумирањето на овој разговор.';
 }

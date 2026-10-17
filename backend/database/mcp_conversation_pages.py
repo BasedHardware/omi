@@ -148,7 +148,15 @@ def get_mcp_conversation_cards_page(
         scanned += len(raw_docs)
         for doc in raw_docs:
             raw = doc.to_dict() or {}
-            last_position = (raw.get('created_at'), doc.id)
+            doc_created_at = raw.get('created_at')
+            if doc_created_at is None:
+                # A tombstoned row with no created_at can't seed a resumable
+                # keyset position (the next start_after would carry a None
+                # timestamp and raise above). Stop the scan here instead of
+                # handing back a cursor the following page would reject.
+                exhausted = True
+                break
+            last_position = (doc_created_at, doc.id)
             conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
@@ -157,6 +165,8 @@ def get_mcp_conversation_cards_page(
             conversation.setdefault('id', doc.id)
             visible.append(conversation)
             visible_positions.append(last_position)
+        if exhausted:
+            break
         if len(raw_docs) < limit + 1:
             exhausted = True
             break

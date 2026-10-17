@@ -20,10 +20,10 @@ def test_authenticated_channel_contract_and_store_exit(monkeypatch):
     app.include_router(dream_cohort.router)
     app.dependency_overrides[dream_cohort.auth.get_current_user_uid] = lambda: 'synthetic-authed-user'
     client = TestClient(app)
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'off')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
     assert client.put('/v1/users/release-channel', json={'release_channel': 'testflight'}).status_code == 404
     assert not writes
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     for channel in ('testflight', 'app_store', 'dev'):
         response = client.put('/v1/users/release-channel', json={'release_channel': channel, 'app_build': 300})
         assert response.status_code == 204
@@ -43,10 +43,10 @@ def test_authenticated_channel_contract_and_store_exit(monkeypatch):
     assert len(writes) == 4
 
 
-def test_plain_testflight_assertion_without_qualifying_build_cannot_enroll(monkeypatch):
+def test_release_channel_hint_does_not_control_all_user_eligibility(monkeypatch):
     from config.dream_agent import eligible
 
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', '')
     monkeypatch.delenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', raising=False)
@@ -64,6 +64,6 @@ def test_plain_testflight_assertion_without_qualifying_build_cannot_enroll(monke
     response = client.put('/v1/users/release-channel', json={'release_channel': 'testflight'})
     assert response.status_code == 204
     user = writes[-1][2]
-    assert not eligible('synthetic-authed-user', user)
+    assert eligible('synthetic-authed-user', user)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_MIN_BUILD', '300')
-    assert not eligible('synthetic-authed-user', user)
+    assert eligible('synthetic-authed-user', user)

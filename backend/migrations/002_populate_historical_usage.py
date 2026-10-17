@@ -19,6 +19,7 @@ from database import user_usage as user_usage_db
 from models.conversation import Conversation
 from models.memories import MemoryDB
 from utils import encryption
+from database.fsr_read_cache import cache_writer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ def get_all_memories_for_user(uid: str) -> list[MemoryDB]:
     return memories
 
 
+@cache_writer('usage_month_cache')
 def delete_hourly_usage_for_user(uid: str):
     """Deletes all documents in the hourly_usage subcollection for a user to ensure idempotency."""
     logger.info(f"Deleting existing hourly usage data for user {uid}...")

@@ -38,6 +38,16 @@ inputs:
       worker runs as that service account and the cloned backend-sync contract drops key-credential refs.
     required: false
     default: ''
+  forbidden_env_names:
+    description: Manifest forbidden env keys to exclude from the live clone (mode=worker)
+    required: false
+    default: DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL
+  remove_env_extra:
+    description: >-
+      Manifest forbidden env keys the worker deploy's literal --remove-env-vars list lacks, each with a
+      leading comma (mode=worker). gcloud rejects a key named twice.
+    required: false
+    default: ''
   backfill_env_vars:
     description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
     required: false
@@ -105,9 +115,13 @@ runs:
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
         REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH${{ inputs.project_id == 'based-hardware' && ',CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST' || '' }}
+        FORBIDDEN_ENV_NAMES: ${{ inputs.forbidden_env_names }}
         IDENTITY_FLAGS: ${{ inputs.identity_flags }}
       run: |
         DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+        # Drop forbidden live bindings before overlays can reintroduce them after gcloud removal.
+        REMOVE_ENV_VARS="${REMOVE_ENV_VARS},${FORBIDDEN_ENV_NAMES}"
+        export REMOVE_ENV_VARS
         # A worker pinned to its own runtime identity cannot read backend-sync's key secret, and
         # gcloud applies --update-secrets after --remove-secrets, so the clone itself must drop it.
         if [[ -n "$IDENTITY_FLAGS" ]]; then
@@ -140,6 +154,39 @@ runs:
           echo "flag=--tag=${{ inputs.candidate_tag }}" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: Resolve live sync-backfill maxScale
+      id: live-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync-backfill
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+        # Service-level caps are the live ops control; older services may only have a revision cap.
+        # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
+        MAX_SCALE="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+            [.[] | select(.metadata.name == $service)]
+            | if length > 1 then error("Duplicate Cloud Run service") else
+                (.[0].metadata.annotations["run.googleapis.com/maxScale"]
+                 // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
+                 // "40") end
+            | if type == "string" and test("^[1-9][0-9]*$") then .
+              else error("Invalid Cloud Run maxScale") end
+            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
+            | if length > 3 then "40"
+              elif tonumber > 500 then "40" else . end')"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+        # Resolve in worker AND platform/dispatch invocations, which reconcile the queue separately.
+        DISPATCH_LIMIT=$((MAX_SCALE * 6))
+        if (( DISPATCH_LIMIT > 90 )); then DISPATCH_LIMIT=90; fi
+        if (( DISPATCH_LIMIT < 1 )); then DISPATCH_LIMIT=1; fi
+        echo "max_concurrent_dispatches=$DISPATCH_LIMIT" >> "$GITHUB_OUTPUT"
+
     - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
       if: ${{ inputs.mode == 'worker' }}
       id: deploy-backend-sync-backfill
@@ -151,15 +198,15 @@ runs:
         image: ${{ inputs.image }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ inputs.revision_suffix }}
+          --revision-suffix=${{ inputs.revision_suffix }}-base
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=3
-          --max-instances=18
-          --max=18
+          --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
+          --max=${{ steps.live-max-scale.outputs.max_scale }}
           --concurrency=6
           --cpu=2
           --memory=8Gi
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
           ${{ inputs.cloud_run_flags }}
           ${{ inputs.identity_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
@@ -194,9 +241,15 @@ runs:
     - name: Reconcile bounded sync backfill queue
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
+      env:
+        BACKFILL_MAX_CONCURRENT_DISPATCHES: ${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}
       run: |
-        # The first concurrency=6 step retains 40 concurrent dispatches / 10 per second
-        # to isolate instance packing from higher downstream load.
+        set -euo pipefail
+        # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
+        # The 15/s rate caps starts, not in-flight work; the concurrency limit below
+        # independently prevents dispatch beyond worker capacity, including bursts.
+        # Retain 8 GiB and one owner per UID. Later operator steps require
+        # latency/retry/GPU/Firestore/Redis gates and a follow-up config train.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).
@@ -210,16 +263,16 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=40 \
-            --max-dispatches-per-second=10 \
+            --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
+            --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
         else
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=40 \
-            --max-dispatches-per-second=10 \
+            --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
+            --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
         fi
@@ -445,7 +498,9 @@ runs:
             LOG_FILTER='resource.type="cloud_scheduler_job" AND resource.labels.job_id="sync-backfill-uid-sequencer" AND severity>=ERROR AND jsonPayload."@type"="type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished"'
             CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_scheduler_job\""
             CONDITION='> 0'
-            DURATION='0s'
+            # Sustained failure for 10 minutes (about five sweeps) pages; one failed
+            # two-minute sweep does not. Matches the live policy set by the alert owner.
+            DURATION='600s'
           else
             DISPLAY_NAME='Sync backfill UID sequencer Scheduler heartbeat missing'
             LOG_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name="backend-sync" AND "event=sync_uid_sequencer action=sweep_summary outcome=done"'
@@ -482,7 +537,7 @@ runs:
             DURATION_SECONDS=600
           else
             CONDITION_KIND=threshold
-            DURATION_SECONDS=0
+            DURATION_SECONDS=600
           fi
           python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
             --project='${{ inputs.project_id }}' --policy="$POLICY" \

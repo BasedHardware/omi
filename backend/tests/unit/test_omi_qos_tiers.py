@@ -239,7 +239,6 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'langchain_anthropic',",
         "    'langchain_openai',",
         "    'tiktoken',",
-        "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
         "    'models.structured_extraction',",

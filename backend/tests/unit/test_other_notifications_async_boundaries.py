@@ -237,6 +237,7 @@ def test_daily_summary_hour_send_failures_are_a_typed_cron_failure() -> None:
             stats = kwargs.get('stats')
             if stats is not None:
                 stats.failed += 2
+                stats.retry_pending += 2
             return True
 
         notifications._send_bulk_summary_notification = fail_sends

@@ -1,5 +1,6 @@
 # Sync Cloud Run sizing and phase metrics
 
+Current Train 1 capacity is documented in the concurrency section below. Other sizing, cost and lifetime-audit sections retain their original dated evidence; they are not authorization to apply those older proposals.
 Evidence cutoff: 2026-10-04. Production remains read-only in this build lane; deploy only after review through the normal GitHub Actions path. Cost scenarios overlap and must not be added. Figures use 30 days, gross us-central1 list rates, without credits/commitments.
 
 ## Metrics and export acceptance
@@ -31,13 +32,11 @@ Memory-only rollout: backfill 8 → 4 GiB, keep 2 vCPU, concurrency 3, min/max 3
 
 ## Concurrency and dispatch
 
-The owning deploy configuration is `.github/actions/sync-backfill-lifecycle/action.yml`: worker `--max-instances=18`, service cap `--max=18`, `--concurrency=3`; both queue create/update branches configure **40 concurrent dispatches, 10 dispatches/s, retry backoff 5–60s**. These are source settings, not a verified live queue read: `ro-prod` lacks `cloudtasks.queues.get`. Do not escalate credentials to work around that restriction.
+Updated 2026-10-15 for Train 1: `.github/actions/sync-backfill-lifecycle/action.yml` sets revision max 40 **and** service max 40, concurrency 6, CPU 2, memory 8 GiB, min 3. Both queue create/update branches set 90 concurrent dispatches / 15 per second,5–60s retry backoff. This is source configuration; verify the applied revision, traffic, worker capacity and queue separately. The earlier 40/10 and concurrency 3 sizing proposals below are historical, not current settings.
 
-A 3 → 6 worker setting changes total nominal slots from 54 to 108. Keep the queue at 40/10 initially: it is already below both capacities, and unchanged dispatch isolates within-instance packing from an increase in downstream load. More concurrency can overlap GCS/Parakeet waiting but shares 2 vCPU among twice as many decoders and increases Firestore transaction/write contention. Per-UID sequencing avoids one class of conflicts, not fleet-wide CPU/DB contention. With 40 requests, saturation needs at least 14 instances at concurrency 3 or 7 at 6; real autoscaling can run more.
+The prior baseline was 60/10 and 18×6 slots. Release worker capacity before queue dispatch. Keep 90/ 15 as the persisted first step; later operator increases 135/20→180/25→200/25 require at least 15 min per step, durable-throughput evidence, <10% latency/retry regression, no OOM/capacity 429, unchanged GPU admission, and observed Firestore/Redis headroom. See [capacity and retirement runbook](sync-backfill-concurrency.md) for the exact queue rollback and flag-off behavior. Retire Redis-absent heads under the new guarded policy instead of consuming a full Cloud Tasks turn per expired job; this recovers capacity but does not itself recover audio or count as a completed transcript.
 
-Staged proposal after the observability baseline and memory-only acceptance: synthetic dev 8-GiB/concurrency-6 long-file and retry stress, then production concurrency 6 **with 8 GiB initially** through a reviewed normal deploy. Hold at least a day; require no memory terminations, <10% p95 whole-job/Firestore/Parakeet regression, no sustained CPU saturation, no increased retries or queue-age regression. Only then qualify 4 GiB/concurrency 6 with synthetic headroom stress. Do not increase queue limits concurrently. If throughput needs more dispatch, a separate review can try 40 → 54 before any step toward 80 (below the 108-slot cap), retaining 10/s and monitoring downstream pressure. Mixed revisions must respect the lower 54-slot capacity until traffic is entirely on concurrency 6.
-
-At 8 GiB, estimated **$330–970/month** assumes 25–50% less active instance time at unchanged work; zero saving or a loss is possible under contention. At 4 GiB the same assumption gives approximately **$283–843/month**, overlapping memory savings. Roll back concurrency to 3 and queue limits to 40/10 (if independently changed), retaining enough memory for the measured load.
+Do not combine this train with 4 GiB memory, concurrency >6, lower minima, GPU admission increases or fresh request-billing changes. The older cost/packing estimates in this document remain historical hypotheses, not Train 1 savings forecasts.
 
 ## Request-based CPU safety audit
 
@@ -52,7 +51,7 @@ At 8 GiB, estimated **$330–970/month** assumes 25–50% less active instance t
 | Sync reprocess webhook | `backend/utils/sync/pipeline.py:1085` | Submitted, not awaited; durable task or join within request. |
 | Conversation vectors, action items, goal updates and webhook | `backend/utils/conversations/process_conversation.py:3291`, `:3293`, `:3305`, `:3310`, `:3342` | Conditional non-reprocess effects outlive parent; reprocess paths await some writes, but vectors/webhooks and shared routes still need audit/durable dispatch. |
 | Conversation integration auto-sync | `backend/utils/conversations/process_conversation.py:2246`, `:2251` | Fire-and-forget integrations; queue separately. |
-| Capture/relevance/owner/transcription shadows | `backend/utils/conversations/capture_jev_shadow.py:369`, `backend/utils/conversations/jev_shadow.py:138`, `backend/utils/conversations/transcription_shadow.py:125` | Flag-dependent background work; disable on request-billed worker or use durable jobs. |
+| Relevance/owner/transcription shadows | `backend/utils/conversations/jev_shadow.py:138`, `backend/utils/conversations/transcription_shadow.py:125` | Flag-dependent background work; disable on request-billed worker or use durable jobs. |
 | Live STT fleet-health refresh and result/bench writes | `backend/main.py:356`, `backend/utils/stt/live_health.py:394`, `:545`, `:750` | Recurring/background; separate service role or scheduled durable refresh. |
 | Batch-pressure refresh | `backend/main.py:357`, `backend/utils/stt/batch_pressure.py:73` | Periodic async task, env-dependent; move/disable by service role. |
 | Soniox runway poller | `backend/main.py:359` | Conditional recurring task; disable on sync role or move owner. |

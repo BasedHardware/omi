@@ -788,6 +788,9 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     from datetime import timedelta
 
     merge, notifications = score_merge_modules
+    from database import review_overlay_merge
+
+    monkeypatch.setattr(review_overlay_merge, 'transfer', lambda *args, **kwargs: True)
     now = datetime(2026, 10, 5, tzinfo=timezone.utc)
     sources = {
         cid: dict(
@@ -814,7 +817,6 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *a: None)
     monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *a, **k: None)
     monkeypatch.setattr(merge, 'canonical_intake_is_fenced', lambda: False)
-    monkeypatch.setattr(merge, 'record_capture_outcome', lambda *a: None)
     monkeypatch.setattr(merge, '_handle_merge_failure', lambda *a, **k: failures.append(a))
     monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *a: None)
     merge.perform_merge_async('u', ['a', 'b'], reprocess=False)
@@ -992,7 +994,7 @@ def test_manual_speaker_routes_with_stored_scores(manual_score_routes, monkeypat
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 @pytest.mark.parametrize('operation', ['text', 'assignment', 'translation'])
-def test_partial_transcript_writes_reclaim_stored_scores(manual_score_routes, level, operation):
+def test_partial_transcript_writes_reclaim_stored_scores(manual_score_routes, monkeypatch, level, operation):
     import database.conversations as db
 
     _, store = manual_score_routes
@@ -1004,6 +1006,10 @@ def test_partial_transcript_writes_reclaim_stored_scores(manual_score_routes, le
     assert scores.FIELD in store.rows[path]
     store.rows[path]['other_metadata'] = 'x' * (900 * 1024)
     if operation == 'text':
+        from tests.support.transcript_correction_store import install_store
+
+        decoded = db.prepare_conversation_for_read(store.rows[path], 'u')
+        store = install_store(monkeypatch, 'u', 'c', decoded)
         assert db.update_conversation_segment_text('u', 'c', 's', 'edited') == 'ok'
     elif operation == 'assignment':
         updated, *_ = db.assign_conversation_speaker(
@@ -1012,7 +1018,10 @@ def test_partial_transcript_writes_reclaim_stored_scores(manual_score_routes, le
         assert scores.FIELD not in updated
     else:
         assert db.materialize_translation('u', 'c', 's', 'synthetic', 'en', 'translated', firestore_client=store)
-    assert store.rows[path][scores.FIELD] is db.firestore.DELETE_FIELD
+    if operation == 'text':
+        assert scores.FIELD not in store.rows[path]
+    else:
+        assert store.rows[path][scores.FIELD] is db.firestore.DELETE_FIELD
     readable = db.prepare_conversation_for_read(store.rows[path], 'u')
     assert scores.FIELD not in readable
     stored_segment = readable['transcript_segments'][0]

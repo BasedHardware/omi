@@ -12,14 +12,22 @@ from pathlib import Path
 
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
-from render_feature_flag_registry import render
+from render_feature_flag_registry import render, _parse_mapping
 
 
 def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]:
     entry: dict[str, object] = {
-        "key": key, "aliases": [], "kind": "env", "lifecycle": "rollout",
-        "surfaces": ["backend"], "summary": "Fixture gate", "fail": "closed",
-        "owner": "unowned", "created": "2026-08-01", "review_by": "2026-10-15", "decision": "pending",
+        "key": key,
+        "aliases": [],
+        "kind": "env",
+        "lifecycle": "rollout",
+        "surfaces": ["backend"],
+        "summary": "Fixture gate",
+        "fail": "closed",
+        "owner": "unowned",
+        "created": "2026-08-01",
+        "review_by": "2026-10-15",
+        "decision": "pending",
     }
     entry.update(overrides)
     return entry
@@ -29,7 +37,12 @@ class RegistryFixture(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="omi-flag-registry-")
         self.root = Path(self.temp.name)
-        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True, env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")})
+        subprocess.run(
+            ["git", "init", "-q"],
+            cwd=self.root,
+            check=True,
+            env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+        )
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))
 
@@ -42,11 +55,21 @@ class RegistryFixture(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
 
     @staticmethod
-    def yaml(flags: list[dict[str, object]], ignore: list[dict[str, str]] | None = None, retired: list[dict[str, object]] | None = None) -> str:
+    def yaml(
+        flags: list[dict[str, object]],
+        ignore: list[dict[str, str]] | None = None,
+        retired: list[dict[str, object]] | None = None,
+    ) -> str:
         return "\n".join(
-            ["flags:", *(f"  - {json.dumps(entry)}" for entry in flags), "ignore:",
-             *(f"  - {json.dumps(entry)}" for entry in (ignore or [])), "retired:",
-             *(f"  - {json.dumps(entry)}" for entry in (retired or [])), ""]
+            [
+                "flags:",
+                *(f"  - {json.dumps(entry)}" for entry in flags),
+                "ignore:",
+                *(f"  - {json.dumps(entry)}" for entry in (ignore or [])),
+                "retired:",
+                *(f"  - {json.dumps(entry)}" for entry in (retired or [])),
+                "",
+            ]
         )
 
     def errors(self) -> list[str]:
@@ -63,18 +86,42 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("backend/service.py:5: unregistered feature flag: THIRD_STOP", errors)
 
     def test_swift_dart_and_build_define_patterns_require_registry_entries(self) -> None:
-        self.write("desktop/macos/Desktop/Sources/Feature.swift", 'static let killSwitchFlagName = "missing_macos_kill"\nisFeatureEnabled("missing_enable")\n')
-        self.write("app/lib/services/experiments/registry.dart", "ExperimentDefinition<String>(\n  key: 'missing-mobile-experiment',\n)\n")
+        self.write(
+            "desktop/macos/Desktop/Sources/Feature.swift",
+            'static let killSwitchFlagName = "missing_macos_kill"\nisFeatureEnabled("missing_enable")\n',
+        )
+        self.write(
+            "app/lib/services/experiments/registry.dart",
+            "ExperimentDefinition<String>(\n  key: 'missing-mobile-experiment',\n)\n",
+        )
         self.write("desktop/windows/src/renderer/flags.ts", "import.meta.env.VITE_ENABLE_MISSING_WINDOWS\n")
         self.write("web/admin/src/flags.ts", "process.env.NEXT_PUBLIC_ENABLE_MISSING_WEB\n")
         errors = "\n".join(self.errors())
-        for key in ("missing_macos_kill", "missing_enable", "missing-mobile-experiment", "VITE_ENABLE_MISSING_WINDOWS", "NEXT_PUBLIC_ENABLE_MISSING_WEB"):
+        for key in (
+            "missing_macos_kill",
+            "missing_enable",
+            "missing-mobile-experiment",
+            "VITE_ENABLE_MISSING_WINDOWS",
+            "NEXT_PUBLIC_ENABLE_MISSING_WEB",
+        ):
             self.assertIn(f"unregistered feature flag: {key}", errors)
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
 
+    def test_cataloged_node_runtime_gate_is_not_stale(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(), flag("ADMIN_GATE_ENABLED", surfaces=["web-admin"])]))
+        self.write("web/admin/lib/flags.ts", "process.env.ADMIN_GATE_ENABLED !== '1'\n")
+        self.assertEqual(self.errors(), [])
+
+    def test_commented_node_runtime_gate_stays_stale(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(), flag("ADMIN_GATE_ENABLED", surfaces=["web-admin"])]))
+        self.write("web/admin/lib/flags.ts", "// process.env.ADMIN_GATE_ENABLED !== '1'\n")
+        self.assertIn("stale registry entry: delete it or restore the read: ADMIN_GATE_ENABLED", self.errors())
+
     def test_hook_git_environment_does_not_redirect_fixture_git_reads(self) -> None:
-        with mock.patch.dict(os.environ, {"GIT_DIR": "/nonexistent-outer-git-dir", "GIT_WORK_TREE": "/nonexistent-outer-worktree"}):
+        with mock.patch.dict(
+            os.environ, {"GIT_DIR": "/nonexistent-outer-git-dir", "GIT_WORK_TREE": "/nonexistent-outer-worktree"}
+        ):
             self.assertEqual(self.errors(), [])
 
     def test_commented_client_gate_names_are_not_code_reads(self) -> None:
@@ -88,7 +135,12 @@ class RegistryFixture(unittest.TestCase):
 
     def test_deploy_key_missing_from_registry(self) -> None:
         self.write("backend/deploy/runtime_env/_base.yaml", "services:\n  MISSING_KILL_SWITCH:\n    value: false\n")
-        self.assertTrue(any("backend/deploy/runtime_env/_base.yaml:2: undeclared registry flag: MISSING_KILL_SWITCH" in e for e in self.errors()))
+        self.assertTrue(
+            any(
+                "backend/deploy/runtime_env/_base.yaml:2: undeclared registry flag: MISSING_KILL_SWITCH" in e
+                for e in self.errors()
+            )
+        )
 
     def test_rejects_bad_enums_duplicate_alias_and_posthog_schema(self) -> None:
         entries = [flag(kind="mystery", aliases=["EXAMPLE_ENABLED"], lifecycle="experiment", review_by="nonsense")]
@@ -102,9 +154,19 @@ class RegistryFixture(unittest.TestCase):
 
     def test_ship_decision_is_accepted_and_rendered(self) -> None:
         self.write("backend/docs/experiments/EXP-fixture.md", "# Closure\n")
-        self.write("config/feature-flags.yaml", self.yaml([flag(
-            lifecycle="experiment", decision="ship", review_by="2020-01-01", prereg="backend/docs/experiments/EXP-fixture.md",
-        )]))
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml(
+                [
+                    flag(
+                        lifecycle="experiment",
+                        decision="ship",
+                        review_by="2020-01-01",
+                        prereg="backend/docs/experiments/EXP-fixture.md",
+                    )
+                ]
+            ),
+        )
         self.assertEqual(self.errors(), [])
         registry = load_registry(self.root / "config/feature-flags.yaml")
         output = render(self.root, registry, date(2026, 10, 8))
@@ -115,7 +177,22 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("invalid decision", "\n".join(self.errors()))
 
     def test_duplicates_across_flag_alias_ignore_and_retired_are_rejected(self) -> None:
-        self.write("config/feature-flags.yaml", self.yaml([flag(aliases=["OLD_ENABLED"])], ignore=[{"key": "OLD_ENABLED", "reason": "Test"}], retired=[{"key": "EXAMPLE_ENABLED", "kind": "posthog", "retired": "2026-09-24", "reason": "Test", "posthog": {"row": "delete"}}]))
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml(
+                [flag(aliases=["OLD_ENABLED"])],
+                ignore=[{"key": "OLD_ENABLED", "reason": "Test"}],
+                retired=[
+                    {
+                        "key": "EXAMPLE_ENABLED",
+                        "kind": "posthog",
+                        "retired": "2026-09-24",
+                        "reason": "Test",
+                        "posthog": {"row": "delete"},
+                    }
+                ],
+            ),
+        )
         errors = "\n".join(self.errors())
         self.assertIn("duplicate key or alias: OLD_ENABLED", errors)
         self.assertIn("duplicate key or alias: EXAMPLE_ENABLED", errors)
@@ -138,10 +215,27 @@ class RegistryFixture(unittest.TestCase):
         self.write("backend/docs/feature-flag-registry.md", "<!-- feature-flag-registry as-of: 2026-09-24 -->\nstale\n")
         self.assertIn("rendered doc drift", "\n".join(check(self.root)[0]))
 
+    def test_renderer_resolves_shared_cohort_mapping(self) -> None:
+        tree = _parse_mapping(
+            'first:\n  <<: &cohort {"FLAG": {"value": "true", "category": "rollout"}}\nsecond:\n  <<: *cohort\n  OTHER: literal\n'
+        )
+        self.assertEqual(tree['first']['FLAG'], {'value': 'true', 'category': 'rollout'})
+        self.assertEqual(tree['second']['FLAG'], tree['first']['FLAG'])
+        self.assertEqual(tree['second']['OTHER'], 'literal')
+
     def test_renderer_shows_inherited_and_chart_values_and_explicit_empty_literals(self) -> None:
-        self.write("backend/deploy/runtime_env/_base.yaml", "environment_shared:\n  gke:\n    backend-listen:\n      env:\n        EXAMPLE_ENABLED:\n          value: 'true'\n        EMPTY_ENABLED:\n          value: ''\n")
-        self.write("backend/deploy/runtime_env/prod.overlay.yaml", "overlay:\n  gke:\n    backend-listen:\n      env:\n        EXAMPLE_ENABLED:\n          value: 'false'\n")
-        self.write("backend/charts/backend-listen/prod_omi_backend_listen_values.yaml", "env:\n  - name: EXAMPLE_ENABLED\n    value: 'true'\n")
+        self.write(
+            "backend/deploy/runtime_env/_base.yaml",
+            "environment_shared:\n  gke:\n    backend-listen:\n      env:\n        EXAMPLE_ENABLED:\n          value: 'true'\n        EMPTY_ENABLED:\n          value: ''\n",
+        )
+        self.write(
+            "backend/deploy/runtime_env/prod.overlay.yaml",
+            "overlay:\n  gke:\n    backend-listen:\n      env:\n        EXAMPLE_ENABLED:\n          value: 'false'\n",
+        )
+        self.write(
+            "backend/charts/backend-listen/prod_omi_backend_listen_values.yaml",
+            "env:\n  - name: EXAMPLE_ENABLED\n    value: 'true'\n",
+        )
         registry = {"flags": [flag(), flag("EMPTY_ENABLED")], "ignore": [], "retired": []}
         output = render(self.root, registry, date(2026, 9, 24))
         self.assertIn("| _base | dev | prod |", output)
@@ -180,18 +274,24 @@ class RegistryFixture(unittest.TestCase):
 
     def test_prereg_must_be_relative_inside_root_and_exist(self) -> None:
         self.write("docs/prereg/example.md", "# prereg\n")
-        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/missing.md")]))
+        self.write(
+            "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/missing.md")])
+        )
         self.assertIn("prereg file does not exist", "\n".join(self.errors()))
         self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="/etc/passwd")]))
         self.assertIn("prereg must be a repo-relative path", "\n".join(self.errors()))
         self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="../outside.md")]))
         self.assertIn("prereg escapes the repository root", "\n".join(self.errors()))
-        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")]))
+        self.write(
+            "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")])
+        )
         self.assertEqual(self.errors(), [])
 
     def test_running_experiments_table_links_prereg_and_marks_overdue(self) -> None:
         running = flag(lifecycle="experiment", prereg="docs/prereg/example.md", review_by="2026-10-15")
-        killed = flag("KILLED_EXPERIMENT_ENABLED", lifecycle="experiment", decision="kill", prereg="docs/prereg/killed.md")
+        killed = flag(
+            "KILLED_EXPERIMENT_ENABLED", lifecycle="experiment", decision="kill", prereg="docs/prereg/killed.md"
+        )
         registry = {"flags": [running, killed], "ignore": [], "retired": []}
         early = render(self.root, registry, date(2026, 9, 24))
         late = render(self.root, registry, date(2026, 11, 1))
@@ -207,13 +307,21 @@ class RegistryFixture(unittest.TestCase):
 
     def test_fresh_render_with_running_experiments_has_no_drift(self) -> None:
         self.write("docs/prereg/example.md", "# prereg\n")
-        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")]))
+        self.write(
+            "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")])
+        )
         registry = load_registry(self.root / "config/feature-flags.yaml")
         self.write("backend/docs/feature-flag-registry.md", render(self.root, registry, date(2026, 9, 24)))
         self.assertEqual(check(self.root)[0], [])
 
     def test_retired_name_must_not_be_read_and_is_exempt_from_stale(self) -> None:
-        old = {"key": "old-kill-v1", "kind": "posthog", "retired": "2026-09-24", "reason": "Superseded", "posthog": {"row": "delete"}}
+        old = {
+            "key": "old-kill-v1",
+            "kind": "posthog",
+            "retired": "2026-09-24",
+            "reason": "Superseded",
+            "posthog": {"row": "delete"},
+        }
         self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[old]))
         self.assertEqual(self.errors(), [])
         self.write("backend/other.py", "OLD_FLAG_KEY = 'old-kill-v1'\n")

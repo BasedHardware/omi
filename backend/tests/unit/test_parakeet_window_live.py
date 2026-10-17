@@ -75,6 +75,8 @@ def runtime(monkeypatch):
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '12')
+    monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', raising=False)
+    monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', raising=False)
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '4')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
@@ -198,7 +200,7 @@ def receiver():
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
     before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get()
-    before_first = WINDOW_FIRST_TEXT._sum.get()
+    before_first = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get()
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     from utils.stt import live_session
@@ -232,7 +234,7 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert window.admission.active == 0
     assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get() == before_text + 1
-    assert WINDOW_FIRST_TEXT._sum.get() > before_first
+    assert WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() > before_first
 
 
 @pytest.mark.asyncio
@@ -1253,10 +1255,12 @@ async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0
     return sample + 640
 
 
-async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_seconds=0.04, settled=False):
+async def _settled_fragment_silence(
+    actual, clock, sample, frames, *, wall_seconds=0.04, settled=False, transition_frames=140
+):
     # Keep 40ms packets at state transitions. Once VAD is settled, batch known
     # silence while retaining a final 320ms of packets for exact pre-roll.
-    first = 0 if settled else min(140, frames)
+    first = 0 if settled else min(transition_frames, frames)
     for _ in range(first):
         sample = await _fragment_frame(actual, clock, sample, wall_seconds=wall_seconds)
     remaining = frames - first
@@ -1414,7 +1418,10 @@ async def test_repeated_short_empty_episodes_exhaust_cumulative_rescue_budget(mo
         timer = previous.raw._first_text_timer
         started_at = previous.raw._deadline_speech_at
         assert timer is not None
-        sample = await _settled_fragment_silence(actual, clock, sample, 125)
+        # 640ms of 40ms frames settles this window gate's 300ms hangover.
+        # Batch only the remaining known silence, preserving its full PCM,
+        # capture duration and final pre-roll; numeric gain remains real.
+        sample = await _settled_fragment_silence(actual, clock, sample, 125, transition_frames=16)
         assert len(client.requests) == cycle + 1
         # Each POST includes old context; overlapping answers must not recount it.
         assert previous.raw._answered_empty_speech_bytes == (cycle + 1) * admitted_bytes
@@ -1510,7 +1517,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
             return {'segments': [{'text': 'Real speech.', 'start': 0.6, 'end': _wav_duration(kwargs) - 0.28}]}
 
         client.payloads.append(real_response)
-    before_latency = WINDOW_FIRST_TEXT._sum.get()
+    before_latency = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get()
     for _ in range(150):
         sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
     new_started = previous.raw._deadline_speech_at
@@ -1527,7 +1534,7 @@ async def test_answered_blip_then_later_real_speech_has_fresh_startup_budget(mon
         sample = await _settled_fragment_silence(actual, clock, sample, 125)
         assert [item['text'] for item in base.emitted] == ['Real speech.']
         assert previous.raw._first_text_timer is None
-        assert WINDOW_FIRST_TEXT._sum.get() - before_latency == pytest.approx(31.32)
+        assert WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() - before_latency == pytest.approx(31.32)
         assert previous.raw._answered_empty_speech_bytes == 0
         clock[0] = new_started + 12
         assert not previous.is_connection_dead
@@ -4148,3 +4155,106 @@ async def test_expired_rescue_with_no_cheap_capacity_never_extends_paid(monkeypa
     assert len(callbacks) == 1
     client.release.set()
     await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('flag', [None, 'false', 'invalid', 'true'])
+@pytest.mark.parametrize('progress', [False, True])
+async def test_normal_paced_first_post_holds_with_deadline_cut_on_or_off(monkeypatch, flag, progress):
+    if flag is None:
+        monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', flag)
+    now = [100.0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+
+    class PacedClient(UnpunctuatedClient):
+        async def post(self, url, **kwargs):
+            now[0] += 0.8
+            return await super().post(url, **kwargs)
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: PacedClient())
+    emitted = []
+    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
+    sock.progress_deadline_enabled = progress
+    sock._first_text_recorded = progress
+    forced_before = window.WINDOW_FORCED_CUTS._value.get()
+    try:
+        pcm = b'\x01\x00' * 16000 * 6
+        sock.mark_speech()
+        assert sock.send(pcm[:640])  # First 20ms of speech arms the timer at 100s.
+        now[0] += sock._pace_seconds  # Accumulate a full pace before the POST.
+        sock.mark_speech()
+        assert sock.send(pcm[640:])
+        assert sock._deadline_speech_at == 100.0
+        sock._next_post = now[0] + sock._pace_seconds  # The real pump's scheduling rule.
+        job = sock._next_job()
+        assert job is not None and not job.force
+        await sock._run_job(job)
+        assert now[0] == pytest.approx(106.8)
+        assert emitted == [] and sock._anchor_bytes == 0
+        assert sock._deadline_cut_enabled == (flag == 'true')
+        assert window.WINDOW_FORCED_CUTS._value.get() == forced_before
+    finally:
+        sock.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('progress', [False, True])
+@pytest.mark.parametrize(
+    'flag,bound,rescued',
+    [
+        ('true', None, True),
+        ('true', '0.8', False),
+        ('true', '1.5', True),
+        ('true', 'nan', True),
+        ('false', None, False),
+    ],
+)
+async def test_slow_nonempty_post_near_deadline_survives_only_with_qualified_cut(
+    monkeypatch, progress, flag, bound, rescued
+):
+    # Capture takes a full pace, then a slow but responding HTTP POST leaves
+    # 1.1s before the original timer expires. Exercise the real parser/anchor.
+    monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', flag)
+    if bound is not None:
+        monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', bound)
+    now = [100.0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+
+    class SlowClient(UnpunctuatedClient):
+        async def post(self, url, **kwargs):
+            now[0] += 4.9
+            return await super().post(url, **kwargs)
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SlowClient())
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    emitted = []
+    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
+    sock.progress_deadline_enabled = progress
+    sock._first_text_recorded = progress
+    try:
+        pcm = b'\x01\x00' * 16000 * 6
+        sock.mark_speech()
+        assert sock.send(pcm[:640])
+        now[0] += sock._pace_seconds
+        sock.mark_speech()
+        assert sock.send(pcm[640:])
+        assert sock._deadline_speech_at == 100.0
+        sock._next_post = now[0] + sock._pace_seconds
+        job = sock._next_job()
+        assert job is not None and not job.force
+        await sock._run_job(job)
+        assert now[0] == pytest.approx(110.9)
+        assert bool(emitted) == rescued
+        assert (sock._anchor_bytes > 0) == rescued
+        assert (sock._first_text_timer is None) == rescued
+        now[0] = 112.1
+        sock._expire_first_text()
+        assert sock.is_connection_dead != rescued
+        if rescued:
+            assert all(segment['text'].strip() for segment in emitted)
+        else:
+            assert sock.death_reason == 'first_text_deadline'
+    finally:
+        sock.finish()

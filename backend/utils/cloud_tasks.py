@@ -11,10 +11,13 @@ staged audio must not start an inline worker after an enqueue exception: a
 lost create-task acknowledgement can mean the deterministic named task exists.
 """
 
+from config import audio_archive
+
 import json
 import logging
 import hashlib
 import os
+import time
 import uuid
 from typing import Any, Dict, Iterable, NamedTuple, Optional
 
@@ -27,6 +30,7 @@ from google.protobuf import duration_pb2
 from google.protobuf import timestamp_pb2
 
 from utils.log_sanitizer import sanitize
+from utils.sync.backfill_order import direct_schedule_at
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +111,13 @@ def _oidc_audience() -> str:
     return os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or _handler_url()
 
 
-def _audio_merge_handler_url() -> str:
+def _audio_merge_handler_url(uid: str = '') -> str:
+    if audio_archive.admitted(uid, 'SEPARATE_MERGE'):
+        worker = os.getenv('AUDIO_MERGE_WORKER_URL', '').strip()
+        if not worker:
+            logger.warning('separate merge worker missing AUDIO_MERGE_WORKER_URL; retaining legacy handler')
+        else:
+            return worker
     return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
 
 
@@ -284,8 +294,12 @@ def enqueue_named_task(
         logger.info('task %s already enqueued, skipping duplicate', task_id)
 
 
-def enqueue_sync_job(payload: Dict[str, Any]) -> None:
-    """Enqueue one named HTTP task (task id = job_id) for a sync job.
+def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
+    """Enqueue one named HTTP task for a sync job.
+
+    Sequenced redrives use a persisted dispatch attempt in the task name while
+    retaining the execution epoch in the payload. Re-enqueueing that attempt is
+    idempotent; a later attempt can bypass a deleted task's name tombstone.
 
     Duplicate names are success. Callers retry the same name a bounded number
     of times, then retain staged retry material if acknowledgement remains
@@ -311,6 +325,12 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
         raise ValueError('sync job sequencer epoch must be a positive integer')
     task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
+    if dispatch_attempt:
+        if sequencer_epoch is None or dispatch_attempt < 0:
+            raise ValueError('sync job dispatch attempt requires a sequencer epoch and a positive value')
+        task_id += f'-d{dispatch_attempt}'
+    schedule_at = direct_schedule_at(payload)
+    schedule_options: Dict[str, Any] = {'schedule_at': schedule_at} if schedule_at is not None else {}
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
@@ -321,9 +341,10 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
                 task_id,
                 payload,
                 audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
+                **schedule_options,
             )
             return
-    enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
+    enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload, **schedule_options)
 
 
 def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
@@ -359,17 +380,44 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
     per-part names (audio_file ids are UUIDv4).
     """
-    if payload.get('schema_version') == 2:
-        task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
-    else:
-        task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
-    handler_url = _audio_merge_handler_url()
+    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
-        task_id,
+        _audio_merge_task_id(payload),
         payload,
         audience=handler_url,
+    )
+
+
+def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
+    # Demand tasks use a separate hourly name so a drained eager task or a
+    # deleted/expired artifact cannot tombstone a first play. Run locks still
+    # coalesce requests straddling the hour boundary.
+    suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
+    if not payload.get('on_demand') and payload.get('playback_epoch'):
+        suffix = f"-r{payload['playback_epoch']}"
+    if payload.get('schema_version') == 2:
+        return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
+    return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"
+
+
+def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int) -> None:
+    """Re-enqueue a merge task that ran into a destructive-operation fence.
+
+    The ``-dd{n}`` suffix (n = ``payload['destructive_deferrals']``) escapes the
+    original name's tombstone, and ``schedule_at`` places the new task after the
+    gate has cleared. Gate holds last seconds to a few minutes.
+    """
+    deferral = int(payload['destructive_deferrals'])
+    handler_url = _audio_merge_handler_url(str(payload.get('uid') or ''))
+    enqueue_named_task(
+        os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
+        handler_url,
+        f'{_audio_merge_task_id(payload)}-dd{deferral}',
+        payload,
+        audience=handler_url,
+        schedule_at=int(time.time()) + delay_seconds,
     )
 
 
@@ -405,6 +453,15 @@ def _listen_finalization_invoker_sa() -> str:
     return os.getenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA') or _invoker_sa()
 
 
+def listen_finalization_binding() -> dict[str, str]:
+    return {
+        'queue': os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        'handler': _listen_finalization_handler_url(),
+        'audience': _listen_finalization_audience(),
+        'invoker_sa': _listen_finalization_invoker_sa(),
+    }
+
+
 def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:
     """Wake the finalizer with opaque routing data only.
 
@@ -423,7 +480,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
 
 
 def verify_configured_cloud_tasks_oidc(
-    request: Request, *, audience: str, invoker_sa: str, log_failure: bool = True
+    request: Request, *, audience: str | list[str], invoker_sa: str, log_failure: bool = True
 ) -> int:
     """Verify a configured task audience and issuer; returns task retry count.
 
@@ -468,7 +525,10 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
     audience names a different service (backend-sync-backfill) can still
     mint a token the merge worker will accept.
     """
-    return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
+    audiences = list(filter(None, (_audio_merge_handler_url(), os.getenv('AUDIO_MERGE_WORKER_URL', '').strip())))
+    return verify_configured_cloud_tasks_oidc(
+        request, audience=audiences[0] if len(audiences) == 1 else audiences, invoker_sa=_invoker_sa()
+    )
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:

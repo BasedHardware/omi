@@ -126,6 +126,17 @@ enum ScreenTaskFreshFlagResponse {
 @MainActor enum ScreenTaskFlagRefresh {
   private static var timer: Timer?
   private static var reloadInFlight = false
+  private static var lastFlagReload: TimeInterval?
+  /// Every PostHog flag reload is a billed request. Clients with the flag off (nearly all)
+  /// only need to notice a newly enabled flag, so they reload every 30 minutes; the 30 s
+  /// cadence is kept only while the flag is on, where the 55 s leases depend on it.
+  static let disabledReloadInterval: TimeInterval = 30 * 60
+
+  static func shouldReloadFlags(enabled: Bool, now: TimeInterval, last: TimeInterval?) -> Bool {
+    guard let last else { return true }
+    return enabled || now - last >= disabledReloadInterval
+  }
+
   static func start() {
     guard timer == nil else { return }
     reload()
@@ -135,8 +146,13 @@ enum ScreenTaskFreshFlagResponse {
   }
 
   private static func reload() {
-    PostHogManager.shared.reloadFeatureFlags()
-    guard !reloadInFlight, PostHogManager.shared.isFeatureEnabled(ScreenTaskFeature.flagName),
+    let now = ProcessInfo.processInfo.systemUptime
+    let enabled = PostHogManager.shared.isFeatureEnabled(ScreenTaskFeature.flagName)
+    if shouldReloadFlags(enabled: enabled, now: now, last: lastFlagReload) {
+      lastFlagReload = now
+      PostHogManager.shared.reloadFeatureFlags()
+    }
+    guard !reloadInFlight, enabled,
       let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     else { return }
     reloadInFlight = true

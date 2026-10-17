@@ -123,10 +123,18 @@ class TestRatePolicies(unittest.TestCase):
 
     def test_expensive_endpoints_have_low_limits(self):
         """Expensive endpoints should have lower limits."""
-        expensive = ['knowledge_graph:rebuild', 'wrapped:generate', 'conversations:reprocess']
+        expensive = ['knowledge_graph:rebuild', 'wrapped:generate']
         for name in expensive:
             max_req, _ = RATE_POLICIES[name]
             self.assertLessEqual(max_req, 5, f"{name} should have low base limit")
+
+    def test_reprocess_allows_template_exploration_below_create_ceiling(self):
+        """Reprocess must allow trying several templates but never exceed full-create spend."""
+        max_req, window = RATE_POLICIES['conversations:reprocess']
+        create_max, create_window = RATE_POLICIES['conversations:create']
+        self.assertEqual(window, 3600)
+        self.assertGreaterEqual(max_req, 10)
+        self.assertLessEqual(max_req / window, create_max / create_window)
 
     def test_bursty_endpoints_have_high_limits(self):
         """Agent/MCP endpoints should allow bursts."""
@@ -1016,7 +1024,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.assertTrue(allowed)
         self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
-            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
+            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10], client=None
         )
 
         self.real_module._RATE_LIMIT_RESERVE_LUA.return_value = [0, 10, 1200]

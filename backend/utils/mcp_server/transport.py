@@ -26,6 +26,7 @@ from utils.mcp_analytics import (
     result_count_for_tool_result,
     schedule_mcp_active,
     schedule_mcp_tool_call,
+    schedule_mcp_tool_use_succeeded,
 )
 from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 from utils.mcp_server.auth import MCPAuthContext, authenticate_mcp_request, invalid_mcp_auth_exception
@@ -105,7 +106,14 @@ def _protocol_error_response(msg_id: Any, exc: JsonRpcProtocolError) -> Dict[str
 
 def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     scope_set = set(scopes)
-    return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
+    from config.demand_processing import tool_enabled
+
+    return [
+        tool
+        for tool in MCP_TOOLS
+        if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set
+        and (tool['name'] != 'process_recent_conversations' or tool_enabled())
+    ]
 
 
 def require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
@@ -155,6 +163,7 @@ def _handle_tool_call(
     msg_id: Any,
     params: Dict[str, Any],
     effective_version: str,
+    marker_client_name: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     tool_name = params.get("name")
     if "arguments" in params and not isinstance(params["arguments"], dict):
@@ -305,6 +314,17 @@ def _handle_tool_call(
             _complete_result(_tool_error_payload(error_code, tool_error.message), effective_version),
         )
 
+    # This point is reached only after application success, including empty reads.
+    # clientInfo is the only marker client source; never infer initiation from it.
+    schedule_mcp_tool_use_succeeded(
+        uid=auth_context.uid,
+        tool_name=tool_name,
+        client_name=(
+            marker_client_name
+            if marker_client_name is not None
+            else normalize_client_name(client_info_name({"params": params}), None)
+        ),
+    )
     _tool_call_analytics(
         auth_context,
         request,
@@ -435,7 +455,14 @@ def handle_mcp_message(
         )
 
     if method == "tools/call":
-        return _handle_tool_call(auth_context, request, msg_id, params, effective_version)
+        return _handle_tool_call(
+            auth_context,
+            request,
+            msg_id,
+            params,
+            effective_version,
+            marker_client_name=normalize_client_name(client_info_name(message), None),
+        )
 
     if method == "ping":
         # ping was removed in the 2026 stateless revision.

@@ -112,6 +112,7 @@ export interface Events {
 }
 
 export interface TranscriptSegment {
+  id?: string | null;
   text: string;
   speaker: string;
   speaker_id: number;

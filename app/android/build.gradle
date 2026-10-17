@@ -54,3 +54,16 @@ gradle.projectsEvaluated {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+// The pinned FFI plugin must free model/WAV resources on every error path.
+gradle.projectsEvaluated {
+    def sub = rootProject.subprojects.find { it.name == 'whisper_flutter_new' }
+    if (sub != null) {
+        def source = new File(sub.projectDir, '../src/main.cpp')
+        def patch = new File(rootProject.projectDir, '../scripts/patch_whisper_cleanup.py')
+        def proc = ['python3', patch.absolutePath, source.canonicalPath].execute(null, rootProject.projectDir)
+        def out = new StringBuffer(); def err = new StringBuffer()
+        proc.consumeProcessOutput(out, err); proc.waitFor()
+        if (proc.exitValue() != 0) throw new GradleException("Whisper cleanup patch failed: ${err} ${out}")
+    }
+}

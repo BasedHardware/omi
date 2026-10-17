@@ -106,6 +106,92 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: DEMAND_PROCESSING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_LAZY_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_TOOL_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
+  - name: DEMAND_PROCESSING_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_UID_ALLOWLIST
+    value: ""
+  - name: BATCH_PIPELINE_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_SERVING_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_WORKER_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_API_URL
+    value: ""
+  - name: BATCH_PIPELINE_WORKER_AUDIENCE
+    value: ""
+  - name: BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT
+    value: ""
+  - name: BUCKET_BATCH_PIPELINE
+    value: ""
+  - name: BATCH_PIPELINE_UNIT_SECONDS
+    value: "3600"
+  - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
+    value: "false"
+  - name: PLAYBACK_ON_DEMAND_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_REVISION_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_LLM_VERSION
+    value: "2026-10-16-v1"
+  - name: SYNC_POLL_BACKOFF_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
+    value: 'false'
+  - name: BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_ALL_ADMITTED
+    value: "false"
+  - name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_MODE
+    value: "off"
+  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+    value: ""
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "true"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -113,6 +199,28 @@ env:
     value: "https://us.posthog.com"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
+  - name: FIRESTORE_READ_LEVERS
+    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+  - name: FSR_QUEUE_AGE_PUBLISHER
+    value: "1"
+  - name: FSR_QUEUE_AGE_LEASE_SECONDS
+    value: "120"
+  - name: FSR_LEADER_LEASE_TTL_SECONDS
+    value: "0"
+  - name: DELETION_WIPE_RECONCILE_INTERVAL_SECONDS
+    value: "300"
+  - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
+    value: "30"
+  - name: FSR_USAGE_MONTH_TTL_SECONDS
+    value: "60"
+  - name: FSR_SUBSCRIPTION_TTL_SECONDS
+    value: "60"
+  - name: FSR_SERVING_CONFIG_TTL_SECONDS
+    value: "60"
+  - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
+    value: "30"
+  - name: CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS
+    value: "30"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
@@ -125,6 +233,10 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_MODE
+    value: "shadow"
+  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
+    value: "100"
   # Keep these aligned with the development GitHub environment variables used
   # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -221,6 +333,12 @@ env:
     value: "gateway"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: ""
+  - name: DREAM_ON_DEMAND_ENABLED
+    value: 'true'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -255,12 +373,6 @@ env:
     value: "60000"
   - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
     value: ""
-  - name: CAPTURE_JEV_SHADOW_ENABLED
-    value: "true"
-  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: CAPTURE_JEV_SHADOW_PERCENT
-    value: "0"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -308,13 +420,17 @@ env:
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL
-    value: "http://vad.omiapi.com:80/v1/vad"
+    value: "http://172.16.48.49/vad/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omiapi.com:80"
+    value: "http://172.16.48.49/diarizer"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://nllb.omiapi.com"
+    value: "http://172.16.48.49/nllb"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
+  - name: TRANSLATION_CACHE_TTL
+    value: "86400"
+  - name: TRANSLATION_NEGATIVE_CACHE_TTL
+    value: "21600"
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED
     value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
@@ -370,6 +486,14 @@ env:
     value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
+  - name: STT_LIVE_DEMAND_ENABLED
+    value: "false"
+  - name: STT_LIVE_DEMAND_PERCENT
+    value: "0"
+  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
+    value: ""
+  - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
+    value: "15"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "false"
   - name: STT_ROUTING_MODE
@@ -408,6 +532,10 @@ env:
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
     value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_ENABLED
+    value: "false"
+  - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
+    value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
@@ -425,7 +553,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
+    value: "parakeet-window,modulate-velma-2,soniox"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

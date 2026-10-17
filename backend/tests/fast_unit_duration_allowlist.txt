@@ -18,6 +18,8 @@ tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_
 tests/unit/test_pusher_conversation_ledger_instrument.py::test_conversation_lane_gateway_client_is_attributed
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
+# Parses the full deploy/runtime_env.yaml manifest (grew ~230 lines in #21803); measured 0.32s CPU locally.
+tests/unit/test_llm_gateway_deploy_contract.py::test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
 # Builds 10,001 in-memory records to prove universal export has no historical-data cap.
 tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
@@ -408,3 +410,50 @@ tests/unit/test_live_speaker_collapse.py::test_controller_emits_metric_and_log_w
 
 tests/unit/test_client_telemetry.py::test_voice_actor_capacity_sharded_across_documents
 # 2,200-actor sharding capacity regression; volume is the property under test (~0.86s CPU)
+
+# Takeover-mapping route tests import the full routers.conversations module graph
+# under file isolation (pydantic/pydub/audioop chain). Measured 2.78s / 2.25s CPU
+# during pre-push (2026-10-14).
+tests/unit/test_account_gate_busy_http.py::test_conversation_delete_route_maps_takeover_to_409
+tests/unit/test_account_gate_busy_http.py::test_account_gate_cascade_purge_maps_fence_before_generic_failure[DestructiveGateTakeover]
+tests/unit/test_account_gate_busy_http.py
+# First reclaim in the file deep-copies the fake Firestore state and pays the cold
+# lazy import in its call phase under file isolation. Measured 0.29s quiet and
+# 0.31-0.32s beside another unit file (2026-10-15), straddling the 0.30s guard.
+tests/unit/test_dream_lease_reclamation.py::test_only_strictly_older_leases_are_reclaimed[1-bounded]
+# First test in the file: one lease plus settlement transaction on the fake
+# Firestore, paying the cold lazy import in its call phase. 0.41s during the
+# loaded pre-push gate (2026-10-15).
+tests/unit/test_dream_budget_settlement.py::test_known_cost_and_lease_finish_share_one_transaction
+# The file's tests pay the task sync module graph under file isolation; up to 0.39s CPU
+# during pre-push (2026-10-15, strict local fail limit 0.30s).
+tests/unit/test_task_sync_apple_async_boundary.py::test_single_apple_reminder_sync_offloads_batch_update_and_preserves_result
+tests/unit/test_task_sync_apple_async_boundary.py::test_batch_apple_reminder_sync_offloads_batch_update_and_preserves_per_item_results
+tests/unit/test_task_sync_apple_async_boundary.py::test_apple_reminder_sync_failure_hides_exception_text_in_single_and_batch_results
+
+# These behavioral import-contract tests deliberately load the real chat_file module
+# against fresh router/database stubs. Both assertions pass; the required import
+# graph costs 0.44-0.60s CPU per call in file isolation (serial and parallel runs).
+# Keep both contracts in the unit selection without weakening the global budget.
+tests/unit/test_chat_file_gateway_stub_import_contract.py::test_chat_file_imports_against_the_suite_gateway_stub
+tests/unit/test_chat_file_gateway_stub_import_contract.py::test_a_stale_stub_fails_on_the_exact_missing_attribute
+# Compares the runtime manifest, ingress chart and deployment workflow declarations
+# in dev and prod; all assertions pass, but YAML parsing costs 0.30-0.31s CPU.
+tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_runtime_static_address_matches_helm_ingress_declaration
+# The first real translation quality check loads langdetect's local profiles.
+# Assertions pass in isolation, but the cold profile load costs 0.32-0.34s CPU.
+tests/unit/test_translation_negative_cache_detection.py::test_negative_cached_segment_does_not_vote_for_target_language
+# First test in the file pays yaml.safe_load of deploy/runtime_env.yaml in the
+# call phase. Measured 0.31s alone and 0.32-0.47s inside pre-push (local fail
+# limit 0.30s). The pusher release contract selects this file whenever
+# verify_pusher_live_alert_route.py changes. Assertions still run.
+tests/unit/test_conversation_notes_v2_beta_rollout.py::test_dev_enables_every_rollout_flag_on_every_summary_pipeline_service
+# 2026-10-16: parses the full runtime-env manifest per env (0.41-0.49s CPU at load avg ~4). Assertions still run.
+tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[dev]
+tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_overlays_on_every_cloud_run_conversation_service[prod]
+# 2026-10-16: parses the full listen chart values plus rendered runtime env (0.30-0.34s CPU at load avg ~20 on the pre-push host). Assertions still run.
+tests/unit/test_backend_listen_helm_defaults.py::test_windowed_live_rollout_is_prod_canary_and_bounded
+# 2026-10-16: builds both Vertex cache request shapes through the provider boundary (0.30s CPU at load avg ~20). Assertions still run.
+tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traffic_types[False-dedicated]
+# 2026-10-16: scripted 8-turn hunt with 26 proposals, verification and exact undo (0.32-0.41s CPU under load). Assertions still run.
+tests/unit/test_dream_replay.py::test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo

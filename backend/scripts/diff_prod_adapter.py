@@ -22,6 +22,17 @@ DIARIZER_BATCH_RULE: dict[str, Any] = {
     'metricsQuery': 'max(omi_diarization_v2_queue_depth{<<.LabelMatchers>>,job="diarizer-batch-metrics"}) by (<<.GroupBy>>)',
 }
 API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
+PARAKEET_QUEUE_RULES = [
+    {
+        'seriesQuery': f'parakeet_batch_lane_oldest_pending_seconds{{namespace!="",pod!="",lane="{lane}"}}',
+        'resources': {'overrides': {'namespace': {'resource': 'namespace'}, 'pod': {'resource': 'pod'}}},
+        'name': {'as': f'parakeet_{lane}_queue_age_seconds'},
+        'metricsQuery': 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="'
+        + lane
+        + '"}) by (<<.GroupBy>>)',
+    }
+    for lane in ('live', 'backfill')
+]
 
 
 def normalized_config(config):
@@ -54,6 +65,24 @@ def expected_config(live):
         if rule[field] not in (before, after):
             raise ValueError(f'Unexpected live listen {field}: reconcile and review first')
         rule[field] = after
+    gpu_rules = [rule for rule in expected['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization']
+    if len(gpu_rules) != 1:
+        raise ValueError('Unexpected live Parakeet GPU rule count: reconcile and review first')
+    gpu = gpu_rules[0]
+    gpu_changes = {
+        'seriesQuery': (
+            'DCGM_FI_DEV_GPU_UTIL{namespace!=""}',
+            'DCGM_FI_DEV_GPU_UTIL{container="parakeet",namespace!=""}',
+        ),
+        'metricsQuery': (
+            'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))',
+            'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="parakeet",<<.LabelMatchers>>}[1m]))',
+        ),
+    }
+    for field, (before, after) in gpu_changes.items():
+        if gpu.get(field) not in (before, after):
+            raise ValueError(f'Unexpected live Parakeet GPU {field}: reconcile and review first')
+        gpu[field] = after
     nllb = [rule for rule in expected['externalRules'] if rule['name']['as'] == NLLB_RULE['name']['as']]
     if nllb and nllb != [NLLB_RULE]:
         raise ValueError('Unexpected live NLLB rule: reconcile and review first')
@@ -64,6 +93,12 @@ def expected_config(live):
         raise ValueError('Unexpected live batch queue rule: reconcile and review first')
     if not batch:
         expected['rules'].append(copy.deepcopy(DIARIZER_BATCH_RULE))
+    for queue_rule in PARAKEET_QUEUE_RULES:
+        existing = [r for r in expected['rules'] if r['name']['as'] == queue_rule['name']['as']]
+        if existing and existing != [queue_rule]:
+            raise ValueError('Unexpected live Parakeet queue rule: reconcile and review first')
+        if not existing:
+            expected['rules'].append(copy.deepcopy(queue_rule))
     return normalized_config(expected)
 
 

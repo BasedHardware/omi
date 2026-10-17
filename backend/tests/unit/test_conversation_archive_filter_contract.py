@@ -55,8 +55,9 @@ class _CountResult:
 
 
 class _Query:
-    def __init__(self, rows):
+    def __init__(self, rows, observations):
         self._rows = rows
+        self.observations = observations
         self.filters = []
         self.events = []
         self._order_field = None
@@ -65,29 +66,42 @@ class _Query:
         self.selected_fields = None
 
     def where(self, *, filter):
-        self.filters.append((filter.field_path, filter.op_string, filter.value))
-        self.events.append(("where", filter.field_path, filter.op_string, filter.value))
-        return self
+        query = self._clone()
+        query.filters.append((filter.field_path, filter.op_string, filter.value))
+        query.events.append(("where", filter.field_path, filter.op_string, filter.value))
+        return query
+
+    def _clone(self):
+        from copy import copy
+
+        query = copy(self)
+        query.filters = list(self.filters)
+        query.events = list(self.events)
+        return query
 
     def order_by(self, field_path, direction=None):
-        self._order_field = field_path
-        self.events.append(("order_by", field_path, direction))
-        return self
+        query = self._clone()
+        query._order_field = field_path
+        query.events.append(("order_by", field_path, direction))
+        return query
 
     def select(self, field_paths):
-        self.selected_fields = list(field_paths)
-        self.events.append(("select", tuple(field_paths)))
-        return self
+        query = self._clone()
+        query.selected_fields = list(field_paths)
+        query.events.append(("select", tuple(field_paths)))
+        return query
 
     def limit(self, value):
-        self._limit = value
-        self.events.append(("limit", value))
-        return self
+        query = self._clone()
+        query._limit = value
+        query.events.append(("limit", value))
+        return query
 
     def offset(self, value):
-        self._offset = value
-        self.events.append(("offset", value))
-        return self
+        query = self._clone()
+        query._offset = value
+        query.events.append(("offset", value))
+        return query
 
     def _matching_rows(self):
         rows = list(self._rows)
@@ -96,7 +110,9 @@ class _Query:
                 rows = [row for row in rows if row.get(field_path) == expected]
             elif operator == "in":
                 rows = [row for row in rows if row.get(field_path) in expected]
-            else:  # pragma: no cover - this test contract only uses equality and membership.
+            elif operator == '>':
+                rows = [row for row in rows if isinstance(row.get(field_path), str) and row[field_path] > expected]
+            else:
                 raise AssertionError(f"unexpected Firestore operator: {operator}")
         if self._order_field:
             rows.sort(key=lambda row: row[self._order_field], reverse=True)
@@ -104,6 +120,7 @@ class _Query:
 
     def stream(self):
         self.events.append(("stream",))
+        self.observations.append(self)
         rows = self._matching_rows()
         if self._limit is not None:
             rows = rows[self._offset : self._offset + self._limit]
@@ -111,6 +128,7 @@ class _Query:
 
     def count(self):
         self.events.append(("count",))
+        self.observations.append(self)
         return SimpleNamespace(get=lambda: [[_CountResult(len(self._matching_rows()))]])
 
 
@@ -127,9 +145,7 @@ class _Firestore:
         assert name in {"users", "conversations"}
         if name == "users":
             return self
-        query = _Query(self.rows)
-        self.queries.append(query)
-        return query
+        return _Query(self.rows, self.queries)
 
 
 def _decorator(*_args, **_kwargs):
@@ -139,6 +155,10 @@ def _decorator(*_args, **_kwargs):
 @pytest.fixture
 def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
+    # Load the pure policy/registry before the fixture closes the utils import path.
+    import config.dream_agent  # noqa: F401
+    from utils.conversations import summary_delivery
+
     firestore = _Firestore([])
 
     google = ModuleType("google")
@@ -155,6 +175,7 @@ def conversations_db():
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
+    exceptions_module.FailedPrecondition = type("FailedPrecondition", (Exception,), {})
     exceptions_module.NotFound = type("NotFound", (Exception,), {})
 
     database_client = ModuleType("database._client")
@@ -205,6 +226,7 @@ def conversations_db():
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
         "utils.conversations": utils_conversations,
+        "utils.conversations.summary_delivery": summary_delivery,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),
@@ -257,6 +279,9 @@ def conversations_db():
     # when the fixture replaces the utils package with an empty import path.
     fakes["utils.firestore_document_size"] = load_module_fresh(
         "utils.firestore_document_size", str(_BACKEND / "utils" / "firestore_document_size.py")
+    )
+    fakes["utils.other.playback_identity"] = load_module_fresh(
+        "utils.other.playback_identity", str(_BACKEND / "utils" / "other" / "playback_identity.py")
     )
 
     with stub_modules(fakes):

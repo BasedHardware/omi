@@ -9,13 +9,16 @@ import json
 import logging
 import secrets
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Collection, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
 from database.firestore_index_registry import UNIVERSAL_CANONICAL_LIST_SCAN_QUERY
@@ -59,6 +62,7 @@ from database.memory_apply_store import (
     privacy_deletion_receipt_id,
 )
 from database.legal_holds import (
+    assert_destructive_gate_still_ours,
     DestructiveOperationInProgress,
     LegalHoldAuthorityUnavailable,
     assert_account_deletion_permitted,
@@ -2736,6 +2740,7 @@ def replace_conversation_sourced_memories(
         db_client=client,
         reason="conversation_reprocess_retract",
         preserve_source_replacement_receipts=True,
+        revalidate_gate=bool(not items and claim_destructive_gate),
     )
     if belief_model_enabled() and result.committed_memory_ids:
         from utils.memory.belief_evidence import admit_committed_claims
@@ -3381,6 +3386,7 @@ def resolve_canonical_memory_review(
                     purge_stale_review_conflicts_for_memories(
                         uid,
                         [memory_id],
+                        revalidate_gate=True,
                         reason=f"canonical_review_{decision}_replay",
                         db_client=client,
                         include_legacy_commits=True,
@@ -3398,6 +3404,7 @@ def resolve_canonical_memory_review(
             purge_stale_review_conflicts_for_memories(
                 uid,
                 [memory_id],
+                revalidate_gate=True,
                 reason=f"canonical_review_{decision}",
                 db_client=client,
                 include_legacy_commits=True,
@@ -3408,6 +3415,7 @@ def resolve_canonical_memory_review(
                 db_client=client,
                 reason=f"canonical_review_{decision}",
                 include_review_queue=False,
+                revalidate_gate=True,
             )
             resolved = tombstoned[0]
             return {
@@ -3610,6 +3618,7 @@ def _tombstone_memory_items_under_gate(
     last_conflict: Optional[CanonicalMemoryTombstoneConflict] = None
     planned_items = authoritative_items
     for _attempt in range(3):
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
         observed_control = _read_replacement_control(uid, db_client=db_client)
         all_items = (
             planned_items
@@ -3652,6 +3661,7 @@ def _tombstone_memory_items_under_gate(
         ):
             last_conflict = CanonicalMemoryTombstoneConflict("memory control changed during privacy source scan")
             continue
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
         try:
             result = tombstone_memory_items_firestore(
                 uid=uid,
@@ -3735,6 +3745,38 @@ def _run_immediate_privacy_cleanup(
         )
 
 
+@dataclass
+class _DeferredCanonicalPrivacyFinalization:
+    uid: str
+    db_client: Any
+    memory_ids: List[str]
+
+
+_DEFERRED_CANONICAL_PRIVACY_FINALIZATION: ContextVar[Optional[_DeferredCanonicalPrivacyFinalization]] = ContextVar(
+    "deferred_canonical_privacy_finalization", default=None
+)
+
+
+@contextmanager
+def defer_conversation_privacy_finalization(uid: str, *, db_client: Any) -> Iterator[List[str]]:
+    """Keep retry tombstones until MemoryService purges the complete task set.
+
+    Only provider-proven IDs are collected; no history read is cached. Bind
+    the scope to both the user and client so nested work cannot enlist a
+    different account or database in this task's finalization. The
+    caller must run the mandatory final projection purge after this scope and
+    before removing source-replacement receipts. On failure, both the durable
+    tombstones and receipts remain available to reconstruct cleanup on retry.
+    """
+    client = db_client if db_client is not None else default_db_client
+    pending = _DeferredCanonicalPrivacyFinalization(uid, client, [])
+    token = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.set(pending)
+    try:
+        yield pending.memory_ids
+    finally:
+        _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.reset(token)
+
+
 def purge_canonical_memory_projections(
     uid: str,
     memory_ids: List[str],
@@ -3742,12 +3784,17 @@ def purge_canonical_memory_projections(
     db_client: Any,
     reason: str,
     include_review_queue: bool = True,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
     preserve_source_replacement_receipts: bool = False,
 ) -> None:
     """Fail closed until every content-bearing canonical projection is gone."""
 
+    coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
     unique_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
     for memory_id in unique_ids:
+        if revalidate_gate:
+            assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
         _run_immediate_privacy_cleanup(
             uid,
             memory_id,
@@ -3756,21 +3803,43 @@ def purge_canonical_memory_projections(
             include_review_queue=False,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     if include_review_queue and unique_ids:
         purge_stale_review_conflicts_for_memories(
             uid,
             unique_ids,
+            revalidate_gate=revalidate_gate,
+            gate_kind=gate_kind,
             reason=reason,
             db_client=db_client,
-            include_legacy_commits=True,
+            # Review/correction cleanup stays live. Only its redundant history
+            # walk is omitted; the mandatory finalizer performs a fresh purge.
+            include_legacy_commits=not coalesce,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
     invalidate_kg_for_memory_retraction(uid, unique_ids, db_client=db_client)
     from database.memory_ledger import finalize_canonical_privacy_tombstones
 
+    if revalidate_gate:
+        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
+    pending = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.get() if coalesce else None
+    if (
+        pending is not None
+        and pending.uid == uid
+        and pending.db_client is (db_client if db_client is not None else default_db_client)
+        and gate_kind == "explicit_memory_deletion"
+        and preserve_source_replacement_receipts
+    ):
+        pending.memory_ids[:] = list(dict.fromkeys(pending.memory_ids + unique_ids))
+        return
     finalize_canonical_privacy_tombstones(
         uid,
         unique_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
         firestore_client=db_client,
         preserve_source_replacement_receipts=preserve_source_replacement_receipts,
     )
@@ -3940,6 +4009,8 @@ def _retract_conversation_sourced_memories_under_gate(
     client = db_client if db_client is not None else default_db_client
     last_conflict: Optional[ConversationReplacementConflictError] = None
     for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
+        if claim_destructive_gate:
+            assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=client)
         try:
             return replace_conversation_sourced_memories(
                 uid,
@@ -4032,6 +4103,7 @@ def _delete_canonical_memory_under_gate(uid: str, memory_id: str, *, db_client: 
         lineage_ids,
         db_client=client,
         reason="canonical_memory_delete",
+        revalidate_gate=True,
     )
     return lineage_ids
 
@@ -4079,6 +4151,7 @@ def _delete_canonical_memories_batch_under_gate(
         lineage_ids,
         db_client=client,
         reason="canonical_memory_delete_batch",
+        revalidate_gate=True,
     )
     return lineage_ids
 
@@ -4132,6 +4205,7 @@ def _delete_canonical_memories_matching(
             sorted(cleanup_ids),
             db_client=client,
             reason=reason,
+            revalidate_gate=True,
         )
 
 

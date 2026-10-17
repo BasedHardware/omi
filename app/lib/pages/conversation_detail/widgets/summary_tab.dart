@@ -24,16 +24,22 @@ import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
 
+  /// Switches the page to the Transcript tab.
+  final VoidCallback? onOpenTranscript;
+
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
-      this.onTapWhenSearchEmpty});
+      this.onTapWhenSearchEmpty,
+      this.onOpenTranscript});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -61,7 +67,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, provider, child) {
           final conversation = provider.conversationOrNull;
           final discarded = conversation?.discarded ?? true;
-          final summarySelection = provider.getSummarySelection();
+          // Base the surrounding tab state on the summary the user is actually looking at
+          // (the displayed source chip), not the canonical server selection.
+          final summarySelection = provider.getDisplayedSummarySelection();
           // Room under the tab row (Omi v8 `.sum`). A leading section heading brings its own.
           final leadsWithHeading = summarySelection.content.trimLeft().startsWith('#');
           // App-result summaries require result coordinates for trustworthy
@@ -89,7 +97,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 !provider.loadingReprocessConversation &&
                 conversation?.status == ConversationStatus.completed &&
                 !discarded &&
-                provider.getSummarySelection().content.trim().isNotEmpty,
+                summarySelection.content.trim().isNotEmpty,
             child: Stack(
               children: [
                 CustomScrollView(
@@ -105,8 +113,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                onOpenSource: widget.onOpenSource,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
+                                onOpenTranscript: widget.onOpenTranscript,
                                 canStartEditing: () {
                                   final connectivityProvider =
                                       Provider.of<ConnectivityProvider>(context, listen: false);

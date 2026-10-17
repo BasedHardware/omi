@@ -5,7 +5,8 @@ Jobs are ephemeral — they exist only long enough for the app to reconcile
 results. Redis is the right store: no Firestore costs, automatic TTL cleanup.
 
 Key format: sync_job:{job_id}
-TTL: 24 hours (refreshed on each update)
+TTL: 24 hours (refreshed on each update), with opt-in shorter retention for
+successful results and metric-only deduplication. See the runtime getters.
 
 The TTL governs how long a finished job's result stays queryable. The client
 uploads audio, marks the recording "uploaded", and reconciles it against this
@@ -33,6 +34,7 @@ from typing import Any, Dict, Optional, Set, cast
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database import sync_dead_letters
 from database.redis_db import r
+from utils.observability.fallback import record_fallback
 from utils.sync import stage as sync_stage
 from utils.sync.assignment_errors import bounded_sync_assignment_subtype
 
@@ -40,6 +42,8 @@ logger = logging.getLogger(__name__)
 
 JOB_KEY_PREFIX = 'sync_job:'
 JOB_TTL_SECONDS = 86400  # 24 hours — reconcile window (see module docstring)
+COMPLETED_TTL_ENV = 'SYNC_JOB_COMPLETED_TTL_SECONDS'
+METRIC_ONCE_TTL_ENV = 'SYNC_JOB_METRIC_ONCE_TTL_SECONDS'
 STALE_THRESHOLD_SECONDS = 600  # 10 minutes — if processing exceeds this, treat as failed
 # Cloud Tasks dispatch is near-immediate and its named task is created before
 # the 202 returns. A cloud_tasks job still 'queued' this long has lost its task
@@ -87,6 +91,28 @@ ONCE_KEY_PREFIX = 'sync_job_once:'
 def _key(key: str) -> str:
     """Keep prod's existing job and run-lease keys; isolate shared Redis in dev."""
     return sync_stage.redis_key(key)
+
+
+def _retention_seconds(env_name: str) -> int:
+    """Land dark; bad or out-of-range config preserves today's 24h retention.
+
+    Only allow reductions with a minimum one-hour recovery/observability
+    window. Read at the write boundary so tests and runtime configuration do
+    not depend on import order. Never print the environment value.
+    """
+    try:
+        seconds = int(os.getenv(env_name, str(JOB_TTL_SECONDS)))
+    except ValueError:
+        seconds = JOB_TTL_SECONDS
+    return seconds if 3600 <= seconds <= JOB_TTL_SECONDS else JOB_TTL_SECONDS
+
+
+def _job_retention_seconds(job: Dict[str, Any]) -> int:
+    # Failed/partial results still own retry/dead-letter recovery material;
+    # queued/processing jobs must survive dispatch delays and retries.
+    if job.get('status') == 'completed':
+        return _retention_seconds(COMPLETED_TTL_ENV)
+    return JOB_TTL_SECONDS
 
 
 class FencedSyncJobMutationOutcome(str, Enum):
@@ -202,6 +228,15 @@ def create_sync_job(
     }
     key = _key(f'{JOB_KEY_PREFIX}{job_id}')
     r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    try:
+        r.zadd(index_key, {job_id: now})
+        r.zremrangebyrank(index_key, 0, -101)
+        r.expire(index_key, JOB_TTL_SECONDS)
+    except Exception:
+        record_fallback(
+            component='sync_dispatch', from_mode='redis', to_mode='none', reason='other', outcome='degraded'
+        )
     return job
 
 
@@ -277,6 +312,11 @@ def _as_redis_text(value: Any) -> str:
     return str(value)
 
 
+def sync_job_key_exists(job_id: str) -> bool:
+    """Raw existence proof: corrupt JSON is present; Redis failures propagate."""
+    return bool(r.exists(_key(f'{JOB_KEY_PREFIX}{job_id}')))
+
+
 def sync_job_run_lock_present(job_id: str) -> bool:
     """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
     return bool(r.exists(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}')))
@@ -303,6 +343,61 @@ def _backfill_dead_letter_confirmed(job_id: str, job: Optional[Dict[str, Any]]) 
     if not isinstance(job, dict) or job.get('lane') != 'backfill':
         return
     sync_dead_letters.confirm_dead_letter(job_id)
+
+
+# Match SyncLocalFilesResultResponse's wire fields. The two internal strike
+# fields must survive terminal polling/task cleanup races; they are not wire
+# fields but prevent repeated persistence failures from retrying indefinitely.
+_TERMINAL_RESULT_FIELDS = frozenset(
+    (
+        'new_memories',
+        'updated_memories',
+        'failed_segments',
+        'total_segments',
+        'errors',
+        'repeat_failure_key',
+        'repeat_failure_fingerprint',
+    )
+)
+
+
+def _compact_terminal_job(job: Dict[str, Any]) -> None:
+    """Discard retry-only state after a terminal transition, preserving poll JSON.
+
+    Keep ownership/content/dispatch/fence metadata: terminal readers still use
+    it to retire durable claims and release per-user slots. Telemetry uses the
+    original result passed to the finalizer, not this stored projection.
+    """
+    if job.get('status') not in TERMINAL_STATUSES:
+        return
+    job.pop('partial_result', None)
+    job.pop('last_error', None)
+    result = job.get('result')
+    if isinstance(result, dict):
+        compact = {key: value for key, value in result.items() if key in _TERMINAL_RESULT_FIELDS}
+        # The route includes result only when truthy. Preserve that distinction
+        # even for a legacy telemetry-only result whose typed response is defaults.
+        job['result'] = compact if compact or not result else {'new_memories': []}
+
+
+def _cleanup_terminal_segments(job_id: str, job: Optional[Dict[str, Any]]) -> None:
+    """Only a winning terminal CAS authorizes removal of retry checkpoints."""
+    if job is None or job.get('status') not in TERMINAL_STATUSES:
+        return
+    try:
+        r.delete(_key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'))
+    except Exception as error:
+        # A cleanup outage must not turn a committed success into a retry or
+        # prevent durable claim cleanup. The existing set retains its TTL.
+        logger.warning('sync terminal segment cleanup failed exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='terminal_segment_cleanup',
+            to_mode='ttl_cleanup',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
 
 
 _LEGACY_JOB_MUTATION_MAX_RETRIES = 3
@@ -383,6 +478,7 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
             return None
         next_job = dict(current_job)
         next_job.update(payload)
+        _compact_terminal_job(next_job)
         next_raw = json.dumps(next_job, default=str, separators=(',', ':'))
         mutation = _decode_legacy_job_mutation(
             r.eval(
@@ -391,10 +487,11 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
                 key,
                 current_raw,
                 next_raw,
-                JOB_TTL_SECONDS,
+                _job_retention_seconds(next_job),
             )
         )
         if mutation.outcome is FencedSyncJobMutationOutcome.APPLIED:
+            _cleanup_terminal_segments(job_id, mutation.job)
             return mutation.job
         if mutation.outcome is not FencedSyncJobMutationOutcome.CONFLICT:
             return None
@@ -535,6 +632,7 @@ def fenced_update_sync_job(
             return FencedSyncJobMutation(FencedSyncJobMutationOutcome.INVALID_STATE, current_job, current_raw)
         next_job = dict(current_job)
         next_job.update(payload)
+        _compact_terminal_job(next_job)
         next_raw = json.dumps(next_job, default=str, separators=(',', ':'))
         mutation = _decode_fenced_mutation(
             r.eval(
@@ -545,10 +643,12 @@ def fenced_update_sync_job(
                 run_lock_token,
                 current_raw,
                 next_raw,
-                JOB_TTL_SECONDS,
+                _job_retention_seconds(next_job),
             )
         )
         if mutation.outcome is not FencedSyncJobMutationOutcome.CONFLICT:
+            if mutation.applied:
+                _cleanup_terminal_segments(job_id, mutation.job)
             return mutation
         if mutation.raw_job is None or mutation.job is None:
             return FencedSyncJobMutation(FencedSyncJobMutationOutcome.INVALID_JOB)
@@ -1125,8 +1225,45 @@ def try_mark_once(job_id: str, tag: str) -> bool:
     own fail-open posture — better to occasionally double-count than to
     silently never count.
     """
+    # Billing/fair-use and unknown future guards retain the full job window.
+    # Short metric retention may duplicate telemetry on a delayed retry but
+    # cannot repeat usage charging or customer-visible processing.
+    metric_only = tag == 'terminal_outcome_metric' or tag.startswith('segment_outcome:')
+    ttl = _retention_seconds(METRIC_ONCE_TTL_ENV) if metric_only else JOB_TTL_SECONDS
     try:
-        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=JOB_TTL_SECONDS))
+        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=ttl))
     except Exception as e:
         logger.warning('try_mark_once failed for %s:%s: %s', job_id, tag, e)
         return True
+
+
+def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
+    """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
+    from datetime import datetime, timezone
+
+    index_key = _key(f'pending_sync_jobs:{uid}')
+    ids = r.zrevrange(index_key, 0, 99) or []
+    result = []
+    for raw_id in ids:
+        job_id = raw_id.decode() if isinstance(raw_id, bytes) else raw_id
+        job = get_sync_job(job_id)
+        if not job or job.get('uid') != uid or job.get('status') not in {'queued', 'processing'}:
+            r.zrem(index_key, job_id)
+            continue
+        start = job.get('started_at') or job['created_at']
+        job_result = job.get('result') or {}
+        conversations = sorted(
+            set(job_result.get('new_memories') or []) | set(job_result.get('updated_memories') or [])
+        )
+        result.append(
+            {
+                'id': 'sync:' + job_id,
+                'kind': 'sync_job',
+                'state': 'queued' if job['status'] == 'queued' else 'transcribing',
+                'conversation_ids': conversations,
+                'started_at': datetime.fromtimestamp(start, timezone.utc),
+                'duration_seconds': 0,
+                'updated_at': datetime.fromtimestamp(job['updated_at'], timezone.utc),
+            }
+        )
+    return result

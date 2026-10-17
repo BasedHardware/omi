@@ -6,6 +6,7 @@ from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknow
 
 from ._client import db
 from database.document_ids import calendar_meeting_doc_id
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 T = TypeVar("T")
 
@@ -43,10 +44,24 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    meeting_id = calendar_meeting_doc_id(uid, meeting_data['calendar_source'], meeting_data['calendar_event_id'])
+    # The natural key needs both fields — meeting_data['x'] raises KeyError
+    # on a payload missing either, before the doc-path is even built.
+    try:
+        calendar_source = meeting_data['calendar_source']
+        calendar_event_id = meeting_data['calendar_event_id']
+    except KeyError as exc:
+        raise ValueError(f'meeting_data missing required field: {exc}') from exc
+    meeting_id = calendar_meeting_doc_id(uid, calendar_source, calendar_event_id)
     doc_ref = _get_meetings_collection(uid).document(meeting_id)
-    transaction = db.transaction()
-    _upsert_meeting_transaction(transaction, doc_ref, meeting_data, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+
+    @firestore.transactional
+    def upsert(write_transaction):
+        _upsert_meeting_transaction(write_transaction, doc_ref, meeting_data, now)
+
+    # Concurrent calendar syncs for the same user contend on the transaction —
+    # a bare db.transaction() abandons on Aborted. Bounded equal-jitter retry.
+    run_with_transaction_contention_retry(db.transaction, upsert, operation_name='calendar_meeting_create')
     return meeting_id
 
 

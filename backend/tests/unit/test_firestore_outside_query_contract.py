@@ -157,6 +157,17 @@ def test_outside_pins_are_literal_reviewed_function_fingerprints():
     assert all(serving_function_body_digest(key) == digest for key, digest in outside.BODY_DIGEST.items())
 
 
+def test_fingerprint_parse_reuse_cannot_hide_changed_source(tmp_path):
+    module = tmp_path / 'reader.py'
+    module.write_text('def read():\n    return 1\n')
+    before = serving_function_body_digest('reader.read', tmp_path)
+    assert serving_function_body_digest('reader.read', tmp_path) == before
+    module.write_text('def read():\n    return 2\n')
+    after = serving_function_body_digest('reader.read', tmp_path)
+    assert after != before
+    assert serving_function_body_digest('reader.read', tmp_path) == after
+
+
 @pytest.mark.parametrize('directory', ['routers', 'utils', 'services', 'jobs', 'new_serving_package'])
 def test_serving_sentinel_covers_every_backend_directory(tmp_path, directory):
     folder = tmp_path / directory

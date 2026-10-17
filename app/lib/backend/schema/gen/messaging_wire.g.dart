@@ -123,20 +123,24 @@ class GeneratedChannelLink {
 }
 
 class GeneratedChannelLinksResponse {
+  final Map<String, dynamic> availability;
   final List<GeneratedChannelLink> links;
 
   const GeneratedChannelLinksResponse({
+    this.availability = const {},
     required this.links,
   });
 
   factory GeneratedChannelLinksResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLinksResponse(
+      availability: _required(_readFieldValue<Map<String, dynamic>>(_readField(json, const ["availability"]), "availability", _readMap, requiredField: false, nullable: false, defaultValue: const {}), "availability"),
       links: _required(_readFieldValue<List<GeneratedChannelLink>>(_readField(json, const ["links"]), "links", (value) => _readObjectList(value, GeneratedChannelLink.fromJson), requiredField: true, nullable: false), "links"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'availability': availability,
       'links': links.map((value) => value.toJson()).toList(),
     };
   }

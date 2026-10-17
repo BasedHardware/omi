@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from models.dream_refs import base_ref, cited_value
+from models.agent_refs import base_ref, cited_value
 from models.review import SpellingContext, SpellingContextSegment
 
 MAX_CONTEXT_CHARS = 400

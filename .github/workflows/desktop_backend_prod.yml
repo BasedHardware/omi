@@ -69,6 +69,7 @@ jobs:
           cp .workflow-source/backend/deploy/cloud_run_gmp_sidecar.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/attach_cloud_run_gmp_sidecar.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/render_backend_runtime_env.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/runtime_env_compat.py "$controls/backend/scripts/"
           cp .workflow-source/backend/config/free_tier_rollout.py "$controls/backend/config/"
           cp .workflow-source/backend/deploy/runtime_env.yaml "$controls/backend/deploy/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
@@ -355,6 +356,12 @@ jobs:
             --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
+            DEMAND_PROCESSING_ENABLED=false
+            DEMAND_PROCESSING_LAZY_ENABLED=false
+            DEMAND_PROCESSING_TOOL_ENABLED=false
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED=false
+            DEMAND_PROCESSING_UID_ALLOWLIST=
+            DEMAND_PROCESSING_PERCENT=0
             PROACTIVITY_V2_POSTHOG_TOKEN=phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             PROACTIVITY_V2_POSTHOG_HOST=https://us.posthog.com
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
@@ -366,6 +373,7 @@ jobs:
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
+            OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD=12435
             OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}
             OMI_LLM_GATEWAY_FEATURE_MODE=gateway
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
@@ -383,6 +391,7 @@ jobs:
             OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
             FIRESTORE_READ_LEDGER=1
             FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
           secrets: |
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest

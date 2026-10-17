@@ -384,6 +384,8 @@ def _snapshot_bound_projection_updates(
     uid: str,
     conversation: Mapping[str, Any],
     extra_updates: Mapping[str, Any] | None,
+    *,
+    transcript_corrections: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Bind ``extra_updates`` to this snapshot, then keep projection fields only.
 
@@ -391,7 +393,9 @@ def _snapshot_bound_projection_updates(
     one that does not is dropped. Binding is the same helper every exit uses
     — not a second write path per branch.
     """
-    bound = conversations_db.extra_updates_with_bound_client_processing(uid, conversation, extra_updates)
+    bound = conversations_db.extra_updates_with_bound_client_processing(
+        uid, conversation, extra_updates, transcript_corrections=transcript_corrections
+    )
     return {field: bound[field] for field in PROJECTION_FAMILY_FIELDS if field in bound}
 
 
@@ -426,7 +430,20 @@ def _apply_snapshot_bound_projection(
     """
     if conversation is None:
         return
-    conversation_updates = _snapshot_bound_projection_updates(uid, conversation, extra_updates)
+    corrections = None
+    if conversation.get('has_transcript_corrections') and any(
+        field in (extra_updates or {}) for field in PROJECTION_FAMILY_FIELDS
+    ):
+        from database import review_store
+
+        overlay_ref = conversation_ref.parent.parent.collection('transcript_corrections').document(conversation_ref.id)
+        overlay = overlay_ref.get(transaction=transaction).to_dict()
+        corrections = review_store.require_doc(uid, overlay).get('source')
+        if not isinstance(corrections, list):
+            raise ValueError('Transcript correction overlay invalid')
+    conversation_updates = _snapshot_bound_projection_updates(
+        uid, conversation, extra_updates, transcript_corrections=corrections
+    )
     for key, value in lifecycle_updates.items():
         # A dotted key is a Firestore field path: ``client_processing.title``
         # writes inside the projection without going through the bind.
@@ -769,6 +786,7 @@ def _claim_finalization_job_txn(
             # A lease epoch fences a worker that resumes after another worker
             # has reclaimed its expired lease. Terminal writes must present it.
             'lease_epoch': lease_epoch,
+            'lease_counts_worker_attempt': count_worker_claim,
             **({'worker_claim_count': worker_claim_count} if count_worker_claim else {}),
             'reconcile_after_at': lease_expires_at,
             'updated_at': now,
@@ -1078,14 +1096,17 @@ def _mark_finalization_retryable_txn(
     failure_code: str,
     now: datetime,
     projection_collection: Any | None = None,
+    count_attempt: bool = True,
 ) -> bool:
+    if not count_attempt and failure_code != 'record_owner_contention':
+        raise ValueError('only route contention may defer without a processing attempt')
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
     job = snapshot.to_dict() or {}
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
-    attempt_count = int(job.get('attempt_count') or 0) + 1
+    attempt_count = int(job.get('attempt_count') or 0) + int(count_attempt)
     transaction.update(
         job_ref,
         {
@@ -1095,6 +1116,13 @@ def _mark_finalization_retryable_txn(
             'attempt_count': attempt_count,
             'reconcile_after_at': now + get_finalization_reconcile_stale_after(),
             'last_failure_code': failure_code,
+            # A contention-only delivery did no processing. Refund its durable
+            # worker slot too, or the next claim would count it as a killed worker.
+            **(
+                {'worker_claim_count': max(0, int(job.get('worker_claim_count') or 0) - 1)}
+                if not count_attempt and job.get('lease_counts_worker_attempt')
+                else {}
+            ),
         },
     )
     _record_projection_delta(transaction, projection_collection, job, leased=-1, queued=1)
@@ -1108,6 +1136,7 @@ def mark_finalization_retryable(
     failure_code: str = 'processing_failed',
     *,
     firestore_client: Any = None,
+    count_attempt: bool = True,
 ) -> bool:
     client = _client(firestore_client)
     transaction = client.transaction()
@@ -1120,6 +1149,7 @@ def mark_finalization_retryable(
         failure_code,
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        count_attempt,
     )
 
 
@@ -1177,6 +1207,12 @@ def _mark_finalization_dead_letter_txn(
         # collection inside this transaction.
         conversation_updates = dead_letter_conversation_updates(
             uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
+        )
+    if conversation_updates is not None and isinstance(uid, str) and isinstance(conversation, Mapping):
+        from database.processing_attention import create_in_transaction
+
+        create_in_transaction(
+            transaction, uid, conversation_ref, dict(conversation), conversation_updates, failure_code, now
         )
     transaction.update(
         job_ref,

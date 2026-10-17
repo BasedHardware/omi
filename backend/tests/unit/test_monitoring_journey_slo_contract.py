@@ -86,10 +86,11 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
     if chat_page:
         # Long windows only, counted on explicit failure|stale terminals.
         # Accepted minus success invents misses when Cloud Run series churn.
-        assert [float(value) for value in thresholds] == [
-            pytest.approx((1 - target) * 14.4),
-            pytest.approx((1 - target) * 6),
-        ]
+        assert len(thresholds) == 2
+        assert all(
+            math.isclose(float(value), (1 - target) * multiplier, rel_tol=1e-10)
+            for value, multiplier in zip(thresholds, (14.4, 6))
+        )
         assert '[5m]' not in expr and '[30m]' not in expr and '[10m]' not in expr
         assert ' - ' not in expr
         assert 'outcome=~"failure|stale"' in expr
@@ -152,7 +153,7 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
         assert rule['for'] == {'critical': '2m', 'warning': '15m'}[severity]
     assert rule['keep_firing_for'] == '0s'
     assert rule['noDataState'] == 'NoData'  # absent SLI must never resolve healthy
-    assert rule['execErrState'] == 'Error'
+    assert rule['execErrState'] == 'KeepLast'  # datasource canary owns query-path outages
     assert rule['labels']['severity'] == severity
     assert rule['labels']['alert_identity'] == uid
     assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'

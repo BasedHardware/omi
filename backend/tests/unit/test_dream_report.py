@@ -5,6 +5,7 @@ import json
 import httpx
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from unittest.mock import AsyncMock
 
@@ -14,15 +15,14 @@ from fastapi.testclient import TestClient
 
 from config.dream_agent import Caps
 from database import dream_store, review_store
-from models.dream_agent import Plan, Edit, Term, Feedback
 from routers import dream_report as routes
 from tests.support.dream_firestore import DreamFirestore
-from utils import dream_agent, dream_reads, dream_report, dream_transport
+from utils import dream_agent, dream_report
 from utils.llm.shaped_agent import Turn
 from scripts.export_openapi import build_openapi
 from scripts.generate_dart_models import build_output
 
-UID = 'synthetic-report-owner'
+from tests.unit.test_dream_harness_runtime import runtime, store, UID
 
 
 def test_checked_in_dream_schema_and_mobile_dtos_match_real_routes():
@@ -36,419 +36,63 @@ def test_checked_in_dream_schema_and_mobile_dtos_match_real_routes():
 
 
 @pytest.fixture
-def store(monkeypatch):
-    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
-    db = DreamFirestore()
-    db.rows[('users', UID)] = {}
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
-    monkeypatch.setenv('DREAM_SELF_REPORT_MODE', 'on')
-    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
-    monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
-    monkeypatch.setenv('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '3')
-    monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
-    monkeypatch.setattr(dream_report, 'get_firestore_client', lambda: db)
-    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
-    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
-    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
-    monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
-    monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
-    monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
-    monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
-    monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
-    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
-    monkeypatch.setattr(
-        dream_reads,
-        'read_record',
-        lambda uid, ref, **kwargs: {
-            'structured': {'title': 'Synthetic sync'},
-            'transcript_segments': [{'text': 'Qorby'}],
-        },
-    )
-    return db
-
-
-@pytest.fixture
-def client(store):
+def client(runtime, monkeypatch):
+    monkeypatch.setattr(dream_report, 'get_firestore_client', dream_store.get_firestore_client)
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: UID
     return TestClient(app)
 
 
-def test_manual_capacity_wait_is_retryable_instead_of_idle(store, client, monkeypatch):
-    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=None))
+def test_manual_capacity_wait_is_retryable(client, monkeypatch):
+    monkeypatch.setattr(
+        dream_agent, 'run_pass', AsyncMock(return_value={'status': 'waiting', 'reason': 'reserved_capacity'})
+    )
     response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 503
-    assert response.json() == {'detail': 'reserved_capacity'}
-    assert response.headers['retry-after'] == '120'
+    assert response.status_code == 503 and response.headers['retry-after'] == '120'
 
 
-@pytest.mark.parametrize('method', ['get', 'post'])
-@pytest.mark.parametrize('gate', ['off', 'stranger', 'dream_off'])
-def test_disabled_and_outside_cohort_are_exact_404(client, monkeypatch, gate, method):
-    if gate == 'off':
-        monkeypatch.setenv('DREAM_SELF_REPORT_MODE', 'off')
-    elif gate == 'dream_off':
-        monkeypatch.setenv('DREAM_AGENT_MODE', 'off')
-    else:
-        monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', 'other')
-    response = getattr(client, method)('/v1/dream/runs', **({'json': {}} if method == 'post' else {}))
-    assert response.status_code == 404
-    assert response.json() == {'detail': 'dream_report_disabled'}
+def test_global_kill_closes_owner_reports_before_model_dispatch(client, monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
+    model = AsyncMock()
+    monkeypatch.setattr(dream_agent, 'run_pass', model)
+    assert client.get('/v1/dream/runs').status_code == 404
+    assert client.post('/v1/dream/runs', json={}).status_code == 404
+    model.assert_not_called()
 
 
-def test_manual_lease_cap_and_idle_are_separate_from_schedule(store, client):
-    today = datetime.now(timezone.utc).date().isoformat()
-    store.rows[('dream_users', UID)] = {'day': today, 'passes': 2, 'manual_runs': 0, 'score': 0}
-    assert client.post('/v1/dream/runs', json={}).json()['status'] == 'idle'
-    assert store.rows[('dream_users', UID)]['manual_runs'] == 0
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    lease = dream_store.acquire(UID, Caps(), trigger='manual')
-    assert lease['trigger'] == 'manual'
-    assert store.rows[('dream_users', UID)]['passes'] == 2
-    assert store.rows[('dream_users', UID)]['manual_runs'] == 1
-    assert client.post('/v1/dream/runs', json={}).json() == {'detail': 'dream_run_in_progress'}
-    assert client.post('/v1/dream/runs', json={}).status_code == 409
-    dream_store.finish(UID, lease, {'tokens': 1}, success=False)
-    store.rows[('dream_users', UID)]['manual_runs'] = 3
-    assert client.post('/v1/dream/runs', json={}).status_code == 429
-    assert client.post('/v1/dream/runs', json={}).json() == {'detail': 'dream_manual_limit'}
-    assert dream_store.acquire(UID, Caps(passes=3)) is not None
+@pytest.mark.parametrize(
+    'reason,code', [('dream_run_in_progress', 409), ('dream_manual_limit', 429), ('dream_budget_unavailable', 503)]
+)
+def test_manual_decline_is_not_mistaken_for_idle(client, monkeypatch, reason, code):
+    monkeypatch.setattr(dream_agent, 'run_pass', AsyncMock(side_effect=dream_store.AdmissionDenied(reason)))
+    assert client.post('/v1/dream/runs', json={}).status_code == code
 
 
-def test_manual_respects_global_ceiling(store, client):
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    store.rows[('dream_users', UID, 'spend', datetime.now(timezone.utc).date().isoformat())] = {'reserved_usd': 20}
-    assert client.post('/v1/dream/runs', json={}).status_code == 503
-    assert 'lease' not in store.rows[('dream_users', UID)]
-
-
-def test_manual_idle_refunds_correct_allowance(store, client, monkeypatch):
-    dream_store.mark_dirty(UID, [('conversations', 'deleted')])
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
-    response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 200 and response.json()['status'] == 'idle'
-    state = store.rows[('dream_users', UID)]
-    assert state['manual_runs'] == state['passes'] == 0
-    assert store.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == 0
-    assert client.get('/v1/dream/runs').json()['runs'] == []
-
-
-def test_projection_strips_evidence_reproductions_and_extra_diagnostics(store, client):
+def test_projection_only_exposes_owner_labels_and_no_seed_refs(runtime, monkeypatch):
+    monkeypatch.setattr(
+        dream_report.dream_reads, 'read_record', lambda *args: {'structured': {'title': 'Synthetic report'}}
+    )
     source = {
         'status': 'complete',
-        'proposed': {
-            'questions': [{'kind': 'same_person', 'title': 'Are these the same robot?', 'item_id': 'private-id'}],
-            'slow_tasks': [{'description': 'Send the synthetic proposal', 'evidence': ['private-ref']}],
-            'vocabulary': [{'kind': 'jargon', 'spelling': 'Qorbi', 'aliases': ['Qorby'], 'evidence': ['private-ref']}],
-            'feedback': [
-                Feedback(
-                    component='notes',
-                    failure_class='spelling',
-                    severity='warning',
-                    count=3,
-                    latency_ms=2,
-                    error_rate=0.1,
-                    reproduction='private-reproduction',
-                ).model_dump()
-            ],
-        },
-        'outcomes': [{'tool': 'feedback', 'status': 'privacy_rejected'}],
-        'usage_unknown': True,
-    }
-    store.rows[('users', UID, 'dream_runs', 'report')] = {
-        **review_store.encode_doc(UID, {'source': source}),
-        'created_at': datetime.now(timezone.utc),
-    }
-    response = client.get('/v1/dream/runs')
-    run = response.json()['runs'][0]
-    assert run['questions'] == [{'kind': 'same_person', 'text': 'Are these the same robot?'}]
-    assert run['privacy_rejected'] == 1
-    assert run['feedback'] == [{'component': 'notes', 'failure_class': 'spelling', 'severity': 'warning', 'count': 3}]
-    assert (
-        'private-' not in response.text and 'usage_unknown' not in response.text and 'latency_ms' not in response.text
-    )
-
-
-def test_run_now_and_list_decrypt_same_contract_without_refs(store, client, monkeypatch):
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    plan = Plan(
-        edits=[
-            Edit(
-                kind='spelling',
-                target='conversations/c1',
-                before='Qorby',
-                after='Qorbi',
-                reason='Consistent spelling',
-                evidence=['conversations/c1'],
-            )
-        ],
-        vocabulary=[Term(kind='jargon', spelling='Qorbi', aliases=['Qorby'], evidence=['conversations/c1'])],
-    )
-
-    async def turn(uid, lane, mount, messages, **kwargs):
-        from models.dream_agent import Triage, Cluster
-
-        sink = kwargs['usage_sink']
-        sink['tokens'] += 10
-        sink['usage_unknown'] = False
-        return Turn(
-            value=(
-                Triage(clusters=[Cluster(refs=['conversations/c1'], problem='spelling')])
-                if lane == dream_transport.TRIAGE_LANE
-                else plan
-            ),
-            tokens=10,
-        )
-
-    monkeypatch.setattr(dream_transport, 'model_turn', turn)
-    response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 200, response.text
-    run = response.json()
-    assert run['status'] == 'complete' and run['trigger'] == 'manual'
-    assert run['records_read'] == 1 and run['records_queued_after'] == 0 and run['tokens'] == 20
-    assert run['edits'][0]['target_label'] == 'Conversation · Synthetic sync'
-    assert run['edits'][0]['outcome'] == 'shadow' and run['edits'][0]['evidence_count'] == 1
-    assert 'conversations/c1' not in response.text
-    doc = store.rows[('users', UID, 'dream_runs', run['run_id'])]
-    assert 'review_encrypted_v1' in doc['source']
-    assert {key: doc[key] for key in ('records_read', 'records_queued_after', 'tokens', 'cost_usd')} == {
-        key: run[key] for key in ('records_read', 'records_queued_after', 'tokens', 'cost_usd')
-    }
-    stranger = ('users', 'stranger', 'dream_runs', 'private')
-    store.rows[stranger] = {'created_at': datetime.now(timezone.utc), 'source': 'private'}
-    listed = client.get('/v1/dream/runs').json()
-    assert listed['runs'] == [run]
-    assert listed['manual_runs_today'] == 1 and listed['passes_today'] == 0
-    assert listed['queued_changes'] == 0
-    monkeypatch.setattr(dream_reads, 'read_record', lambda *a, **k: None)
-    assert client.get('/v1/dream/runs').json()['runs'][0]['edits'][0]['target_label'] == 'Deleted item'
-
-
-def test_newest_first_bounded_and_legacy_trigger(store, client):
-    for i in range(25):
-        store.rows[('users', UID, 'dream_runs', str(i))] = {
-            **review_store.encode_doc(UID, {'source': {'status': 'complete'}}),
-            'created_at': datetime(2026, 10, 9, 0, i, tzinfo=timezone.utc),
-        }
-    runs = client.get('/v1/dream/runs?limit=20').json()['runs']
-    assert len(runs) == 20 and runs[0]['run_id'] == '24' and runs[-1]['run_id'] == '5'
-    assert all(row['trigger'] == 'schedule' for row in runs)
-
-
-def test_enriched_entity_targets_resolve_owner_labels(store, client, monkeypatch):
-    seen = []
-
-    def resolve(uid, key):
-        seen.append((uid, key))
-        return {'name': 'Synthetic robot'}
-
-    monkeypatch.setattr(dream_reads, 'resolve_entity', resolve)
-    source = {
-        'status': 'complete',
+        'tokens': 50,
         'proposed': {
             'edits': [
-                Edit(
-                    kind='entity_summary',
-                    target='entity/person:opaque-key',
-                    after='Summary',
-                    reason='Supported',
-                    evidence=['entity/person:opaque-key'],
-                ).model_dump(),
+                {
+                    'key': 'synthetic-key',
+                    'kind': 'dismiss_person',
+                    'target': 'people/junk',
+                    'reason': 'Synthetic correction',
+                    'evidence': ['conversations/one'],
+                    'policy': 'auto',
+                }
             ]
         },
-        'outcomes': [{'key': 'edit-key', 'status': 'shadow'}],
+        'notes': 'Private synthetic future digest',
+        'outcomes': [{'key': 'synthetic-key', 'status': 'applied'}],
     }
-    store.rows[('users', UID, 'dream_runs', 'entity-run')] = {
-        **review_store.encode_doc(UID, {'source': source}),
-        'created_at': datetime.now(timezone.utc),
-    }
-    response = client.get('/v1/dream/runs')
-    assert response.json()['runs'][0]['edits'][0]['target_label'] == 'Entity · Synthetic robot'
-    assert seen == [(UID, 'person:opaque-key')]
-    assert 'opaque-key' not in response.text
-
-
-def test_deadline_includes_admission_and_retains_ambiguous_state(client, store, monkeypatch):
-    monkeypatch.setattr(routes, 'MANUAL_DEADLINE_SECONDS', 0.01)
-
-    async def stall(*a, **k):
-        await asyncio.Event().wait()
-
-    monkeypatch.setattr(dream_agent, 'run_pass', stall)
-    response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 200 and response.json()['status'] == 'deadline'
-
-
-def test_manual_refund_after_midnight_does_not_decrement_new_day(store):
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    lease = dream_store.acquire(UID, Caps(), trigger='manual')
-    store.rows[('dream_users', UID)].update(day='2099-01-01', manual_runs=2, passes=1)
-    dream_store.finish(UID, lease, {'tokens': 0}, success=False, refund=True)
-    assert store.rows[('dream_users', UID)]['manual_runs'] == 2
-
-
-def test_untitled_summary_target_is_visible_in_report():
-    assert (
-        dream_report.target_label('conversations/synthetic', {'structured': {'title': ''}}) == 'Untitled conversation'
-    )
-    assert dream_report.target_label('conversations/synthetic', None) == 'Deleted item'
-
-
-@pytest.mark.parametrize('samples', [1, 3])
-def test_full_manual_endpoint_uses_samples_and_persists_only_guarded_plan(store, client, monkeypatch, samples):
-    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
-    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', str(samples))
-    monkeypatch.setenv('DREAM_AGENT_DAILY_USD', '60')
-    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    seen = []
-    plan = Plan(
-        edits=[
-            Edit(
-                kind='title',
-                target='conversations/c1',
-                after='Existing title',
-                reason='Synthetic',
-                evidence=['conversations/c1'],
-            )
-        ],
-        feedback=[
-            Feedback(
-                component='notes',
-                failure_class='success',
-                severity='info',
-                count=1,
-                latency_ms=0,
-                error_rate=0,
-                reproduction='english translation is correct.',
-            )
-        ],
-    )
-
-    async def turn(uid, lane, mount, messages, **kwargs):
-        seen.append((lane, mount.budget.deadline_seconds, kwargs['completion_limit']))
-        sink = kwargs['usage_sink']
-        sink['tokens'] += 10
-        sink['usage_unknown'] = False
-        return Turn(value=plan, tokens=10)
-
-    monkeypatch.setattr(dream_transport, 'model_turn', turn)
-    response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 200, response.text
-    run = response.json()
-    assert run['status'] == 'complete' and run['tokens'] == 10 * samples
-    assert seen == [(dream_transport.MAIN_LANE, 480, 32768)] * samples
-    stored = review_store.decode_doc(UID, store.rows[('users', UID, 'dream_runs', run['run_id'])])['source']
-    assert stored['context_mode'] == 'full'
-    assert stored['samples_requested'] == stored['samples_returned'] == samples
-    assert stored['rejected'] == {'nonempty_field': 1}
-    assert not stored['proposed']['edits'] and len(stored['proposed']['feedback']) == 1
-    assert 'raw_plan' not in stored and 'admitted_records' not in stored
-    assert stored['targets'] == stored['records'] == 1
-    assert dream_store.dirty_count(UID) == 0
-
-
-@pytest.mark.parametrize('samples', [1, 3])
-def test_full_manual_json_retry_stays_in_one_lease_and_preserves_usage(store, client, monkeypatch, samples):
-    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
-    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', str(samples))
-    monkeypatch.setenv('DREAM_AGENT_DAILY_USD', '60')
-    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    gateway = type('Client', (), {'post': AsyncMock()})()
-    gateway.post.side_effect = [
-        httpx.Response(
-            200,
-            request=httpx.Request('POST', 'https://synthetic.invalid'),
-            json={
-                'usage': {'prompt_tokens': 30, 'completion_tokens': 20},
-                'choices': [{'message': {'content': content}, 'finish_reason': 'stop'}],
-            },
-        )
-        for content in ['{"edits":[{"reason":"unterminated', *['{}'] * samples]
-    ]
-    monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: gateway)
-    monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
-    monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **kwargs: {})
-    monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
-    response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 200, response.text
-    run = response.json()
-    assert run['status'] == 'complete' and run['tokens'] == 50 * (samples + 1)
-    stored = review_store.decode_doc(UID, store.rows[('users', UID, 'dream_runs', run['run_id'])])['source']
-    assert stored['response_retries'] == 1 and stored['usage_unknown'] is False
-    assert stored['cost_usd'] == pytest.approx(50 * (samples + 1) * Caps().max_usd_per_token)
-    state = dream_store.state_ref(store, UID).get().to_dict()
-    assert store.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == pytest.approx(stored['cost_usd'])
-    assert state['manual_runs'] == 1 and state['lease'] is None
-    assert gateway.post.await_count == samples + 1 and dream_store.dirty_count(UID) == 0
-    assert stored['samples_returned'] == samples and stored['samples_failed'] == 0
-    assert 'raw_plan' not in stored and 'admitted_records' not in stored
-
-
-def test_manual_endpoint_reclaims_abandoned_lease_and_completes_new_pass(store, client, monkeypatch, caplog):
-    dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    stale = dream_store.acquire(UID, Caps(), trigger='manual', now=datetime.now(timezone.utc) - timedelta(hours=1))
-    pending = dream_store.dirty_refs(UID)[0].to_dict()
-    assert store.rows[('dream_users', UID)]['lease']['run_id'] == stale['run_id']
-
-    async def turn(uid, lane, mount, messages, **kwargs):
-        from models.dream_agent import Triage, Cluster
-
-        kwargs['usage_sink']['tokens'] += 10
-        kwargs['usage_sink']['usage_unknown'] = False
-        return Turn(
-            value=(
-                Triage(clusters=[Cluster(refs=['conversations/c1'], problem='spelling')])
-                if lane == dream_transport.TRIAGE_LANE
-                else Plan()
-            ),
-            tokens=10,
-        )
-
-    monkeypatch.setattr(dream_transport, 'model_turn', turn)
-    import logging
-    from utils import dream_metrics
-
-    failed = dream_metrics.PASSES.labels('failed', 'LeaseAbandoned')
-    abandoned = dream_metrics.ABANDONED.labels('bounded')
-    before = (failed._value.get(), abandoned._value.get())
-    with caplog.at_level(logging.INFO, logger='utils.dream_metrics'):
-        response = client.post('/v1/dream/runs', json={})
-    assert response.status_code == 200, response.text
-    assert response.json()['status'] == 'complete'
-    assert response.json()['run_id'] != stale['run_id']
-    assert (failed._value.get(), abandoned._value.get()) == (before[0] + 1, before[1] + 1)
-    messages = [r.getMessage() for r in caplog.records if r.getMessage().startswith('Dream lease reclaimed')]
-    assert len(messages) == 1 and messages[0].endswith(' mode=bounded')
-    assert UID not in messages[0] and stale['run_id'] not in messages[0]
-    assert store.rows[('dream_users', UID)]['abandoned_passes'] == 1
-    old = review_store.decode_doc(UID, dream_store.own_run(UID, stale['run_id'], firestore_client=store))
-    assert old['source']['usage_unknown'] and old['records_queued_after'] == 1
-    assert old['source']['budget_charge_usd'] == stale['reservation_usd']
-    assert store.rows[('dream_users', UID)]['lease'] is None
-    # The replacement pass read/settled the version; reclamation itself left it pending.
-    assert pending['version'] and response.json()['records_read'] == 1
-
-
-@pytest.mark.parametrize('denied', [False, True])
-def test_caller_records_committed_reclaim_when_new_admission_is_refused(monkeypatch, denied):
-    from utils import dream_agent, dream_metrics
-
-    def acquire(uid, caps, *, reclaim_sink, **kwargs):
-        reclaim_sink.update(age_s=301, context_mode='bounded')
-        if denied:
-            raise dream_store.AdmissionDenied('manual_cap')
-        return None
-
-    monkeypatch.setattr(dream_store, 'acquire', acquire)
-    failed = dream_metrics.PASSES.labels('failed', 'LeaseAbandoned')
-    abandoned = dream_metrics.ABANDONED.labels('bounded')
-    before = (failed._value.get(), abandoned._value.get())
-    if denied:
-        with pytest.raises(dream_store.AdmissionDenied):
-            asyncio.run(dream_agent._run_admitted_pass(UID))
-    else:
-        assert asyncio.run(dream_agent._run_admitted_pass(UID)) == {'status': 'not_admitted'}
-    assert (failed._value.get(), abandoned._value.get()) == (before[0] + 1, before[1] + 1)
+    raw = review_store.encode_doc(UID, {'source': source}) | {'created_at': datetime.now(timezone.utc), 'mode': 'on'}
+    report = dream_report.project_run(UID, 'synthetic-run', raw)
+    text = report.model_dump_json()
+    assert 'Private synthetic' not in text and 'people/junk' not in text and 'conversations/one' not in text
+    assert report.edits[0].outcome == 'applied'

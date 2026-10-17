@@ -108,6 +108,8 @@ def create_canonical_goal(
 def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalNotFoundError):
         raise HTTPException(status_code=404, detail='Goal not found') from exc
+    if isinstance(exc, goals_db.GoalValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, goals_db.GoalConflictError):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     raise exc
@@ -226,7 +228,11 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
 
-    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    try:
+        updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
 
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")

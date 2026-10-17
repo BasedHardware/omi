@@ -11,6 +11,7 @@ from pydantic.json_schema import SkipJsonSchema
 from models.capture_window_proof import CaptureWindowProof
 from models.other import Person
 from models.speaker_label_provenance import project_source
+from utils.model_text import format_elapsed
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -101,6 +102,9 @@ class SpeakerIdentityStatus(str, Enum):
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = Field(
+        default=None, description='Immutable captured text when text includes active corrections.'
+    )
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
@@ -170,6 +174,8 @@ class TranscriptSegment(BaseModel):
         # the return type inferred so Pydantic retains the public field schema.
         # Omit absent internal markers to keep ordinary v1 payloads unchanged.
         data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
         data['speaker_label_source'] = project_source(data)
         for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
             value = getattr(self, key)
@@ -335,7 +341,9 @@ class TranscriptSegment(BaseModel):
         self.speaker_id_scope = scope
         self._speaker_id_synthesized = False
 
-    def get_timestamp_string(self) -> str:
+    def get_timestamp_string(self, *, elapsed: bool = False) -> str:
+        if elapsed:
+            return f'{format_elapsed(self.start)} - {format_elapsed(self.end)}'
         start_duration = timedelta(seconds=int(self.start))
         end_duration = timedelta(seconds=int(self.end))
         return f'{str(start_duration).split(".")[0]} - {str(end_duration).split(".")[0]}'
@@ -346,6 +354,7 @@ class TranscriptSegment(BaseModel):
         include_timestamps: bool = False,
         user_name: Optional[str] = None,
         people: Optional[List[Person]] = None,
+        elapsed_timestamps: bool = False,
     ) -> str:
         if not user_name:
             user_name = 'User'
@@ -354,13 +363,17 @@ class TranscriptSegment(BaseModel):
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
-            timestamp_str = f'[{segment.get_timestamp_string()}] ' if include_timestamps else ''
+            timestamp_str = (
+                f'[{segment.get_timestamp_string(elapsed=elapsed_timestamps)}] ' if include_timestamps else ''
+            )
             speaker_name = user_name
             if not segment.is_user:
                 if segment.person_id and segment.person_id in people_map:
                     speaker_name = people_map[segment.person_id]
                 else:
-                    speaker_name = f'Speaker {segment.speaker_id}'
+                    speaker_name = (
+                        f'Speaker {segment.speaker_id}' if segment.speaker_id is not None else 'Unknown speaker'
+                    )
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 
         return transcript.strip()
