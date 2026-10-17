@@ -118,7 +118,6 @@ describe("omi tool manifest", () => {
       "request_permission",
       "get_product_kb",
       "web_search",
-      "screenshot",
       "search_contacts",
       "list_message_chats",
       "read_message_history",
@@ -129,11 +128,22 @@ describe("omi tool manifest", () => {
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
 
-  it("keeps the realtime screenshot executor capability-registered", () => {
-    const screenshot = toolsForAdapter("pi-mono").find((tool) => tool.name === "screenshot");
+  it("keeps the realtime screenshot executor capability-registered for realtime voice only", () => {
+    const screenshot = toolsForAdapter("pi-mono", { surfaceKind: "realtime_voice" }).find(
+      (tool) => tool.name === "screenshot",
+    );
 
     expect(screenshot?.surfaces).toEqual(["realtime_voice"]);
     expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
+
+    // The pi-mono adapter no longer advertises screenshot outside a realtime
+    // voice run: typed-chat and push-to-talk batch runs (main_chat,
+    // floating_chat) get a guaranteed-failure tool otherwise, since the Swift
+    // executor rejects it as unknown_realtime_invocation outside realtime
+    // voice.
+    expect(toolNamesForAdapter("pi-mono", { surfaceKind: "main_chat" })).not.toContain("screenshot");
+    expect(toolNamesForAdapter("pi-mono", { surfaceKind: "floating_chat" })).not.toContain("screenshot");
+    expect(toolNamesForAdapter("pi-mono", { surfaceKind: "realtime_voice" })).toContain("screenshot");
   });
 
   it("keeps think_deeper on exactly two thinking levels with a normal default", () => {

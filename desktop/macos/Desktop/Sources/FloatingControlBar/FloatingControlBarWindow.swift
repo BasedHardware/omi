@@ -3175,8 +3175,7 @@ class FloatingControlBarManager {
   private var notificationPresentationCallbacks: [UUID: NotificationPresentationCallbacks] = [:]
   private var activeQueryGeneration: Int = 0
   private var selectedFloatingModel: String {
-    let selected = ShortcutSettings.shared.selectedModel
-    return selected.isEmpty ? ModelQoS.Claude.defaultSelection : selected
+    AIProvider.resolveQuickChatModel()
   }
   /// A query waiting for the current reply to stop. One bound to a hands-free request is
   /// handed out only while that request's account is still current.
