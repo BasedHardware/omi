@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-from typing import List
+from typing import Awaitable, Callable, List
 import os
 import time
 
@@ -90,10 +90,74 @@ class ExternalIntegrationFanoutError(RuntimeError):
     """At least one durable finalization webhook did not acknowledge delivery."""
 
 
+class _SupersededDeliveryError(Exception):
+    """A realtime audio send was superseded mid-flight by a newer call.
+
+    Control-flow signal only (latest-wins re-check after acquiring the send
+    semaphore): the delivery is intentionally abandoned, so callers must
+    record neither a breaker failure nor a webhook-health failure.
+    """
+
+
 # A retry only helps when the destination may answer differently next time.
 # Webhook health tracking (`record_app_webhook_failure`) owns the permanent
 # case: it warns the app owner and auto-disables the webhook after 72h.
 _RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
+
+
+# One extra dial for transport-level failures (connect reset, timeout) in the
+# realtime lanes: they post on every segment, so a single blip otherwise drops
+# the delivery, ticks the per-URL circuit breaker, and eventually opens the
+# breaker on endpoints that are merely flaky. Deliberately a single short
+# delay — realtime fan-out values freshness over delivery guarantees (the
+# conversation-created durable lane retries at the job level, and the
+# developer-webhook lane owns the long 1/5/30s schedule).
+_TRANSPORT_RETRY_DELAYS = (0.5,)
+
+
+def _transport_error_str(exc: BaseException) -> str:
+    """Bounded, typed token for a failed realtime delivery.
+
+    Transport exceptions stringify empty surprisingly often (every
+    ``httpx.ConnectError`` raised without a message), which produced the
+    production sensor line ``App integration error: `` — an ERROR record with
+    neither the app nor the failure kind, impossible to attribute or alert on.
+    Always carry the exception type; append the message only when it is
+    non-empty, collapsed to one line and capped so log lines and webhook-health
+    rows stay bounded.
+    """
+    message = ' '.join(str(exc).split())
+    token = type(exc).__name__
+    if message:
+        token = f'{token}: {message[:120]}'
+    return token
+
+
+async def _send_with_transport_retry(app_id: str, send_once: Callable[[], Awaitable[httpx.Response]]) -> httpx.Response:
+    """Run one realtime webhook POST, retrying only transport faults.
+
+    A transport error is a property of the dial, not of the payload: the same
+    POST can succeed on the next attempt, so the realtime lanes spend one
+    short retry before the failure is recorded. HTTP responses are returned
+    immediately — a non-2xx answer is never retried here (a repeat post of
+    the same payload can only reproduce it) and the callers' status handling
+    owns it, along with the breaker and webhook-health bookkeeping.
+    """
+    for attempt in range(len(_TRANSPORT_RETRY_DELAYS) + 1):
+        try:
+            return await send_once()
+        except (httpx.TransportError, TimeoutError) as exc:
+            if attempt >= len(_TRANSPORT_RETRY_DELAYS):
+                raise
+            logger.warning(
+                'App integration transport retry app=%s error=%s attempt=%d/%d',
+                app_id,
+                _transport_error_str(exc),
+                attempt + 1,
+                len(_TRANSPORT_RETRY_DELAYS) + 1,
+            )
+            await asyncio.sleep(_TRANSPORT_RETRY_DELAYS[attempt])
+    raise AssertionError('unreachable: retry loop must return or raise')
 
 
 def _delivery_failure_is_retryable(status_code: int) -> bool:
@@ -903,17 +967,24 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         try:
             headers = dict(pin_kwargs['headers'])
             headers['Content-Type'] = 'application/octet-stream'
-            async with get_webhook_semaphore():
-                if not latest_wins_check(uid, version):
-                    return  # Check again after acquiring semaphore
-                client = get_webhook_client()
-                response = await client.post(
-                    pinned_url,
-                    content=bytes(data),
-                    headers=headers,
-                    extensions=pin_kwargs['extensions'],
-                    follow_redirects=False,
-                )
+
+            async def send_once() -> httpx.Response:
+                async with get_webhook_semaphore():
+                    if not latest_wins_check(uid, version):
+                        # Newer call superseded this one; the outer handler
+                        # sees the typed supersession and records nothing.
+                        raise _SupersededDeliveryError()
+
+                    client = get_webhook_client()
+                    return await client.post(
+                        pinned_url,
+                        content=bytes(data),
+                        headers=headers,
+                        extensions=pin_kwargs['extensions'],
+                        follow_redirects=False,
+                    )
+
+            response = await _send_with_transport_retry(app.id, send_once)
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_app_webhook_success, app.id)
@@ -926,12 +997,17 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                 )
                 await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
                 logger.warning(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
+        except _SupersededDeliveryError:
+            # Latest-wins: a newer audio call replaced this one mid-flight.
+            # Abandoning the send is the intended outcome, not a delivery
+            # fault — record nothing (breaker, health, journey untouched).
+            return
         except Exception as e:
             cb.record_failure()
-            error_str = type(e).__name__
+            error_str = _transport_error_str(e)
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
             await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.error(f"Plugin integration error: {e}")
+            logger.error('Plugin integration error app=%s error=%s', app.id, _transport_error_str(e))
 
     chunk_size = 8
     for i in range(0, len(filtered_apps), chunk_size):
@@ -1013,15 +1089,22 @@ async def _async_trigger_realtime_integrations(
             return
 
         try:
-            async with get_webhook_semaphore():
-                client = get_webhook_client()
-                response = await client.post(
-                    pinned_url,
-                    json={"session_id": uid, "segments": [transcript_segment_for_client(s) for s in segments]},
-                    headers=pin_kwargs['headers'],
-                    extensions=pin_kwargs['extensions'],
-                    follow_redirects=False,
-                )
+
+            async def send_once() -> httpx.Response:
+                # Semaphore held per attempt, not across the retry delay:
+                # the bound must not serialize the whole fan-out behind one
+                # destination's connect blip.
+                async with get_webhook_semaphore():
+                    client = get_webhook_client()
+                    return await client.post(
+                        pinned_url,
+                        json={"session_id": uid, "segments": [transcript_segment_for_client(s) for s in segments]},
+                        headers=pin_kwargs['headers'],
+                        extensions=pin_kwargs['extensions'],
+                        follow_redirects=False,
+                    )
+
+            response = await _send_with_transport_retry(app.id, send_once)
             if response.status_code < 200 or response.status_code >= 300:
                 journey_attempt.fail('upstream_rejected')
                 cb.record_failure()
@@ -1084,10 +1167,10 @@ async def _async_trigger_realtime_integrations(
         except Exception as e:
             journey_attempt.fail('upstream_timeout' if isinstance(e, TimeoutError) else 'provider_error')
             cb.record_failure()
-            error_str = type(e).__name__
+            error_str = _transport_error_str(e)
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
             await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.error(f"App integration error: {e}")
+            logger.error('App integration error app=%s error=%s', app.id, _transport_error_str(e))
             return
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="realtime_integrations", max_concurrency=10)

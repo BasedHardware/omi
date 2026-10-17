@@ -4942,3 +4942,27 @@ so a recovered endpoint stays enabled; the breaker keeps bounding network waste.
 Disable latching is unchanged in kind — only its convergence is new — and the
 skip INFO line (`delivery skipped, circuit breaker open`) replaces the former
 silent outer skip.
+
+### Realtime app-integration webhook transport resilience
+
+The app (third-party developer) realtime lanes — transcript segments
+(`trigger_realtime_integrations`) and audio bytes
+(`trigger_realtime_audio_bytes`) — differ from the developer-webhook lanes
+above: they fire per segment/chunk on the live path, so they deliberately do
+not walk a long retry schedule. Since 2026-10-17 each lane spends exactly one
+short in-place retry (0.5s) on transport-level faults only
+(`httpx.TransportError`, `TimeoutError`): a dial fault is a property of the
+connection, not of the payload, so one connect blip no longer drops the
+delivery or ticks the per-URL breaker. HTTP answers are never retried there
+(a repeat post of the same payload can only reproduce the status); the
+callers' existing handling — breaker tick, webhook-health ladder, journey
+outcome — sees the response once, and the send semaphore is acquired per
+attempt so a retry delay cannot hold the global webhook concurrency bound.
+The audio lane's latest-wins supersession re-check moved inside the send, so a
+superseded send is a typed silent abandon (no breaker or health bookkeeping)
+and a retry can never duplicate a send the newer call replaced. Every realtime
+failure log is typed and attributed — `App integration error app=<id>
+error=<Type>: <bounded message>` (previously `App integration error: ` with an
+empty exception string for message-less `httpx.ConnectError`, unattributable
+and unalertable) — and the same bounded token feeds `record_app_webhook_failure`
+so webhook-health rows carry the failure kind too.

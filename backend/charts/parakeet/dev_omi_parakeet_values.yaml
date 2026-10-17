@@ -83,6 +83,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: PARAKEET_PACKING_ENABLED
+    value: "false"
+  - name: PARAKEET_EXPLICIT_CUDA_GRAPHS
+    value: "false"
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:

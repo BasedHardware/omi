@@ -643,7 +643,10 @@ class TestAsyncTriggerRealtimeAudioBytes:
             # Should not raise
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
 
-        assert call_count == 2
+        # app1's TimeoutException is a dial fault, so it gets one bounded
+        # transport retry (2 dials); app2 posted once. Either way app1's
+        # failure must not prevent app2 from receiving audio.
+        assert call_count == 3
 
     @pytest.mark.asyncio
     async def test_no_threading_used(self):
