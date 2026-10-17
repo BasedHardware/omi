@@ -1170,3 +1170,70 @@ def test_multipart_anonymous_gaps_are_distinct_while_pyannote_voice_is_shared(la
     assert len(gaps) == 2 and len({s['speaker_id'] for s in gaps}) == 2
     assert len({s['speaker_id'] for s in voices}) == 1
     assert not {s['speaker_id'] for s in voices} & {s['speaker_id'] for s in gaps}
+
+
+def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatch):
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims.redis_db, 'r', redis)
+    script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
+    monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
+    batch = lane.seed()
+    lane.finish(batch)
+    entered, release = threading.Event(), threading.Event()
+    load = lane.projector.load_result
+
+    def paused_load(*args):
+        entered.set()
+        assert release.wait(20)
+        return load(*args)
+
+    monkeypatch.setattr(lane.projector, 'load_result', paused_load)
+    # Independent instances sharing only the real emulator and Redis boundary.
+    projectors = [
+        lane.Projector(lane.store, paused_load, publish=lane.projector.publish, clock=lane.clock) for _ in range(3)
+    ]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        first = pool.submit(projectors[0].sweep)
+        assert entered.wait(20)
+        try:
+            others = [pool.submit(projector.sweep) for projector in projectors[1:]]
+            for future in others:
+                assert future.result(timeout=20) == {'completed': 0, 'waiting': 1, 'blocked': 0, 'error': 0}
+        finally:
+            release.set()
+        assert first.result(timeout=30) == {'completed': 1, 'waiting': 0, 'blocked': 0, 'error': 0}
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
+    assert len(lane.loads) == len(lane.tasks) == len(lane.published) == 1
+    assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
+
+
+def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    batch = lane.seed()
+    lane.finish(batch, outcome='silence')
+    barrier = threading.Barrier(3)
+    check = lane.projector.store.check
+    seen = set()
+    lock = threading.Lock()
+
+    def synchronized_check(session):
+        check(session)
+        with lock:
+            first_check = threading.get_ident() not in seen
+            seen.add(threading.get_ident())
+        if first_check:
+            barrier.wait(timeout=20)
+
+    monkeypatch.setattr(lane.projector.store, 'check', synchronized_check)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(lane.projector.project, [batch.ids[0]] * 3))
+    assert all(result['outcome'] == 'expected_silence' for result in results)
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
+    assert not active_rows(lane) and not lane.loads and not lane.tasks

@@ -198,3 +198,58 @@ def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, m
         store.mark_enrichment('segment', binding, 0, 'c', 'en')
     assert not client.transactions[0].sets
     session.write_receipt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'flag', ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED']
+)
+def test_batch_contention_control_retries_projection_transactions(monkeypatch, flag):
+    from database import firestore_transaction_retry
+
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    monkeypatch.setenv(flag, 'true')
+    actual = firestore_transaction_retry.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        firestore_transaction_retry,
+        'run_with_transaction_contention_retry',
+        lambda *args, **kwargs: actual(*args, **kwargs, sleep=lambda _: None),
+    )
+    client = Mock()
+    client.transaction.side_effect = [object(), object()]
+    operation = Mock(side_effect=[Aborted('synthetic'), 'persisted'])
+    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert operation.call_count == 2
+
+
+def test_owner_claim_is_shared_token_fenced_and_expires(monkeypatch):
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims.redis_db, 'r', redis)
+    script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
+    monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
+    with claims.projection_claim('synthetic', 'owner') as first:
+        assert first
+        with claims.projection_claim('synthetic', 'owner') as second:
+            assert not second
+        # A timed-out caller must never release the replacement's token.
+        redis.set('batch_projection:synthetic:owner', 'replacement', ex=300)
+    assert redis.get('batch_projection:synthetic:owner') == b'replacement'
+    redis.delete('batch_projection:synthetic:owner')
+    with pytest.raises(RuntimeError):
+        with claims.projection_claim('synthetic', 'owner') as acquired:
+            assert acquired
+            raise RuntimeError('synthetic interruption')
+    assert not redis.exists('batch_projection:synthetic:owner')
+
+
+def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = Mock()
+    redis.set.side_effect = ConnectionError('synthetic')
+    monkeypatch.setattr(claims.redis_db, 'r', redis)
+    with claims.projection_claim('synthetic', 'owner') as acquired:
+        assert acquired

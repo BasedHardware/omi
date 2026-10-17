@@ -9,6 +9,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from config.batch_pipeline import projection_contention_enabled
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
@@ -155,7 +156,10 @@ class ProjectionStore:
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
+        if (
+            not projection_contention_enabled()
+            and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
+        ):
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,

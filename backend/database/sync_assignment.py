@@ -36,11 +36,14 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
     return encoded
 
 
-def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str]):
+def run_sync_assignment(client: Any, assign: Any, full_ids: frozenset[str], *, retry_contention: bool = False):
     from database._client import run_transactional
     from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-    if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
+    if (
+        not retry_contention
+        and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
+    ):
         return run_transactional(client, assign, full_ids=full_ids)
     return run_with_transaction_contention_retry(
         client.transaction,

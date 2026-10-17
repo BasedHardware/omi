@@ -3898,6 +3898,7 @@ def assign_sync_conversation(
     before_assign: Callable[[Any], None] | None = None,
     validate_plan: Callable[[Any, dict], None] | None = None,
     after_assign: Callable[[Any, tuple], None] | None = None,
+    retry_contention: bool = False,
 ):
     """Atomically choose, create or append a sync conversation across workers."""
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
@@ -3959,7 +3960,8 @@ def assign_sync_conversation(
         return planned
 
     result = run_with_size_limit_backstop(
-        lambda full_ids: run_sync_assignment(client, assign, full_ids), lambda: attempted.get('canonical')
+        lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+        lambda: attempted.get('canonical'),
     )
     invalidate_people_stats_cache(uid)
     conversation = result[0]
