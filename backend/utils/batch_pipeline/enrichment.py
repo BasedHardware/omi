@@ -8,6 +8,7 @@ from google.cloud import firestore
 from database._client import get_firestore_client
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from utils.sync import reprocess
+from utils.sync.pipeline import SyncConversationPersistenceFenced
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,6 @@ def run_enrichment(
     def enrich(uid: str, conversation_id: str, language: str):
         if discard_blocked(document_id):
             return
-        from utils.sync.pipeline import SyncConversationPersistenceFenced
 
         callback = process
         if callback is None:

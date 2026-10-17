@@ -221,6 +221,9 @@ def test_fenced_enrichment_absorbs_lifecycle_fence_and_settles(monkeypatch, capl
         _reprocess_conversation_after_update=callback, SyncConversationPersistenceFenced=fence
     )
     monkeypatch.setitem(sys.modules, 'utils.sync.pipeline', fake_pipeline)
+    # The fence is imported at module scope; patch the bound name so the
+    # except-clause matches the fake class identity.
+    monkeypatch.setattr(enrichment, 'SyncConversationPersistenceFenced', fence)
     monkeypatch.setattr(enrichment, 'discard_blocked', lambda document_id: False)
     monkeypatch.setattr(enrichment.reprocess, 'owns_runtime', lambda: True)
 
