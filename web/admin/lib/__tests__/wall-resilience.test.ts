@@ -79,6 +79,7 @@ it("serves the previous good payload during refresh, including midnight, without
     wallPayload(new Date(), compute),
     wallPayload(new Date(), compute),
   ]);
+  await vi.advanceTimersByTimeAsync(0); // the refresh starts after its lease
   expect(compute).toHaveBeenCalledTimes(2);
   expect(results[0]).toMatchObject({ refreshing: true, cacheStale: true });
   expect(results[0].metrics[0].sourceRefreshedAt).toBe(now.toISOString());
@@ -241,6 +242,7 @@ it("retries partial transient source failures on the next poll instead of freezi
   await wallPayload(now, compute);
   vi.advanceTimersByTime(30_001);
   await wallPayload(new Date(), compute);
+  await vi.advanceTimersByTimeAsync(0);
   expect(compute).toHaveBeenCalledTimes(2);
 });
 
