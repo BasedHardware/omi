@@ -14040,4 +14040,55 @@ class AppLocalizationsHu extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name még nincs csatlakoztatva';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Elérte a havi keretet. A felvételek mentve vannak, és $date napon kerülnek átírásra.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Az új felvételek ezen a telefonon kerülnek átírásra. A várakozó felvételek átírása: $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Felvétel, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Átírásra vár';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'A felhős átírás szünetel';
+
+  @override
+  String get heldAudioLiveBody => 'Elérte a havi keretet. Az Omi továbbra is rögzít.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes perc rögzítve a keret elérése óta';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Átírás: $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration várakozik';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automatikus átírás: $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration vár átírásra';
+  }
 }

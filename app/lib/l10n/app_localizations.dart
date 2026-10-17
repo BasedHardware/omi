@@ -24872,6 +24872,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} Hasn\'t Connected Yet'**
   String connectAgentWaitingTitle(String name);
+
+  /// Body of the home card when recordings are saved and waiting for cloud transcription. date is a formatted date.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve reached this month\'s limit. Your recordings are saved and will be transcribed on {date}.'**
+  String heldAudioSavedBody(String date);
+
+  /// Body after the user chooses on-phone transcription. date is when recordings already waiting will be transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'New recordings will transcribe on this phone. Waiting recordings transcribe on {date}.'**
+  String heldAudioPhoneChosenBody(String date);
+
+  /// Title of one held recording in the conversations list. time is a formatted clock time.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording, {time}'**
+  String heldAudioRecordingTitle(String time);
+
+  /// Subtitle of one held recording. duration is a compact length such as 4m.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} · Waiting to transcribe'**
+  String heldAudioRecordingSubtitle(String duration);
+
+  /// Title of the banner shown while a live recording continues after the monthly limit.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud transcription paused'**
+  String get heldAudioLiveTitle;
+
+  /// Body of the live-recording banner after the monthly limit.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve reached this month\'s limit. Omi keeps recording.'**
+  String get heldAudioLiveBody;
+
+  /// Placeholder line in the live transcript. minutes is a whole number of minutes recorded since the limit.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min recorded since the limit'**
+  String heldAudioRecordedSinceLimit(int minutes);
+
+  /// Second line of the live transcript placeholder. date is a formatted date.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribes on {date}'**
+  String heldAudioTranscribesOn(String date);
+
+  /// Settings usage row title. duration is a compact length of audio waiting to be transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} waiting'**
+  String heldAudioWaiting(String duration);
+
+  /// Settings usage row subtitle. date is when waiting audio is transcribed automatically.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed automatically on {date}'**
+  String heldAudioWaitingOn(String date);
+
+  /// Title of the held-audio card. duration is a compact length such as 2m 30s, already including its unit.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} waiting to transcribe'**
+  String heldAudioCardTitle(String duration);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

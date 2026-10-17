@@ -4280,5 +4280,16 @@
     "reconnect": "Koble til på nytt",
     "chatGptNeedsReconnect": "Trenger mer tilgang. Koble til på nytt for å fikse det.",
     "connectAgentWaiting": "Venter på at agenten bruker nøkkelen sin",
-    "connectAgentWaitingTitle": "{name} er ikke tilkoblet ennå"
+    "connectAgentWaitingTitle": "{name} er ikke tilkoblet ennå",
+    "heldAudioSavedBody": "Du har nådd grensen for denne måneden. Opptakene dine er lagret og blir transkribert {date}.",
+    "heldAudioPhoneChosenBody": "Nye opptak transkriberes på denne telefonen. Ventende opptak transkriberes {date}.",
+    "heldAudioRecordingTitle": "Opptak, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Venter på transkripsjon",
+    "heldAudioLiveTitle": "Skytranskripsjon er satt på pause",
+    "heldAudioLiveBody": "Du har nådd grensen for denne måneden. Omi fortsetter å ta opp.",
+    "heldAudioRecordedSinceLimit": "{minutes} min tatt opp siden grensen",
+    "heldAudioTranscribesOn": "Transkriberes {date}",
+    "heldAudioWaiting": "{duration} venter",
+    "heldAudioWaitingOn": "Transkriberes automatisk {date}",
+    "heldAudioCardTitle": "{duration} venter på transkribering"
 }

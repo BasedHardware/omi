@@ -4280,5 +4280,16 @@
     "reconnect": "Savienot vēlreiz",
     "chatGptNeedsReconnect": "Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.",
     "connectAgentWaiting": "Gaida, kamēr aģents izmantos savu atslēgu",
-    "connectAgentWaitingTitle": "{name} vēl nav savienots"
+    "connectAgentWaitingTitle": "{name} vēl nav savienots",
+    "heldAudioSavedBody": "Esat sasniedzis šī mēneša limitu. Jūsu ieraksti ir saglabāti un tiks transkribēti {date}.",
+    "heldAudioPhoneChosenBody": "Jaunie ieraksti tiks transkribēti šajā tālrunī. Gaidošie ieraksti tiek transkribēti {date}.",
+    "heldAudioRecordingTitle": "Ieraksts, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Gaida transkripciju",
+    "heldAudioLiveTitle": "Mākoņa transkripcija ir apturēta",
+    "heldAudioLiveBody": "Esat sasniedzis šī mēneša limitu. Omi turpina ierakstīt.",
+    "heldAudioRecordedSinceLimit": "{minutes} min ierakstītas pēc limita",
+    "heldAudioTranscribesOn": "Transkribē {date}",
+    "heldAudioWaiting": "{duration} gaida",
+    "heldAudioWaitingOn": "Automātiski transkribē {date}",
+    "heldAudioCardTitle": "{duration} gaida transkribēšanu"
 }

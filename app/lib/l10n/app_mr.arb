@@ -11706,5 +11706,16 @@
     "reconnect": "पुन्हा कनेक्ट करा",
     "chatGptNeedsReconnect": "अधिक प्रवेश आवश्यक आहे. निराकरणासाठी पुन्हा कनेक्ट करा.",
     "connectAgentWaiting": "एजंटने त्याची की वापरण्याची प्रतीक्षा आहे",
-    "connectAgentWaitingTitle": "{name} अजून कनेक्ट झालेला नाही"
+    "connectAgentWaitingTitle": "{name} अजून कनेक्ट झालेला नाही",
+    "heldAudioSavedBody": "तुम्ही या महिन्याची मर्यादा गाठली आहे. तुमच्या रेकॉर्डिंग जतन केल्या आहेत आणि {date} रोजी लिहिल्या जातील.",
+    "heldAudioPhoneChosenBody": "नवीन रेकॉर्डिंग या फोनवर लिहिल्या जातील. प्रतीक्षेतील रेकॉर्डिंग {date} रोजी लिहिल्या जातात.",
+    "heldAudioRecordingTitle": "रेकॉर्डिंग, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · लिहिण्याच्या प्रतीक्षेत",
+    "heldAudioLiveTitle": "क्लाउड ट्रान्सक्रिप्शन थांबवले आहे",
+    "heldAudioLiveBody": "तुम्ही या महिन्याची मर्यादा गाठली आहे. Omi रेकॉर्ड करत राहतो.",
+    "heldAudioRecordedSinceLimit": "मर्यादेनंतर {minutes} मिनिटे रेकॉर्ड झाली",
+    "heldAudioTranscribesOn": "{date} रोजी लिहिले जाईल",
+    "heldAudioWaiting": "{duration} प्रतीक्षेत",
+    "heldAudioWaitingOn": "{date} रोजी आपोआप लिहिले जाईल",
+    "heldAudioCardTitle": "{duration} ट्रान्सक्रिप्शनच्या प्रतीक्षेत"
 }

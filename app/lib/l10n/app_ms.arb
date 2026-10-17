@@ -4280,5 +4280,16 @@
     "reconnect": "Sambung semula",
     "chatGptNeedsReconnect": "Perlukan akses tambahan. Sambung semula untuk membetulkan.",
     "connectAgentWaiting": "Menunggu ejen menggunakan kuncinya",
-    "connectAgentWaitingTitle": "{name} Belum Disambungkan"
+    "connectAgentWaitingTitle": "{name} Belum Disambungkan",
+    "heldAudioSavedBody": "Anda telah mencapai had bulan ini. Rakaman anda disimpan dan akan ditranskripsi pada {date}.",
+    "heldAudioPhoneChosenBody": "Rakaman baharu akan ditranskripsi pada telefon ini. Rakaman yang menunggu ditranskripsi pada {date}.",
+    "heldAudioRecordingTitle": "Rakaman, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Menunggu transkripsi",
+    "heldAudioLiveTitle": "Transkripsi awan dijeda",
+    "heldAudioLiveBody": "Anda telah mencapai had bulan ini. Omi terus merakam.",
+    "heldAudioRecordedSinceLimit": "{minutes} min dirakam sejak had",
+    "heldAudioTranscribesOn": "Ditranskripsi pada {date}",
+    "heldAudioWaiting": "{duration} menunggu",
+    "heldAudioWaitingOn": "Ditranskripsi secara automatik pada {date}",
+    "heldAudioCardTitle": "{duration} menunggu transkripsi"
 }

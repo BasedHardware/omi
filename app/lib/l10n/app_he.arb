@@ -11706,5 +11706,16 @@
     "reconnect": "התחבר מחדש",
     "chatGptNeedsReconnect": "נדרשת גישה נוספת. התחבר מחדש כדי לתקן.",
     "connectAgentWaiting": "ממתין לכך שהסוכן ישתמש במפתח שלו",
-    "connectAgentWaitingTitle": "{name} עדיין לא מחובר"
+    "connectAgentWaitingTitle": "{name} עדיין לא מחובר",
+    "heldAudioSavedBody": "הגעת למכסה של החודש. ההקלטות שלך נשמרו ויתומללו ב-{date}.",
+    "heldAudioPhoneChosenBody": "הקלטות חדשות יתומללו בטלפון הזה. הקלטות ממתינות יתומללו ב-{date}.",
+    "heldAudioRecordingTitle": "הקלטה, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · ממתין לתמלול",
+    "heldAudioLiveTitle": "התמלול בענן מושהה",
+    "heldAudioLiveBody": "הגעת למכסה של החודש. Omi ממשיך להקליט.",
+    "heldAudioRecordedSinceLimit": "{minutes} דק הוקלטו מאז המכסה",
+    "heldAudioTranscribesOn": "מתומלל ב-{date}",
+    "heldAudioWaiting": "{duration} בהמתנה",
+    "heldAudioWaitingOn": "מתומלל אוטומטית ב-{date}",
+    "heldAudioCardTitle": "{duration} של הקלטות ממתינות לתמלול"
 }

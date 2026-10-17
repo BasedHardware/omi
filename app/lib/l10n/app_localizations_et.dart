@@ -13976,4 +13976,55 @@ class AppLocalizationsEt extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name pole veel ühendatud';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Oled jõudnud selle kuu limiidini. Sinu salvestused on alles ja transkribeeritakse $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Uued salvestused transkribeeritakse selles telefonis. Ootel salvestused transkribeeritakse $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Salvestus, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Ootab transkribeerimist';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Pilvetranskriptsioon on peatatud';
+
+  @override
+  String get heldAudioLiveBody => 'Oled jõudnud selle kuu limiidini. Omi jätkab salvestamist.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min salvestatud pärast limiiti';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkribeeritakse $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration ootel';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transkribeeritakse automaatselt $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration ootab transkribeerimist';
+  }
 }

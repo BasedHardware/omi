@@ -4280,5 +4280,16 @@
     "reconnect": "Επανασύνδεση",
     "chatGptNeedsReconnect": "Χρειάζεται περισσότερη πρόσβαση. Επανασυνδέστε για διόρθωση.",
     "connectAgentWaiting": "Αναμονή για να χρησιμοποιήσει ο πράκτορας το κλειδί του",
-    "connectAgentWaitingTitle": "Το {name} δεν έχει συνδεθεί ακόμη"
+    "connectAgentWaitingTitle": "Το {name} δεν έχει συνδεθεί ακόμη",
+    "heldAudioSavedBody": "Φτάσατε το όριο αυτού του μήνα. Οι εγγραφές σας έχουν αποθηκευτεί και θα απομαγνητοφωνηθούν στις {date}.",
+    "heldAudioPhoneChosenBody": "Οι νέες εγγραφές θα απομαγνητοφωνηθούν σε αυτό το τηλέφωνο. Οι εγγραφές σε αναμονή απομαγνητοφωνούνται στις {date}.",
+    "heldAudioRecordingTitle": "Εγγραφή, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Σε αναμονή απομαγνητοφώνησης",
+    "heldAudioLiveTitle": "Η απομαγνητοφώνηση στο cloud σταμάτησε",
+    "heldAudioLiveBody": "Φτάσατε το όριο αυτού του μήνα. Το Omi συνεχίζει την εγγραφή.",
+    "heldAudioRecordedSinceLimit": "{minutes} λεπ. ηχογραφήθηκαν μετά το όριο",
+    "heldAudioTranscribesOn": "Απομαγνητοφώνηση στις {date}",
+    "heldAudioWaiting": "{duration} σε αναμονή",
+    "heldAudioWaitingOn": "Απομαγνητοφωνείται αυτόματα στις {date}",
+    "heldAudioCardTitle": "{duration} σε αναμονή για μεταγραφή"
 }

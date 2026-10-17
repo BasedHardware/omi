@@ -13975,4 +13975,55 @@ class AppLocalizationsFa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name هنوز وصل نشده است';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'به سقف این ماه رسیده اید. ضبط های شما ذخیره شده و در $date پیاده می شوند.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'ضبط های جدید روی این گوشی پیاده می شوند. ضبط های در انتظار در $date پیاده می شوند.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'ضبط، $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · در انتظار پیاده سازی';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'پیاده سازی ابری متوقف شد';
+
+  @override
+  String get heldAudioLiveBody => 'به سقف این ماه رسیده اید. Omi به ضبط ادامه می دهد.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes دقیقه از زمان رسیدن به سقف ضبط شده';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'در $date پیاده می شود';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration در انتظار';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'به طور خودکار در $date پیاده می شود';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration در انتظار رونویسی';
+  }
 }

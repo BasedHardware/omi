@@ -4315,5 +4315,16 @@
     "reconnect": "Yeniden bağlan",
     "chatGptNeedsReconnect": "Daha fazla erişim gerekiyor. Düzeltmek için yeniden bağlan.",
     "connectAgentWaiting": "Ajanın anahtarını kullanması bekleniyor",
-    "connectAgentWaitingTitle": "{name} Henüz Bağlanmadı"
+    "connectAgentWaitingTitle": "{name} Henüz Bağlanmadı",
+    "heldAudioSavedBody": "Bu ayın sınırına ulaştınız. Kayıtlarınız saklandı ve {date} tarihinde yazıya dökülecek.",
+    "heldAudioPhoneChosenBody": "Yeni kayıtlar bu telefonda yazıya dökülecek. Bekleyen kayıtlar {date} tarihinde yazıya dökülür.",
+    "heldAudioRecordingTitle": "Kayıt, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Yazıya dökülmeyi bekliyor",
+    "heldAudioLiveTitle": "Bulut transkripsiyonu duraklatıldı",
+    "heldAudioLiveBody": "Bu ayın sınırına ulaştınız. Omi kaydetmeye devam ediyor.",
+    "heldAudioRecordedSinceLimit": "Sınırdan beri {minutes} dk kaydedildi",
+    "heldAudioTranscribesOn": "{date} tarihinde yazıya dökülür",
+    "heldAudioWaiting": "{duration} bekliyor",
+    "heldAudioWaitingOn": "{date} tarihinde otomatik yazıya dökülür",
+    "heldAudioCardTitle": "{duration} yazıya dökülmeyi bekliyor"
 }

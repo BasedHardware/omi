@@ -11706,5 +11706,16 @@
     "reconnect": "دوبارہ کنیکٹ کریں",
     "chatGptNeedsReconnect": "مزید رسائی درکار ہے۔ درست کرنے کے لیے دوبارہ کنیکٹ کریں۔",
     "connectAgentWaiting": "ایجنٹ کے اپنی کلید استعمال کرنے کا انتظار ہے",
-    "connectAgentWaitingTitle": "{name} ابھی تک منسلک نہیں ہوا"
+    "connectAgentWaitingTitle": "{name} ابھی تک منسلک نہیں ہوا",
+    "heldAudioSavedBody": "آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ آپ کی ریکارڈنگز محفوظ ہیں اور {date} کو نقل کی جائیں گی۔",
+    "heldAudioPhoneChosenBody": "نئی ریکارڈنگز اس فون پر نقل کی جائیں گی۔ انتظار میں ریکارڈنگز {date} کو نقل ہوتی ہیں۔",
+    "heldAudioRecordingTitle": "ریکارڈنگ، {time}",
+    "heldAudioRecordingSubtitle": "{duration} · نقل کے انتظار میں",
+    "heldAudioLiveTitle": "کلاؤڈ نقل نویسی رکی ہوئی ہے",
+    "heldAudioLiveBody": "آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ Omi ریکارڈنگ جاری رکھتا ہے۔",
+    "heldAudioRecordedSinceLimit": "حد کے بعد {minutes} منٹ ریکارڈ ہوئے",
+    "heldAudioTranscribesOn": "{date} کو نقل ہوگی",
+    "heldAudioWaiting": "{duration} انتظار میں",
+    "heldAudioWaitingOn": "{date} کو خود بخود نقل ہوگی",
+    "heldAudioCardTitle": "{duration} ٹرانسکرپشن کے انتظار میں"
 }

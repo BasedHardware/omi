@@ -14011,4 +14011,55 @@ class AppLocalizationsLv extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name vēl nav savienots';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Esat sasniedzis šī mēneša limitu. Jūsu ieraksti ir saglabāti un tiks transkribēti $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Jaunie ieraksti tiks transkribēti šajā tālrunī. Gaidošie ieraksti tiek transkribēti $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Ieraksts, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Gaida transkripciju';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Mākoņa transkripcija ir apturēta';
+
+  @override
+  String get heldAudioLiveBody => 'Esat sasniedzis šī mēneša limitu. Omi turpina ierakstīt.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min ierakstītas pēc limita';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkribē $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration gaida';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automātiski transkribē $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration gaida transkribēšanu';
+  }
 }

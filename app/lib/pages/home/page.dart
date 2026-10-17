@@ -15,6 +15,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -708,8 +709,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       _captureProvider!.addListener(_onCaptureProviderChanged);
       final onDevice = OnDeviceTranscriptionController.instance;
       final usage = context.read<UsageProvider>();
-      void updateEntitlement() => onDevice.updateEntitlement(
-          atCap: usage.isOutOfCredits, paid: usage.subscription?.subscription.plan.isPaid ?? false);
+      var heldRetentionReady = false;
+      void updateEntitlement() {
+        final held = onDevice.isActive ? usage.subscription?.heldAudio : null;
+        onDevice.updateEntitlement(
+          atCap: usage.isOutOfCredits || (held?.retainLive ?? false),
+          paid: usage.subscription?.subscription.plan.isPaid ?? false,
+        );
+        if (heldRetentionReady) applyHeldAudioLiveRetention(onDevice, held);
+      }
+
       updateEntitlement();
       _overflowUsage = usage;
       _overflowEntitlementListener = () {
@@ -718,8 +727,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       };
       usage.addListener(_overflowEntitlementListener!);
       onDevice.ensureLoaded().then((_) {
-        if (!mounted || !onDevice.isActive) return;
+        heldRetentionReady = true;
+        if (!mounted) return;
         updateEntitlement();
+        if (!onDevice.isActive) return;
         final sync = ServiceManager.instance().wal.getSyncs().phone;
         if (sync is LocalWalSyncImpl) {
           _onDeviceRunner = OnDeviceRunner(

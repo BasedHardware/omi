@@ -4280,5 +4280,16 @@
     "reconnect": "重新连接",
     "chatGptNeedsReconnect": "需要更多权限。重新连接以修复。",
     "connectAgentWaiting": "正在等待 Agent 使用其密钥",
-    "connectAgentWaitingTitle": "{name} 尚未连接"
+    "connectAgentWaitingTitle": "{name} 尚未连接",
+    "heldAudioSavedBody": "你已达到本月的用量上限。录音已保存，将在 {date} 转写。",
+    "heldAudioPhoneChosenBody": "新的录音将在这台手机上转写。等待中的录音将在 {date} 转写。",
+    "heldAudioRecordingTitle": "录音，{time}",
+    "heldAudioRecordingSubtitle": "{duration} · 等待转写",
+    "heldAudioLiveTitle": "云端转写已暂停",
+    "heldAudioLiveBody": "你已达到本月的用量上限。Omi 会继续录音。",
+    "heldAudioRecordedSinceLimit": "达到上限后已录制 {minutes} 分钟",
+    "heldAudioTranscribesOn": "将在 {date} 转写",
+    "heldAudioWaiting": "{duration} 等待中",
+    "heldAudioWaitingOn": "将在 {date} 自动转写",
+    "heldAudioCardTitle": "{duration} 等待转录"
 }

@@ -4280,5 +4280,16 @@
     "reconnect": "再接続",
     "chatGptNeedsReconnect": "追加のアクセス権が必要です。再接続して修正してください。",
     "connectAgentWaiting": "エージェントがキーを使うのを待っています",
-    "connectAgentWaitingTitle": "{name}はまだ接続していません"
+    "connectAgentWaitingTitle": "{name}はまだ接続していません",
+    "heldAudioSavedBody": "今月の上限に達しました。録音は保存され、{date}に文字起こしされます。",
+    "heldAudioPhoneChosenBody": "新しい録音はこの端末で文字起こしされます。待機中の録音は{date}に文字起こしされます。",
+    "heldAudioRecordingTitle": "録音、{time}",
+    "heldAudioRecordingSubtitle": "{duration} · 文字起こし待ち",
+    "heldAudioLiveTitle": "クラウドの文字起こしを一時停止",
+    "heldAudioLiveBody": "今月の上限に達しました。Omiは録音を続けます。",
+    "heldAudioRecordedSinceLimit": "上限以降に{minutes}分録音",
+    "heldAudioTranscribesOn": "{date}に文字起こし",
+    "heldAudioWaiting": "{duration}待機中",
+    "heldAudioWaitingOn": "{date}に自動で文字起こし",
+    "heldAudioCardTitle": "{duration}が文字起こし待ち"
 }

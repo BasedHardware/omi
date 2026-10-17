@@ -16968,5 +16968,94 @@
                 "type": "String"
             }
         }
+    },
+    "heldAudioSavedBody": "You've reached this month's limit. Your recordings are saved and will be transcribed on {date}.",
+    "@heldAudioSavedBody": {
+        "description": "Body of the home card when recordings are saved and waiting for cloud transcription. date is a formatted date.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioPhoneChosenBody": "New recordings will transcribe on this phone. Waiting recordings transcribe on {date}.",
+    "@heldAudioPhoneChosenBody": {
+        "description": "Body after the user chooses on-phone transcription. date is when recordings already waiting will be transcribed.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioRecordingTitle": "Recording, {time}",
+    "@heldAudioRecordingTitle": {
+        "description": "Title of one held recording in the conversations list. time is a formatted clock time.",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioRecordingSubtitle": "{duration} · Waiting to transcribe",
+    "@heldAudioRecordingSubtitle": {
+        "description": "Subtitle of one held recording. duration is a compact length such as 4m.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioLiveTitle": "Cloud transcription paused",
+    "@heldAudioLiveTitle": {
+        "description": "Title of the banner shown while a live recording continues after the monthly limit."
+    },
+    "heldAudioLiveBody": "You've reached this month's limit. Omi keeps recording.",
+    "@heldAudioLiveBody": {
+        "description": "Body of the live-recording banner after the monthly limit."
+    },
+    "heldAudioRecordedSinceLimit": "{minutes} min recorded since the limit",
+    "@heldAudioRecordedSinceLimit": {
+        "description": "Placeholder line in the live transcript. minutes is a whole number of minutes recorded since the limit.",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "heldAudioTranscribesOn": "Transcribes on {date}",
+    "@heldAudioTranscribesOn": {
+        "description": "Second line of the live transcript placeholder. date is a formatted date.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioWaiting": "{duration} waiting",
+    "@heldAudioWaiting": {
+        "description": "Settings usage row title. duration is a compact length of audio waiting to be transcribed.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioWaitingOn": "Transcribed automatically on {date}",
+    "@heldAudioWaitingOn": {
+        "description": "Settings usage row subtitle. date is when waiting audio is transcribed automatically.",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "heldAudioCardTitle": "{duration} waiting to transcribe",
+    "@heldAudioCardTitle": {
+        "description": "Title of the held-audio card. duration is a compact length such as 2m 30s, already including its unit.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
     }
 }

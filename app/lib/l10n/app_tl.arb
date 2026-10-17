@@ -11706,5 +11706,16 @@
     "reconnect": "Muling ikonekta",
     "chatGptNeedsReconnect": "Kailangan ng mas maraming access. Muling ikonekta para ayusin.",
     "connectAgentWaiting": "Hinihintay na gamitin ng agent ang key nito",
-    "connectAgentWaitingTitle": "Hindi pa nakakonekta ang {name}"
+    "connectAgentWaitingTitle": "Hindi pa nakakonekta ang {name}",
+    "heldAudioSavedBody": "Naabot mo na ang limitasyon ngayong buwan. Naka-save ang mga recording mo at ita-transcribe sa {date}.",
+    "heldAudioPhoneChosenBody": "Ang mga bagong recording ay ita-transcribe sa teleponong ito. Ang naghihintay na recording ay ita-transcribe sa {date}.",
+    "heldAudioRecordingTitle": "Recording, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Naghihintay na i-transcribe",
+    "heldAudioLiveTitle": "Naka-pause ang cloud transcription",
+    "heldAudioLiveBody": "Naabot mo na ang limitasyon ngayong buwan. Patuloy na nagre-record ang Omi.",
+    "heldAudioRecordedSinceLimit": "{minutes} min na naitala mula nang maabot ang limitasyon",
+    "heldAudioTranscribesOn": "Ita-transcribe sa {date}",
+    "heldAudioWaiting": "{duration} naghihintay",
+    "heldAudioWaitingOn": "Awtomatikong ita-transcribe sa {date}",
+    "heldAudioCardTitle": "{duration} na naghihintay ma-transcribe"
 }

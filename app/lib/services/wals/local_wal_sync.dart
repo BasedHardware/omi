@@ -149,6 +149,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   List<Wal> _wals = [];
 
   bool _pendingPhoneOnly = false;
+
+  /// When funded cloud transcription is paused, socket delivery is not a transcript.
+  /// Frames stay in the WAL and upload through the existing sync path, which holds them.
+  bool _retainSuppressedLiveAudio = false;
+  int _retainedLiveFrames = 0;
   List<WalFrame> _frames = [];
   String? _captureEvidenceRoot;
   int _captureEvidenceGeneration = 0;
@@ -282,6 +287,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames = [];
     _pendingPhoneOnly = false;
     _frameSynced = [];
+    _retainSuppressedLiveAudio = false;
+    _retainedLiveFrames = 0;
     _captureEvidenceRoot = null;
     _captureEvidenceGeneration++;
     _nextSourceFramePosition = 0;
@@ -619,6 +626,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames = [];
     _pendingPhoneOnly = false;
     _frameSynced = [];
+    _retainedLiveFrames = 0;
 
     _framesPerSecond = codec.getFramesPerSecond();
     _codec = codec;
@@ -1890,6 +1898,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     );
     _frames.add(positioned);
     _frameSynced.add(false);
+    if (_retainSuppressedLiveAudio) _retainedLiveFrames++;
     return positioned;
   }
 
@@ -1929,9 +1938,37 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return count;
   }
 
+  /// Seconds of live audio kept locally because cloud transcription is paused.
+  int get retainedLiveSeconds {
+    if (_framesPerSecond <= 0) return 0;
+    return _retainedLiveFrames ~/ _framesPerSecond;
+  }
+
+  /// [retain] keeps new socket-acked frames for the sync hold path. Frames the
+  /// socket already accepted are dropped: they were transcribed before the pause,
+  /// and uploading them again would transcribe them twice.
+  void setRetainSuppressedLiveAudio(bool retain) {
+    if (_retainSuppressedLiveAudio == retain) return;
+    _retainSuppressedLiveAudio = retain;
+    if (!retain) {
+      _retainedLiveFrames = 0;
+      return;
+    }
+    var kept = 0;
+    for (var i = _frames.length - 1; i >= 0; i--) {
+      if (_frameSynced[i]) {
+        _frames.removeAt(i);
+        _frameSynced.removeAt(i);
+      } else {
+        kept++;
+      }
+    }
+    _retainedLiveFrames = kept;
+  }
+
   @override
   void markFrameSynced(FrameSyncKey key) {
-    if (_pendingPhoneOnly || LocalSttCustody.keepsPhoneAudio) return;
+    if (_pendingPhoneOnly || LocalSttCustody.keepsPhoneAudio || _retainSuppressedLiveAudio) return;
     for (int i = _frames.length - 1; i >= 0; i--) {
       if (_frames[i].syncKey == key) {
         _frameSynced[i] = true;

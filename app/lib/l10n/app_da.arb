@@ -4322,5 +4322,16 @@
     "reconnect": "Forbind igen",
     "chatGptNeedsReconnect": "Kræver mere adgang. Forbind igen for at rette det.",
     "connectAgentWaiting": "Venter på at agenten bruger sin nøgle",
-    "connectAgentWaitingTitle": "{name} er endnu ikke forbundet"
+    "connectAgentWaitingTitle": "{name} er endnu ikke forbundet",
+    "heldAudioSavedBody": "Du har nået denne måneds grænse. Dine optagelser er gemt og bliver transskriberet {date}.",
+    "heldAudioPhoneChosenBody": "Nye optagelser transskriberes på denne telefon. Ventende optagelser transskriberes {date}.",
+    "heldAudioRecordingTitle": "Optagelse, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Venter på transskription",
+    "heldAudioLiveTitle": "Cloud-transskription er sat på pause",
+    "heldAudioLiveBody": "Du har nået denne måneds grænse. Omi bliver ved med at optage.",
+    "heldAudioRecordedSinceLimit": "{minutes} min optaget siden grænsen",
+    "heldAudioTranscribesOn": "Transskriberes {date}",
+    "heldAudioWaiting": "{duration} venter",
+    "heldAudioWaitingOn": "Transskriberes automatisk {date}",
+    "heldAudioCardTitle": "{duration} venter på transskription"
 }

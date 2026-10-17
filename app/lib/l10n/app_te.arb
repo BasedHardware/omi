@@ -11706,5 +11706,16 @@
     "reconnect": "మళ్లీ కనెక్ట్ చేయండి",
     "chatGptNeedsReconnect": "మరిన్ని యాక్సెస్ అవసరం. సరిచేయడానికి మళ్లీ కనెక్ట్ చేయండి.",
     "connectAgentWaiting": "ఏజెంట్ తన కీని ఉపయోగించడానికి వేచి ఉంది",
-    "connectAgentWaitingTitle": "{name} ఇంకా కనెక్ట్ కాలేదు"
+    "connectAgentWaitingTitle": "{name} ఇంకా కనెక్ట్ కాలేదు",
+    "heldAudioSavedBody": "మీరు ఈ నెల పరిమితిని చేరుకున్నారు. మీ రికార్డింగ్‌లు సేవ్ అయ్యాయి మరియు {date} న లిప్యంతరం చేయబడతాయి.",
+    "heldAudioPhoneChosenBody": "కొత్త రికార్డింగ్‌లు ఈ ఫోన్‌లో లిప్యంతరం చేయబడతాయి. వేచి ఉన్న రికార్డింగ్‌లు {date} న లిప్యంతరం చేయబడతాయి.",
+    "heldAudioRecordingTitle": "రికార్డింగ్, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · లిప్యంతరం కోసం వేచి ఉంది",
+    "heldAudioLiveTitle": "క్లౌడ్ లిప్యంతరం పాజ్ చేయబడింది",
+    "heldAudioLiveBody": "మీరు ఈ నెల పరిమితిని చేరుకున్నారు. Omi రికార్డ్ చేస్తూనే ఉంటుంది.",
+    "heldAudioRecordedSinceLimit": "పరిమితి తర్వాత {minutes} నిమిషాలు రికార్డ్ అయ్యాయి",
+    "heldAudioTranscribesOn": "{date} న లిప్యంతరం",
+    "heldAudioWaiting": "{duration} వేచి ఉంది",
+    "heldAudioWaitingOn": "{date} న స్వయంచాలకంగా లిప్యంతరం",
+    "heldAudioCardTitle": "{duration} ట్రాన్‌స్క్రైబ్ కోసం వేచి ఉంది"
 }

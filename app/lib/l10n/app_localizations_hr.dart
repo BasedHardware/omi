@@ -14018,4 +14018,55 @@ class AppLocalizationsHr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name još nije povezan';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Dosegli ste ograničenje za ovaj mjesec. Vaše snimke su spremljene i bit će transkribirane $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nove snimke transkribirat će se na ovom telefonu. Snimke na čekanju transkribiraju se $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Snimka, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Čeka transkripciju';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Transkripcija u oblaku je pauzirana';
+
+  @override
+  String get heldAudioLiveBody => 'Dosegli ste ograničenje za ovaj mjesec. Omi nastavlja snimanje.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min snimljeno nakon ograničenja';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkribira se $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration na čekanju';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automatski se transkribira $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration čeka transkripciju';
+  }
 }

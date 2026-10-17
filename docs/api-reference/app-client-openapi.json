@@ -18178,6 +18178,62 @@
         "title": "HasSpeechProfileResponse",
         "type": "object"
       },
+      "HeldAudioRecording": {
+        "description": "One recording the server is keeping until reset or upgrade. No audio bytes.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "seconds"
+        ],
+        "title": "HeldAudioRecording",
+        "type": "object"
+      },
+      "HeldAudioSummary": {
+        "description": "Additive held-audio totals. Absent until funded-STT admission is holding audio.",
+        "properties": {
+          "recordings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HeldAudioRecording"
+            },
+            "title": "Recordings",
+            "type": "array"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "retain_live": {
+            "title": "Retain Live",
+            "type": "boolean"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seconds",
+          "reset_at",
+          "retain_live"
+        ],
+        "title": "HeldAudioSummary",
+        "type": "object"
+      },
       "IgnoredVoice": {
         "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
         "properties": {
@@ -24653,6 +24709,16 @@
               }
             ],
             "title": "Desktop Grandfather Until"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",
@@ -36574,6 +36640,16 @@
               }
             ],
             "title": "Desktop Grandfather Until"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",

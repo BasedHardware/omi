@@ -4280,5 +4280,16 @@
     "reconnect": "Reconectează",
     "chatGptNeedsReconnect": "Are nevoie de mai mult acces. Reconectează pentru a remedia.",
     "connectAgentWaiting": "Se așteaptă ca agentul să-și folosească cheia",
-    "connectAgentWaitingTitle": "{name} nu s-a conectat încă"
+    "connectAgentWaitingTitle": "{name} nu s-a conectat încă",
+    "heldAudioSavedBody": "Ai atins limita acestei luni. Înregistrările tale sunt salvate și vor fi transcrise pe {date}.",
+    "heldAudioPhoneChosenBody": "Înregistrările noi vor fi transcrise pe acest telefon. Înregistrările în așteptare sunt transcrise pe {date}.",
+    "heldAudioRecordingTitle": "Înregistrare, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · În așteptarea transcrierii",
+    "heldAudioLiveTitle": "Transcrierea în cloud este întreruptă",
+    "heldAudioLiveBody": "Ai atins limita acestei luni. Omi continuă să înregistreze.",
+    "heldAudioRecordedSinceLimit": "{minutes} min înregistrate de la limită",
+    "heldAudioTranscribesOn": "Se transcrie pe {date}",
+    "heldAudioWaiting": "{duration} în așteptare",
+    "heldAudioWaitingOn": "Transcris automat pe {date}",
+    "heldAudioCardTitle": "{duration} în așteptarea transcrierii"
 }

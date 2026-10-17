@@ -11706,5 +11706,16 @@
     "reconnect": "اتصال دوباره",
     "chatGptNeedsReconnect": "به دسترسی بیشتری نیاز دارد. برای رفع مشکل دوباره متصل شوید.",
     "connectAgentWaiting": "در انتظار استفاده عامل از کلیدش",
-    "connectAgentWaitingTitle": "{name} هنوز وصل نشده است"
+    "connectAgentWaitingTitle": "{name} هنوز وصل نشده است",
+    "heldAudioSavedBody": "به سقف این ماه رسیده اید. ضبط های شما ذخیره شده و در {date} پیاده می شوند.",
+    "heldAudioPhoneChosenBody": "ضبط های جدید روی این گوشی پیاده می شوند. ضبط های در انتظار در {date} پیاده می شوند.",
+    "heldAudioRecordingTitle": "ضبط، {time}",
+    "heldAudioRecordingSubtitle": "{duration} · در انتظار پیاده سازی",
+    "heldAudioLiveTitle": "پیاده سازی ابری متوقف شد",
+    "heldAudioLiveBody": "به سقف این ماه رسیده اید. Omi به ضبط ادامه می دهد.",
+    "heldAudioRecordedSinceLimit": "{minutes} دقیقه از زمان رسیدن به سقف ضبط شده",
+    "heldAudioTranscribesOn": "در {date} پیاده می شود",
+    "heldAudioWaiting": "{duration} در انتظار",
+    "heldAudioWaitingOn": "به طور خودکار در {date} پیاده می شود",
+    "heldAudioCardTitle": "{duration} در انتظار رونویسی"
 }

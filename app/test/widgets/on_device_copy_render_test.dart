@@ -12,6 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
@@ -45,6 +47,7 @@ void main() {
     bool light = false,
     Locale locale = const Locale('en'),
     Future<void> Function(WidgetTester tester)? afterPump,
+    List<String> fontFallback = const ['SF Pro Display'],
   }) async {
     debugDefaultTargetPlatformOverride = platform;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -63,7 +66,7 @@ void main() {
       appBarTheme: theme.appBarTheme.copyWith(
         titleTextStyle: (theme.appBarTheme.titleTextStyle ?? const TextStyle()).copyWith(
           fontFamily: 'SF Pro Display',
-          fontFamilyFallback: const ['SF Pro Display'],
+          fontFamilyFallback: fontFallback,
         ),
       ),
     );
@@ -78,7 +81,7 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         theme: titled,
         builder: (context, child) => DefaultTextStyle.merge(
-          style: const TextStyle(fontFamily: 'SF Pro Display', fontFamilyFallback: ['SF Pro Display']),
+          style: TextStyle(fontFamily: 'SF Pro Display', fontFamilyFallback: fontFallback),
           child: child!,
         ),
         home: home,
@@ -436,6 +439,110 @@ void main() {
     expect(find.text('Remove Speech Model'), findsNothing);
   });
 
+  HeldAudioSummary heldSummary({bool retainLive = true}) => HeldAudioSummary(
+        seconds: 150,
+        resetAt: DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000,
+        retainLive: retainLive,
+        recordings: [
+          HeldAudioRecording(
+              id: 'newer', startedAt: DateTime.utc(2026, 10, 17, 15, 4).millisecondsSinceEpoch ~/ 1000, seconds: 90),
+          HeldAudioRecording(
+              id: 'older', startedAt: DateTime.utc(2026, 10, 17, 9, 12).millisecondsSinceEpoch ~/ 1000, seconds: 60),
+        ],
+      );
+
+  Widget heldHome(OnDeviceTranscriptionController value) {
+    return Scaffold(
+      body: ListView(
+        children: [
+          HeldAudioHomeSection(
+            controller: value,
+            gate: true,
+            summary: heldSummary(),
+            onUpgrade: () {},
+            onPhone: () {},
+          ),
+        ],
+      ),
+    );
+  }
+
+  for (final language in const ['en', 'es', 'ja']) {
+    for (final light in const [false, true]) {
+      final theme = light ? 'light' : 'dark';
+      testWidgets('held audio home $language $theme', (tester) async {
+        final value = controller(settings: const OnDeviceSettings(enabled: false));
+        await shoot(
+          tester,
+          'held-audio-a-$language-$theme.png',
+          light: light,
+          locale: Locale(language),
+          fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+          home: heldHome(value),
+        );
+      });
+    }
+  }
+
+  testWidgets('held audio home after choosing the phone', (tester) async {
+    final value = controller(settings: const OnDeviceSettings(enabled: true));
+    await shoot(tester, 'held-audio-a-phone-en-dark.png', home: heldHome(value));
+    expect(find.textContaining('New recordings will transcribe on this phone'), findsOneWidget);
+    expect(find.byKey(const Key('held_audio_on_phone')), findsNothing);
+  });
+
+  for (final language in const ['en', 'es', 'ja']) {
+    for (final light in const [false, true]) {
+      final theme = light ? 'light' : 'dark';
+      testWidgets('held audio live $language $theme', (tester) async {
+        final value = controller(settings: const OnDeviceSettings(enabled: false));
+        await shoot(
+          tester,
+          'held-audio-b-$language-$theme.png',
+          light: light,
+          locale: Locale(language),
+          fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+          home: Scaffold(
+            body: HeldAudioLiveBanner(
+              controller: value,
+              gate: true,
+              summary: heldSummary(),
+              recordedSeconds: 185,
+              onUpgrade: () {},
+              onPhone: () {},
+            ),
+          ),
+        );
+      });
+    }
+  }
+
+  for (final language in const ['en', 'es', 'ja']) {
+    for (final light in const [false, true]) {
+      final theme = light ? 'light' : 'dark';
+      testWidgets('held audio usage $language $theme', (tester) async {
+        final value = controller(settings: const OnDeviceSettings(enabled: false, saveLiveHours: true));
+        await shoot(
+          tester,
+          'held-audio-c-$language-$theme.png',
+          light: light,
+          locale: Locale(language),
+          fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+          home: Scaffold(
+            body: HeldAudioUsageSection(
+              controller: value,
+              gate: true,
+              summary: heldSummary(retainLive: false),
+              paid: true,
+              onUpgrade: () {},
+              onSaveLiveHours: (_) {},
+            ),
+          ),
+        );
+      });
+    }
+  }
+
   testWidgets('android model setup', (tester) async {
     await shoot(
       tester,
@@ -460,7 +567,10 @@ InlineSpan _productFont(InlineSpan span) {
   final style = span.style ?? const TextStyle();
   return TextSpan(
     text: span.text,
-    style: style.fontFamily == null ? style.copyWith(fontFamily: 'SF Pro Display') : style,
+    style: style.copyWith(
+      fontFamily: style.fontFamily ?? 'SF Pro Display',
+      fontFamilyFallback: <String>[...?style.fontFamilyFallback, 'Hiragino Sans'],
+    ),
     children: span.children?.map(_productFont).toList(),
     recognizer: span.recognizer,
     semanticsLabel: span.semanticsLabel,
@@ -514,6 +624,13 @@ Future<void> _loadEvidenceFonts() async {
     }
     await loader.load();
   }
+  final cjk = _hiraginoGothic();
+  if (cjk != null) {
+    final bytes = await cjk.readAsBytes();
+    final cjkLoader = FontLoader('Hiragino Sans')
+      ..addFont(Future.value(ByteData.sublistView(Uint8List.fromList(bytes))));
+    await cjkLoader.load();
+  }
   final icons = _materialIconsFont();
   final bytes = await icons.readAsBytes();
   final iconLoader = FontLoader('MaterialIcons')
@@ -544,6 +661,18 @@ List<int>? _uprightWeight(File? source, int weight) {
       return data;
     }
     directory += 16;
+  }
+  return null;
+}
+
+File? _hiraginoGothic() {
+  const extracted = '/tmp/held-audio-hiragino-w3.otf';
+  if (File(extracted).existsSync()) return File(extracted);
+  final dir = Directory('/System/Library/Fonts');
+  if (!dir.existsSync()) return null;
+  for (final entity in dir.listSync()) {
+    if (entity is! File) continue;
+    if (entity.path.contains('W3.ttc') && entity.path.contains('角')) return entity;
   }
   return null;
 }

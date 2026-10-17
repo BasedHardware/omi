@@ -14077,4 +14077,55 @@ class AppLocalizationsTa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name இன்னும் இணைக்கப்படவில்லை';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். உங்கள் பதிவுகள் சேமிக்கப்பட்டு $date அன்று எழுதப்படும்.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'புதிய பதிவுகள் இந்த தொலைபேசியில் எழுதப்படும். காத்திருக்கும் பதிவுகள் $date அன்று எழுதப்படும்.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'பதிவு, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · எழுத காத்திருக்கிறது';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'மேக எழுத்துப்படிப்பு இடைநிறுத்தப்பட்டது';
+
+  @override
+  String get heldAudioLiveBody => 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். Omi பதிவைத் தொடர்கிறது.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'வரம்புக்குப் பின் $minutes நிமிடம் பதிவாகியுள்ளது';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$date அன்று எழுதப்படும்';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration காத்திருக்கிறது';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$date அன்று தானாக எழுதப்படும்';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration உரையாக்கக் காத்திருக்கிறது';
+  }
 }

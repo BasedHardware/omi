@@ -14042,4 +14042,55 @@ class AppLocalizationsRo extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name nu s-a conectat încă';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Ai atins limita acestei luni. Înregistrările tale sunt salvate și vor fi transcrise pe $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Înregistrările noi vor fi transcrise pe acest telefon. Înregistrările în așteptare sunt transcrise pe $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Înregistrare, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · În așteptarea transcrierii';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Transcrierea în cloud este întreruptă';
+
+  @override
+  String get heldAudioLiveBody => 'Ai atins limita acestei luni. Omi continuă să înregistreze.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min înregistrate de la limită';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Se transcrie pe $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration în așteptare';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transcris automat pe $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration în așteptarea transcrierii';
+  }
 }

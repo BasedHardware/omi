@@ -4280,5 +4280,16 @@
     "reconnect": "Volver a conectar",
     "chatGptNeedsReconnect": "Necesita más acceso. Vuelve a conectar para solucionarlo.",
     "connectAgentWaiting": "Esperando a que el agente use su clave",
-    "connectAgentWaitingTitle": "{name} aún no está conectado"
+    "connectAgentWaitingTitle": "{name} aún no está conectado",
+    "heldAudioSavedBody": "Has alcanzado el límite de este mes. Tus grabaciones están guardadas y se transcribirán el {date}.",
+    "heldAudioPhoneChosenBody": "Las grabaciones nuevas se transcribirán en este teléfono. Las grabaciones en espera se transcriben el {date}.",
+    "heldAudioRecordingTitle": "Grabación, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · En espera de transcripción",
+    "heldAudioLiveTitle": "Transcripción en la nube en pausa",
+    "heldAudioLiveBody": "Has alcanzado el límite de este mes. Omi sigue grabando.",
+    "heldAudioRecordedSinceLimit": "{minutes} min grabados desde el límite",
+    "heldAudioTranscribesOn": "Se transcribe el {date}",
+    "heldAudioWaiting": "{duration} en espera",
+    "heldAudioWaitingOn": "Se transcribe automáticamente el {date}",
+    "heldAudioCardTitle": "{duration} pendiente de transcribir"
 }

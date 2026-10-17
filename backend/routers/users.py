@@ -56,8 +56,10 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
+from config.stt_cap_dispatch import execution_admission_enabled
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
+from utils.sync.held_audio_summary import client_held_audio
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
 from utils.product_metrics import sanitize_app_build
@@ -1235,6 +1237,9 @@ def get_user_subscription_endpoint(
     if allowance.remaining_seconds is None or (allowance.limit_seconds is not None and allowance.limit_seconds > 0):
         response.transcription_seconds_limit = allowance.limit_seconds or 0
         response.subscription.limits.transcription_seconds = allowance.limit_seconds
+    # Off: leave the field unset and do not read holds. On: additive totals only.
+    if execution_admission_enabled():
+        response.held_audio = client_held_audio(uid)
     return response
 
 

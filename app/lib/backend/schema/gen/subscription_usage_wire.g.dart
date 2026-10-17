@@ -255,6 +255,66 @@ class GeneratedTranscriptionAllowanceSnapshot {
   }
 }
 
+class GeneratedHeldAudioRecording {
+  final String id;
+  final int seconds;
+  final int startedAt;
+
+  const GeneratedHeldAudioRecording({
+    required this.id,
+    required this.seconds,
+    required this.startedAt,
+  });
+
+  factory GeneratedHeldAudioRecording.fromJson(Map<String, dynamic> json) {
+    return GeneratedHeldAudioRecording(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      seconds: _required(_readFieldValue<int>(_readField(json, const ["seconds"]), "seconds", _readInt, requiredField: true, nullable: false), "seconds"),
+      startedAt: _required(_readFieldValue<int>(_readField(json, const ["started_at"]), "started_at", _readInt, requiredField: true, nullable: false), "started_at"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'seconds': seconds,
+      'started_at': startedAt,
+    };
+  }
+}
+
+class GeneratedHeldAudioSummary {
+  final List<GeneratedHeldAudioRecording> recordings;
+  final int resetAt;
+  final bool retainLive;
+  final int seconds;
+
+  const GeneratedHeldAudioSummary({
+    this.recordings = const [],
+    required this.resetAt,
+    required this.retainLive,
+    required this.seconds,
+  });
+
+  factory GeneratedHeldAudioSummary.fromJson(Map<String, dynamic> json) {
+    return GeneratedHeldAudioSummary(
+      recordings: _required(_readFieldValue<List<GeneratedHeldAudioRecording>>(_readField(json, const ["recordings"]), "recordings", (value) => _readObjectList(value, GeneratedHeldAudioRecording.fromJson), requiredField: false, nullable: false, defaultValue: const []), "recordings"),
+      resetAt: _required(_readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt, requiredField: true, nullable: false), "reset_at"),
+      retainLive: _required(_readFieldValue<bool>(_readField(json, const ["retain_live"]), "retain_live", _readBool, requiredField: true, nullable: false), "retain_live"),
+      seconds: _required(_readFieldValue<int>(_readField(json, const ["seconds"]), "seconds", _readInt, requiredField: true, nullable: false), "seconds"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'recordings': recordings.map((value) => value.toJson()).toList(),
+      'reset_at': resetAt,
+      'retain_live': retainLive,
+      'seconds': seconds,
+    };
+  }
+}
+
 class GeneratedUserSubscriptionResponse {
   final List<GeneratedSubscriptionPlan> availablePlans;
   final bool chatQuotaAllowed;
@@ -263,6 +323,7 @@ class GeneratedUserSubscriptionResponse {
   final String? chatQuotaUnit;
   final double chatQuotaUsed;
   final int? desktopGrandfatherUntil;
+  final GeneratedHeldAudioSummary? heldAudio;
   final int insightsGainedLimit;
   final int insightsGainedUsed;
   final GeneratedPhoneCallQuota? phoneCallQuota;
@@ -282,6 +343,7 @@ class GeneratedUserSubscriptionResponse {
     this.chatQuotaUnit,
     this.chatQuotaUsed = 0.0,
     this.desktopGrandfatherUntil,
+    this.heldAudio,
     required this.insightsGainedLimit,
     required this.insightsGainedUsed,
     this.phoneCallQuota,
@@ -303,6 +365,7 @@ class GeneratedUserSubscriptionResponse {
       chatQuotaUnit: _readFieldValue<String>(_readField(json, const ["chat_quota_unit"]), "chat_quota_unit", _readString, requiredField: false, nullable: true),
       chatQuotaUsed: _required(_readFieldValue<double>(_readField(json, const ["chat_quota_used"]), "chat_quota_used", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "chat_quota_used"),
       desktopGrandfatherUntil: _readFieldValue<int>(_readField(json, const ["desktop_grandfather_until"]), "desktop_grandfather_until", _readInt, requiredField: false, nullable: true),
+      heldAudio: _readFieldValue<GeneratedHeldAudioSummary>(_readField(json, const ["held_audio"]), "held_audio", (value) => _readObject(value, GeneratedHeldAudioSummary.fromJson), requiredField: false, nullable: true),
       insightsGainedLimit: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_limit"]), "insights_gained_limit", _readInt, requiredField: true, nullable: false), "insights_gained_limit"),
       insightsGainedUsed: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_used"]), "insights_gained_used", _readInt, requiredField: true, nullable: false), "insights_gained_used"),
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
@@ -325,6 +388,7 @@ class GeneratedUserSubscriptionResponse {
       'chat_quota_unit': chatQuotaUnit,
       'chat_quota_used': chatQuotaUsed,
       'desktop_grandfather_until': desktopGrandfatherUntil,
+      'held_audio': heldAudio?.toJson(),
       'insights_gained_limit': insightsGainedLimit,
       'insights_gained_used': insightsGainedUsed,
       'phone_call_quota': phoneCallQuota?.toJson(),

@@ -4280,5 +4280,16 @@
     "reconnect": "Torna a connectar",
     "chatGptNeedsReconnect": "Necessita més accés. Torna a connectar-ho per solucionar-ho.",
     "connectAgentWaiting": "Esperant que l'agent utilitzi la seva clau",
-    "connectAgentWaitingTitle": "{name} encara no s'ha connectat"
+    "connectAgentWaitingTitle": "{name} encara no s'ha connectat",
+    "heldAudioSavedBody": "Has arribat al límit d'aquest mes. Les teves gravacions estan desades i es transcriuran el {date}.",
+    "heldAudioPhoneChosenBody": "Les gravacions noves es transcriuran en aquest telèfon. Les gravacions en espera es transcriuen el {date}.",
+    "heldAudioRecordingTitle": "Gravació, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · En espera de transcripció",
+    "heldAudioLiveTitle": "Transcripció al núvol en pausa",
+    "heldAudioLiveBody": "Has arribat al límit d'aquest mes. Omi continua gravant.",
+    "heldAudioRecordedSinceLimit": "{minutes} min gravats des del límit",
+    "heldAudioTranscribesOn": "Es transcriu el {date}",
+    "heldAudioWaiting": "{duration} en espera",
+    "heldAudioWaitingOn": "Es transcriu automàticament el {date}",
+    "heldAudioCardTitle": "{duration} pendents de transcriure"
 }

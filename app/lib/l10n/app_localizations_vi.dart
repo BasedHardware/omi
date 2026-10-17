@@ -13982,4 +13982,55 @@ class AppLocalizationsVi extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name chưa kết nối';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Bạn đã đạt giới hạn tháng này. Bản ghi của bạn được lưu và sẽ được chuyển thành chữ vào $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Bản ghi mới sẽ được chuyển thành chữ trên điện thoại này. Bản ghi đang chờ được chuyển thành chữ vào $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Bản ghi, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Đang chờ chuyển thành chữ';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Tạm dừng chuyển giọng nói trên đám mây';
+
+  @override
+  String get heldAudioLiveBody => 'Bạn đã đạt giới hạn tháng này. Omi vẫn tiếp tục ghi.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes phút đã ghi kể từ khi đạt giới hạn';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Chuyển thành chữ vào $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration đang chờ';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Tự động chuyển thành chữ vào $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration đang chờ phiên âm';
+  }
 }

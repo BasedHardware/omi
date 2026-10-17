@@ -11706,5 +11706,16 @@
     "reconnect": "Поново повежи",
     "chatGptNeedsReconnect": "Потребан је већи приступ. Поново повежи да бисте поправили.",
     "connectAgentWaiting": "Чека се да агент употреби свој кључ",
-    "connectAgentWaitingTitle": "{name} још није повезан"
+    "connectAgentWaitingTitle": "{name} још није повезан",
+    "heldAudioSavedBody": "Dostigli ste limit za ovaj mesec. Vaši snimci su sačuvani i biće transkribovani {date}.",
+    "heldAudioPhoneChosenBody": "Novi snimci će se transkribovati na ovom telefonu. Snimci na čekanju se transkribuju {date}.",
+    "heldAudioRecordingTitle": "Snimak, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Čeka transkripciju",
+    "heldAudioLiveTitle": "Transkripcija u oblaku je pauzirana",
+    "heldAudioLiveBody": "Dostigli ste limit za ovaj mesec. Omi nastavlja snimanje.",
+    "heldAudioRecordedSinceLimit": "{minutes} min snimljeno nakon limita",
+    "heldAudioTranscribesOn": "Transkribuje se {date}",
+    "heldAudioWaiting": "{duration} na čekanju",
+    "heldAudioWaitingOn": "Automatski se transkribuje {date}",
+    "heldAudioCardTitle": "{duration} чека на препис"
 }

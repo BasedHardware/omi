@@ -13762,4 +13762,55 @@ class AppLocalizationsZh extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name 尚未连接';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return '你已达到本月的用量上限。录音已保存，将在 $date 转写。';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return '新的录音将在这台手机上转写。等待中的录音将在 $date 转写。';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return '录音，$time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · 等待转写';
+  }
+
+  @override
+  String get heldAudioLiveTitle => '云端转写已暂停';
+
+  @override
+  String get heldAudioLiveBody => '你已达到本月的用量上限。Omi 会继续录音。';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '达到上限后已录制 $minutes 分钟';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '将在 $date 转写';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration 等待中';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '将在 $date 自动转写';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration 等待转录';
+  }
 }

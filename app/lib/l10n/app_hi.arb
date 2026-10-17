@@ -4280,5 +4280,16 @@
     "reconnect": "फिर से कनेक्ट करें",
     "chatGptNeedsReconnect": "अधिक एक्सेस की ज़रूरत है। ठीक करने के लिए फिर से कनेक्ट करें।",
     "connectAgentWaiting": "एजेंट के अपनी कुंजी इस्तेमाल करने का इंतज़ार",
-    "connectAgentWaitingTitle": "{name} अभी तक कनेक्ट नहीं हुआ है"
+    "connectAgentWaitingTitle": "{name} अभी तक कनेक्ट नहीं हुआ है",
+    "heldAudioSavedBody": "आप इस महीने की सीमा तक पहुँच गए हैं। आपकी रिकॉर्डिंग सहेजी गई हैं और {date} को लिखी जाएँगी।",
+    "heldAudioPhoneChosenBody": "नई रिकॉर्डिंग इस फ़ोन पर लिखी जाएँगी। प्रतीक्षारत रिकॉर्डिंग {date} को लिखी जाती हैं।",
+    "heldAudioRecordingTitle": "रिकॉर्डिंग, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · लिखे जाने की प्रतीक्षा",
+    "heldAudioLiveTitle": "क्लाउड ट्रांसक्रिप्शन रुका हुआ है",
+    "heldAudioLiveBody": "आप इस महीने की सीमा तक पहुँच गए हैं। Omi रिकॉर्ड करना जारी रखता है।",
+    "heldAudioRecordedSinceLimit": "सीमा के बाद {minutes} मिनट रिकॉर्ड हुए",
+    "heldAudioTranscribesOn": "{date} को लिखा जाएगा",
+    "heldAudioWaiting": "{duration} प्रतीक्षा में",
+    "heldAudioWaitingOn": "{date} को अपने आप लिखा जाएगा",
+    "heldAudioCardTitle": "{duration} ट्रांसक्रिप्शन के इंतज़ार में"
 }

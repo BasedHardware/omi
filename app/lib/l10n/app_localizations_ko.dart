@@ -13788,4 +13788,55 @@ class AppLocalizationsKo extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name 아직 연결되지 않음';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return '이번 달 한도에 도달했습니다. 녹음은 저장되어 있으며 $date에 받아적습니다.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return '새 녹음은 이 휴대폰에서 받아적습니다. 대기 중인 녹음은 $date에 받아적습니다.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return '녹음, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · 받아쓰기 대기';
+  }
+
+  @override
+  String get heldAudioLiveTitle => '클라우드 받아쓰기가 일시중지됨';
+
+  @override
+  String get heldAudioLiveBody => '이번 달 한도에 도달했습니다. Omi는 계속 녹음합니다.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '한도 이후 $minutes분 녹음됨';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$date에 받아쓰기';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration 대기 중';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$date에 자동으로 받아쓰기';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration 분량이 변환 대기 중';
+  }
 }

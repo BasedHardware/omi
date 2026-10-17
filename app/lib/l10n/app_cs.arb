@@ -4280,5 +4280,16 @@
     "reconnect": "Znovu připojit",
     "chatGptNeedsReconnect": "Potřebuje větší přístup. Připojte znovu a opravte to.",
     "connectAgentWaiting": "Čekání, až agent použije svůj klíč",
-    "connectAgentWaitingTitle": "{name} se zatím nepřipojil"
+    "connectAgentWaitingTitle": "{name} se zatím nepřipojil",
+    "heldAudioSavedBody": "Dosáhli jste limitu pro tento měsíc. Vaše nahrávky jsou uložené a budou přepsány {date}.",
+    "heldAudioPhoneChosenBody": "Nové nahrávky se přepíšou v tomto telefonu. Čekající nahrávky se přepíšou {date}.",
+    "heldAudioRecordingTitle": "Nahrávka, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Čeká na přepis",
+    "heldAudioLiveTitle": "Přepis v cloudu je pozastaven",
+    "heldAudioLiveBody": "Dosáhli jste limitu pro tento měsíc. Omi dál nahrává.",
+    "heldAudioRecordedSinceLimit": "{minutes} min nahráno od limitu",
+    "heldAudioTranscribesOn": "Přepis {date}",
+    "heldAudioWaiting": "{duration} čeká",
+    "heldAudioWaitingOn": "Automaticky přepsáno {date}",
+    "heldAudioCardTitle": "{duration} čeká na přepis"
 }

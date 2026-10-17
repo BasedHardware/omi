@@ -13995,4 +13995,55 @@ class AppLocalizationsTr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Henüz Bağlanmadı';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Bu ayın sınırına ulaştınız. Kayıtlarınız saklandı ve $date tarihinde yazıya dökülecek.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Yeni kayıtlar bu telefonda yazıya dökülecek. Bekleyen kayıtlar $date tarihinde yazıya dökülür.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Kayıt, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Yazıya dökülmeyi bekliyor';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Bulut transkripsiyonu duraklatıldı';
+
+  @override
+  String get heldAudioLiveBody => 'Bu ayın sınırına ulaştınız. Omi kaydetmeye devam ediyor.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'Sınırdan beri $minutes dk kaydedildi';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$date tarihinde yazıya dökülür';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration bekliyor';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$date tarihinde otomatik yazıya dökülür';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration yazıya dökülmeyi bekliyor';
+  }
 }

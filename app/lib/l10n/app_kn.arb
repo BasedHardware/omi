@@ -11706,5 +11706,16 @@
     "reconnect": "ಮರುಸಂಪರ್ಕಿಸಿ",
     "chatGptNeedsReconnect": "ಹೆಚ್ಚಿನ ಪ್ರವೇಶ ಬೇಕು. ಸರಿಪಡಿಸಲು ಮರುಸಂಪರ್ಕಿಸಿ.",
     "connectAgentWaiting": "ಏಜೆಂಟ್ ತನ್ನ ಕೀಯನ್ನು ಬಳಸುವುದಕ್ಕಾಗಿ ಕಾಯಲಾಗುತ್ತಿದೆ",
-    "connectAgentWaitingTitle": "{name} ಇನ್ನೂ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ"
+    "connectAgentWaitingTitle": "{name} ಇನ್ನೂ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ",
+    "heldAudioSavedBody": "ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ ಮತ್ತು {date} ರಂದು ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ.",
+    "heldAudioPhoneChosenBody": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ. ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು {date} ರಂದು ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ.",
+    "heldAudioRecordingTitle": "ರೆಕಾರ್ಡಿಂಗ್, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · ಲಿಪ್ಯಂತರಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ",
+    "heldAudioLiveTitle": "ಕ್ಲೌಡ್ ಲಿಪ್ಯಂತರ ವಿರಾಮದಲ್ಲಿದೆ",
+    "heldAudioLiveBody": "ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. Omi ರೆಕಾರ್ಡ್ ಮಾಡುವುದನ್ನು ಮುಂದುವರಿಸುತ್ತದೆ.",
+    "heldAudioRecordedSinceLimit": "ಮಿತಿಯ ನಂತರ {minutes} ನಿಮಿಷ ರೆಕಾರ್ಡ್ ಆಗಿದೆ",
+    "heldAudioTranscribesOn": "{date} ರಂದು ಲಿಪ್ಯಂತರ",
+    "heldAudioWaiting": "{duration} ಕಾಯುತ್ತಿದೆ",
+    "heldAudioWaitingOn": "{date} ರಂದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಲಿಪ್ಯಂತರ",
+    "heldAudioCardTitle": "{duration} ಪ್ರತಿಲೇಖನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ"
 }

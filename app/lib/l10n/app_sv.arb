@@ -4280,5 +4280,16 @@
     "reconnect": "Anslut igen",
     "chatGptNeedsReconnect": "Behöver mer åtkomst. Anslut igen för att åtgärda.",
     "connectAgentWaiting": "Väntar på att agenten ska använda sin nyckel",
-    "connectAgentWaitingTitle": "{name} är inte ansluten än"
+    "connectAgentWaitingTitle": "{name} är inte ansluten än",
+    "heldAudioSavedBody": "Du har nått den här månadens gräns. Dina inspelningar är sparade och transkriberas {date}.",
+    "heldAudioPhoneChosenBody": "Nya inspelningar transkriberas på den här telefonen. Väntande inspelningar transkriberas {date}.",
+    "heldAudioRecordingTitle": "Inspelning, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Väntar på transkription",
+    "heldAudioLiveTitle": "Molntranskription pausad",
+    "heldAudioLiveBody": "Du har nått den här månadens gräns. Omi fortsätter att spela in.",
+    "heldAudioRecordedSinceLimit": "{minutes} min inspelat sedan gränsen",
+    "heldAudioTranscribesOn": "Transkriberas {date}",
+    "heldAudioWaiting": "{duration} väntar",
+    "heldAudioWaitingOn": "Transkriberas automatiskt {date}",
+    "heldAudioCardTitle": "{duration} väntar på transkribering"
 }

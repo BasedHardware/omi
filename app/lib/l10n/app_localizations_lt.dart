@@ -14006,4 +14006,55 @@ class AppLocalizationsLt extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name dar neprijungtas';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Pasiekėte šio mėnesio limitą. Jūsų įrašai išsaugoti ir bus transkribuoti $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nauji įrašai bus transkribuojami šiame telefone. Laukiantys įrašai transkribuojami $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Įrašas, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Laukia transkripcijos';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Debesijos transkripcija pristabdyta';
+
+  @override
+  String get heldAudioLiveBody => 'Pasiekėte šio mėnesio limitą. Omi toliau įrašinėja.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min įrašyta nuo limito';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkribuojama $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration laukia';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automatiškai transkribuojama $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration laukia transkripcijos';
+  }
 }

@@ -168,11 +168,20 @@ cross-process admission race.
 
 - **Mobile, on-device overflow flag off:** capture continues as main permits, but
   exhausted managed sessions stop producing new cloud transcripts. Existing Plus
-  threshold handling remains. Uploaded offline audio waits durably; this PR adds
-  no held-content card or automatic on-device processing of that backlog.
-- **Mobile, on-device overflow flag on:** eligible clients keep the existing
-  on-device offer/mode switch. Custom/on-device sessions continue normally.
-  Already-held server uploads still wait for reset/upgrade recovery.
+  threshold handling remains. Uploaded offline audio waits durably. The held-audio
+  card, rows, live banner and settings row stay hidden.
+- **Mobile, on-device overflow flag on:** the conversations list shows held uploads
+  with Upgrade and, when this phone can run the on-device engine, Transcribe on
+  this phone. That action switches new recordings to the existing on-device mode.
+  It does not download or transcribe audio the server already holds: the phone
+  deletes its copy after a successful hold acknowledgement, and there is no owner
+  download. Waiting recordings still transcribe on the reset date. Live capture
+  keeps recording while cloud transcription pauses. A socket send is not a
+  transcript, and live audio is not archived unless private-cloud sync is already
+  on, so the client stops treating those frames as delivered and uploads them
+  through the existing sync path, where they become held audio. Settings usage
+  adds the waiting row beside the existing meter, the existing paid on-phone
+  toggle when this phone can run the engine, and See plans.
 - **macOS:** the existing threshold handler can stop capture, as it does today.
   The backend also refuses new funded sends if the client continues; accepted work
   drains. There is no new macOS on-device overflow flow in this PR.

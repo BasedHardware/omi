@@ -4376,5 +4376,16 @@
     "reconnect": "Újracsatlakozás",
     "chatGptNeedsReconnect": "Több hozzáférésre van szükség. Csatlakoztasd újra a javításhoz.",
     "connectAgentWaiting": "Várakozás, hogy az ügynök használja a kulcsát",
-    "connectAgentWaitingTitle": "{name} még nincs csatlakoztatva"
+    "connectAgentWaitingTitle": "{name} még nincs csatlakoztatva",
+    "heldAudioSavedBody": "Elérte a havi keretet. A felvételek mentve vannak, és {date} napon kerülnek átírásra.",
+    "heldAudioPhoneChosenBody": "Az új felvételek ezen a telefonon kerülnek átírásra. A várakozó felvételek átírása: {date}.",
+    "heldAudioRecordingTitle": "Felvétel, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Átírásra vár",
+    "heldAudioLiveTitle": "A felhős átírás szünetel",
+    "heldAudioLiveBody": "Elérte a havi keretet. Az Omi továbbra is rögzít.",
+    "heldAudioRecordedSinceLimit": "{minutes} perc rögzítve a keret elérése óta",
+    "heldAudioTranscribesOn": "Átírás: {date}",
+    "heldAudioWaiting": "{duration} várakozik",
+    "heldAudioWaitingOn": "Automatikus átírás: {date}",
+    "heldAudioCardTitle": "{duration} vár átírásra"
 }

@@ -13997,4 +13997,55 @@ class AppLocalizationsUr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ابھی تک منسلک نہیں ہوا';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ آپ کی ریکارڈنگز محفوظ ہیں اور $date کو نقل کی جائیں گی۔';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'نئی ریکارڈنگز اس فون پر نقل کی جائیں گی۔ انتظار میں ریکارڈنگز $date کو نقل ہوتی ہیں۔';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'ریکارڈنگ، $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · نقل کے انتظار میں';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'کلاؤڈ نقل نویسی رکی ہوئی ہے';
+
+  @override
+  String get heldAudioLiveBody => 'آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ Omi ریکارڈنگ جاری رکھتا ہے۔';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'حد کے بعد $minutes منٹ ریکارڈ ہوئے';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$date کو نقل ہوگی';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration انتظار میں';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$date کو خود بخود نقل ہوگی';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration ٹرانسکرپشن کے انتظار میں';
+  }
 }

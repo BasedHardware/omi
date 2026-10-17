@@ -4280,5 +4280,16 @@
     "reconnect": "Opnieuw verbinden",
     "chatGptNeedsReconnect": "Meer toegang nodig. Opnieuw verbinden om dit op te lossen.",
     "connectAgentWaiting": "Wachten tot de agent zijn sleutel gebruikt",
-    "connectAgentWaitingTitle": "{name} is nog niet verbonden"
+    "connectAgentWaitingTitle": "{name} is nog niet verbonden",
+    "heldAudioSavedBody": "Je hebt de limiet van deze maand bereikt. Je opnamen zijn bewaard en worden getranscribeerd op {date}.",
+    "heldAudioPhoneChosenBody": "Nieuwe opnamen worden op deze telefoon getranscribeerd. Wachtende opnamen worden getranscribeerd op {date}.",
+    "heldAudioRecordingTitle": "Opname, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Wacht op transcriptie",
+    "heldAudioLiveTitle": "Cloudtranscriptie gepauzeerd",
+    "heldAudioLiveBody": "Je hebt de limiet van deze maand bereikt. Omi blijft opnemen.",
+    "heldAudioRecordedSinceLimit": "{minutes} min opgenomen sinds de limiet",
+    "heldAudioTranscribesOn": "Transcriptie op {date}",
+    "heldAudioWaiting": "{duration} in de wacht",
+    "heldAudioWaitingOn": "Automatisch getranscribeerd op {date}",
+    "heldAudioCardTitle": "{duration} wacht op transcriptie"
 }

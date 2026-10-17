@@ -13987,4 +13987,55 @@ class AppLocalizationsNo extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name er ikke tilkoblet ennå';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Du har nådd grensen for denne måneden. Opptakene dine er lagret og blir transkribert $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nye opptak transkriberes på denne telefonen. Ventende opptak transkriberes $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Opptak, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Venter på transkripsjon';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Skytranskripsjon er satt på pause';
+
+  @override
+  String get heldAudioLiveBody => 'Du har nådd grensen for denne måneden. Omi fortsetter å ta opp.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min tatt opp siden grensen';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkriberes $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration venter';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transkriberes automatisk $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration venter på transkribering';
+  }
 }

@@ -11706,5 +11706,16 @@
     "reconnect": "மீண்டும் இணைக்கவும்",
     "chatGptNeedsReconnect": "கூடுதல் அணுகல் தேவை. சரிசெய்ய மீண்டும் இணைக்கவும்.",
     "connectAgentWaiting": "முகவர் தனது விசையைப் பயன்படுத்துவதற்காகக் காத்திருக்கிறது",
-    "connectAgentWaitingTitle": "{name} இன்னும் இணைக்கப்படவில்லை"
+    "connectAgentWaitingTitle": "{name} இன்னும் இணைக்கப்படவில்லை",
+    "heldAudioSavedBody": "இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். உங்கள் பதிவுகள் சேமிக்கப்பட்டு {date} அன்று எழுதப்படும்.",
+    "heldAudioPhoneChosenBody": "புதிய பதிவுகள் இந்த தொலைபேசியில் எழுதப்படும். காத்திருக்கும் பதிவுகள் {date} அன்று எழுதப்படும்.",
+    "heldAudioRecordingTitle": "பதிவு, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · எழுத காத்திருக்கிறது",
+    "heldAudioLiveTitle": "மேக எழுத்துப்படிப்பு இடைநிறுத்தப்பட்டது",
+    "heldAudioLiveBody": "இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். Omi பதிவைத் தொடர்கிறது.",
+    "heldAudioRecordedSinceLimit": "வரம்புக்குப் பின் {minutes} நிமிடம் பதிவாகியுள்ளது",
+    "heldAudioTranscribesOn": "{date} அன்று எழுதப்படும்",
+    "heldAudioWaiting": "{duration} காத்திருக்கிறது",
+    "heldAudioWaitingOn": "{date} அன்று தானாக எழுதப்படும்",
+    "heldAudioCardTitle": "{duration} உரையாக்கக் காத்திருக்கிறது"
 }

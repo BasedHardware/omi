@@ -13982,4 +13982,55 @@ class AppLocalizationsCs extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name se zatím nepřipojil';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Dosáhli jste limitu pro tento měsíc. Vaše nahrávky jsou uložené a budou přepsány $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nové nahrávky se přepíšou v tomto telefonu. Čekající nahrávky se přepíšou $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Nahrávka, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Čeká na přepis';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Přepis v cloudu je pozastaven';
+
+  @override
+  String get heldAudioLiveBody => 'Dosáhli jste limitu pro tento měsíc. Omi dál nahrává.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min nahráno od limitu';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Přepis $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration čeká';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automaticky přepsáno $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration čeká na přepis';
+  }
 }

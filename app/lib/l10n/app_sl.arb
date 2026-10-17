@@ -11706,5 +11706,16 @@
     "reconnect": "Znova poveži",
     "chatGptNeedsReconnect": "Potreben je dodatni dostop. Znova poveži za popravilo.",
     "connectAgentWaiting": "Čakamo, da agent uporabi svoj ključ",
-    "connectAgentWaitingTitle": "{name} še ni povezan"
+    "connectAgentWaitingTitle": "{name} še ni povezan",
+    "heldAudioSavedBody": "Dosegli ste omejitev za ta mesec. Vaši posnetki so shranjeni in bodo prepisani {date}.",
+    "heldAudioPhoneChosenBody": "Novi posnetki bodo prepisani na tem telefonu. Čakajoči posnetki se prepišejo {date}.",
+    "heldAudioRecordingTitle": "Posnetek, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Čaka na prepis",
+    "heldAudioLiveTitle": "Prepis v oblaku je zaustavljen",
+    "heldAudioLiveBody": "Dosegli ste omejitev za ta mesec. Omi še naprej snema.",
+    "heldAudioRecordedSinceLimit": "{minutes} min posneto po omejitvi",
+    "heldAudioTranscribesOn": "Prepis {date}",
+    "heldAudioWaiting": "{duration} čaka",
+    "heldAudioWaitingOn": "Samodejno prepisano {date}",
+    "heldAudioCardTitle": "{duration} čaka na prepis"
 }

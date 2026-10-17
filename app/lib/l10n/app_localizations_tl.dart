@@ -14095,4 +14095,55 @@ class AppLocalizationsTl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return 'Hindi pa nakakonekta ang $name';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Naabot mo na ang limitasyon ngayong buwan. Naka-save ang mga recording mo at ita-transcribe sa $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Ang mga bagong recording ay ita-transcribe sa teleponong ito. Ang naghihintay na recording ay ita-transcribe sa $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Recording, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Naghihintay na i-transcribe';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Naka-pause ang cloud transcription';
+
+  @override
+  String get heldAudioLiveBody => 'Naabot mo na ang limitasyon ngayong buwan. Patuloy na nagre-record ang Omi.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min na naitala mula nang maabot ang limitasyon';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Ita-transcribe sa $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration naghihintay';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Awtomatikong ita-transcribe sa $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration na naghihintay ma-transcribe';
+  }
 }

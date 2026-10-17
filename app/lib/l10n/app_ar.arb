@@ -4280,5 +4280,16 @@
     "reconnect": "إعادة الاتصال",
     "chatGptNeedsReconnect": "يحتاج إلى صلاحيات أكثر. أعد الاتصال للإصلاح.",
     "connectAgentWaiting": "في انتظار أن يستخدم الوكيل مفتاحه",
-    "connectAgentWaitingTitle": "{name} لم يتصل بعد"
+    "connectAgentWaitingTitle": "{name} لم يتصل بعد",
+    "heldAudioSavedBody": "لقد بلغت حد هذا الشهر. تسجيلاتك محفوظة وسيتم تفريغها في {date}.",
+    "heldAudioPhoneChosenBody": "التسجيلات الجديدة ستُفرغ على هذا الهاتف. التسجيلات المنتظرة تُفرغ في {date}.",
+    "heldAudioRecordingTitle": "تسجيل، {time}",
+    "heldAudioRecordingSubtitle": "{duration} · في انتظار التفريغ",
+    "heldAudioLiveTitle": "تم إيقاف التفريغ السحابي مؤقتا",
+    "heldAudioLiveBody": "لقد بلغت حد هذا الشهر. يواصل Omi التسجيل.",
+    "heldAudioRecordedSinceLimit": "{minutes} د مسجلة منذ بلوغ الحد",
+    "heldAudioTranscribesOn": "تُفرغ في {date}",
+    "heldAudioWaiting": "{duration} في الانتظار",
+    "heldAudioWaitingOn": "تُفرغ تلقائيا في {date}",
+    "heldAudioCardTitle": "{duration} بانتظار النسخ"
 }

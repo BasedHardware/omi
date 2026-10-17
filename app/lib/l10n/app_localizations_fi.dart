@@ -13987,4 +13987,55 @@ class AppLocalizationsFi extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ei ole vielä yhdistetty';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Olet saavuttanut tämän kuun rajan. Tallenteesi on tallennettu ja ne litteroidaan $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Uudet tallenteet litteroidaan tällä puhelimella. Odottavat tallenteet litteroidaan $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Tallenne, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Odottaa litterointia';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Pilvilitterointi on keskeytetty';
+
+  @override
+  String get heldAudioLiveBody => 'Olet saavuttanut tämän kuun rajan. Omi jatkaa tallentamista.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min tallennettu rajan jälkeen';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Litteroidaan $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration odottaa';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Litteroidaan automaattisesti $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration odottaa litterointia';
+  }
 }

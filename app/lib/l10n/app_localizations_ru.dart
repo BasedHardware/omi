@@ -14031,4 +14031,55 @@ class AppLocalizationsRu extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ещё не подключён';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Вы достигли лимита этого месяца. Записи сохранены и будут расшифрованы $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Новые записи будут расшифрованы на этом телефоне. Ожидающие записи расшифровываются $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Запись, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Ожидает расшифровки';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Облачная расшифровка приостановлена';
+
+  @override
+  String get heldAudioLiveBody => 'Вы достигли лимита этого месяца. Omi продолжает запись.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes мин записано после лимита';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Расшифровка $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration в ожидании';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Расшифровывается автоматически $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return 'Ожидает расшифровки: $duration';
+  }
 }

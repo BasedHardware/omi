@@ -205,6 +205,23 @@ class TranscriptionAllowanceSnapshot(BaseModel):
     reason: str = ''
 
 
+class HeldAudioRecording(BaseModel):
+    """One recording the server is keeping until reset or upgrade. No audio bytes."""
+
+    id: str
+    started_at: int
+    seconds: int
+
+
+class HeldAudioSummary(BaseModel):
+    """Additive held-audio totals. Absent until funded-STT admission is holding audio."""
+
+    seconds: int
+    reset_at: int
+    retain_live: bool
+    recordings: List[HeldAudioRecording] = []
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -232,6 +249,9 @@ class UserSubscriptionResponse(BaseModel):
     # Resolved once per request by `resolve_transcription_allowance`; the same
     # answer the listen socket enforces. Null only on servers that predate it.
     transcription_allowance: Optional[TranscriptionAllowanceSnapshot] = None
+    # Present only while funded-STT admission is on and audio is held or live
+    # capture must be retained. Older clients ignore the field.
+    held_audio: Optional[HeldAudioSummary] = None
 
 
 class AvailableLanguage(BaseModel):

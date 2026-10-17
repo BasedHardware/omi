@@ -13993,4 +13993,55 @@ class AppLocalizationsMr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name अजून कनेक्ट झालेला नाही';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'तुम्ही या महिन्याची मर्यादा गाठली आहे. तुमच्या रेकॉर्डिंग जतन केल्या आहेत आणि $date रोजी लिहिल्या जातील.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'नवीन रेकॉर्डिंग या फोनवर लिहिल्या जातील. प्रतीक्षेतील रेकॉर्डिंग $date रोजी लिहिल्या जातात.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'रेकॉर्डिंग, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · लिहिण्याच्या प्रतीक्षेत';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'क्लाउड ट्रान्सक्रिप्शन थांबवले आहे';
+
+  @override
+  String get heldAudioLiveBody => 'तुम्ही या महिन्याची मर्यादा गाठली आहे. Omi रेकॉर्ड करत राहतो.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'मर्यादेनंतर $minutes मिनिटे रेकॉर्ड झाली';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$date रोजी लिहिले जाईल';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration प्रतीक्षेत';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$date रोजी आपोआप लिहिले जाईल';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration ट्रान्सक्रिप्शनच्या प्रतीक्षेत';
+  }
 }

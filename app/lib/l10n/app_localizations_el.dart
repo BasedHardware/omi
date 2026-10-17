@@ -14073,4 +14073,55 @@ class AppLocalizationsEl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return 'Το $name δεν έχει συνδεθεί ακόμη';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Φτάσατε το όριο αυτού του μήνα. Οι εγγραφές σας έχουν αποθηκευτεί και θα απομαγνητοφωνηθούν στις $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Οι νέες εγγραφές θα απομαγνητοφωνηθούν σε αυτό το τηλέφωνο. Οι εγγραφές σε αναμονή απομαγνητοφωνούνται στις $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Εγγραφή, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Σε αναμονή απομαγνητοφώνησης';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Η απομαγνητοφώνηση στο cloud σταμάτησε';
+
+  @override
+  String get heldAudioLiveBody => 'Φτάσατε το όριο αυτού του μήνα. Το Omi συνεχίζει την εγγραφή.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes λεπ. ηχογραφήθηκαν μετά το όριο';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Απομαγνητοφώνηση στις $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration σε αναμονή';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Απομαγνητοφωνείται αυτόματα στις $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration σε αναμονή για μεταγραφή';
+  }
 }

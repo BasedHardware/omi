@@ -14040,4 +14040,55 @@ class AppLocalizationsTe extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ఇంకా కనెక్ట్ కాలేదు';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. మీ రికార్డింగ్‌లు సేవ్ అయ్యాయి మరియు $date న లిప్యంతరం చేయబడతాయి.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'కొత్త రికార్డింగ్‌లు ఈ ఫోన్‌లో లిప్యంతరం చేయబడతాయి. వేచి ఉన్న రికార్డింగ్‌లు $date న లిప్యంతరం చేయబడతాయి.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'రికార్డింగ్, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · లిప్యంతరం కోసం వేచి ఉంది';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'క్లౌడ్ లిప్యంతరం పాజ్ చేయబడింది';
+
+  @override
+  String get heldAudioLiveBody => 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. Omi రికార్డ్ చేస్తూనే ఉంటుంది.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'పరిమితి తర్వాత $minutes నిమిషాలు రికార్డ్ అయ్యాయి';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$date న లిప్యంతరం';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration వేచి ఉంది';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$date న స్వయంచాలకంగా లిప్యంతరం';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration ట్రాన్‌స్క్రైబ్ కోసం వేచి ఉంది';
+  }
 }

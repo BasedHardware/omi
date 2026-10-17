@@ -14016,4 +14016,55 @@ class AppLocalizationsMs extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Belum Disambungkan';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Anda telah mencapai had bulan ini. Rakaman anda disimpan dan akan ditranskripsi pada $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Rakaman baharu akan ditranskripsi pada telefon ini. Rakaman yang menunggu ditranskripsi pada $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Rakaman, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Menunggu transkripsi';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Transkripsi awan dijeda';
+
+  @override
+  String get heldAudioLiveBody => 'Anda telah mencapai had bulan ini. Omi terus merakam.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min dirakam sejak had';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Ditranskripsi pada $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration menunggu';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Ditranskripsi secara automatik pada $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration menunggu transkripsi';
+  }
 }

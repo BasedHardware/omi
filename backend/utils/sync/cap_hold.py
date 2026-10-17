@@ -92,21 +92,34 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict) -> dic
         return fields
 
 
-def _publish(uid: str, identity: str, seconds: float, fields: dict) -> bool:
+def hold_started_at(metadata: dict) -> int | None:
+    """Recording start from plaintext hold metadata, before it is encrypted."""
+    value = metadata.get('timestamp')
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    return int(value)
+
+
+def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | None) -> dict:
+    body = {
+        **fields,
+        'seconds': seconds,
+        'state': 'held',
+        'created_at': now,
+        'next_attempt_at': 0,
+        'lease_until': 0,
+    }
+    if started_at is not None:
+        body['started_at'] = started_at
+    return body
+
+
+def _publish(uid: str, identity: str, seconds: float, fields: dict, started_at: int | None = None) -> bool:
     # Reacquire the account fence after upload: deletion may have started while
     # the async coordinator switched pools. Never acknowledge a refused manifest.
     with external_write_fence(uid):
         try:
-            holds(uid).document(identity).create(
-                {
-                    **fields,
-                    'seconds': seconds,
-                    'state': 'held',
-                    'created_at': time.time(),
-                    'next_attempt_at': 0,
-                    'lease_until': 0,
-                }
-            )
+            holds(uid).document(identity).create(hold_manifest(fields, seconds, time.time(), started_at))
         except AlreadyExists:
             return False  # Preserve the winner's immutable progress checkpoint.
     return True
@@ -126,7 +139,7 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
     created = False
     if not _exists(uid, identity):
         fields = upload_held_audio(uid, path, identity, metadata)
-        created = _publish(uid, identity, seconds, fields)
+        created = _publish(uid, identity, seconds, fields, hold_started_at(metadata))
     return _finish(identity, seconds, funded_allowance(uid).reason, receipt, created)
 
 
@@ -136,7 +149,7 @@ async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receip
     created = False
     if not await run_blocking(db_executor, _exists, uid, identity):
         fields = await run_blocking(storage_executor, upload_held_audio, uid, path, identity, metadata)
-        created = await run_blocking(db_executor, _publish, uid, identity, seconds, fields)
+        created = await run_blocking(db_executor, _publish, uid, identity, seconds, fields, hold_started_at(metadata))
     _finish(identity, seconds, reason, receipt, created)
 
 

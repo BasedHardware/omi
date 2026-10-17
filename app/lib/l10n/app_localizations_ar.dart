@@ -13905,4 +13905,55 @@ class AppLocalizationsAr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name لم يتصل بعد';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'لقد بلغت حد هذا الشهر. تسجيلاتك محفوظة وسيتم تفريغها في $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'التسجيلات الجديدة ستُفرغ على هذا الهاتف. التسجيلات المنتظرة تُفرغ في $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'تسجيل، $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · في انتظار التفريغ';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'تم إيقاف التفريغ السحابي مؤقتا';
+
+  @override
+  String get heldAudioLiveBody => 'لقد بلغت حد هذا الشهر. يواصل Omi التسجيل.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes د مسجلة منذ بلوغ الحد';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'تُفرغ في $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration في الانتظار';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'تُفرغ تلقائيا في $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration بانتظار النسخ';
+  }
 }

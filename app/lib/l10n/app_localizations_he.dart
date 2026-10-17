@@ -13884,4 +13884,55 @@ class AppLocalizationsHe extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name עדיין לא מחובר';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'הגעת למכסה של החודש. ההקלטות שלך נשמרו ויתומללו ב-$date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'הקלטות חדשות יתומללו בטלפון הזה. הקלטות ממתינות יתומללו ב-$date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'הקלטה, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · ממתין לתמלול';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'התמלול בענן מושהה';
+
+  @override
+  String get heldAudioLiveBody => 'הגעת למכסה של החודש. Omi ממשיך להקליט.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes דק הוקלטו מאז המכסה';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'מתומלל ב-$date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration בהמתנה';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'מתומלל אוטומטית ב-$date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration של הקלטות ממתינות לתמלול';
+  }
 }

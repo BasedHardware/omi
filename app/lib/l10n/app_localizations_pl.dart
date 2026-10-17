@@ -14024,4 +14024,55 @@ class AppLocalizationsPl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name nie połączył się jeszcze';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Osiągnięto limit na ten miesiąc. Nagrania są zapisane i zostaną przepisane $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nowe nagrania będą przepisywane na tym telefonie. Oczekujące nagrania zostaną przepisane $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Nagranie, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Oczekuje na transkrypcję';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Transkrypcja w chmurze wstrzymana';
+
+  @override
+  String get heldAudioLiveBody => 'Osiągnięto limit na ten miesiąc. Omi nadal nagrywa.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min nagrane od limitu';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkrypcja $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration oczekuje';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automatyczna transkrypcja $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration czeka na transkrypcję';
+  }
 }

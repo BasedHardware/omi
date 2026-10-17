@@ -13971,4 +13971,55 @@ class AppLocalizationsDa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name er endnu ikke forbundet';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Du har nået denne måneds grænse. Dine optagelser er gemt og bliver transskriberet $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nye optagelser transskriberes på denne telefon. Ventende optagelser transskriberes $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Optagelse, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Venter på transskription';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Cloud-transskription er sat på pause';
+
+  @override
+  String get heldAudioLiveBody => 'Du har nået denne måneds grænse. Omi bliver ved med at optage.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min optaget siden grænsen';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transskriberes $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration venter';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transskriberes automatisk $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration venter på transskription';
+  }
 }

@@ -309,6 +309,29 @@ void main() {
       expect(sync.testFrameSynced[0], true);
     });
 
+    test('paused cloud transcription keeps new frames and drops ones already sent', () {
+      final sent = FrameSyncKey([0x01]);
+      final waiting = FrameSyncKey([0x02]);
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: sent));
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: waiting));
+      sync.markFrameSynced(sent);
+
+      sync.setRetainSuppressedLiveAudio(true);
+
+      expect(sync.testFrames.map((frame) => frame.payload), [
+        [2]
+      ]);
+      expect(sync.testFrameSynced, [false]);
+      sync.markFrameSynced(waiting);
+      expect(sync.testFrameSynced, [false]);
+      sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([0x03])));
+      expect(sync.testFrameSynced, [false, false]);
+
+      sync.setRetainSuppressedLiveAudio(false);
+      sync.markFrameSynced(waiting);
+      expect(sync.testFrameSynced[0], true);
+    });
+
     test('marks only the last matching frame when duplicate keys exist', () {
       final key = FrameSyncKey([0x10]);
 

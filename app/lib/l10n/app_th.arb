@@ -4280,5 +4280,16 @@
     "reconnect": "เชื่อมต่อใหม่",
     "chatGptNeedsReconnect": "ต้องการสิทธิ์เข้าถึงเพิ่มเติม เชื่อมต่อใหม่เพื่อแก้ไข",
     "connectAgentWaiting": "กำลังรอให้เอเจนต์ใช้คีย์ของตน",
-    "connectAgentWaitingTitle": "{name} ยังไม่ได้เชื่อมต่อ"
+    "connectAgentWaitingTitle": "{name} ยังไม่ได้เชื่อมต่อ",
+    "heldAudioSavedBody": "คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว การบันทึกของคุณถูกเก็บไว้และจะถูกถอดความเป็นข้อความในวันที่ {date}",
+    "heldAudioPhoneChosenBody": "การบันทึกใหม่จะถูกถอดความเป็นข้อความบนโทรศัพท์นี้ การบันทึกที่รออยู่จะถูกถอดความในวันที่ {date}",
+    "heldAudioRecordingTitle": "การบันทึก, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · รอถอดความเป็นข้อความ",
+    "heldAudioLiveTitle": "การถอดความบนคลาวด์หยุดชั่วคราว",
+    "heldAudioLiveBody": "คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว Omi ยังบันทึกต่อไป",
+    "heldAudioRecordedSinceLimit": "บันทึกไป {minutes} นาทีตั้งแต่ถึงขีดจำกัด",
+    "heldAudioTranscribesOn": "ถอดความในวันที่ {date}",
+    "heldAudioWaiting": "{duration} กำลังรอ",
+    "heldAudioWaitingOn": "ถอดความอัตโนมัติในวันที่ {date}",
+    "heldAudioCardTitle": "{duration} รอการถอดเสียง"
 }

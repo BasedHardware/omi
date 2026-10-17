@@ -11706,5 +11706,16 @@
     "reconnect": "Поврзи повторно",
     "chatGptNeedsReconnect": "Потребен е повеќе пристап. Поврзи повторно за да поправиш.",
     "connectAgentWaiting": "Се чека агентот да го употреби својот клуч",
-    "connectAgentWaitingTitle": "{name} сè уште не е поврзан"
+    "connectAgentWaitingTitle": "{name} сè уште не е поврзан",
+    "heldAudioSavedBody": "Ја достигнавте границата за овој месец. Вашите снимки се зачувани и ќе бидат транскрибирани на {date}.",
+    "heldAudioPhoneChosenBody": "Новите снимки ќе се транскрибираат на овој телефон. Снимките што чекаат се транскрибираат на {date}.",
+    "heldAudioRecordingTitle": "Снимка, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Чека транскрипција",
+    "heldAudioLiveTitle": "Транскрипцијата во облак е паузирана",
+    "heldAudioLiveBody": "Ја достигнавте границата за овој месец. Omi продолжува да снима.",
+    "heldAudioRecordedSinceLimit": "{minutes} мин снимени по границата",
+    "heldAudioTranscribesOn": "Се транскрибира на {date}",
+    "heldAudioWaiting": "{duration} на чекање",
+    "heldAudioWaitingOn": "Се транскрибира автоматски на {date}",
+    "heldAudioCardTitle": "{duration} чека транскрипција"
 }

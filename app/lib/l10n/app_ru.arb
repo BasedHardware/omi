@@ -4315,5 +4315,16 @@
     "reconnect": "Подключить снова",
     "chatGptNeedsReconnect": "Нужен дополнительный доступ. Подключите снова, чтобы исправить.",
     "connectAgentWaiting": "Ждём, пока агент использует свой ключ",
-    "connectAgentWaitingTitle": "{name} ещё не подключён"
+    "connectAgentWaitingTitle": "{name} ещё не подключён",
+    "heldAudioSavedBody": "Вы достигли лимита этого месяца. Записи сохранены и будут расшифрованы {date}.",
+    "heldAudioPhoneChosenBody": "Новые записи будут расшифрованы на этом телефоне. Ожидающие записи расшифровываются {date}.",
+    "heldAudioRecordingTitle": "Запись, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Ожидает расшифровки",
+    "heldAudioLiveTitle": "Облачная расшифровка приостановлена",
+    "heldAudioLiveBody": "Вы достигли лимита этого месяца. Omi продолжает запись.",
+    "heldAudioRecordedSinceLimit": "{minutes} мин записано после лимита",
+    "heldAudioTranscribesOn": "Расшифровка {date}",
+    "heldAudioWaiting": "{duration} в ожидании",
+    "heldAudioWaitingOn": "Расшифровывается автоматически {date}",
+    "heldAudioCardTitle": "Ожидает расшифровки: {duration}"
 }

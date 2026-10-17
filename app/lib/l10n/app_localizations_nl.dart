@@ -14021,4 +14021,55 @@ class AppLocalizationsNl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name is nog niet verbonden';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Je hebt de limiet van deze maand bereikt. Je opnamen zijn bewaard en worden getranscribeerd op $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Nieuwe opnamen worden op deze telefoon getranscribeerd. Wachtende opnamen worden getranscribeerd op $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Opname, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Wacht op transcriptie';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Cloudtranscriptie gepauzeerd';
+
+  @override
+  String get heldAudioLiveBody => 'Je hebt de limiet van deze maand bereikt. Omi blijft opnemen.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min opgenomen sinds de limiet';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transcriptie op $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration in de wacht';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Automatisch getranscribeerd op $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration wacht op transcriptie';
+  }
 }

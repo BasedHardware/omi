@@ -4315,5 +4315,16 @@
     "reconnect": "Reconnecter",
     "chatGptNeedsReconnect": "Accès supplémentaire requis. Reconnectez pour corriger.",
     "connectAgentWaiting": "En attente que l'agent utilise sa clé",
-    "connectAgentWaitingTitle": "{name} n'est pas encore connecté"
+    "connectAgentWaitingTitle": "{name} n'est pas encore connecté",
+    "heldAudioSavedBody": "Vous avez atteint la limite de ce mois-ci. Vos enregistrements sont conservés et seront transcrits le {date}.",
+    "heldAudioPhoneChosenBody": "Les nouveaux enregistrements seront transcrits sur ce téléphone. Les enregistrements en attente sont transcrits le {date}.",
+    "heldAudioRecordingTitle": "Enregistrement, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · En attente de transcription",
+    "heldAudioLiveTitle": "Transcription dans le cloud en pause",
+    "heldAudioLiveBody": "Vous avez atteint la limite de ce mois-ci. Omi continue à enregistrer.",
+    "heldAudioRecordedSinceLimit": "{minutes} min enregistrées depuis la limite",
+    "heldAudioTranscribesOn": "Transcription le {date}",
+    "heldAudioWaiting": "{duration} en attente",
+    "heldAudioWaitingOn": "Transcrit automatiquement le {date}",
+    "heldAudioCardTitle": "{duration} en attente de transcription"
 }

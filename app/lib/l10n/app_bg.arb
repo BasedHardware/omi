@@ -4280,5 +4280,16 @@
     "reconnect": "Свържи отново",
     "chatGptNeedsReconnect": "Нужен е по-голям достъп. Свържи отново, за да поправиш.",
     "connectAgentWaiting": "Изчакване агентът да използва своя ключ",
-    "connectAgentWaitingTitle": "{name} все още не е свързан"
+    "connectAgentWaitingTitle": "{name} все още не е свързан",
+    "heldAudioSavedBody": "Достигнахте лимита за този месец. Записите ви са запазени и ще бъдат транскрибирани на {date}.",
+    "heldAudioPhoneChosenBody": "Новите записи ще се транскрибират на този телефон. Чакащите записи се транскрибират на {date}.",
+    "heldAudioRecordingTitle": "Запис, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Чака транскрипция",
+    "heldAudioLiveTitle": "Облачната транскрипция е на пауза",
+    "heldAudioLiveBody": "Достигнахте лимита за този месец. Omi продължава да записва.",
+    "heldAudioRecordedSinceLimit": "{minutes} мин записани след лимита",
+    "heldAudioTranscribesOn": "Транскрибира се на {date}",
+    "heldAudioWaiting": "{duration} в изчакване",
+    "heldAudioWaitingOn": "Транскрибира се автоматично на {date}",
+    "heldAudioCardTitle": "{duration} чакат транскрибиране"
 }

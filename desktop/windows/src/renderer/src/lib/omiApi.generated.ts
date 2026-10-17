@@ -2920,6 +2920,19 @@ export interface HasSpeechProfileResponse {
   has_profile: boolean;
 }
 
+export interface HeldAudioRecording {
+  id: string;
+  seconds: number;
+  started_at: number;
+}
+
+export interface HeldAudioSummary {
+  recordings?: Array<HeldAudioRecording>;
+  reset_at: number;
+  retain_live: boolean;
+  seconds: number;
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -3978,6 +3991,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
@@ -5963,6 +5977,7 @@ export interface UserSubscriptionResponse {
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
@@ -6584,6 +6599,8 @@ export interface OmiApiSchemas {
   "HTTPValidationError": HTTPValidationError;
   "HarnessEdit": HarnessEdit;
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
+  "HeldAudioRecording": HeldAudioRecording;
+  "HeldAudioSummary": HeldAudioSummary;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;

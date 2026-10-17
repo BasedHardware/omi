@@ -13782,4 +13782,55 @@ class AppLocalizationsJa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$nameはまだ接続していません';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return '今月の上限に達しました。録音は保存され、$dateに文字起こしされます。';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return '新しい録音はこの端末で文字起こしされます。待機中の録音は$dateに文字起こしされます。';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return '録音、$time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · 文字起こし待ち';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'クラウドの文字起こしを一時停止';
+
+  @override
+  String get heldAudioLiveBody => '今月の上限に達しました。Omiは録音を続けます。';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '上限以降に$minutes分録音';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '$dateに文字起こし';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration待機中';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '$dateに自動で文字起こし';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$durationが文字起こし待ち';
+  }
 }

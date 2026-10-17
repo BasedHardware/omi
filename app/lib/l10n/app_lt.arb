@@ -4280,5 +4280,16 @@
     "reconnect": "Prisijungti iš naujo",
     "chatGptNeedsReconnect": "Reikia daugiau prieigos. Prisijunkite iš naujo, kad ištaisytumėte.",
     "connectAgentWaiting": "Laukiama, kol agentas panaudos savo raktą",
-    "connectAgentWaitingTitle": "{name} dar neprijungtas"
+    "connectAgentWaitingTitle": "{name} dar neprijungtas",
+    "heldAudioSavedBody": "Pasiekėte šio mėnesio limitą. Jūsų įrašai išsaugoti ir bus transkribuoti {date}.",
+    "heldAudioPhoneChosenBody": "Nauji įrašai bus transkribuojami šiame telefone. Laukiantys įrašai transkribuojami {date}.",
+    "heldAudioRecordingTitle": "Įrašas, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Laukia transkripcijos",
+    "heldAudioLiveTitle": "Debesijos transkripcija pristabdyta",
+    "heldAudioLiveBody": "Pasiekėte šio mėnesio limitą. Omi toliau įrašinėja.",
+    "heldAudioRecordedSinceLimit": "{minutes} min įrašyta nuo limito",
+    "heldAudioTranscribesOn": "Transkribuojama {date}",
+    "heldAudioWaiting": "{duration} laukia",
+    "heldAudioWaitingOn": "Automatiškai transkribuojama {date}",
+    "heldAudioCardTitle": "{duration} laukia transkripcijos"
 }

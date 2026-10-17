@@ -13913,4 +13913,55 @@ class AppLocalizationsTh extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ยังไม่ได้เชื่อมต่อ';
   }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว การบันทึกของคุณถูกเก็บไว้และจะถูกถอดความเป็นข้อความในวันที่ $date';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'การบันทึกใหม่จะถูกถอดความเป็นข้อความบนโทรศัพท์นี้ การบันทึกที่รออยู่จะถูกถอดความในวันที่ $date';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'การบันทึก, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · รอถอดความเป็นข้อความ';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'การถอดความบนคลาวด์หยุดชั่วคราว';
+
+  @override
+  String get heldAudioLiveBody => 'คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว Omi ยังบันทึกต่อไป';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return 'บันทึกไป $minutes นาทีตั้งแต่ถึงขีดจำกัด';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'ถอดความในวันที่ $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration กำลังรอ';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'ถอดความอัตโนมัติในวันที่ $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration รอการถอดเสียง';
+  }
 }

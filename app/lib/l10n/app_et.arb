@@ -4280,5 +4280,16 @@
     "reconnect": "Ühenda uuesti",
     "chatGptNeedsReconnect": "Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega.",
     "connectAgentWaiting": "Ootame, kuni agent kasutab oma võtit",
-    "connectAgentWaitingTitle": "{name} pole veel ühendatud"
+    "connectAgentWaitingTitle": "{name} pole veel ühendatud",
+    "heldAudioSavedBody": "Oled jõudnud selle kuu limiidini. Sinu salvestused on alles ja transkribeeritakse {date}.",
+    "heldAudioPhoneChosenBody": "Uued salvestused transkribeeritakse selles telefonis. Ootel salvestused transkribeeritakse {date}.",
+    "heldAudioRecordingTitle": "Salvestus, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Ootab transkribeerimist",
+    "heldAudioLiveTitle": "Pilvetranskriptsioon on peatatud",
+    "heldAudioLiveBody": "Oled jõudnud selle kuu limiidini. Omi jätkab salvestamist.",
+    "heldAudioRecordedSinceLimit": "{minutes} min salvestatud pärast limiiti",
+    "heldAudioTranscribesOn": "Transkribeeritakse {date}",
+    "heldAudioWaiting": "{duration} ootel",
+    "heldAudioWaitingOn": "Transkribeeritakse automaatselt {date}",
+    "heldAudioCardTitle": "{duration} ootab transkribeerimist"
 }

@@ -4280,5 +4280,16 @@
     "reconnect": "Yhdistä uudelleen",
     "chatGptNeedsReconnect": "Tarvitsee lisäoikeuksia. Korjaa yhdistämällä uudelleen.",
     "connectAgentWaiting": "Odotetaan, että agentti käyttää avaintaan",
-    "connectAgentWaitingTitle": "{name} ei ole vielä yhdistetty"
+    "connectAgentWaitingTitle": "{name} ei ole vielä yhdistetty",
+    "heldAudioSavedBody": "Olet saavuttanut tämän kuun rajan. Tallenteesi on tallennettu ja ne litteroidaan {date}.",
+    "heldAudioPhoneChosenBody": "Uudet tallenteet litteroidaan tällä puhelimella. Odottavat tallenteet litteroidaan {date}.",
+    "heldAudioRecordingTitle": "Tallenne, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Odottaa litterointia",
+    "heldAudioLiveTitle": "Pilvilitterointi on keskeytetty",
+    "heldAudioLiveBody": "Olet saavuttanut tämän kuun rajan. Omi jatkaa tallentamista.",
+    "heldAudioRecordedSinceLimit": "{minutes} min tallennettu rajan jälkeen",
+    "heldAudioTranscribesOn": "Litteroidaan {date}",
+    "heldAudioWaiting": "{duration} odottaa",
+    "heldAudioWaitingOn": "Litteroidaan automaattisesti {date}",
+    "heldAudioCardTitle": "{duration} odottaa litterointia"
 }

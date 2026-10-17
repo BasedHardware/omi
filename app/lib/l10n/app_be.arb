@@ -11706,5 +11706,16 @@
     "reconnect": "Падключыць зноў",
     "chatGptNeedsReconnect": "Патрабуецца больш доступу. Падключыце зноў, каб выправіць.",
     "connectAgentWaiting": "Чакаем, пакуль агент выкарыстае свой ключ",
-    "connectAgentWaitingTitle": "{name} яшчэ не падключаўся"
+    "connectAgentWaitingTitle": "{name} яшчэ не падключаўся",
+    "heldAudioSavedBody": "Вы дасягнулі ліміту гэтага месяца. Вашы запісы захаваны і будуць расшыфраваны {date}.",
+    "heldAudioPhoneChosenBody": "Новыя запісы будуць расшыфраваны на гэтым тэлефоне. Запісы ў чаканні расшыфруюцца {date}.",
+    "heldAudioRecordingTitle": "Запіс, {time}",
+    "heldAudioRecordingSubtitle": "{duration} · Чакае расшыфроўкі",
+    "heldAudioLiveTitle": "Воблачная расшыфроўка прыпынена",
+    "heldAudioLiveBody": "Вы дасягнулі ліміту гэтага месяца. Omi працягвае запіс.",
+    "heldAudioRecordedSinceLimit": "{minutes} хв запісана пасля ліміту",
+    "heldAudioTranscribesOn": "Расшыфроўка {date}",
+    "heldAudioWaiting": "{duration} у чаканні",
+    "heldAudioWaitingOn": "Расшыфроўваецца аўтаматычна {date}",
+    "heldAudioCardTitle": "{duration} чакае транскрыпцыі"
 }
