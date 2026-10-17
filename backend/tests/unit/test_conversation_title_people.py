@@ -958,7 +958,7 @@ def test_title_lead_repair_is_counted_as_a_static_presentation_repair(monkeypatc
 def test_title_lead_repair_is_counted_under_the_title_contract_version(monkeypatch):
     from prometheus_client import REGISTRY
 
-    labels = {'outcome': 'static_repair', 'reason': 'title_people_lead', 'contract_version': 'v2'}
+    labels = {'outcome': 'static_repair', 'reason': 'title_people_lead', 'contract_version': 'v3'}
     before = REGISTRY.get_sample_value('omi_conversation_note_presentation_total', labels) or 0.0
     prefix = _prefix_for(_three_party_conversation(), monkeypatch)
 

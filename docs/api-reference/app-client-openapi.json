@@ -29526,7 +29526,7 @@
         "type": "object"
       },
       "SharedSection": {
-        "description": "Public note content, without internal transcript evidence IDs.",
+        "description": "Public note content linked to the transcript segments on the same share payload.",
         "properties": {
           "body_markdown": {
             "title": "Body Markdown",
@@ -29544,6 +29544,13 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           }
         },
         "required": [

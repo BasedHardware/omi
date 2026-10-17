@@ -6,13 +6,18 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
-ServerConversation _conversationWithSections({List<AppResponse> appResults = const [], String overview = ''}) {
+ServerConversation _conversationWithSections(
+    {List<AppResponse> appResults = const [],
+    String overview = '',
+    List<TranscriptSegment> transcriptSegments = const []}) {
   final structured = Structured('Sprint sync', overview, emoji: '🧠');
   structured.sections = [
     const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
@@ -23,6 +28,7 @@ ServerConversation _conversationWithSections({List<AppResponse> appResults = con
     createdAt: DateTime(2026, 7, 1, 9).toUtc(),
     structured: structured,
     appResults: appResults,
+    transcriptSegments: transcriptSegments,
   );
 }
 
@@ -30,6 +36,7 @@ Future<void> _pumpSummary(
   WidgetTester tester,
   ServerConversation conversation, {
   bool asSliver = true,
+  ValueChanged<String>? onOpenSource,
   void Function(ConversationSummarySelection selection, String newContent)? onSaveSummarySelection,
 }) async {
   await tester.pumpWidget(
@@ -47,6 +54,7 @@ Future<void> _pumpSummary(
                     conversation: conversation,
                     onSaveSummarySelection: onSaveSummarySelection,
                     asSliver: true,
+                    onOpenSource: onOpenSource,
                   ),
                 ],
               )
@@ -63,6 +71,51 @@ Future<void> _pumpSummary(
 }
 
 void main() {
+  testWidgets('typed section chips navigate and highlight through the existing transcript controller', (tester) async {
+    final conversation = _conversationWithSections(transcriptSegments: [
+      TranscriptSegment(
+          id: 's1', text: 'Approved', speaker: null, isUser: false, personId: null, start: 3, end: 5, translations: [])
+    ]);
+    conversation.structured.sections = [
+      const Section(heading: 'Decision []', bodyMarkdown: 'Approved. [s1]', sourceSegmentIds: ['missing', 's1', 's1']),
+      const Section(heading: 'Legacy', bodyMarkdown: 'No typed sources. [s1] []'),
+    ];
+    final selection = ConversationSummarySelection.select(conversation);
+    expect(selection.sections[0].sourceSegmentIds, ['s1']);
+    expect(selection.sections[1].sourceSegmentIds, isEmpty);
+    final controller = ConversationPlaybackController(segments: conversation.transcriptSegments);
+    addTearDown(controller.dispose);
+    await _pumpSummary(tester, conversation, onOpenSource: (id) {
+      final segment = conversation.transcriptSegments.singleWhere((segment) => segment.id == id);
+      controller.seek(segment.start, strict: true);
+    });
+    expect(find.byKey(const ValueKey('note-source-0-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('note-source-1-0')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('note-source-0-0')));
+    await tester.pump();
+    expect(controller.highlightedSegment.value, 's1');
+    expect(controller.followTargetSegmentId, 's1');
+    expect(controller.followRequest, 1);
+    expect(controller.isPlaying, isFalse);
+    expect(conversation.structured.sections.first.heading, 'Decision []');
+  });
+
+  testWidgets('section presentation still edits the entire selected summary', (tester) async {
+    final conversation = _conversationWithSections();
+    await _pumpSummary(tester, conversation, onSaveSummarySelection: (_, __) {});
+    final body = find.textContaining('Ship the beta on Friday', findRichText: true);
+    await tester.tap(body);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(body);
+    await tester.pump();
+    expect(find.byType(TextField), findsOneWidget);
+    final editor = tester.widget<TextField>(find.byType(TextField));
+    expect(editor.controller!.text, ConversationSummarySelection.select(conversation).content);
+    expect(editor.controller!.text, contains('Risks'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   group('renderSections', () {
     test('renders each section as a heading followed by its markdown body', () {
       final markdown = ConversationSummarySelection.renderSections(const [
