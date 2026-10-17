@@ -964,24 +964,18 @@ def resolve_speakers_for_processing(
             (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
         )
         if batch_record:
-            # One unit is one diarization. Across independent units/live scopes
-            # we retain labels but cannot assert a conversation-wide cast count.
+            # Reuse owner-safe abstention for unrelated legacy scopes without
+            # reclustering batch voices. Manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
-            conversation.speaker_resolution = ConversationSpeakers(
-                status='capture' if trusted else 'unavailable',
-                version=RESOLUTION_VERSION,
-                participant_speaker_ids=(
-                    significant_capture_speaker_ids(
-                        [
-                            segment
-                            for segment in conversation.transcript_segments
-                            if segment.speaker_match_source != 'batch_abstention'
-                        ]
-                    )
-                    if trusted
-                    else []
-                ),
-            )
+            _without_resolution(conversation, 'batch_authoritative', force_unavailable=not trusted)
+            if trusted:
+                conversation.speaker_resolution.participant_speaker_ids = significant_capture_speaker_ids(
+                    [
+                        segment
+                        for segment in conversation.transcript_segments
+                        if segment.speaker_match_source != 'batch_abstention'
+                    ]
+                )
         final_record = batch_record or (
             authoritative_for(uid)
             and all(

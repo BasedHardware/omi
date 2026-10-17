@@ -1458,3 +1458,20 @@ def test_batch_authority_applies_existing_manual_receipt_without_resolver(monkey
     assert conv.transcript_segments[0].person_id == 'synthetic-person'
     assert conv.transcript_segments[0].speaker_label_source == 'manual'
     resolver.assert_not_called()
+
+
+def test_batch_authority_reuses_owner_safe_abstention_for_legacy_scopes(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0, 1, 2], scopes=['final:batch:unit', 'sync:one', 'sync:two'])
+    for segment in conv.transcript_segments[1:]:
+        segment.is_user = True
+        segment.speaker_match_source = 'sync_embedding'
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert all(not s.is_user for s in conv.transcript_segments)
+    assert conv.transcript_segments[0].speaker_id_scope == 'final:batch:unit'
+    assert conv.speaker_resolution.status == 'unavailable'
+    resolver.assert_not_called()
