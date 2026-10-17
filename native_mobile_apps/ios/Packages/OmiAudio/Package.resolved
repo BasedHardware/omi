@@ -1,0 +1,15 @@
+{
+  "originHash" : "bf755a48962f53b5d045e34f08d5040a13a599eb1d89876df68b5201afb8d2a8",
+  "pins" : [
+    {
+      "identity" : "swift-opus",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nelcea/swift-opus.git",
+      "state" : {
+        "revision" : "a22f542387f1dd72c6c045ecc3b21dfed71acce2",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

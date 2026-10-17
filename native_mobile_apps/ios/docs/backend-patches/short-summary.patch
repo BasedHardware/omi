@@ -1,0 +1,81 @@
+diff --git a/backend/models/structured.py b/backend/models/structured.py
+index 763478dd..832e42ea 100644
+--- a/backend/models/structured.py
++++ b/backend/models/structured.py
+@@ -18,7 +18,7 @@ except ModuleNotFoundError:
+         'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
+     ]
+ 
+-    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights')
++    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'short_summary')
+ 
+     def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
+         for field_name in fields:
+@@ -139,6 +139,10 @@ except ModuleNotFoundError:
+             description='A brief overview of the conversation, highlighting the key details from it',
+             default='',
+         )
++        short_summary: str = Field(
++            default='',
++            description='The gist and outcome in two or three plain sentences, kept when overview becomes the full note',
++        )
+         emoji: str = Field(description='An emoji to represent the conversation', default='🧠')
+         category: CategoryEnum = Field(description='A category for this conversation', default=CategoryEnum.other)
+         sections: List[Section] = Field(
+diff --git a/backend/utils/llm/conversation_processing.py b/backend/utils/llm/conversation_processing.py
+index d431f95e..66224a2f 100644
+--- a/backend/utils/llm/conversation_processing.py
++++ b/backend/utils/llm/conversation_processing.py
+@@ -1208,7 +1208,8 @@ FACTUAL FIDELITY
+   clause, and remove unsupported details before returning.
+ 
+ OVERVIEW
+-- Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
++- Also emit a short overview: two or three plain sentences (at most 60 words) with the gist and the outcome; no
++  headings, no lists. The server will project sections to markdown for legacy clients.
+ 
+ ACTION ITEMS
+ - Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
+@@ -1352,6 +1353,9 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
+     for event in structured.events:
+         event.duration = min(event.duration, 180)
+         event.created = False
++    # The model's short overview survives as short_summary before overview becomes the full note.
++    if structured.overview and not structured.short_summary:
++        structured.short_summary = structured.overview.strip()
+     structured.overview = render_sections_markdown(structured.sections) or structured.overview
+     return structured
+ 
+@@ -1506,6 +1510,8 @@ def _get_conversation_notes_legacy(
+         event.created = False
+     projected_overview = render_sections_markdown(structured.sections)
+     if projected_overview:
++        if structured.overview and not structured.short_summary:
++            structured.short_summary = structured.overview.strip()
+         structured.overview = projected_overview
+     return structured
+ 
+diff --git a/plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py b/plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py
+index 190a8542..3cdf9c80 100644
+--- a/plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py
++++ b/plugins/omi-plugin-sdk/src/omi_plugin_sdk/models.py
+@@ -11,7 +11,7 @@ MeetingType = Literal[
+ # Optional structured fields added for rich meeting notes are serialized only
+ # when the producer actually set them: the flag-off note shape must stay
+ # byte-identical in prompts, responses, and persisted documents.
+-_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights')
++_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'short_summary')
+ 
+ 
+ def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
+@@ -181,6 +181,10 @@ class Structured(BaseModel):
+         description="A brief overview of the conversation, highlighting the key details from it",
+         default="",
+     )
++    short_summary: str = Field(
++        default="",
++        description="The gist and outcome in two or three plain sentences, kept when overview becomes the full note",
++    )
+     emoji: str = Field(description="An emoji to represent the conversation", default="🧠")
+     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
+     sections: List[Section] = Field(
