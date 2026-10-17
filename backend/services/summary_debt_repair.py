@@ -65,6 +65,7 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             new['first_pending_at'] = min(new['first_pending_at'], row['summary_first_pending_at'])
             new['summary_deadline_at'] = min(new.get('summary_deadline_at', due), due)
             new['due_at'] = min(new['due_at'], due)
+            new['language'] = row.get('language') or (old.get('language') if old else None) or 'en'
             new['summary_lane'] = row.get('summary_lane', 'unknown')
             new['summary_repair'] = True
             new['summary_expected_revision'] = row.get('sync_content_revision')

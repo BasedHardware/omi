@@ -201,3 +201,10 @@ def test_cursor_rotates_past_blocked_rows_and_caps_attempts(debt_store, monkeypa
     finally:
         for added in refs:
             added.delete()
+
+
+def test_repair_preserves_stored_conversation_language(debt_store):
+    client, uid, tasks, ref, row = debt_store
+    ref.update({'language': 'vi'})
+    assert repair.redrive(client, uid, 'c', now=220)
+    assert tasks[-1]['language'] == 'vi'
