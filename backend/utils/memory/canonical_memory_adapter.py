@@ -3758,7 +3758,7 @@ _DEFERRED_CANONICAL_PRIVACY_FINALIZATION: ContextVar[Optional[_DeferredCanonical
 
 
 @contextmanager
-def _defer_conversation_privacy_finalization(uid: str, *, db_client: Any) -> Iterator[List[str]]:
+def defer_conversation_privacy_finalization(uid: str, *, db_client: Any) -> Iterator[List[str]]:
     """Keep retry tombstones until MemoryService purges the complete task set.
 
     Only provider-proven IDs are collected; no history read is cached. Bind

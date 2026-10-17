@@ -82,7 +82,7 @@ from utils.memory.canonical_memory_adapter import (
     delete_canonical_memories_batch,
     memory_item_to_memorydb,
     purge_canonical_memory_projections,
-    _defer_conversation_privacy_finalization,
+    defer_conversation_privacy_finalization,
     read_canonical_memory_item,
     read_canonical_memories,
     read_canonical_scan_page,
@@ -4465,7 +4465,7 @@ class MemoryService:
         if coalesce:
             # Retain the canonical tombstones and source receipt until the
             # outer, complete canonical + historical ID set is ready to purge.
-            with _defer_conversation_privacy_finalization(uid, db_client=self.db_client) as deferred_ids:
+            with defer_conversation_privacy_finalization(uid, db_client=self.db_client) as deferred_ids:
                 result = retract_conversation_sourced_memories(
                     uid,
                     conversation_id,

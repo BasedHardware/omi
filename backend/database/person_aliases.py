@@ -249,7 +249,7 @@ def list_people(
             continue
         data.setdefault('id', person.id)
         result.append(data)
-    if generation is not None:
+    if memo is not None and generation is not None:
         try:
             payload = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
             # Payload+key bytes bounded separately from <= max_entries metadata.

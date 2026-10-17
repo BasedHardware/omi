@@ -383,7 +383,7 @@ def test_deferral_is_user_and_client_scoped(harness, monkeypatch):
     second_db, second_ids = harness.make_db(1)
     finalize = MagicMock()
     monkeypatch.setattr(harness.ledger, "finalize_canonical_privacy_tombstones", finalize)
-    with harness.adapter._defer_conversation_privacy_finalization(UID, db_client=first_db) as deferred:
+    with harness.adapter.defer_conversation_privacy_finalization(UID, db_client=first_db) as deferred:
         for uid, db, ids in ((UID, second_db, second_ids), ("other-user", first_db, first_ids)):
             harness.adapter.purge_canonical_memory_projections(
                 uid, ids, db_client=db, reason="scope-test", preserve_source_replacement_receipts=True
