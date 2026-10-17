@@ -109,8 +109,21 @@ class WorkResult:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
 
 
+@dataclass(frozen=True)
+class HeldWork:
+    segment_id: str
+    retry_after: int = 60
+
+
+@dataclass(frozen=True)
+class RecoveryWork:
+    """Non-success handoff after speech VAD and an exhausted padded ASR retry."""
+
+    segment_id: str
+
+
 class BatchWorker(Protocol):
-    def process_batch(self, items: Sequence[WorkItem]) -> Sequence[WorkResult]: ...
+    def process_batch(self, items: Sequence[WorkItem], **kwargs) -> Sequence[WorkResult | HeldWork | RecoveryWork]: ...
 
 
 @dataclass(frozen=True)

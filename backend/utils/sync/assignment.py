@@ -221,6 +221,7 @@ def assign_in_transaction(
     """
     incoming = deepcopy(incoming)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
+    require_live_target = incoming.pop('_batch_require_live_target', False)
     index = AssignmentIndex(transaction, user_ref)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
@@ -262,6 +263,11 @@ def assign_in_transaction(
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
     own_id, own_anchor = resolve(incoming['id'], one_hop=flatten)
     target = load(target_id) if target_id else None
+    if require_live_target and target_id and target is None:
+        # WAL can finish before listen creates its explicitly named row. A new
+        # timestamp anchor here becomes a twin when listen later persists. The
+        # already-read target document fences concurrent create on replay.
+        raise SyncAssignmentConflict('batch live target not persisted', subtype='other')
     redirected = False
     if flatten:
         if target and target.get('sync_merged_into'):

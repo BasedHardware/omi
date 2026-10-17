@@ -13553,6 +13553,195 @@ class AppLocalizationsTe extends AppLocalizations {
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
 
   @override
+  String get connectAgentHeadline => 'ChatGPT మరియు మీ AI ఏజెంట్లలో మీ Omi మెమరీని ఉపయోగించండి';
+
+  @override
+  String get connectAgentIntro =>
+      'ఒకసారి కనెక్ట్ చేయండి. ఆ తర్వాత మీ సంభాషణలు, జ్ఞాపకాలు మరియు పనుల గురించి వాటిని అడగండి.';
+
+  @override
+  String get connectAgentOneTap => 'ఒకే ట్యాప్‌తో';
+
+  @override
+  String get connectAgentComputerAgents => 'సొంత కంప్యూటర్ ఉన్న ఏజెంట్లు';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'ఒక ప్రాంప్ట్‌ను కాపీ చేయండి. Omi ఆ ఏజెంట్ కోసమే ఒక కీని తయారు చేసి సురక్షితంగా పంపుతుంది.';
+
+  @override
+  String get connectAgentOtherAgent => 'ఇతర ఏజెంట్';
+
+  @override
+  String get connectAgentKeyActive => 'కీ యాక్టివ్‌గా ఉంది';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'చివరిసారి ఉపయోగించినది $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'డెవలపర్ల కోసం MCP మరియు API కీలు';
+
+  @override
+  String get connectAgentLoadFailed => 'మీ కనెక్షన్‌లను లోడ్ చేయలేకపోయాము.';
+
+  @override
+  String get connectAgentActionFailed => 'ఏదో తప్పు జరిగింది. మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPTని కనెక్ట్ చేయండి';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'సుమారు 30 సెకన్లు పడుతుంది. మీరు ChatGPTలోనే ఆమోదిస్తారు, ఇది మీ ఫోన్ మరియు కంప్యూటర్‌లో పని చేస్తుంది.';
+
+  @override
+  String get connectChatGptStepOpen => 'మేము ChatGPTలో Omiని తెరుస్తాము';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT నేరుగా Omi యాప్ పేజీలో తెరుచుకుంటుంది.';
+
+  @override
+  String get connectChatGptStepApprove => '\"కనెక్ట్ చేయండి\" నొక్కి, ఆ తర్వాత Omiకి సైన్ ఇన్ చేయండి';
+
+  @override
+  String get connectChatGptStepApproveBody => 'ఇక్కడ ఉపయోగించే అదే ఖాతాను ఉపయోగించండి.';
+
+  @override
+  String get connectChatGptStepReturn => 'Omiకి తిరిగి రండి';
+
+  @override
+  String get connectChatGptStepReturnBody => 'మేము కనెక్షన్‌ను ఆటోమేటిక్‌గా తనిఖీ చేస్తాము.';
+
+  @override
+  String get openChatGpt => 'ChatGPTని తెరవండి';
+
+  @override
+  String get chatGptConnectedEverywhere => 'ఫోన్ మరియు కంప్యూటర్‌లో కనెక్ట్ అయింది';
+
+  @override
+  String get tryAskingChatGpt => 'ChatGPTని అడిగి చూడండి';
+
+  @override
+  String get tryAskingChatGptFooter => 'ఏదైనా ఒకదాన్ని నొక్కితే, అది నింపిన స్థితిలో ChatGPT తెరుచుకుంటుంది.';
+
+  @override
+  String get chatGptExampleMeetings => 'నిన్నటి సమావేశాల్లో నేను దేనికి అంగీకరించాను?';
+
+  @override
+  String get chatGptExampleTasks => 'నా పెండింగ్ Omi పనులను ఈ వారం ప్లాన్‌గా మార్చు.';
+
+  @override
+  String get chatGptExampleGoals => 'నా లక్ష్యాల గురించి Omiకి ఏమి తెలుసు?';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPTని డిస్‌కనెక్ట్ చేయండి';
+
+  @override
+  String get disconnectChatGptQuestion => 'ChatGPTని డిస్‌కనెక్ట్ చేయాలా?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT ఇకపై మీ Omi జ్ఞాపకాలు, సంభాషణలు లేదా పనులను చదవలేదు.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$nameని కనెక్ట్ చేయండి';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'ఒక ప్రాంప్ట్‌ను అతికించండి. $name తన సొంత కంప్యూటర్‌లో Omiని సెటప్ చేస్తుంది.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'ఒక ప్రాంప్ట్‌ను అతికించండి. మీ ఏజెంట్ తన సొంత కంప్యూటర్‌లో Omiని సెటప్ చేస్తుంది.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '“$name” కీ సృష్టించబడింది';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'ప్రాంప్ట్‌లో కీ ఉండదు, ఒక్కసారి మాత్రమే ఉపయోగించగల లింక్ ఉంటుంది. అది ఒక్కసారే తెరుచుకుంటుంది, 1 గంటలో గడువు ముగుస్తుంది. కీని ఇక్కడ ఎప్పుడైనా రిభోక్ చేయవచ్చు.';
+
+  @override
+  String get connectAgentPreparing => 'కీ మరియు సురక్షిత లింక్ తయారవుతున్నాయి…';
+
+  @override
+  String get connectAgentPrepareFailed => 'కీని తయారు చేయలేకపోయాము. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get copyPrompt => 'ప్రాంప్ట్ కాపీ చేయండి';
+
+  @override
+  String get connectAgentNewLink => 'లింక్ గడువు ముగిసిందా? కొత్తది తయారు చేయండి';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name కనెక్ట్ అయింది';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name వద్ద Omi కీ ఉంది. యాక్సెస్ ఆపడానికి దాన్ని రిభోక్ చేయండి. మీరు ఎప్పుడైనా మళ్లీ కనెక్ట్ చేయవచ్చు.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '$name కీని రిభోక్ చేయాలా?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name వెంటనే మీ Omi మెమరీకి యాక్సెస్ కోల్పోతుంది.';
+  }
+
+  @override
+  String get askAboutConversation => 'ఈ సంభాషణ గురించి అడగండి';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'మీ ప్రశ్న సిద్ధంగా ఉండేలా ChatGPTని తెరుస్తుంది. అది Omi ద్వారా సంభాషణను వెతుకుతుంది, కాబట్టి మీరు ట్రాన్స్‌క్రిప్ట్‌ను అతికించనవసరం లేదు.';
+
+  @override
+  String get askYourQuestion => 'మీ ప్రశ్న';
+
+  @override
+  String get askSuggestFollowUp => 'ఈ సంభాషణ ఆధారంగా ఫాలో-అప్ ఇమెయిల్ డ్రాఫ్ట్ రాయి.';
+
+  @override
+  String get askSuggestCommitments => 'ఈ సంభాషణలో నేను ఏమి చేస్తానని మాట ఇచ్చాను?';
+
+  @override
+  String get askSuggestDoc => 'ఈ సంభాషణను ఒక చిన్న డాక్యుమెంట్‌గా మార్చు.';
+
+  @override
+  String get askInChatGpt => 'ChatGPTని అడగండి';
+
+  @override
+  String get copyForAnyApp => 'ఏ యాప్ కోసమైనా కాపీ చేయండి';
+
+  @override
+  String get askConnectChatGptFirst => 'మీ సంభాషణల గురించి అడగడానికి ChatGPTని ఒకసారి కనెక్ట్ చేయండి.';
+
+  @override
+  String get reconnect => 'మళ్లీ కనెక్ట్ చేయండి';
+
+  @override
+  String get chatGptNeedsReconnect => 'మరిన్ని యాక్సెస్ అవసరం. సరిచేయడానికి మళ్లీ కనెక్ట్ చేయండి.';
+
+  @override
+  String get connectAgentWaiting => 'ఏజెంట్ తన కీని ఉపయోగించడానికి వేచి ఉంది';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ఇంకా కనెక్ట్ కాలేదు';
+  }
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

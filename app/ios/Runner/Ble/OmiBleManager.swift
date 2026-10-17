@@ -896,6 +896,7 @@ final class OmiBleManager: NSObject {
         let i = days.count - 1
         days[i]["received"] = (days[i]["received"] as? Int64 ?? 0) + 1
         days[i]["expected"] = (days[i]["expected"] as? Int64 ?? 0) + Int64(delta > 4096 ? 1 : delta)
+        days[i]["last_at"] = now
         packetDays[uuid] = Array(days.suffix(8))
         if let marker = healthStore.openSince(uuid) {
             let key = Self.historyKey(uuid)
@@ -907,10 +908,73 @@ final class OmiBleManager: NSObject {
             } else {
                 history = Array((history + [["timestamp": marker, "lostAudioResolvedAt": now, "identity_epoch": healthStore.epoch]]).suffix(Self.maxDisconnectHistory))
             }
-            guard persistPropertyListRecords(history, forKey: key, in: defaults) else { return }
-            defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
-            persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
+            let persisted = persistPropertyListRecords(history, forKey: key, in: defaults)
+            // Audio resumed. Drop the start marker only after some durable
+            // recovery exists. A failed history write keeps the marker unless a
+            // separate small stamp lands, so the outage cannot vanish. A later
+            // success must not delete that stamp until its start is a resolved
+            // history entry; otherwise the earlier outage is recorded nowhere.
+            if persisted {
+                retireRecoveryStampIfDurable(uuid: uuid, history: history, in: defaults)
+                defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
+                persistPropertyListRecords(packetDays[uuid] ?? [], forKey: "ble_packet_days_\(uuid)", in: defaults)
+            } else if persistAudioRecoveryStamp(uuid: uuid, start: marker, resolvedAt: now, in: defaults) {
+                defaults.removeObject(forKey: "ble_audio_outage_\(uuid)")
+            }
         }
+    }
+
+    private func persistAudioRecoveryStamp(uuid: String, start: Int64, resolvedAt: Int64, in defaults: UserDefaults) -> Bool {
+        do {
+            try SafeDefaults.store(.dictionary([
+                "start": .int64(start),
+                "resolved_at": .int64(resolvedAt),
+                "identity_epoch": .int64(healthStore.epoch),
+            ]), forKey: "ble_audio_recovery_\(uuid)", in: defaults)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// A disconnect row can share the stamp's timestamp without
+    /// `lostAudioResolvedAt`. That is not proof the recovery was stored.
+    private static func historyContainsResolvedStart(_ start: Int64, in history: [[String: Any]]) -> Bool {
+        history.contains { ($0["timestamp"] as? Int64) == start && $0["lostAudioResolvedAt"] != nil }
+    }
+
+    /// Delete the fallback stamp only after its resolution is in history.
+    /// Fold a missing start into the ring when that does not evict another
+    /// record; otherwise leave the stamp for Dart's `audio_outage_resolved_start`
+    /// import. A later failed history write may still replace the stamp.
+    private func retireRecoveryStampIfDurable(uuid: String, history: [[String: Any]], in defaults: UserDefaults) {
+        let stampKey = "ble_audio_recovery_\(uuid)"
+        guard let recovery = defaults.dictionary(forKey: stampKey) else { return }
+        guard let start = recovery["start"] as? Int64,
+              let resolvedAt = recovery["resolved_at"] as? Int64 else {
+            defaults.removeObject(forKey: stampKey)
+            return
+        }
+        if Self.historyContainsResolvedStart(start, in: history) {
+            defaults.removeObject(forKey: stampKey)
+            return
+        }
+        var folded = history
+        if let index = folded.lastIndex(where: { ($0["timestamp"] as? Int64) == start }) {
+            folded[index]["lostAudioSeconds"] = Double(max(0, resolvedAt - start)) / 1000
+            folded[index]["lostAudioResolvedAt"] = resolvedAt
+        } else if folded.count < Self.maxDisconnectHistory {
+            folded.append([
+                "timestamp": start,
+                "lostAudioResolvedAt": resolvedAt,
+                "identity_epoch": recovery["identity_epoch"] as? Int64 ?? healthStore.epoch,
+            ])
+        } else {
+            return
+        }
+        guard persistPropertyListRecords(folded, forKey: Self.historyKey(uuid), in: defaults),
+              Self.historyContainsResolvedStart(start, in: folded) else { return }
+        defaults.removeObject(forKey: stampKey)
     }
 
     private func readFirmwareDiagnosticsIfDue(_ peripheral: CBPeripheral, uuid: String) {
@@ -975,6 +1039,13 @@ final class OmiBleManager: NSObject {
         ]
         data["identity_epoch"] = healthStore.epoch
         data["audio_outage_started_at"] = healthStore.openSince(uuid)
+        if let recovery = defaults.dictionary(forKey: "ble_audio_recovery_\(uuid)"),
+           recovery["identity_epoch"] as? Int64 == healthStore.epoch,
+           let resolvedStart = recovery["start"] as? Int64,
+           let resolvedAt = recovery["resolved_at"] as? Int64 {
+            data["audio_outage_resolved_start"] = resolvedStart
+            data["audio_outage_resolved_at"] = resolvedAt
+        }
         guard let encoded = try? SafeJSON.data(withJSONObject: data),
               let result = String(data: encoded, encoding: .utf8) else { return "{}" }
         return result
@@ -1066,7 +1137,7 @@ final class OmiBleManager: NSObject {
         reconnectDiagnostics[uuid] = recovery
         history = recovery.retainedHistory(
             history, nowMs: now, retentionMs: Self.disconnectRetentionMs, limit: Self.maxDisconnectHistory,
-            timestampOf: { $0["timestamp"] as? Int64 ?? 0 }
+            timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp
         )
 
         persistPropertyListRecords(history, forKey: key, in: defaults)
@@ -1094,7 +1165,7 @@ final class OmiBleManager: NSObject {
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
         if let updated = pending.backfilledHistory(
             history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
-            timestampOf: { $0["timestamp"] as? Int64 ?? 0 },
+            timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp,
             withDuration: { event, duration in
                 var updated = event
                 updated["timeToReconnectMs"] = duration

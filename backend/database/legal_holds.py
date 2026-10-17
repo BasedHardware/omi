@@ -29,6 +29,9 @@ LEGAL_HOLD_SCHEMA_VERSION = "legal_hold.v1"
 LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION = "legal_hold_deletion_gate.v1"
 _AUTHORIZED_ISSUERS = frozenset({"admin", "legal_hold_service"})
 _GATE_STATES = frozenset({"running", "failed", "completed"})
+_DREAM_RETRYABLE_GATE_KINDS = frozenset(
+    {"explicit_memory_deletion", "retention_cleanup", "audio_conversation_deletion"}
+)
 # A gate row whose holder crashed before finishing would otherwise block that
 # account forever: there is no janitor for this collection. A "running" gate
 # older than this bound is treated as abandoned — acquire may take it over and
@@ -380,6 +383,43 @@ def assert_no_destructive_operation_transaction(
     gate = _validated_gate(gate_ref.get(transaction=transaction))
     if _gate_blocks(gate, datetime.now(timezone.utc)):
         raise DestructiveOperationInProgress("canonical mutation blocked by destructive operation")
+
+
+def dream_gate_contention_retry_allowed(
+    uid: str,
+    *,
+    firestore_client: Any | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """Allow Dream to retry only around short destructive operations, never account deletion."""
+
+    if not uid:
+        return False
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None or current.utcoffset() is None:
+        return False
+    try:
+        client = account_deletion_firestore_client(firestore_client=firestore_client)
+        account_payload = _snapshot_payload(
+            _document(client, f"account_deletions/{uid}").get(), label="account deletion authority"
+        )
+        status = normalize_account_deletion_status(
+            marker_exists=account_payload is not None,
+            raw_status=account_payload.get("wipe_status") if account_payload is not None else None,
+        )
+        if account_deletion_blocks_access(status):
+            return False
+        gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+    except Exception as exc:  # noqa: BLE001 - failed authority reads must disable retry
+        logger.warning("Dream gate retry authority read failed: %s", type(exc).__name__)
+        return False
+    if gate is None:
+        return True
+    if gate["uid"] != uid:
+        return False
+    if not _gate_blocks(gate, current):
+        return True
+    return gate["kind"] in _DREAM_RETRYABLE_GATE_KINDS
 
 
 @contextmanager

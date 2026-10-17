@@ -388,9 +388,10 @@ class TestVadIsEmptyCache:
 
     @patch.object(vad, 'redis_db')
     @patch('utils.stt.vad._run_file_vad')
-    def test_cache_miss_runs_vad_and_stores(self, mock_local, mock_redis):
+    def test_cache_miss_runs_vad_and_stores(self, mock_local, mock_redis, monkeypatch):
         """Cache miss runs VAD and stores result in cache."""
-        os.environ.pop('HOSTED_VAD_API_URL', None)
+        monkeypatch.delenv('HOSTED_VAD_API_URL', raising=False)
+        monkeypatch.delenv(vad.VAD_CACHE_TTL_SECONDS_ENV, raising=False)
 
         mock_redis.get_generic_cache.return_value = None
         mock_local.return_value = [{'start': 0.0, 'end': 0.5, 'duration': 0.5}]
@@ -401,6 +402,34 @@ class TestVadIsEmptyCache:
         call_args = mock_redis.set_generic_cache.call_args
         assert call_args[0][0] == 'vad_is_empty:/fake/path.wav'
         assert call_args[1]['ttl'] == 86400
+
+    @patch.object(vad, 'redis_db')
+    @patch('utils.stt.vad._run_file_vad')
+    def test_cache_ttl_uses_valid_call_time_override(self, mock_local, mock_redis, monkeypatch):
+        """A valid override is read at each cache write, not captured at import time."""
+        monkeypatch.delenv('HOSTED_VAD_API_URL', raising=False)
+        mock_redis.get_generic_cache.return_value = None
+        mock_local.return_value = [{'start': 0.0, 'end': 0.5, 'duration': 0.5}]
+
+        monkeypatch.setenv(vad.VAD_CACHE_TTL_SECONDS_ENV, '600')
+        vad_is_empty('/first.wav', cache=True)
+        monkeypatch.setenv(vad.VAD_CACHE_TTL_SECONDS_ENV, '300')
+        vad_is_empty('/second.wav', cache=True)
+
+        assert [call.kwargs['ttl'] for call in mock_redis.set_generic_cache.call_args_list] == [600, 300]
+
+    @pytest.mark.parametrize('raw_value', ['', 'invalid', '299', '86401', '1.5'])
+    @patch.object(vad, 'redis_db')
+    @patch('utils.stt.vad._run_file_vad')
+    def test_cache_ttl_invalid_override_uses_default(self, mock_local, mock_redis, monkeypatch, raw_value):
+        monkeypatch.delenv('HOSTED_VAD_API_URL', raising=False)
+        monkeypatch.setenv(vad.VAD_CACHE_TTL_SECONDS_ENV, raw_value)
+        mock_redis.get_generic_cache.return_value = None
+        mock_local.return_value = []
+
+        vad_is_empty('/invalid.wav', cache=True)
+
+        assert mock_redis.set_generic_cache.call_args.kwargs['ttl'] == 86400
 
     @patch.object(vad, 'redis_db')
     @patch('utils.stt.vad._run_file_vad')
@@ -635,3 +664,10 @@ class TestRunVadWindow:
         assert feed_dict['input'].shape == (1, VAD_CONTEXT_SAMPLES + VAD_WINDOW_SAMPLES)
         assert feed_dict['state'].shape == _STATE_SHAPE
         assert feed_dict['sr'].dtype == np.int64
+
+
+@pytest.mark.parametrize('probability', [float('nan'), float('inf'), -0.1, 1.1])
+def test_strict_pcm_vad_invalid_probability_is_failure_not_silence(monkeypatch, probability):
+    monkeypatch.setattr(vad, 'run_vad_window', lambda audio, state, context: (probability, state, context))
+    with pytest.raises(VADProcessingError):
+        vad.offline_pcm_speech_segments(b'\0' * 1024)

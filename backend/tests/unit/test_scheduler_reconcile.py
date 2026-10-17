@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import pytest
+import yaml
 
 from scripts import scheduler_reconcile as reconcile
 
@@ -104,13 +105,26 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "messaging-maintenance-hourly",
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
+        "omi-tv-rollup-daily",
         "sentry-feedback-poll",
         "sync-backfill-uid-sequencer",
     }
+    rollup = prod_jobs["omi-tv-rollup-daily"]
+    assert rollup["lifecycle"] == "planned"
+    assert rollup["state"] == "PAUSED"
+    assert rollup["target"]["oauth"]["service_account"] == (
+        "finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com"
+    )
+
     assert "agent-vm-reconciler-5m" not in dev_jobs
     assert "candidate-integration-sweep" not in dev_jobs
     assert prod_jobs["candidate-integration-sweep"]["state"] == "ENABLED"
     assert "lifecycle" not in prod_jobs["candidate-integration-sweep"]  # active once backend-sync serves the route
+    messaging = prod_jobs["messaging-maintenance-hourly"]
+    assert "lifecycle" not in messaging
+    assert messaging["target"]["oauth"]["service_account"] == (
+        "msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com"
+    )
     for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
         job = env_jobs["frame-request-retention-hourly"]
         assert job["lifecycle"] == "planned"
@@ -124,6 +138,30 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         assert job["target"]["oauth"]["service_account"] == (
             f"frame-retention-scheduler@{project}.iam.gserviceaccount.com"
         )
+
+
+@pytest.mark.parametrize('auth_type', ['oauth', 'oidc'])
+@pytest.mark.parametrize('account_id', ['abcde', 'a' * 31, 'messaging-maintenance-scheduler', 'Uppercase', 'abcde-'])
+def test_manifest_rejects_invalid_service_account_ids_before_io(tmp_path, auth_type, account_id):
+    manifest = copy.deepcopy(reconcile.load_manifest())
+    job = manifest['environments']['prod']['jobs'][0]
+    job['target'].pop('oauth')
+    job['target'][auth_type] = {'service_account': f'{account_id}@based-hardware.iam.gserviceaccount.com'}
+    path = tmp_path / 'jobs.yaml'
+    path.write_text(yaml.safe_dump(manifest))
+    with pytest.raises(reconcile.ReconcileError, match='6-30 character ID'):
+        reconcile.load_manifest(path)
+
+
+@pytest.mark.parametrize('account_id', ['abcdef', 'a' * 30])
+def test_manifest_accepts_service_account_id_length_boundaries(tmp_path, account_id):
+    manifest = copy.deepcopy(reconcile.load_manifest())
+    manifest['environments']['prod']['jobs'][0]['target']['oauth'][
+        'service_account'
+    ] = f'{account_id}@based-hardware.iam.gserviceaccount.com'
+    path = tmp_path / 'jobs.yaml'
+    path.write_text(yaml.safe_dump(manifest))
+    assert reconcile.load_manifest(path)
 
 
 def _planned_frame_retention_manifest():

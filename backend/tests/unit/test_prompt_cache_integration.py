@@ -490,6 +490,7 @@ def _get_agentic_module():
         "save_playbook",
         "create_standing_trigger",
         "close_fact_tool",
+        "process_recent_conversations",
     ]
     # ``close_fact_tool`` is the module attribute (matching the import
     # statement in agentic.py), but the real LangChain tool overrides its
@@ -733,10 +734,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_38_tools():
+def test_core_tools_has_39_tools():
     """CORE_TOOLS includes the three JIT-gated ledger write verbs; web search remains server-built-in."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 38, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 38"
+    assert len(agentic_mod.CORE_TOOLS) == 39, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 39"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -759,9 +760,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 39
-    assert len(tools_b) == 38
-    assert len(agentic_mod.CORE_TOOLS) == 38, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 40
+    assert len(tools_b) == 39
+    assert len(agentic_mod.CORE_TOOLS) == 39, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -810,6 +811,7 @@ def test_core_tools_order_matches_exports():
         "save_playbook",
         "create_standing_trigger",
         "close_fact",
+        "process_recent_conversations",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]

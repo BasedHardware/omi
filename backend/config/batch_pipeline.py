@@ -83,3 +83,36 @@ def recovery_owners() -> tuple[str, ...]:
             }
         )
     )
+
+
+def authoritative_labels_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'false').lower() == 'true'
+
+
+def empty_asr_recovery_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true'
+
+
+def require_live_target_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'false').lower() == 'true'
+
+
+def recover_all_admitted() -> bool:
+    # These are already batch-owned obligations; rollback must still drain them.
+    return (
+        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').lower() == 'on'
+        and os.getenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'false').lower() == 'true'
+    )
+
+
+def recovery_enabled_for(owner_id: str) -> bool:
+    return recover_all_admitted() or owner_id in recovery_owners()
+
+
+def empty_asr_disposition_enabled() -> bool:
+    """Dark strict-VAD disposition; accepted paid intents are never reset."""
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def projection_contention_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'

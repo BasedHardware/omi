@@ -65,6 +65,8 @@ from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
+from config.repeat_work import playback_on_demand
+from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
 from .first_open_obligations import (
@@ -1715,6 +1717,16 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         cursor = snapshots[-1]
 
 
+def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
+    """Write opaque rollback metadata without reading or recreating the owner."""
+    ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    try:
+        ref.update({'playback_eager_epoch': epoch})
+    except NotFound:
+        return False
+    return True
+
+
 @after_write('conversations')
 def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
     """Apply ``update_data`` to a conversation.
@@ -1735,6 +1747,11 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
         return False
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
+        update_data = {
+            **update_data,
+            'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
+        }
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
@@ -1756,6 +1773,19 @@ def refresh_conversation_after_chat_edit(uid: str, conversation_id: str) -> None
     """Reconcile derived conversation views after an edit or inverse commits."""
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_id)
+
+
+def record_demand_enrichment_checkpoint(
+    uid: str, conversation_id: str, digest: str, *, firestore_client: Any = None
+) -> bool:
+    """Blind metadata-only checkpoint. Never recreate a removed conversation."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    try:
+        ref.update({'demand_enrichment_applied_hash': digest})
+    except NotFound:
+        return False
+    return True
 
 
 def update_conversation_chat(uid: str, conversation_id: str, expected: dict, update_data: dict) -> dict:
@@ -1844,7 +1874,12 @@ def _finalize_audio_file_group(
         return None
 
     # Generate file ID
-    file_id = str(uuid.uuid4())
+    source_hash = source_fingerprint(chunk_group) if playback_on_demand() else None
+    file_id = (
+        str(uuid.uuid5(uuid.NAMESPACE_OID, f'{uid}/{conversation_id}/{source_hash}'))
+        if source_hash
+        else str(uuid.uuid4())
+    )
 
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
@@ -1874,6 +1909,7 @@ def _finalize_audio_file_group(
         duration = spans[-1][1] - spans[0][0]
         return AudioFile(
             id=file_id,
+            source_fingerprint=source_hash,
             uid=uid,
             conversation_id=conversation_id,
             chunk_timestamps=timestamps,
@@ -1895,6 +1931,7 @@ def _finalize_audio_file_group(
 
     return AudioFile(
         id=file_id,
+        source_fingerprint=source_hash,
         uid=uid,
         conversation_id=conversation_id,
         chunk_timestamps=timestamps,
@@ -3861,6 +3898,7 @@ def assign_sync_conversation(
     before_assign: Callable[[Any], None] | None = None,
     validate_plan: Callable[[Any, dict], None] | None = None,
     after_assign: Callable[[Any, tuple], None] | None = None,
+    retry_contention: bool = False,
 ):
     """Atomically choose, create or append a sync conversation across workers."""
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
@@ -3922,7 +3960,8 @@ def assign_sync_conversation(
         return planned
 
     result = run_with_size_limit_backstop(
-        lambda full_ids: run_sync_assignment(client, assign, full_ids), lambda: attempted.get('canonical')
+        lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+        lambda: attempted.get('canonical'),
     )
     invalidate_people_stats_cache(uid)
     conversation = result[0]

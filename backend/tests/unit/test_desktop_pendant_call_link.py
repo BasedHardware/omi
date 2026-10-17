@@ -43,7 +43,6 @@ def store(monkeypatch):
     fake = StrictFirestore()
     monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'on')
     monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_PERCENT', '100')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'false')
     fake.degraded = MagicMock()
     monkeypatch.setattr(duplicate_capture, '_record_degraded', fake.degraded)
     monkeypatch.setattr(groups, 'get_firestore_client', lambda: fake)
@@ -62,8 +61,6 @@ def store(monkeypatch):
             and value['finished_at'] >= kw['finished_after']
         ][: kw['limit']],
     )
-    monkeypatch.setattr(duplicate_capture, 'submit_same_scene', lambda *a: None)
-    monkeypatch.setattr(duplicate_capture, 'submit_resummary', lambda *a: None)
     return fake
 
 

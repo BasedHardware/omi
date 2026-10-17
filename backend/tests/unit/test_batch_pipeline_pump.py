@@ -234,3 +234,42 @@ async def test_fatal_gpu_restarts_without_fail_or_attempt_charge_then_fresh_work
     assert store.rows['jobs', 'first']['state'] == 'committed'
     assert store.rows['jobs', 'second']['state'] == 'committed'
     assert store.rows['results', 'second']['previous_segment_id'] == 'first'
+
+
+@pytest.mark.asyncio
+async def test_worker_dispatch_denial_defers_without_quarantining_or_losing_audio(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    calls = []
+
+    def authorize(leases):
+        calls.append([v.item.segment_id for v in leases])
+        return {'allowed': calls[-1] if len(calls) == 1 else []}
+
+    class RecheckingWorker:
+        def process_batch(self, items, *, authorize_dispatch):
+            assert not authorize_dispatch({v.segment_id for v in items})
+            return [HeldWork(v.segment_id) for v in items]
+
+    store, _, pump = setup(RecheckingWorker(), authorize_compute=authorize)
+    assert await pump.run_once() == 1
+    job = store.rows['jobs', 'first']
+    assert job['state'] == 'retry' and job['attempt'] == 0
+    assert ('results', 'first') not in store.rows
+    assert calls == [['first'], ['first']]
+
+
+@pytest.mark.asyncio
+async def test_empty_asr_handoff_quarantines_first_attempt_and_stale_token_cannot_complete():
+    from utils.batch_pipeline.contracts import RecoveryWork
+
+    worker = Worker()
+    worker.process_batch = lambda items: [RecoveryWork(v.segment_id) for v in items]
+    store, queue, pump = setup(worker)
+    await pump.run_once()
+    job = store.rows['jobs', 'first']
+    assert job['state'] == 'quarantined' and job['attempt'] == 1
+    assert job['recovery_state'] == 'held' and not job['merge_pending']
+    assert ('results', 'first') not in store.rows
+    assert not queue.complete(WorkResult('first', 'gs://synthetic/stale'), '', time.time())

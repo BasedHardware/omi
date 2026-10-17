@@ -32,6 +32,9 @@ worker:
   batchSize: 8
   unitSeconds: 3600
   paddedSeconds: 272
+  emptyAsrRecoveryEnabled: false
+  emptyAsrDispositionEnabled: false
+  correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
   # Round peak + max(1Gi, 20%) / max(2Gi, 40%) up for request / limit.

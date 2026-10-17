@@ -87,6 +87,7 @@ describe("wall source and payload contracts", () => {
     expect(compute).toHaveBeenCalledTimes(1);
     expect(await wallPayload(new Date("2026-10-15T12:01Z"), compute)).toBe(a);
     await wallPayload(new Date("2026-10-16T00:00Z"), compute);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // lease, then compute
     expect(compute).toHaveBeenCalledTimes(2);
   });
   it("labels current Stripe / completed MAU as a dimmed proxy, not a same-cutoff close", async () => {

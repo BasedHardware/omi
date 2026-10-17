@@ -47,7 +47,10 @@ The hook runs after successful persistence in REST/sync/from-segments processing
 and after the durable fanout fence in live/Cloud Tasks finalization. Deploy the
 same revision/config to Cloud Run backend, backend-sync, backend-sync-backfill,
 backend-integration, GKE backend-listen and pusher. No client release is required.
-Smart merge and EXP-003 Jev remain separate and unchanged.
+Smart merge remains separate. EXP-003 Jev concluded no-go on 2026-10-17 after
+3 of 14 “same” calls were wrong (79% precision, below the preregistered 90%
+bar); the re-summary half was dropped. Its log-only shadow was removed, and
+this deterministic matcher remains the replacement.
 
 ## Matcher contract (overlap_shared_speech_v1)
 
@@ -180,11 +183,22 @@ before dispatch and watch at least 15 minutes. Do not dispatch dedicated Pusher
 or backend-listen deployments. Their default-off code follows the next regular
 train owned by others; keep their mode off until the train carries the code.
 
+Before the first shadow deployment, declare `CAPTURE_SHARED_SPEECH_MODE=off`
+and `CAPTURE_SHARED_SPEECH_PERCENT=0` explicitly on those four Cloud Run hosts,
+deploy and watch that release, and retain its eligible full SHA. The deployment
+action defaults to merging environment variables; a feature-bearing release
+that omits these keys cannot reset a later shadow value. The sidecar attachment
+preserves extra environment entries. Use the explicit-off release for the normal
+workflow rollback so it overwrites mode/percentage while retaining current
+incident controls. See the [deployment action contract](https://github.com/google-github-actions/deploy-cloudrun/blob/v3/action.yml#L83-L91).
+GKE overrides remain absent/default off throughout this qualification.
+
 Land a separate runtime-env config PR enabling shadow on Cloud Run only, then
 repeat the Cloud Run deploy and watch. Leave GKE settings absent/default off.
 Capture served revisions, traffic and exact rollback commands before dispatch.
-The prior eligible release is restored through the same Cloud Run workflow with
-its previous `release_sha`. The documented incident-only Pusher fallback is
+The prior eligible explicit-off release is restored through the same Cloud Run
+workflow with its previous `release_sha`; an omitted-key release is insufficient
+once shadow keys have been set. The documented incident-only Pusher fallback is
 `helm --kube-context gke_based-hardware_us-central1_prod-omi-gke -n prod-omi-backend rollback prod-omi-pusher <previous revision>`;
 do not execute it without an incident. No Pusher deploy is part of this rollout.
 

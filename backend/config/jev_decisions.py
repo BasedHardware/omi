@@ -16,7 +16,6 @@ from __future__ import annotations
 import hashlib
 import math
 import os
-from datetime import datetime, timezone
 from typing import Literal
 
 JEV_AUTO_LANE_ID = 'omi:auto:jev-decisions'
@@ -37,9 +36,6 @@ JEV_CLIENT_MAX_ATTEMPTS = 2
 
 CONVERSATION_RELEVANCE_JEV_ENABLED_ENV = 'CONVERSATION_RELEVANCE_JEV_ENABLED'
 MEMORY_OWNER_JEV_FLIP_ENABLED_ENV = 'MEMORY_OWNER_JEV_FLIP_ENABLED'
-CAPTURE_JEV_SHADOW_ENABLED_ENV = 'CAPTURE_JEV_SHADOW_ENABLED'
-CAPTURE_JEV_SHADOW_EXPIRY_ENV = 'CAPTURE_JEV_SHADOW_EXPIRY'
-CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY = '2026-10-18T00:00:00Z'
 
 _TRUE_VALUES = frozenset({'1', 'true', 'yes', 'on'})
 
@@ -141,25 +137,3 @@ def relevance_experiment_active() -> bool:
         or percentage('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT') > 0
         or percentage('CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT') > 0
     )
-
-
-def capture_jev_shadow_enabled(now: datetime | None = None) -> tuple[bool, str]:
-    """A malformed deadline disables the experiment; its default is a hard UTC stop."""
-    if not _flag(CAPTURE_JEV_SHADOW_ENABLED_ENV):
-        return False, 'flag_off'
-    try:
-        configured = datetime.fromisoformat(
-            os.getenv(CAPTURE_JEV_SHADOW_EXPIRY_ENV, CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY).replace('Z', '+00:00')
-        )
-        hard_stop = datetime.fromisoformat(CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY.replace('Z', '+00:00'))
-        # A deadline without an offset (date-only, or a missing offset) is malformed for a UTC hard
-        # stop: min() against the aware default raises TypeError, which must not escape to the
-        # unguarded callers (separate-conversation route, finalizer). Fail closed instead.
-        if configured.tzinfo is None or hard_stop.tzinfo is None:
-            return False, 'expired'
-        expiry = min(configured, hard_stop)
-        if (now or datetime.now(timezone.utc)) >= expiry:
-            return False, 'expired'
-    except (ValueError, TypeError):
-        return False, 'expired'
-    return True, 'enabled'

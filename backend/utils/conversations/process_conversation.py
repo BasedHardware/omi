@@ -14,6 +14,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
+from utils.sync.repeat_work_metrics import conversation_scope, record_final, record_feature, bind_generation
+
 import database._client as db_client_module
 from database import redis_db
 from database.firestore_read_metrics import FirestoreReadSite
@@ -1012,6 +1014,7 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 
 
 @spelling_context_run
+@conversation_scope
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
@@ -1977,7 +1980,9 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
-    llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client)
+    if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
+        record_feature(uid, conversation, 'l1', 'durable')
+        conversation.l1_llm_input_hash = l1_digest
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
     owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
@@ -2181,6 +2186,16 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
     )
     if identity.deliver_after_persist:  # a failed attempt above queues nothing for its retry to repeat
         submit_with_context(postprocess_executor, _run_auto_sync)
+
+
+def apply_settled_enrichment(uid: str, conversation: Conversation) -> None:
+    """Apply invisible effects using the same canonical and capture-policy writers."""
+    extract_memories(uid, conversation)
+    person_ids = list(set(conversation.get_person_ids()))
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
+    _save_action_items(uid, conversation, people, ProcessingTrigger.SYNC_UPDATE)
+    if save_structured_vector(uid, conversation) is False:
+        raise RuntimeError('conversation vector is not ready')
 
 
 def _save_action_items(
@@ -2742,6 +2757,7 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
 
 
 @spelling_context_run
+@conversation_scope
 def process_conversation(
     uid: str,
     language_code: str,
@@ -3047,6 +3063,7 @@ def process_conversation(
         people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
     structured, discarded = _get_structured(
@@ -3148,6 +3165,25 @@ def process_conversation(
             conversation.id,
         )
         return conversation
+
+    record_final(uid, conversation)
+    if llm_hashes:
+        record_feature(uid, conversation, 'notes', 'durable')
+        for field, value in llm_hashes.items():
+            setattr(conversation, field, value)
+
+    from utils.conversations.demand_processing import lazy_enrichment_enabled
+
+    lazy_effects = lazy_enrichment_enabled(uid) and not discarded
+    if lazy_effects and not defer_derived_effects:
+        from utils.sync.reprocess import mark_effects
+
+        mark_effects(
+            uid,
+            conversation.id,
+            language_code,
+            immediate=trigger in {ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.FIRST_OPEN},
+        )
 
     if relevance is not None:
         emit_recorded_decision(uid, conversation.id, relevance)
@@ -3272,14 +3308,16 @@ def process_conversation(
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             # Durable finalization writes its vector directly behind the fanout claim,
             # including completed replays and terminal intelligence suppression.
-            if not defer_derived_effects and not is_reprocess:
+            if not lazy_effects and not defer_derived_effects and not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-            if not defer_memory_extraction:
+            if not lazy_effects and not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            if is_reprocess:
+            if lazy_effects:
+                pass  # Coalesced memory, vector and task work is durably owned above.
+            elif is_reprocess:
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.

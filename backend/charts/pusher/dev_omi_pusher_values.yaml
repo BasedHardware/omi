@@ -116,6 +116,26 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: DEMAND_PROCESSING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_LAZY_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_TOOL_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
+  - name: DEMAND_PROCESSING_PERCENT
+    value: "0"
+  - name: PLAYBACK_ON_DEMAND_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_REVISION_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_LLM_VERSION
+    value: "2026-10-16-v1"
+  - name: SYNC_POLL_BACKOFF_ENABLED
+    value: "false"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -146,7 +166,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
+    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "0"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -312,12 +332,6 @@ env:
     value: "60000"
   - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
     value: ""
-  - name: CAPTURE_JEV_SHADOW_ENABLED
-    value: "true"
-  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: CAPTURE_JEV_SHADOW_PERCENT
-    value: "0"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
   - name: MEMORY_BELIEF_AUTOMATION_PAUSED

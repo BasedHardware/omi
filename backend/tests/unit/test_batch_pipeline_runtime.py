@@ -289,3 +289,21 @@ def test_memory_probe_separates_host_and_device_peaks():
     assert result['gpu_allocated_peak_bytes'] == 30
     assert result['gpu_reserved_peak_bytes'] == 40
     assert result['host_process_peak_bytes'] > 0
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_cap_audio_counter_is_exported_by_the_worker_metrics_registry(monkeypatch, enforce):
+    from utils.observability.stt_cap_dispatch import record_audio
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    state = runtime.RuntimeState()
+    server = runtime.health_server(state, CollectorRegistry(), 0)
+    try:
+        record_audio('sync', 'accepted', 'parakeet', 5)
+        body = urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics').read().decode()
+        assert ('omi_stt_cap_provider_audio_seconds_total' in body) is enforce
+        if enforce:
+            assert 'path="sync"' in body and 'provider="parakeet"' in body
+    finally:
+        server.shutdown()
+        server.server_close()
