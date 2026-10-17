@@ -1363,7 +1363,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
         ('DREAM_AGENT_FEEDBACK_SALT', '1'),
         ('DREAM_AGENT_PASSES_PER_DAY', '4'),
         ('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '4'),
-        ('DREAM_AGENT_DAILY_USD', '20'),
+        ('DREAM_AGENT_DAILY_USD', '10'),
     ],
 )
 def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, service, setting, stale):
