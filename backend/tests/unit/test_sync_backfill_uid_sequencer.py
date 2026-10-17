@@ -1384,6 +1384,13 @@ def test_sweep_stops_redriving_at_the_budget_deferral_cap(db, monkeypatch):
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    finalized_chains = []
+    monkeypatch.setattr(
+        uid_sequencer,
+        'mark_job_failed',
+        lambda job_id, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
+        or {'status': 'failed'},
+    )
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
     redrives = []
@@ -1407,6 +1414,10 @@ def test_sweep_stops_redriving_at_the_budget_deferral_cap(db, monkeypatch):
     # The exhausted job's owner record is gone and the next capture has
     # already claimed the lane: the per-UID slot is no longer held hostage.
     assert released.get('active_job_id') == 'next'
+    # The abandoned Redis job was terminalized (sequenced jobs are excluded
+    # from stale polling, so the sweep itself must hand off the terminal
+    # state) with a distinct failure reason for observability.
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
 
     # Below the cap the sweep keeps redriving with the persisted count
     # re-attached (existing contract, thread guard).

@@ -5127,6 +5127,83 @@ async def test_sync_task_budget_deferral_uncertain_enqueue_keeps_deferred_marker
 
 
 @pytest.mark.asyncio
+async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_enqueue():
+    """The shared deadline firing while the marker write itself is awaiting is
+    NOT an uncertain enqueue: the enqueue call never ran, so no replacement can
+    exist and retaining the marker would leave the queue's retries exhausting
+    against the preserved lock with no delayed continuation to resume the job.
+    The fallback must classify it as a marker timeout and clear any
+    late-applied marker, exactly like a deterministic enqueue failure."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_that_never_finishes(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    marker_writes = []
+
+    async def _marker_that_uses_whole_deadline(job_id, updates):
+        marker_writes.append(dict(updates))
+        # Only the marker write consumes the deadline; the fallback's marker
+        # clear (deferred_until=None) must return fast so this test exercises
+        # classification, not a real cleanup-timeout wait.
+        if updates.get('deferred_until') is not None:
+            await asyncio.sleep(30)
+
+    async def _awaiting_run_blocking(_executor, fn, *args, **kwargs):
+        # The passthrough run_blocking returns fn(*args) without awaiting it,
+        # which would make the marker coroutine "complete" instantly; the
+        # deadline must expire while the marker write is genuinely awaited.
+        result = fn(*args, **kwargs)
+        if asyncio.iscoroutine(result):
+            result = await result
+        return result
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.run_blocking = _awaiting_run_blocking
+        # The deadline expires while the marker write awaits: the update is
+        # cancelled before the enqueue is ever attempted.
+        module.update_sync_job = MagicMock(
+            side_effect=lambda job_id, updates: _marker_that_uses_whole_deadline(job_id, updates)
+        )
+        module.enqueue_sync_job_budget_replacement = MagicMock(
+            side_effect=AssertionError('enqueue must never run when the marker write timed out')
+        )
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        # Marker write attempted, then cleared: no replacement was scheduled,
+        # so the marker must not outlive the queue-owned retry handback.
+        assert any(call.get('deferred_until') is not None for call in marker_writes)
+        assert any(call.get('deferred_until') is None for call in marker_writes)
+        assert [call['reason'] for call in fallback_calls] == ['marker_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
 async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_marker():
     """The post-budget deadline firing mid-enqueue is the same uncertainty: the
     underlying create may have been accepted after the handler stopped

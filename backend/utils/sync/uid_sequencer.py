@@ -19,6 +19,7 @@ from database.sync_jobs import (
     SyncLedgerFenceMode,
     get_sync_job,
     get_sync_ledger_fence_mode,
+    mark_job_failed,
     sync_job_run_lock_present,
     sync_job_key_exists,
     try_acquire_job_run_lock,
@@ -205,6 +206,57 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _Cl
     return True
 
 
+def _finalize_abandoned_budget_chain_job(job_id: str) -> None:
+    """Terminalize a capped budget-deferral chain's Redis job, conservatively.
+
+    The sweep just released the sequencer owner because the chain spent its
+    whole attempt contract; the Redis job still reads ``processing``, and
+    ``is_sync_job_stale`` deliberately excludes sequenced dispatch, so no
+    status poll can ever finalize it — the client would see a nonterminal job
+    until the 24h Redis TTL and the durable content claim could not recover
+    through the normal terminal path. Marking it failed here is the terminal
+    handoff. Best-effort and fenced by the run lock's absence: a still-held
+    lock means an attempt may be running under the old lease, and its own
+    terminal write must win; a failed finalize degrades to today's behavior
+    (nonterminal until TTL) rather than double-terminalizing.
+    """
+    try:
+        job = get_sync_job(job_id)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=read_failed ' 'job_id=%s exception_type=%s',
+            job_id,
+            type(error).__name__,
+        )
+        return
+    if not isinstance(job, dict) or job.get('status') in TERMINAL_STATUSES:
+        return
+    if job.get('status') != 'processing':
+        return
+    if sync_job_run_lock_present(job_id):
+        # An attempt still holds the run lock under the released lease: its
+        # own terminal write (or its deferral) must win, never the sweep's.
+        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=lock_held job_id=%s', job_id)
+        return
+    try:
+        finalized = mark_job_failed(
+            job_id,
+            'sync budget deferral chain exhausted the attempt contract',
+            reason_code='sync_budget_chain_exhausted',
+        )
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=write_failed ' 'job_id=%s exception_type=%s',
+            job_id,
+            type(error).__name__,
+        )
+        return
+    if finalized is not None:
+        logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
+    else:
+        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
+
+
 def reconcile_uid(
     uid: str,
     owner: dict[str, Any],
@@ -302,6 +354,13 @@ def reconcile_uid(
             deferrals,
         )
         if registry.finish_expired_job(uid, job_id, epoch, 'budget_chain_exhausted', now=current):
+            # The Redis job is deliberately left nonterminal here only if it
+            # is already gone (key absent = retired/expired) or this
+            # best-effort finalize fails; those degrade to the abandoned-attempt
+            # recovery below. finalize is what unblocks the client's terminal
+            # status poll and the durable content claim's recovery path —
+            # without it the job reads processing until the 24h Redis TTL.
+            _finalize_abandoned_budget_chain_job(job_id)
             kick(uid, retire_limit=retire_limit, progress=progress)
             return 'budget_chain_exhausted'
         return 'raced'

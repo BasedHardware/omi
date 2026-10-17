@@ -2311,6 +2311,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
     post_budget_deadline = time.monotonic() + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
     if attempt_state is not None:
         attempt_state['post_budget_deadline'] = post_budget_deadline
+    enqueue_started = False
     try:
         async with asyncio.timeout_at(post_budget_deadline):
             # Marker first, and required: the preserved run lock expires before
@@ -2334,9 +2335,15 @@ async def _defer_sync_job_after_handler_budget_expiry(
                     type(error).__name__,
                 )
                 return _budget_deferral_fallback('marker_failed', 'degraded')
+            # Flagged before the enqueue call, not after: a deadline expiry
+            # while the marker write itself is still awaiting must be
+            # classified as a marker failure (the enqueue never ran and no
+            # replacement can exist), not as an uncertain enqueue whose
+            # marker-retention semantics assume a possibly-created task.
+            enqueue_started = True
             await run_blocking(db_executor, enqueue_sync_job_budget_replacement, payload, schedule_at)
     except Exception as error:
-        uncertain_enqueue = _is_uncertain_enqueue_error(error)
+        uncertain_enqueue = enqueue_started and _is_uncertain_enqueue_error(error)
         logger.warning(
             'event=sync_transcription_job outcome=handler_budget_replacement_failed ' 'exception_type=%s uncertain=%s',
             type(error).__name__,
@@ -2351,6 +2358,17 @@ async def _defer_sync_job_after_handler_budget_expiry(
             # that may still arrive, so the marker stays and the fallback keeps
             # queue-owned retries against it.
             return _budget_deferral_fallback('enqueue_uncertain', 'degraded')
+        if not enqueue_started:
+            # The deadline expired before the enqueue call began — most
+            # plausibly while the marker write itself was still awaiting its
+            # Redis executor call. No replacement can exist, so this is the
+            # marker-failure class: the marker clear below removes any
+            # late-applied marker (with no replacement it is the exact
+            # nonterminal stall that clear exists to prevent), and the
+            # recorded reason distinguishes it from a failed create call.
+            fallback_reason = 'marker_timeout'
+        else:
+            fallback_reason = 'enqueue_failed'
         # The marker above suppresses stale detection until the instant the
         # replacement would have run; with no replacement scheduled that window
         # is an unnecessary nonterminal stall outlasting the preserved lock, so
@@ -2364,7 +2382,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
                 raise RuntimeError('deferred marker clear did not apply')
         except Exception:
             logger.warning('event=sync_transcription_job outcome=handler_budget_deferral_marker_clear_failed')
-        return _budget_deferral_fallback('enqueue_failed', 'degraded')
+        return _budget_deferral_fallback(fallback_reason, 'degraded')
     if payload.get('sequencer_epoch') is not None:
         # Sequenced deliveries only: a lease that expires before the delayed
         # replacement begins makes the sweep redrive from the owner's original
@@ -2405,21 +2423,27 @@ async def _defer_sync_job_after_handler_budget_expiry(
     return JSONResponse(status_code=200, content={'status': SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
 
 
-async def _release_expired_attempt_run_lock(attempt_state: dict) -> None:
+async def _release_expired_attempt_run_lock(attempt_state: dict, *, deadline: Optional[float] = None) -> None:
     """Release a budget-expired attempt's run lock once its job is terminal.
 
     A terminal Redis transition is the pipeline's proven result: the
     redelivery's terminal branch only retries exact-job cleanup and never
     re-transcribes, so the preserved lock no longer protects anything this
     attempt owns. Best-effort — a failed release keeps the lock until its TTL
-    and the redelivery defers against it, exactly the lease-loss path.
+    and the redelivery defers against it, exactly the lease-loss path. The
+    optional deadline bounds the release to the remaining response headroom;
+    expiry skips it, again leaving the lock to its TTL.
     """
     job_id = attempt_state.get('job_id')
     lock_token = attempt_state.get('lock_token')
     if not isinstance(job_id, str) or not isinstance(lock_token, str) or not lock_token:
         return
     try:
-        await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
+        if deadline is None:
+            await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
+        else:
+            async with asyncio.timeout_at(deadline):
+                await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
     except Exception as error:
         logger.warning(
             'event=sync_transcription_job outcome=terminal_expiry_lock_release_failed exception_type=%s',
@@ -2471,8 +2495,19 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
         # attempt owns it.
         job_id = state.get('job_id')
         if isinstance(job_id, str):
+            # Bounded by the same post-budget deadline contract as the
+            # deferral's marker/enqueue work: this Redis read and the lock
+            # release below run after the budget expired, so without a bound a
+            # backlogged db_executor or a stalling Redis could consume the
+            # whole response margin and let the middleware or the Cloud Tasks
+            # dispatch deadline terminate the request first — recreating the
+            # lingering-attempt behavior this budget exists to prevent.
+            # Expiry falls back conservatively: skip the recovery and defer,
+            # exactly as when the read fails.
+            recovery_deadline = time.monotonic() + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
             try:
-                expired_job = await run_blocking(db_executor, get_sync_job, job_id)
+                async with asyncio.timeout_at(recovery_deadline):
+                    expired_job = await run_blocking(db_executor, get_sync_job, job_id)
             except Exception as error:
                 logger.warning(
                     'event=sync_transcription_job outcome=handler_budget_expired_terminal_read_failed '
@@ -2486,7 +2521,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
                     'outcome=handler_budget_expired',
                     expired_job.get('status'),
                 )
-                await _release_expired_attempt_run_lock(state)
+                await _release_expired_attempt_run_lock(state, deadline=recovery_deadline)
                 return JSONResponse(
                     status_code=500,
                     content={'status': 'terminal_cleanup_retry', 'job_status': expired_job.get('status')},
