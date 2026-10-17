@@ -767,10 +767,41 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(
-            q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+
+        has_date_filters = (
+            start_date is not None or end_date is not None or due_start_date is not None or due_end_date is not None
         )
-        total_docs += docs
+        # Fall back to single-query bounded scan when conversation_id is scoped (compact lists
+        # without covering composite indexes for created_at DESC) or when date filters apply.
+        if has_date_filters or conversation_id is not None:
+            items, docs = _stream_action_items_bounded(
+                q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+            )
+            total_docs += docs
+            items.sort(key=_action_item_list_sort_key)
+            return items[:row_budget]
+
+        # No date filter given: read ordered prefixes matching product sort order
+        # (due soonest first, then newest created) so a bounded scan never misses
+        # globally earlier-due tasks outside an arbitrary document-order window.
+        q_due = q.order_by('due_at', direction=firestore.Query.ASCENDING)
+        items_due, docs_due = _stream_action_items_bounded(
+            q_due, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+        )
+        total_docs += docs_due
+
+        if len(items_due) < row_budget and not _out_of_budget():
+            needed = row_budget - len(items_due)
+            q_created = q.order_by('created_at', direction=firestore.Query.DESCENDING)
+            items_created, docs_created = _stream_action_items_bounded(
+                q_created, max_docs=_list_scan_budget(needed), budget=budget, extra_fields=extra_fields
+            )
+            total_docs += docs_created
+            seen_due = {item['id'] for item in items_due}
+            items = items_due + [i for i in items_created if i['id'] not in seen_due and i.get('due_at') is None]
+        else:
+            items = items_due
+
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
 
