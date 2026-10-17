@@ -64,6 +64,7 @@ APP_CLIENT_PREFIXES = (
     '/memory/search',
     '/v1/account/cutover',
     '/v1/action-items',
+    '/v1/affiliate',
     '/v1/agent',
     '/v1/announcements',
     '/v1/app',
