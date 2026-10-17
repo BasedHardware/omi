@@ -22,6 +22,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> Any:
+    from database.vector_db import upsert_action_item_vector as _upsert_action_item_vector
+
+    return _upsert_action_item_vector(uid, action_item_id, description)
+
+
+def delete_action_item_vector(uid: str, action_item_id: str) -> None:
+    from database.vector_db import delete_action_item_vector as _delete_action_item_vector
+
+    _delete_action_item_vector(uid, action_item_id)
+
+
 def get_action_items_text(
     uid: str,
     limit: int = 50,
@@ -186,6 +198,10 @@ def create_action_item_text(
             return "Action item created, but couldn't retrieve details."
 
         task_desc = created_item.get('description', 'Task')
+        try:
+            upsert_action_item_vector(uid, action_item_id, task_desc)
+        except Exception as vec_error:
+            logger.warning(f"Failed to index action item vector: {vec_error}")
         result = f"✅ Added: {task_desc}"
 
         if created_item.get('due_at'):
@@ -272,6 +288,21 @@ def update_action_item_text(
         updated_item = action_items_db.get_action_item(uid, action_item_id)
         if not updated_item:
             return f"Successfully updated action item '{action_item_id}', but couldn't retrieve details."
+
+        if bool(updated_item.get('deleted')):
+            try:
+                delete_action_item_vector(uid, action_item_id)
+            except Exception as vec_error:
+                logger.warning(f"Failed to delete action item vector: {vec_error}")
+        elif 'description' in update_data:
+            try:
+                upsert_action_item_vector(
+                    uid,
+                    action_item_id,
+                    updated_item.get('description') or update_data['description'],
+                )
+            except Exception as vec_error:
+                logger.warning(f"Failed to update action item vector: {vec_error}")
 
         # Send notification if completed
         if completed is True:
