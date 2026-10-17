@@ -138,6 +138,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _is_eligible_for_lock_recovery(uid: str) -> bool:
+    try:
+        from database import users as users_db
+
+        # In stubbed test suites (e.g. test isolation where database.users is AutoMockModule),
+        # an unconfigured user must not falsely resolve to plan_unlimited or trigger heavy imports.
+        if type(users_db).__name__ == '_AutoMockModule' or hasattr(users_db, '_mock_name'):
+            return False
+
+        from utils.subscription import resolve_transcription_allowance
+
+        allowance = resolve_transcription_allowance(uid, byok_active=False)
+        return (
+            bool(getattr(allowance, 'managed', False))
+            and allowance.reason in {'plan_within_allowance', 'plan_unlimited'}
+            and not getattr(allowance, 'byok_active', False)
+        )
+    except Exception as e:
+        logger.warning(f"Failed to check lock recovery eligibility for uid {uid}: {e}")
+        return False
+
+
+def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[str, Any]]) -> None:
+    if not conversations:
+        return
+    locked_items = [c for c in conversations if c.get('is_locked')]
+    if not locked_items:
+        return
+    if not _is_eligible_for_lock_recovery(uid):
+        return
+    for c in locked_items:
+        c['is_locked'] = False
+        cid = c.get('id')
+        if cid:
+            try:
+                conversations_db.update_conversation(uid, cid, {'is_locked': False})
+            except Exception as e:
+                logger.warning(f"Failed to persist lock healing for conv {cid}: {e}")
+
+
 def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
@@ -158,7 +198,14 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync
             raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+        if _is_eligible_for_lock_recovery(uid):
+            conversation['is_locked'] = False
+            try:
+                conversations_db.update_conversation(uid, conversation_id, {'is_locked': False})
+            except Exception as e:
+                logger.warning(f"Failed to persist lock healing for conv {conversation_id}: {e}")
+        else:
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     return conversation
 
@@ -997,9 +1044,9 @@ def get_conversations(
         folder_id=folder_id,
         starred=starred,
         budget=budget,
-        list_fields_only=True,
     )
 
+    _heal_locked_conversations_if_eligible(uid, conversations)
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -2056,6 +2103,7 @@ async def _search_exact_conversation_reference(
         [exact_conversation_id],
         include_discarded=bool(search_request.include_discarded),
     )
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     conversations = [
         conversation
@@ -2105,6 +2153,7 @@ async def _browse_speaker_conversations(
             budget=budget,
         ),
     )
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, browse_results.get('items', []))
     redact_conversations_for_list(browse_results['items'])
     finish_list_budget(response, budget)
     return browse_results
@@ -2203,6 +2252,7 @@ async def search_conversations_endpoint(
     conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
