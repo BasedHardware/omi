@@ -23,6 +23,7 @@
 #include "accel.h"
 #include "button.h"
 #include "config.h"
+#include "custody.h"
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
@@ -52,6 +53,7 @@ extern bool is_charging;
 static atomic_t pusher_stop_flag;
 
 struct bt_conn *current_connection = NULL;
+static struct k_spinlock connection_lock;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
@@ -605,7 +607,15 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     }
 
     LOG_INF("bluetooth activated");
-    current_connection = bt_conn_ref(conn);
+    struct bt_conn *new_conn = bt_conn_ref(conn);
+    {
+        k_spinlock_key_t key = k_spin_lock(&connection_lock);
+        current_connection = new_conn;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        storage_connection_changed();
+#endif
+        k_spin_unlock(&connection_lock, key);
+    }
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
 
@@ -681,6 +691,23 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(false);
     storage_is_on = false;
+#endif
+
+    struct bt_conn *old_conn;
+    {
+        k_spinlock_key_t key = k_spin_lock(&connection_lock);
+        old_conn = current_connection;
+        current_connection = NULL;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        storage_connection_changed();
+#endif
+        k_spin_unlock(&connection_lock, key);
+    }
+    if (old_conn != NULL) {
+        bt_conn_unref(old_conn);
+    }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     /* No phone left to sync: if the mic is idle in AAD sleep, drop SD power again
      * (it was kept on for the connection). */
     if (mic_in_aad_sleep()) {
@@ -689,11 +716,6 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 #endif
 
     LOG_INF("Transport disconnected");
-
-    if (current_connection != NULL) {
-        bt_conn_unref(current_connection);
-        current_connection = NULL;
-    }
     current_mtu = 0;
     charging_status_last_notified = -1;
 
@@ -1133,44 +1155,80 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
 static uint32_t offset = 0;
-static uint16_t buffer_offset = 0;
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
-bool write_to_storage(void)
+static uint8_t storage_record_buf[MAX_WRITE_SIZE];
+static omi_live_pack_t live_pack;
+static bool live_pack_ready;
+static int64_t last_pack_activity_ms;
+static uint32_t last_pack_session;
+
+atomic_t omi_live_persist_records_queued = ATOMIC_INIT(0);
+atomic_t omi_live_persist_records_dropped = ATOMIC_INIT(0);
+atomic_t omi_live_persist_frames_dropped = ATOMIC_INIT(0);
+
+static void storage_pack_init(void)
 {
-    uint8_t *buffer = tx_buffer + 2;
-    uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
-
-    // buffer_offset = buffer_offset+amount_to_fill;
-    // check if adding the new packet will cause a overflow
-    if (buffer_offset + packet_size > MAX_WRITE_SIZE - 1) {
-
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        uint8_t *write_ptr = storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
-
-        buffer_offset = packet_size;
-        storage_temp_data[0] = tx_buffer_size;
-        memcpy(storage_temp_data + 1, buffer, tx_buffer_size);
-
-    } else if (buffer_offset + packet_size == MAX_WRITE_SIZE - 1) {
-        // exact frame needed
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-        buffer_offset = 0;
-        uint8_t *write_ptr = (uint8_t *) storage_temp_data;
-        write_to_file(write_ptr, MAX_WRITE_SIZE);
-    } else {
-        storage_temp_data[buffer_offset] = tx_buffer_size;
-        memcpy(storage_temp_data + buffer_offset + 1, buffer, tx_buffer_size);
-        buffer_offset = buffer_offset + packet_size;
+    if (!live_pack_ready) {
+        omi_live_pack_init(&live_pack, storage_temp_data, MAX_WRITE_SIZE);
+        live_pack_ready = true;
     }
+}
+
+static void storage_submit_record(uint32_t session, uint16_t boundary)
+{
+    uint32_t wrote = sd_ring_write_record(storage_record_buf, MAX_WRITE_SIZE, session, boundary);
+    if (wrote == 0U) {
+        atomic_inc(&omi_live_persist_records_dropped);
+        live_pack.invalidate_next = true;
+        if (live_pack.offset > 0U) {
+            live_pack.record_session = 0U;
+        }
+        static int64_t last_drop_log_ms;
+        int64_t now = k_uptime_get();
+        if (now - last_drop_log_ms > 2000) {
+            LOG_WRN("ring record dropped (queue unavailable), dropped=%ld",
+                    (long) atomic_get(&omi_live_persist_records_dropped));
+            last_drop_log_ms = now;
+        }
+    } else {
+        atomic_inc(&omi_live_persist_records_queued);
+    }
+}
+
+static void storage_pack_drain(void)
+{
+    uint32_t session;
+    uint16_t boundary;
+    if (omi_live_pack_flush(&live_pack, storage_record_buf, &session, &boundary)) {
+        storage_submit_record(session, boundary);
+    }
+}
+
+static void write_to_storage(uint32_t session, uint16_t boundary)
+{
+    storage_pack_init();
+
+    uint32_t record_session;
+    uint16_t record_boundary;
+    if (omi_live_pack_frame(&live_pack,
+                            tx_buffer + RING_BUFFER_HEADER_SIZE,
+                            (uint16_t) tx_buffer_size,
+                            session,
+                            boundary,
+                            storage_record_buf,
+                            &record_session,
+                            &record_boundary)) {
+        storage_submit_record(record_session, record_boundary);
+    }
+
+    last_pack_activity_ms = k_uptime_get();
+    last_pack_session = session;
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     monitor_inc_storage_write();
 #endif
-    return true;
 }
 #endif
 
@@ -1212,46 +1270,102 @@ void test_pusher(void)
     }
 }
 
+#define STORAGE_PACK_IDLE_FLUSH_MS 1000
+
 void pusher(void)
 {
     k_msleep(500);
     while (!atomic_get(&pusher_stop_flag)) {
-        k_sem_take(&tx_queue_sem, K_FOREVER);
+        k_sem_take(&tx_queue_sem, K_MSEC(200));
         if (atomic_get(&pusher_stop_flag)) {
             break;
         }
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        if (live_pack_ready && live_pack.offset > 0U &&
+            (k_uptime_get() - last_pack_activity_ms) >= STORAGE_PACK_IDLE_FLUSH_MS) {
+            storage_pack_drain();
+        }
+#endif
+
         while (read_from_tx_queue()) {
-            struct bt_conn *conn = current_connection;
+            struct bt_conn *conn = get_current_connection_ref();
             bool is_subscribed = false;
-            if (conn) {
-                conn = bt_conn_ref(conn);
-                if (current_mtu >= MINIMAL_PACKET_SIZE) {
-                    is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
-                }
+            if (conn && current_mtu >= MINIMAL_PACKET_SIZE) {
+                is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+            }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+            uint32_t session_before = storage_live_session();
+#endif
+
+            bool sent = false;
+            if (conn && is_subscribed) {
+                sent = push_to_gatt(conn);
+            }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+            uint32_t live_session = storage_live_session();
+            if (live_session != last_pack_session) {
+                storage_pack_init();
+                storage_pack_drain();
+                last_pack_session = live_session;
             }
 
             if (conn && is_subscribed) {
-                push_to_gatt(conn);
-                bt_conn_unref(conn);
-            } else if (!conn) {
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+                if (live_session != 0U) {
+                    uint32_t frame_session = (sent && session_before == live_session) ? live_session : 0U;
+                    write_to_storage(frame_session, packet_next_index);
+                } else if (session_before != 0U) {
+                    write_to_storage(0U, packet_next_index);
+                } else if (!sent) {
+                    live_pack.invalidate_next = true;
+                }
+            } else {
                 if (is_sd_on()) {
                     storage_full_warned = false;
-                    write_to_storage();
+                    write_to_storage(0U, packet_next_index);
                 } else {
+                    live_pack.invalidate_next = true;
+                    atomic_inc(&omi_live_persist_frames_dropped);
                     if (!storage_full_warned) {
                         LOG_WRN("Offline storage unavailable");
                         storage_full_warned = true;
                     }
                 }
-#endif
-            } else {
-                bt_conn_unref(conn);
+            }
+#else
+            if (conn && !is_subscribed) {
                 k_sleep(K_MSEC(10));
+            }
+#endif
+
+            if (conn) {
+                bt_conn_unref(conn);
             }
         }
     }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    {
+        uint32_t drain_session = storage_live_session();
+        struct bt_conn *conn = get_current_connection_ref();
+        bool drain_subscribed = false;
+        if (conn && current_mtu >= MINIMAL_PACKET_SIZE) {
+            drain_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+        }
+        if (conn) {
+            bt_conn_unref(conn);
+        }
+        bool persist_tail = (drain_session != 0U) || !drain_subscribed;
+        while (persist_tail && read_from_tx_queue()) {
+            write_to_storage(0U, packet_next_index);
+        }
+    }
+    if (live_pack_ready) {
+        storage_pack_drain();
+    }
+#endif
 }
 
 int transport_off()
@@ -1267,10 +1381,20 @@ int transport_off()
     }
 
     // First disconnect any active connections
-    if (current_connection != NULL) {
-        bt_conn_disconnect(current_connection, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-        bt_conn_unref(current_connection);
+    struct bt_conn *old_conn;
+    {
+        k_spinlock_key_t key = k_spin_lock(&connection_lock);
+        old_conn = current_connection;
         current_connection = NULL;
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        storage_is_on = false;
+        storage_connection_changed();
+#endif
+        k_spin_unlock(&connection_lock, key);
+    }
+    if (old_conn != NULL) {
+        bt_conn_disconnect(old_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+        bt_conn_unref(old_conn);
     }
 
     // Stop advertising
@@ -1296,10 +1420,6 @@ int transport_off()
     // Ensure all Bluetooth resources are cleaned up
     is_connected = false;
     current_mtu = 0;
-
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-    storage_is_on = false;
-#endif
 
     return 0;
 }
@@ -1449,6 +1569,14 @@ int transport_start()
 struct bt_conn *get_current_connection()
 {
     return current_connection;
+}
+
+struct bt_conn *get_current_connection_ref(void)
+{
+    k_spinlock_key_t key = k_spin_lock(&connection_lock);
+    struct bt_conn *conn = (current_connection != NULL) ? bt_conn_ref(current_connection) : NULL;
+    k_spin_unlock(&connection_lock, key);
+    return conn;
 }
 
 int broadcast_audio_packets(uint8_t *buffer, size_t size)
