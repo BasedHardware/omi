@@ -130,7 +130,6 @@ def test_jit_first_open_worker_skips_malformed_person_records(monkeypatch):
         return True
 
     mock_proc.trigger_conversation_apps = fake_trigger_conversation_apps
-    mock_proc.conversation_apps_opt_in_only = lambda: False
     mock_proc.AppUsageAttribution = types.SimpleNamespace(AUTOMATIC_PROCESSING="auto")
     mock_proc.resolve_authorized_first_open_plan = lambda **kw: types.SimpleNamespace(defer_derived_work=True)
     mock_proc.conversations_db = types.SimpleNamespace(
