@@ -3,7 +3,7 @@
 import os
 
 from config.batch_pipeline import in_percent_cohort, record_capture_eligible
-from config.live_demand import language_qualified
+from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
 def selected(uid: str) -> bool:
@@ -11,6 +11,21 @@ def selected(uid: str) -> bool:
         return in_percent_cohort(uid, float(os.getenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')))
     except ValueError:
         return False
+
+
+def language_qualified(host, capture: dict) -> bool:
+    supported = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
+    language = normalized_stt_language(host.request.language)
+    profile = getattr(host, 'language_profile', None)
+    return bool(
+        language in supported
+        and normalized_stt_language(host.language) == language
+        and normalized_stt_language(capture.get('language')) == language
+        and profile is not None
+        and profile.primary == language
+        and profile.expected
+        and set(profile.expected).issubset(supported)
+    )
 
 
 def covered(host) -> bool:
@@ -26,7 +41,7 @@ def covered(host) -> bool:
         and not host.request.onboarding_mode
         and host.request.source != 'phone_call'
         and host.pusher_enabled
-        and language_qualified(host)
+        and language_qualified(host, capture)
     )
 
 

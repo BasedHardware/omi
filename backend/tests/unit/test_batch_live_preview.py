@@ -128,7 +128,6 @@ def test_durable_record_fences(monkeypatch, field, value):
         ('is_multi_channel', True),
         ('use_custom_stt', True),
         ('pusher_enabled', False),
-        ('multi_lang_enabled', True),
         ('language', 'pt'),
     ],
 )
@@ -152,11 +151,17 @@ def test_actual_selector_prefers_configured_parakeet_and_retains_policy(monkeypa
     enable(monkeypatch)
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://synthetic.invalid')
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-key')
-    monkeypatch.setattr(streaming, 'stt_service_models', ['soniox', 'parakeet'])
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
+    monkeypatch.setattr(streaming, 'stt_service_models', ['soniox', 'parakeet-window'])
     h = host()
     telemetry.attach_demand_telemetry(h, 'ineligible')
     assert batch_preview.capture_batch_preview(h)
     assert h.stt_service == streaming.STTService.parakeet
+    assert h.stt_model == 'parakeet-window'
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0')
+    assert batch_preview.capture_batch_preview(h)
+    assert h.stt_service == streaming.STTService.soniox
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     assert h.demand_telemetry.batch_cohort == 'admitted'
     monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
     assert demand_routing.attach_live_demand(SimpleNamespace(host=h)) is None
@@ -291,3 +296,47 @@ def test_batch_treatment_is_excluded_from_all_existing_live_demand_arms(monkeypa
     assert demand_routing.attach_live_demand(SimpleNamespace(host=h)) is None
     attached.capture(1)
     assert telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted')._value.get() == old_before
+
+
+@pytest.mark.parametrize('language,expected', [('en', ('en',)), ('pt', ('pt', 'en'))])
+def test_window_preview_uses_supported_declared_multilingual_profiles(monkeypatch, language, expected):
+    enable(monkeypatch)
+    h = host()
+    h.request.language = h.language = h.batch_record_capture['language'] = language
+    h.multi_lang_enabled = True
+    h.language_profile = SimpleNamespace(primary=language, expected=expected, multi=True)
+    assert batch_live_preview.covered(h)
+    h.language_profile.expected = (*expected, 'zh')
+    assert not batch_live_preview.covered(h)
+
+
+def test_window_preference_supersedes_hintable_vendor_only_when_policy_permits(monkeypatch):
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://synthetic.invalid')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-key')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
+    monkeypatch.setattr(streaming, 'stt_service_models', ['soniox', 'parakeet-window'])
+    profile = SimpleNamespace(primary='pt', expected=('pt', 'en'), multi=True, in_scope=True, arm='hintable')
+    # A raw client hint cannot activate the new internal preference.
+    assert (
+        streaming.get_stt_service_for_language(
+            'pt', preferred_service='parakeet-window', window_uid='synthetic', language_profile=profile
+        )[0]
+        == streaming.STTService.soniox
+    )
+    assert (
+        streaming.get_stt_service_for_language('pt', prefer_window=True, language_profile=profile)[0]
+        == streaming.STTService.soniox
+    )
+    assert (
+        streaming.get_stt_service_for_language(
+            'pt', prefer_window=True, window_uid='synthetic', language_profile=profile
+        )[2]
+        == 'parakeet-window'
+    )
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0')
+    assert (
+        streaming.get_stt_service_for_language(
+            'pt', prefer_window=True, window_uid='synthetic', language_profile=profile
+        )[0]
+        == streaming.STTService.soniox
+    )

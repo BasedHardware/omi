@@ -1031,12 +1031,12 @@ async def test_rescue_probe_auth_records_on_the_probed_circuit(connect_backoff, 
 async def test_batch_preview_preference_keeps_managed_vendor_failover(monkeypatch, cheap_fails):
     """The retirement preference still dials through policy and the ordinary chain."""
     monkeypatch.setenv('STT_ROUTING_MODE', 'off')
-    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'parakeet'])
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'parakeet-window'])
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
     primary, language, model = st.get_stt_service_for_language(
-        'en', multi_lang_enabled=False, preferred_service='parakeet'
+        'en', multi_lang_enabled=False, prefer_window=True, window_uid='synthetic-batch-preview'
     )
-    assert primary == st.STTService.parakeet and model == 'parakeet'
+    assert primary == st.STTService.parakeet and model == 'parakeet-window'
     calls = []
 
     async def cheap():

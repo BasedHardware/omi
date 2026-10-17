@@ -36,7 +36,8 @@ def capture_batch_preview(host, *, select_provider: bool = True) -> bool:
         host.stt_service, host.stt_language, host.stt_model = get_stt_service_for_language(
             host.language,
             multi_lang_enabled=host.multi_lang_enabled,
-            preferred_service='parakeet',
+            prefer_window=True,
+            window_uid=host.request.uid,
             language_profile=host.language_profile,
         )
         host.stt_service_selected = host.stt_service
