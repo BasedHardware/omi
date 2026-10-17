@@ -32,6 +32,7 @@ from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
+from config import firestore_read_levers
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
@@ -81,6 +82,7 @@ from utils.memory.canonical_memory_adapter import (
     delete_canonical_memories_batch,
     memory_item_to_memorydb,
     purge_canonical_memory_projections,
+    defer_conversation_privacy_finalization,
     read_canonical_memory_item,
     read_canonical_memories,
     read_canonical_scan_page,
@@ -4458,12 +4460,25 @@ class MemoryService:
         on_authoritative_commit: Optional[Callable[[], None]] = None,
         claim_destructive_gate: bool = True,
     ) -> Optional[Dict[str, Any]]:
-        result = retract_conversation_sourced_memories(
-            uid,
-            conversation_id,
-            db_client=self.db_client,
-            claim_destructive_gate=claim_destructive_gate,
-        )
+        coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
+        deferred_ids: List[str] = []
+        if coalesce:
+            # Retain the canonical tombstones and source receipt until the
+            # outer, complete canonical + historical ID set is ready to purge.
+            with defer_conversation_privacy_finalization(uid, db_client=self.db_client) as deferred_ids:
+                result = retract_conversation_sourced_memories(
+                    uid,
+                    conversation_id,
+                    db_client=self.db_client,
+                    claim_destructive_gate=claim_destructive_gate,
+                )
+        else:
+            result = retract_conversation_sourced_memories(
+                uid,
+                conversation_id,
+                db_client=self.db_client,
+                claim_destructive_gate=claim_destructive_gate,
+            )
         # Canonical retraction is irreversible even if the historical scan or
         # suppression write below fails. Advance the merge compensation fence
         # immediately so failure handling preserves the already-built merged
@@ -4481,18 +4496,21 @@ class MemoryService:
         ]
         retracted_ids = list(dict.fromkeys(list(result.get("retracted_memory_ids") or []) if result else []))
         all_ids = list(dict.fromkeys(retracted_ids + historical_ids))
+        if coalesce:
+            all_ids = list(dict.fromkeys(all_ids + deferred_ids))
         if all_ids:
             # Historical suppression must commit before the authoritative fence
             # advances. A suppression failure leaves the callback unfired so
             # merge source-deletion does not proceed on a partial retract.
             self._write_historical_overrides(uid, all_ids, MemoryItemStatus.tombstoned)
-            _purge_required_canonical_projections(
-                uid,
-                all_ids,
-                db_client=self.db_client,
-                reason="conversation_memory_retraction",
-                preserve_source_replacement_receipts=True,
-            )
+            if not coalesce:
+                _purge_required_canonical_projections(
+                    uid,
+                    all_ids,
+                    db_client=self.db_client,
+                    reason="conversation_memory_retraction",
+                    preserve_source_replacement_receipts=True,
+                )
             try:
                 purge_stale_review_conflicts_for_memories(
                     uid,
@@ -4500,7 +4518,7 @@ class MemoryService:
                     revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     reason="conversation_memory_retraction",
                     db_client=self.db_client,
-                    include_legacy_commits=True,
+                    include_legacy_commits=not coalesce,
                     preserve_source_replacement_receipts=True,
                 )
             except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
@@ -4510,6 +4528,17 @@ class MemoryService:
                     status_code=503,
                     detail="Conversation memory review privacy cleanup unavailable",
                 ) from exc
+            if coalesce:
+                # All review cleanup precedes the one fresh task-wide history
+                # purge. Provider absence and gate ownership are re-proven by
+                # this call before tombstones can be physically finalized.
+                _purge_required_canonical_projections(
+                    uid,
+                    all_ids,
+                    db_client=self.db_client,
+                    reason="conversation_memory_retraction",
+                    preserve_source_replacement_receipts=True,
+                )
         for memory_id in historical_ids:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client, required=True)
         _delete_historical_privacy_overrides(uid, all_ids, db_client=self.db_client)

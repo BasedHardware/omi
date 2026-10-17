@@ -13690,4 +13690,91 @@ class AppLocalizationsNo extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name er ikke tilkoblet ennå';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Ikke oppsummert ennå';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi kan gjøre denne samtalen om til en oversikt, hovedpunkter og oppgaver.';
+
+  @override
+  String get summaryWithOmi => 'Oppsummer med Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Oppsummer med $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Bruk en annen mal';
+
+  @override
+  String get summaryFromTheTranscript => 'Fra transkripsjonen';
+
+  @override
+  String get summaryReadFullTranscript => 'Les hele transkripsjonen';
+
+  @override
+  String get summarySheetTitle => 'Oppsummer med';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Oversikt, hovedpunkter og oppgaver';
+
+  @override
+  String get summaryYourTemplates => 'Dine maler';
+
+  @override
+  String get summarySuggestedTemplates => 'Foreslått for denne samtalen';
+
+  @override
+  String get summaryBrowseTemplates => 'Bla gjennom maler';
+
+  @override
+  String get summaryCreateYourOwn => 'Lag din egen';
+
+  @override
+  String get summaryUseForNewConversations => 'Gjør dette til min standard';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Kunne ikke laste inn malene dine. Omi fungerer fortsatt.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Du har ikke lagt til noen maler ennå. Bla gjennom noen, eller lag din egen.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Oppsummerer med $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name kunne ikke fullføre';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Malen returnerte ingen oppsummering for denne samtalen.';
+
+  @override
+  String get summaryWithOmiInstead => 'Oppsummer med Omi i stedet';
+
+  @override
+  String get summaryBusyTitle => 'Behandles fortsatt';
+
+  @override
+  String get summaryBusyBody => 'Omi jobber allerede med denne samtalen. Oppsummeringen vises her når den er ferdig.';
+
+  @override
+  String get summaryCheckAgain => 'Sjekk igjen';
+
+  @override
+  String get summaryLimitTitle => 'Grensen for oppsummeringer er nådd';
+
+  @override
+  String get summaryLimitBody => 'Du har generert flere oppsummeringer på nytt den siste timen. Prøv igjen senere.';
+
+  @override
+  String get summaryFailedTitle => 'Kunne ikke oppsummere';
+
+  @override
+  String get summaryFailedBody => 'Noe gikk galt under oppsummeringen av denne samtalen.';
 }

@@ -13711,4 +13711,92 @@ class AppLocalizationsPt extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ainda não está conectado';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Ainda não resumida';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'O Omi pode transformar esta conversa em uma visão geral, pontos principais e tarefas.';
+
+  @override
+  String get summaryWithOmi => 'Resumir com Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Resumir com $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Usar outro modelo';
+
+  @override
+  String get summaryFromTheTranscript => 'Da transcrição';
+
+  @override
+  String get summaryReadFullTranscript => 'Ler transcrição completa';
+
+  @override
+  String get summarySheetTitle => 'Resumir com';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Visão geral, pontos principais e tarefas';
+
+  @override
+  String get summaryYourTemplates => 'Seus modelos';
+
+  @override
+  String get summarySuggestedTemplates => 'Sugeridos para esta conversa';
+
+  @override
+  String get summaryBrowseTemplates => 'Explorar modelos';
+
+  @override
+  String get summaryCreateYourOwn => 'Criar o seu';
+
+  @override
+  String get summaryUseForNewConversations => 'Definir como meu padrão';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Não foi possível carregar seus modelos. O Omi continua funcionando.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Você ainda não adicionou nenhum modelo. Explore alguns ou crie o seu.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Resumindo com $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name não conseguiu concluir';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'O modelo não retornou um resumo para esta conversa.';
+
+  @override
+  String get summaryWithOmiInstead => 'Resumir com Omi em vez disso';
+
+  @override
+  String get summaryBusyTitle => 'Ainda processando';
+
+  @override
+  String get summaryBusyBody => 'O Omi já está trabalhando nesta conversa. O resumo aparecerá aqui quando terminar.';
+
+  @override
+  String get summaryCheckAgain => 'Verificar novamente';
+
+  @override
+  String get summaryLimitTitle => 'Limite de resumos atingido';
+
+  @override
+  String get summaryLimitBody => 'Você gerou novamente vários resumos na última hora. Tente novamente mais tarde.';
+
+  @override
+  String get summaryFailedTitle => 'Não foi possível resumir';
+
+  @override
+  String get summaryFailedBody => 'Algo deu errado ao resumir esta conversa.';
 }

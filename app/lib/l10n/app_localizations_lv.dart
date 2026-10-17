@@ -13716,4 +13716,93 @@ class AppLocalizationsLv extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name vēl nav savienots';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Vēl nav apkopots';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi var pārvērst šo sarunu pārskatā, galvenajos punktos un uzdevumos.';
+
+  @override
+  String get summaryWithOmi => 'Apkopot ar Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Apkopot ar $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Izmantot citu veidni';
+
+  @override
+  String get summaryFromTheTranscript => 'No transkripcijas';
+
+  @override
+  String get summaryReadFullTranscript => 'Lasīt visu transkripciju';
+
+  @override
+  String get summarySheetTitle => 'Apkopot ar';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Pārskats, galvenie punkti un uzdevumi';
+
+  @override
+  String get summaryYourTemplates => 'Jūsu veidnes';
+
+  @override
+  String get summarySuggestedTemplates => 'Ieteiktas šai sarunai';
+
+  @override
+  String get summaryBrowseTemplates => 'Pārlūkot veidnes';
+
+  @override
+  String get summaryCreateYourOwn => 'Izveidot savu';
+
+  @override
+  String get summaryUseForNewConversations => 'Iestatīt kā noklusējumu';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Neizdevās ielādēt jūsu veidnes. Omi joprojām darbojas.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Jūs vēl neesat pievienojis nevienu veidni. Apskatiet dažas vai izveidojiet savu.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Notiek apkopošana ar $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nevarēja pabeigt';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Veidne neatgrieza šīs sarunas kopsavilkumu.';
+
+  @override
+  String get summaryWithOmiInstead => 'Tā vietā apkopot ar Omi';
+
+  @override
+  String get summaryBusyTitle => 'Joprojām notiek apstrāde';
+
+  @override
+  String get summaryBusyBody => 'Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.';
+
+  @override
+  String get summaryCheckAgain => 'Pārbaudīt vēlreiz';
+
+  @override
+  String get summaryLimitTitle => 'Sasniegts kopsavilkumu limits';
+
+  @override
+  String get summaryLimitBody =>
+      'Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.';
+
+  @override
+  String get summaryFailedTitle => 'Neizdevās apkopot';
+
+  @override
+  String get summaryFailedBody => 'Apkopojot šo sarunu, radās kļūda.';
 }

@@ -13692,4 +13692,92 @@ class AppLocalizationsSv extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name är inte ansluten än';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Inte sammanfattad än';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi kan göra om det här samtalet till en översikt, nyckelpunkter och uppgifter.';
+
+  @override
+  String get summaryWithOmi => 'Sammanfatta med Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Sammanfatta med $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Använd en annan mall';
+
+  @override
+  String get summaryFromTheTranscript => 'Från transkriptionen';
+
+  @override
+  String get summaryReadFullTranscript => 'Läs hela transkriptionen';
+
+  @override
+  String get summarySheetTitle => 'Sammanfatta med';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Översikt, nyckelpunkter och uppgifter';
+
+  @override
+  String get summaryYourTemplates => 'Dina mallar';
+
+  @override
+  String get summarySuggestedTemplates => 'Förslag för det här samtalet';
+
+  @override
+  String get summaryBrowseTemplates => 'Bläddra bland mallar';
+
+  @override
+  String get summaryCreateYourOwn => 'Skapa egen';
+
+  @override
+  String get summaryUseForNewConversations => 'Gör detta till min standard';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Det gick inte att läsa in dina mallar. Omi fungerar fortfarande.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Du har inte lagt till några mallar än. Bläddra bland några eller skapa en egen.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Sammanfattar med $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name kunde inte slutföra';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Mallen returnerade ingen sammanfattning för det här samtalet.';
+
+  @override
+  String get summaryWithOmiInstead => 'Sammanfatta med Omi i stället';
+
+  @override
+  String get summaryBusyTitle => 'Bearbetas fortfarande';
+
+  @override
+  String get summaryBusyBody => 'Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.';
+
+  @override
+  String get summaryCheckAgain => 'Kontrollera igen';
+
+  @override
+  String get summaryLimitTitle => 'Gränsen för sammanfattningar har nåtts';
+
+  @override
+  String get summaryLimitBody =>
+      'Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.';
+
+  @override
+  String get summaryFailedTitle => 'Det gick inte att sammanfatta';
+
+  @override
+  String get summaryFailedBody => 'Något gick fel när det här samtalet skulle sammanfattas.';
 }

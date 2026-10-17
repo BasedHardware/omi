@@ -37,8 +37,16 @@ REVENUE = VIOLET  # revenue is violet on every chart; cost is the blue-greys
 # ▲/▼ glyph carries direction, so color is never the only signal.
 STATUS_GOOD, STATUS_BAD = "#0ca30c", "#d03b3b"
 # Slots 7, 5, 6, 8 (validated adjacent, dark), then neutrals for the small tail.
-PLANS = {"Unlimited": VIOLET, "Unlimited v2": MAGENTA, "Operator": GREEN, "Plus": RED,
-         "Architect": NEUTRAL, "Other": MUTED}
+# Ratified display names: `unlimited` = Neo (legacy), `unlimited_v2` = Unlimited,
+# `operator` = Pro.
+PLAN_NAMES = {"unlimited": "Neo", "unlimited_v2": "Unlimited", "operator": "Pro", "plus": "Plus",
+              "architect": "Architect"}
+PLANS = {"Neo": VIOLET, "Unlimited": MAGENTA, "Pro": GREEN, "Plus": RED, "Architect": NEUTRAL,
+         "Other": MUTED}
+FREE = "Free $/day"
+# Manual cost constants' read date (`STT_AS_OF` / `SAAS_AS_OF` in lib/wall-cost.ts;
+# a board test keeps them equal). The API flags them stale after 35 days.
+ESTIMATES_AS_OF = "2026-10-16"
 COST = {"GCP": "#5c6b80", "Vertex LLM": "#8494ab", "OpenAI": "#aab6c6", "Anthropic": "#cdd5df"}
 # Estimated lines are drawn apart from invoiced ones: sand, low opacity.
 ESTIMATE_OPACITY = 55  # invoiced bars use 88
@@ -239,8 +247,9 @@ QUALIFIED_MAU = ("MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" 
                  "PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ")
 ALL_IN = ("All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), "
           "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is "
-          "a $5.3K/month estimate from the Soniox console (October 2026, read 2026-10-16; the FinOps "
-          "stt_vendor_low model overstated it ~2×). SaaS is a fixed $4.8K/month estimate. ")
+          f"a $5.3K/month estimate from the Soniox console (estimate as of {ESTIMATES_AS_OF}; the FinOps "
+          f"stt_vendor_low model overstated it ~2×). SaaS is a fixed $4.8K/month estimate as of {ESTIMATES_AS_OF}. "
+          "An estimate older than 35 days is marked stale under Margin by plan. ")
 
 
 def columns():
@@ -318,16 +327,13 @@ def columns():
         stat("Revenue", "MRR: live Stripe Omi-plan book (change = same-source FinOps 7-day change). Per user = MRR ÷ monthly users (qualified MAU; change vs prior week). Hardware: Shopify net device sales, last complete Mon–Sun week vs the prior week. Relative % change.",
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
-        (12, chart("MRR by plan",
-                   "Unlimited includes Neo. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
-                   [target("revenue", "mrr", [DATE, ("unlimited", "Unlimited", "number"),
-                                              ("unlimited_v2", "Unlimited v2", "number"),
-                                              ("operator", "Operator", "number"), ("plus", "Plus", "number"),
-                                              ("architect", "Architect", "number"),
+        (7, chart("MRR by plan",
+                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+                   [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
                    overrides=[color(n, h) for n, h in PLANS.items()])),
-        (11, chart("Shopify sales per week",
+        (5, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
                                                    ("hardwareUsd", "Hardware", "number"),
@@ -337,6 +343,8 @@ def columns():
                    overrides=[color("Hardware", REVENUE), color("Plan prepay (cash)", MUTED),
                               hidden("Devices"), prop("Devices", ("unit", "short"))],
                    extra=barchart_options(time_x=True))),
+        (10, margin_by_plan()),
+        (1, margin_status()),
     ]
     health = [
         stat("Health", ALL_IN + "Cost / day is the settled day D−2; cost / user is the 30-day all-in cost ÷ monthly users. " + QUALIFIED_MAU + "Relative % change; up is bad.",
@@ -369,6 +377,64 @@ def columns():
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
 
 
+def margin_by_plan():
+    """Allocated-estimate margin by plan (David 2026-10-17): paid plans as margin %
+    lines (left axis); Free, which has no revenue, as negative $/day bars (right
+    axis). Both axes centre zero, so Free hangs below the line the plans sit on.
+    Per-plan revenue, cost and margin $/day ride in the tooltip."""
+    pct = [(f"{k}Pct", n, "number") for k, n in PLAN_NAMES.items()]
+    money = [(f"{k}{part}", f"{n} {part.lower()}/day", "number")
+             for k, n in PLAN_NAMES.items() for part in ("Revenue", "Cost", "Margin")]
+    money += [("basicCost", "Free cost/day", "number"), ("unattributedCost", "Unattributed cost/day", "number"),
+              ("shared", "Shared pool/day", "number"), ("allInTotal", "All-in total/day", "number")]
+    free = {"matcher": {"id": "byName", "options": FREE}, "properties": [
+        {"id": "displayName", "value": FREE}, {"id": "unit", "value": "currencyUSD"},
+        {"id": "color", "value": {"mode": "fixed", "fixedColor": MUTED}},
+        {"id": "custom.drawStyle", "value": "bars"}, {"id": "custom.fillOpacity", "value": 70},
+        {"id": "custom.barWidthFactor", "value": 0.7},
+        {"id": "custom.lineWidth", "value": 1}, {"id": "custom.axisPlacement", "value": "right"},
+        {"id": "custom.axisCenteredZero", "value": True}]}
+
+    def centre(panel):
+        panel["fieldConfig"]["defaults"]["custom"]["axisCenteredZero"] = True
+        disconnect_after(1.5)(panel)  # any missing day is a gap (e.g. no 09-29 book)
+
+    return chart("Margin by plan",
+                 "Allocated estimate, not gross margin. Revenue = that day's FinOps MRR ÷ 30.4. Cost = FinOps "
+                 "fully-loaded plan cost + the shared pool (TV all-in − FinOps: BigQuery, STT, SaaS) split by each "
+                 "plan's cost-active user-days. Lines: margin % (left); Free: −$/day bars (right); $/day and the "
+                 "unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier "
+                 "than the wall (line below); a day without both cost and revenue is a gap. Caveats: STT is not "
+                 "invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan "
+                 "membership comes from a point-in-time snapshot.",
+                 [target("health", "marginByPlan", [DATE, *pct, ("basicMargin", FREE, "number"), *money])],
+                 unit="percent", decimals=0, time_from="35d", soft_min=None,
+                 overrides=[*[color(n, PLANS[n]) for n in PLAN_NAMES.values()], free,
+                            *[tooltip_only(n) for _, n, _ in money]],
+                 extra=centre)
+
+
+def tooltip_only(name):
+    """A $/day tooltip row on a mixed-unit panel. Grafana 13 drops fields hidden
+    from the viz out of the tooltip, so this one is drawn invisibly (no line, no
+    fill) on its own hidden, fixed scale that never moves the visible axes."""
+    return prop(name, ("displayName", name), ("unit", "currencyUSD"), ("decimals", 2),
+                ("min", -1e6), ("max", 1e6), ("custom.axisPlacement", "hidden"),
+                ("custom.lineWidth", 0), ("custom.fillOpacity", 0), ("custom.pointSize", 1),
+                ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": False}))
+
+
+def margin_status():
+    """Margin by plan's own data-through day and how STT/SaaS were priced."""
+    panel = data_through()
+    panel["description"] = ("Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, "
+                            "and the date the STT and SaaS estimates were read (\"stale\" after 35 days; "
+                            "\"STT measured\" once FinOps carries a vendor line).")
+    panel["targets"] = [target("health", "marginStatus", [("text", "Margin status", "string")])]
+    panel["fieldConfig"]["defaults"]["noValue"] = "Margin through —"
+    return panel
+
+
 def estimate(name, hex_):
     """Estimated cost lines (STT, SaaS): stacked like the rest, sand and lighter."""
     o = color(name, hex_)
@@ -380,7 +446,7 @@ def disconnect_after(days):
     """Break a daily line across a missing day run longer than `days`."""
     def apply(panel):
         custom = panel["fieldConfig"]["defaults"]["custom"]
-        custom.update(insertNulls=days * 86_400_000, spanNulls=False)
+        custom.update(insertNulls=int(days * 86_400_000), spanNulls=False)
     return apply
 
 

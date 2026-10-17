@@ -13749,4 +13749,92 @@ class AppLocalizationsMk extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name сè уште не е поврзан';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Сè уште не е сумирано';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi може да го претвори овој разговор во преглед, клучни точки и задачи.';
+
+  @override
+  String get summaryWithOmi => 'Сумирај со Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Сумирај со $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Користи друг шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'Од транскриптот';
+
+  @override
+  String get summaryReadFullTranscript => 'Прочитај го целиот транскрипт';
+
+  @override
+  String get summarySheetTitle => 'Сумирај со';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Преглед, клучни точки и задачи';
+
+  @override
+  String get summaryYourTemplates => 'Ваши шаблони';
+
+  @override
+  String get summarySuggestedTemplates => 'Предложени за овој разговор';
+
+  @override
+  String get summaryBrowseTemplates => 'Прегледај шаблони';
+
+  @override
+  String get summaryCreateYourOwn => 'Создај свој';
+
+  @override
+  String get summaryUseForNewConversations => 'Постави како мој стандарден';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Не може да се вчитаат вашите шаблони. Omi сè уште работи.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Сè уште немате додадено шаблони. Прегледајте неколку или создајте свој.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Се сумира со $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name не можеше да заврши';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблонот не врати резиме за овој разговор.';
+
+  @override
+  String get summaryWithOmiInstead => 'Наместо тоа, сумирај со Omi';
+
+  @override
+  String get summaryBusyTitle => 'Сè уште се обработува';
+
+  @override
+  String get summaryBusyBody => 'Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.';
+
+  @override
+  String get summaryCheckAgain => 'Провери повторно';
+
+  @override
+  String get summaryLimitTitle => 'Достигнато е ограничувањето за резимеа';
+
+  @override
+  String get summaryLimitBody =>
+      'Во последниот час повеќе пати повторно генериравте резимеа. Обидете се повторно подоцна.';
+
+  @override
+  String get summaryFailedTitle => 'Не може да се сумира';
+
+  @override
+  String get summaryFailedBody => 'Нешто тргна наопаку при сумирањето на овој разговор.';
 }

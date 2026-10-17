@@ -13692,4 +13692,92 @@ class AppLocalizationsFi extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ei ole vielä yhdistetty';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Ei vielä tiivistetty';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi voi muuttaa tämän keskustelun yleiskatsaukseksi, pääkohdiksi ja tehtäviksi.';
+
+  @override
+  String get summaryWithOmi => 'Tiivistä Omilla';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Tiivistä: $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Käytä toista mallia';
+
+  @override
+  String get summaryFromTheTranscript => 'Litteroinnista';
+
+  @override
+  String get summaryReadFullTranscript => 'Lue koko litterointi';
+
+  @override
+  String get summarySheetTitle => 'Tiivistä käyttäen';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Yleiskatsaus, pääkohdat ja tehtävät';
+
+  @override
+  String get summaryYourTemplates => 'Omat mallisi';
+
+  @override
+  String get summarySuggestedTemplates => 'Ehdotettu tähän keskusteluun';
+
+  @override
+  String get summaryBrowseTemplates => 'Selaa malleja';
+
+  @override
+  String get summaryCreateYourOwn => 'Luo oma';
+
+  @override
+  String get summaryUseForNewConversations => 'Tee tästä oletukseni';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Mallejasi ei voitu ladata. Omi toimii edelleen.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Et ole vielä lisännyt malleja. Selaa muutamia tai tee oma.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Tiivistetään: $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ei voinut valmistua';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Malli ei palauttanut tiivistelmää tästä keskustelusta.';
+
+  @override
+  String get summaryWithOmiInstead => 'Tiivistä sen sijaan Omilla';
+
+  @override
+  String get summaryBusyTitle => 'Käsittely on yhä kesken';
+
+  @override
+  String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
+
+  @override
+  String get summaryCheckAgain => 'Tarkista uudelleen';
+
+  @override
+  String get summaryLimitTitle => 'Tiivistelmien raja saavutettu';
+
+  @override
+  String get summaryLimitBody =>
+      'Olet luonut useita tiivistelmiä uudelleen viimeisen tunnin aikana. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get summaryFailedTitle => 'Tiivistäminen epäonnistui';
+
+  @override
+  String get summaryFailedBody => 'Jokin meni vikaan tätä keskustelua tiivistettäessä.';
 }

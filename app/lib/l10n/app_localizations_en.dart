@@ -13672,4 +13672,92 @@ class AppLocalizationsEn extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Hasn\'t Connected Yet';
   }
+
+  @override
+  String get summaryNotSummarizedYet => 'Not summarized yet';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi can turn this conversation into an overview, key points and action items.';
+
+  @override
+  String get summaryWithOmi => 'Summarize with Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Summarize with $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Use a Different Template';
+
+  @override
+  String get summaryFromTheTranscript => 'From the transcript';
+
+  @override
+  String get summaryReadFullTranscript => 'Read Full Transcript';
+
+  @override
+  String get summarySheetTitle => 'Summarize with';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Overview, key points and action items';
+
+  @override
+  String get summaryYourTemplates => 'Your templates';
+
+  @override
+  String get summarySuggestedTemplates => 'Suggested for this conversation';
+
+  @override
+  String get summaryBrowseTemplates => 'Browse Templates';
+
+  @override
+  String get summaryCreateYourOwn => 'Create Your Own';
+
+  @override
+  String get summaryUseForNewConversations => 'Make this my default';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Couldn\'t load your templates. Omi still works.';
+
+  @override
+  String get summaryNoTemplatesYet => 'You haven\'t added any templates yet. Browse a few or make your own.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Summarizing with $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name couldn\'t finish';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'The template didn\'t return a summary for this conversation.';
+
+  @override
+  String get summaryWithOmiInstead => 'Summarize with Omi Instead';
+
+  @override
+  String get summaryBusyTitle => 'Still processing';
+
+  @override
+  String get summaryBusyBody =>
+      'Omi is already working on this conversation. The summary will appear here when it finishes.';
+
+  @override
+  String get summaryCheckAgain => 'Check Again';
+
+  @override
+  String get summaryLimitTitle => 'Summary limit reached';
+
+  @override
+  String get summaryLimitBody => 'You\'ve regenerated several summaries in the last hour. Try again later.';
+
+  @override
+  String get summaryFailedTitle => 'Couldn\'t summarize';
+
+  @override
+  String get summaryFailedBody => 'Something went wrong while summarizing this conversation.';
 }

@@ -8313,6 +8313,7 @@ export interface OmiApiPaths {
         "404": void;
         "409": void;
         "422": HTTPValidationError;
+        "502": void;
       };
     };
   };
