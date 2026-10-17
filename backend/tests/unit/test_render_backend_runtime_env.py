@@ -279,7 +279,7 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
-    approved_allowlists = {'CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'AUDIO_ARCHIVE_UID_ALLOWLIST'}
+    approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
         for key, value in node.items():
             if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
@@ -295,8 +295,8 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
     # The dev-only ledger drain has an explicit operational fence for the two
     # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists. COALESCE and EXP-003 are the only
-    # approved David-only allowlists.
+    # first-user or capture admission lists. Only explicitly reviewed operational
+    # allowlists remain approved.
     assert not _contains_uid_outside_approved_allowlists(
         _MANIFEST['environments']['dev'],
         'vi7SA9ckQCe4ccobWNxlbdcNdC23',

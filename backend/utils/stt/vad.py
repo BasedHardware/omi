@@ -306,6 +306,8 @@ def _segments_from_16khz_samples(samples: np.ndarray[Any, Any], *, threshold: fl
     while offset + VAD_WINDOW_SAMPLES <= len(samples):
         window = samples[offset : offset + VAD_WINDOW_SAMPLES]
         prob, state, context = run_vad_window(window, state, context)
+        if not math.isfinite(prob) or not 0 <= prob <= 1:
+            raise VADProcessingError('invalid local VAD probability')
         is_speech_flags.append(prob > threshold)
         offset += VAD_WINDOW_SAMPLES
     # Convert per-window flags to time segments

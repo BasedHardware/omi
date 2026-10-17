@@ -248,8 +248,8 @@ it("all PostHog legs can choose rollups; v2 snapshot wins the last point and spl
     "retainedHistory",
     "establishedHistory",
     "curve",
-    "mauRecent",
-    "mauHistory",
+    "mauPrior",
+    "mauDaily",
   ] as const)
     await jobs[leg]();
   expect(query).not.toHaveBeenCalled();

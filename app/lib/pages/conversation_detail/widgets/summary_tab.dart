@@ -25,6 +25,7 @@ import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -32,6 +33,7 @@ class SummaryTab extends StatefulWidget {
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
       this.onTapWhenSearchEmpty});
@@ -110,6 +112,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                onOpenSource: widget.onOpenSource,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
                                 canStartEditing: () {

@@ -110,6 +110,21 @@ def line(name, hex_, width=2):
     return o
 
 
+def maturing(name, hex_):
+    """Shaded span of cohorts still inside their maturity window (series frame
+    `maturing`: 1 from the newest closed cohort to now). Its own unit gives it a
+    hidden 0–1 scale, so it fills the plot height behind the lines; the legend
+    names it, the tooltip skips it."""
+    return {"matcher": {"id": "byName", "options": name}, "properties": [
+        {"id": "displayName", "value": name}, {"id": "unit", "value": "none"},
+        {"id": "min", "value": 0}, {"id": "max", "value": 1},
+        {"id": "color", "value": {"mode": "fixed", "fixedColor": hex_}},
+        {"id": "custom.drawStyle", "value": "line"}, {"id": "custom.lineWidth", "value": 0},
+        {"id": "custom.fillOpacity", "value": 14}, {"id": "custom.lineInterpolation", "value": "stepAfter"},
+        {"id": "custom.axisPlacement", "value": "hidden"},
+        {"id": "custom.hideFrom", "value": {"legend": False, "tooltip": True, "viz": False}}]}
+
+
 def chart(title, description, targets, *, unit, axis="", draw="line", stack=False, overrides=(),
           legend=True, time_from=None, decimals=None, soft_min=0, extra=None, kind="timeseries"):
     """Native chart. `axis` is empty unless the unit alone is ambiguous: the title
@@ -201,16 +216,21 @@ PLATFORM_OVERRIDES = [color(n, h) for n, h in PLATFORM.items()]
 DATE = ("date", "date", "timestamp")
 
 
+MATURING = ("The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days "
+            "after its last first-seen day, and a new one is added every day, so the line always ends 8 days back. ")
+
+
 def rate_lines(title, description, frame, series="activation", time_from="95d", total="All"):
     # "Other" platform cohorts are a handful of users: their rate is noise, so it
-    # stays in the tooltip only.
-    return chart(title, description,
+    # stays in the tooltip only (a null there draws nothing).
+    return chart(title, description + " " + MATURING,
                  [target(series, frame, [DATE, ("total", total, "number"), *PLATFORM_COLUMNS,
-                                         ("n", "Cohort users", "number")])],
+                                         ("n", "Cohort users", "number")]),
+                  target(series, "maturing", [DATE, ("maturing", "Maturing", "number")], "B")],
                  unit="percent", decimals=0, time_from=time_from,
-                 overrides=[*PLATFORM_OVERRIDES, prop(total, ("custom.lineWidth", 3)),
+                 overrides=[*PLATFORM_OVERRIDES, prop(total, ("displayName", total), ("custom.lineWidth", 3)),
                             hidden("Other"), hidden("Cohort users"),
-                            prop("Cohort users", ("unit", "short"))])
+                            prop("Cohort users", ("unit", "short")), maturing("Maturing", MUTED)])
 
 
 USERS = ("Users are deduplicated persons with qualified use (v2 definitions): a capture, conversation, "
@@ -278,11 +298,13 @@ def columns():
                   [target("retention", f"cohort_{age}", [], chr(65 + i)) for i, age in enumerate(range(8, -1, -1))],
                   unit="percent", decimals=0, kind="trend", soft_min=0, extra=curve_options)),
         (7, chart("Retention by week",
-                  "Established retention by week (solid) and retained-if-activated (dashed) by the cohort's last first-seen day. Retained-if-activated needs 37 days to mature, so its line ends about five weeks before Established's. Latest points are the stats.",
+                  "Established retention by week (solid) and retained-if-activated (dashed) by the cohort's last first-seen day. Retained-if-activated needs 37 days to mature, so its line always ends 38 days back; the violet band is the cohorts still maturing (a new one closes every day). Established ends at the last complete Mon–Sun week. Latest points are the stats.",
                   [target("retention", "established", [DATE, ("total", "Established", "number")], "A"),
-                   target("retention", "retained", [DATE, ("total", "If activated", "number")], "B")],
+                   target("retention", "retained", [DATE, ("total", "If activated", "number")], "B"),
+                   target("retention", "retainedMaturing", [DATE, ("maturing", "If activated: maturing", "number")], "C")],
                   unit="percent", decimals=0, time_from="125d",
-                  overrides=[color("Established", TOTAL), dashed("If activated", VIOLET)])),
+                  overrides=[color("Established", TOTAL), dashed("If activated", VIOLET),
+                             maturing("If activated: maturing", VIOLET)])),
         (8, chart("Power users · days active",
                   "Share of weekly users by number of active days in the latest 7 days (white), against the same period 4 weeks earlier (grey). A rise on the right means habitual use.",
                   [target("retention", "power", [("days", "Days active", "string"),
@@ -336,13 +358,12 @@ def columns():
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
         (10, chart("Unit economics",
-                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, weekly points. Revenue = Omi-plan MRR ÷ monthly users at each week end (FinOps book; the latest point is the Per user stat). Cost = all-in 30-day cost through D−2 ÷ the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. " + QUALIFIED_MAU,
+                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D−2 ÷ the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. " + QUALIFIED_MAU,
                    [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / user", "number")], "A"),
                     target("health", "costPerMau", [DATE, ("costPerMau", "Cost / user", "number")], "B")],
-                   unit="currencyUSD", decimals=2, time_from="60d",
-                   overrides=[color("Revenue / user", REVENUE), color("Cost / user", COST["OpenAI"]),
-                              prop("Revenue / user", ("custom.showPoints", "always")),
-                              prop("Cost / user", ("custom.showPoints", "always"))])),
+                   unit="currencyUSD", decimals=2, time_from="35d", soft_min=None,  # the crossover is the story
+                   overrides=[color("Revenue / user", REVENUE), color("Cost / user", COST["OpenAI"])],
+                   extra=disconnect_after(2))),
         (1, data_through()),
     ]
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
@@ -353,6 +374,14 @@ def estimate(name, hex_):
     o = color(name, hex_)
     o["properties"] += [{"id": "custom.fillOpacity", "value": ESTIMATE_OPACITY}, {"id": "custom.lineWidth", "value": 1}]
     return o
+
+
+def disconnect_after(days):
+    """Break a daily line across a missing day run longer than `days`."""
+    def apply(panel):
+        custom = panel["fieldConfig"]["defaults"]["custom"]
+        custom.update(insertNulls=days * 86_400_000, spanNulls=False)
+    return apply
 
 
 def threshold_line(value, hex_):

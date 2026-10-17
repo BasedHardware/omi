@@ -51,8 +51,6 @@ def store(monkeypatch):
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
-    monkeypatch.setattr(policy, 'submit_same_scene', MagicMock())
-    monkeypatch.setattr(policy, 'submit_resummary', MagicMock())
     monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', '100')
     monkeypatch.setenv('CAPTURE_GROUP_CONTAINMENT_MODE', 'off')
     monkeypatch.setenv('DESKTOP_PENDANT_CALL_LINK_MODE', 'off')

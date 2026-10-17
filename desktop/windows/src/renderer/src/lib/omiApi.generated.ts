@@ -4846,6 +4846,7 @@ export interface SharedSection {
   body_markdown: string;
   heading: string;
   kind?: "main" | "side_notes";
+  source_segment_ids?: Array<string>;
 }
 
 export interface SharedStructured {

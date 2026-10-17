@@ -13852,4 +13852,194 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
+
+  @override
+  String get connectAgentHeadline => 'Folosește memoria Omi în ChatGPT și în agenții tăi AI';
+
+  @override
+  String get connectAgentIntro =>
+      'Conectează-te o singură dată. Apoi întreabă-i despre conversațiile, amintirile și sarcinile tale.';
+
+  @override
+  String get connectAgentOneTap => 'Cu o singură atingere';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenți cu propriul computer';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Copiază un singur prompt. Omi creează o cheie doar pentru acel agent și o trimite în siguranță.';
+
+  @override
+  String get connectAgentOtherAgent => 'Alt agent';
+
+  @override
+  String get connectAgentKeyActive => 'Cheie activă';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Folosită ultima dată: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Chei MCP și API pentru dezvoltatori';
+
+  @override
+  String get connectAgentLoadFailed => 'Conexiunile tale nu au putut fi încărcate.';
+
+  @override
+  String get connectAgentActionFailed => 'Ceva nu a funcționat. Încearcă din nou.';
+
+  @override
+  String get connectChatGptTitle => 'Conectează ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Durează aproximativ 30 de secunde. Aprobi în ChatGPT și funcționează pe telefon și pe computer.';
+
+  @override
+  String get connectChatGptStepOpen => 'Deschidem Omi în ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT se deschide direct pe pagina aplicației Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Atinge „Conectare”, apoi conectează-te la Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Folosește același cont pe care îl folosești aici.';
+
+  @override
+  String get connectChatGptStepReturn => 'Revino în Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Verificăm conexiunea automat.';
+
+  @override
+  String get openChatGpt => 'Deschide ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Conectat pe telefon și computer';
+
+  @override
+  String get tryAskingChatGpt => 'Încearcă să întrebi ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Atinge una ca să deschizi ChatGPT cu întrebarea deja completată.';
+
+  @override
+  String get chatGptExampleMeetings => 'Cu ce am fost de acord în ședințele de ieri?';
+
+  @override
+  String get chatGptExampleTasks => 'Transformă sarcinile mele deschise din Omi într-un plan pentru săptămâna asta.';
+
+  @override
+  String get chatGptExampleGoals => 'Ce știe Omi despre obiectivele mele?';
+
+  @override
+  String get disconnectChatGpt => 'Deconectează ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Deconectezi ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT nu va mai putea citi amintirile, conversațiile sau sarcinile tale din Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Conectează $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Lipește un singur prompt. $name configurează Omi pe propriul computer.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Lipește un singur prompt. Agentul tău configurează Omi pe propriul computer.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Cheia „$name” a fost creată';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Promptul conține un link de unică folosință, nu cheia propriu-zisă. Se deschide o singură dată și expiră într-o oră. Poți revoca cheia de aici oricând.';
+
+  @override
+  String get connectAgentPreparing => 'Se creează o cheie și un link securizat…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Cheia nu a putut fi creată. Verifică-ți conexiunea și încearcă din nou.';
+
+  @override
+  String get copyPrompt => 'Copiază promptul';
+
+  @override
+  String get connectAgentNewLink => 'Linkul a expirat? Creează unul nou';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name este conectat';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name deține o cheie Omi. Revoc-o pentru a opri accesul. Te poți conecta din nou oricând.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Revoci cheia pentru $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name pierde imediat accesul la memoria ta Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Întreabă despre această conversație';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Deschide ChatGPT cu întrebarea pregătită. Găsește conversația prin Omi, deci nu trebuie să lipești transcrierea.';
+
+  @override
+  String get askYourQuestion => 'Întrebarea ta';
+
+  @override
+  String get askSuggestFollowUp => 'Redactează un e-mail de follow-up pe baza acestei conversații.';
+
+  @override
+  String get askSuggestCommitments => 'La ce m-am angajat în această conversație?';
+
+  @override
+  String get askSuggestDoc => 'Transformă această conversație într-un document scurt.';
+
+  @override
+  String get askInChatGpt => 'Întreabă ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Copiază pentru orice aplicație';
+
+  @override
+  String get askConnectChatGptFirst => 'Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.';
+
+  @override
+  String get reconnect => 'Reconectează';
+
+  @override
+  String get chatGptNeedsReconnect => 'Are nevoie de mai mult acces. Reconectează pentru a remedia.';
+
+  @override
+  String get connectAgentWaiting => 'Se așteaptă ca agentul să-și folosească cheia';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name nu s-a conectat încă';
+  }
 }

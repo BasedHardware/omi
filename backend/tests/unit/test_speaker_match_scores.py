@@ -817,7 +817,6 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *a: None)
     monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *a, **k: None)
     monkeypatch.setattr(merge, 'canonical_intake_is_fenced', lambda: False)
-    monkeypatch.setattr(merge, 'record_capture_outcome', lambda *a: None)
     monkeypatch.setattr(merge, '_handle_merge_failure', lambda *a, **k: failures.append(a))
     monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *a: None)
     merge.perform_merge_async('u', ['a', 'b'], reprocess=False)

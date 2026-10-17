@@ -373,7 +373,9 @@ export function ChatPanel() {
                         ) : (
                           <div className="min-w-0 max-w-[80%]">
                             <div className="rounded-2xl bg-bg-tertiary px-4 py-2.5 text-text-primary">
-                              <ChatMarkdown>{message.text}</ChatMarkdown>
+                              <ChatMarkdown memories={message.memories}>
+                                {message.text}
+                              </ChatMarkdown>
                             </div>
                             <ChatEvidenceCard
                               envelope={parseChatEvidenceFromRecord(message)}
