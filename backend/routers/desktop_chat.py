@@ -574,7 +574,8 @@ def _user_content(content: object) -> object:
         if not isinstance(block, Mapping):
             continue
         if block.get('type') == 'text' and isinstance(block.get('text'), str):
-            blocks.append({'type': 'text', 'text': block['text']})
+            if block['text']:
+                blocks.append({'type': 'text', 'text': block['text']})
         elif block.get('type') == 'image_url' and isinstance(block.get('image_url'), Mapping):
             url = block['image_url'].get('url')
             if isinstance(url, str) and url.startswith('data:') and ';base64,' in url:
@@ -828,7 +829,14 @@ def _request(
         if role in {'system', 'developer'}:
             system = _text(message.get('content'))
         elif role == 'user':
-            translated.append({'role': 'user', 'content': _user_content(message.get('content', ''))})
+            user_content = _user_content(message.get('content', ''))
+            if not user_content:
+                # Anthropic rejects empty content and empty text blocks with 400
+                # invalid_request_error; a user turn with no text and no images
+                # carries nothing, and the provider merges the adjacent turns the
+                # drop leaves behind.
+                continue
+            translated.append({'role': 'user', 'content': user_content})
         elif role == 'assistant':
             content: list[dict[str, object]] = []
             text = _text(message.get('content'))
