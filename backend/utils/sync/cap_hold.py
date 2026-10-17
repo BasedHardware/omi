@@ -114,7 +114,10 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
         fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if codec == 'ogg_opus':
             fields.update(
-                audio_codec=codec, sample_rate=metadata['sample_rate'], source_frames=metadata['source_frames']
+                audio_codec=codec,
+                sample_rate=metadata['sample_rate'],
+                source_frames=metadata['source_frames'],
+                audio_generation=blob.generation,
             )
         if len(encoded_metadata.encode()) > 512 * 1024:
             metadata_digest = hashlib.sha256(encoded_metadata.encode()).hexdigest()

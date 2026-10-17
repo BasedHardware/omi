@@ -1914,9 +1914,9 @@ class ListenReceiver(ReplayFilterMixin):
                     else time.time() - len(buffer) / (2 * self.host.request.sample_rate)
                 )
                 if start is not None:
-                    self._observe_cap_capture(bytes(buffer), self.host.request.sample_rate, start, False)
+                    await hold.observe_async(self, bytes(buffer), self.host.request.sample_rate, start, False)
                 else:
-                    hold.append(
+                    await hold.append_async(
                         bytes(buffer), self.host.request.sample_rate, timestamp, self.host.state.current_conversation_id
                     )
             record_cap_audio(
@@ -2181,7 +2181,7 @@ class ListenReceiver(ReplayFilterMixin):
             if suppressed:
                 hold = getattr(self, 'live_hold', None)
                 if hold is not None:
-                    hold.append(
+                    await hold.append_async(
                         pcm,
                         TARGET_SAMPLE_RATE,
                         now - len(pcm) / (2 * TARGET_SAMPLE_RATE),

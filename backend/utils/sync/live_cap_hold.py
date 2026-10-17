@@ -19,6 +19,7 @@ from database._client import get_firestore_client
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
 from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec
+from utils.sync.live_cap_publication import Publication
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ class LiveHeldAudio:
         self.capacity_identity: str | None = None
         self._summary_ready = False
         self._charged: set[str] = set()
+        self._publications: dict[str, Publication] = {}
         self._buffer_opened = {}
         self._lock = asyncio.Lock()
 
@@ -103,9 +105,7 @@ class LiveHeldAudio:
     def _append(self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int) -> None:
         if not data:
             return
-        buffered = self.pending_bytes + sum(len(item[0]) for item in self.buffers.values())
-        limit = MAX_PENDING_SECONDS * rate * 2
-        if len(data) > limit or (buffered + len(data) > limit and (buffered >= limit or len(data) > rate * 2)):
+        if self.buffered_seconds() + len(data) / (2 * rate) > MAX_PENDING_SECONDS + 1e-9:
             raise RuntimeError('live held audio packet exceeds custody bound')
         if len(data) % 2:
             raise ValueError('held PCM must contain whole PCM16 samples')
@@ -140,8 +140,39 @@ class LiveHeldAudio:
         if emitted:
             self._buffer_opened[key] = time.monotonic()
         self.buffers[key][1] = start
-        if self.pending_bytes > MAX_PENDING_SECONDS * rate * 2:
+        if self.buffered_seconds() > MAX_PENDING_SECONDS + 1e-9:
             raise RuntimeError('live held audio persistence backpressure')
+
+    def buffered_seconds(self) -> float:
+        return sum(len(item[0]) / (2 * item[1]) for item in self.pending) + sum(
+            len(value[0]) / (2 * key[1]) for key, value in self.buffers.items()
+        )
+
+    async def _packet_parts(self, data: bytes, rate: int):
+        # The caller retains the ingress packet while each complete minute is
+        # published. Custody itself never accepts a straddle tail above 60s.
+        if rate <= 0 or len(data) % 2:
+            raise ValueError('held PCM requires whole samples and a positive rate')
+        while data:
+            frames = int((MAX_PENDING_SECONDS - self.buffered_seconds()) * rate + 1e-6)
+            if frames <= 0:
+                await self.flush(force=True)
+                continue
+            size = min(len(data), frames * 2)
+            yield data[:size]
+            data = data[size:]
+
+    async def append_async(
+        self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int = 0
+    ) -> None:
+        async for part in self._packet_parts(data, rate):
+            self.append(part, rate, timestamp, conversation_id, channel)
+            timestamp += len(part) / (2 * rate)
+
+    async def observe_async(self, receiver: Any, data: bytes, rate: int, start: int, admitted: bool) -> None:
+        async for part in self._packet_parts(data, rate):
+            self.observe(receiver, part, rate, start, admitted)
+            start += len(part) // 2
 
     def _queue(self, key: tuple[int, int, str | None]) -> None:
         buffer, start = self.buffers.pop(key)
@@ -186,8 +217,8 @@ class LiveHeldAudio:
                         'source_frames': len(data) // 2,
                         'live_custody_version': 4,
                     }
-                    # Identity is over capture PCM/context, not an encoder's Ogg
-                    # serial or implementation version. Retries name one object.
+                    # Logical capture key retains one opaque Publication across
+                    # retries, independent of encoder randomness.
                     import hashlib
                     import json
 
@@ -196,6 +227,7 @@ class LiveHeldAudio:
                     if not self._summary_ready:
                         await run_blocking(db_executor, cap_hold.ensure_summary, self.host.request.uid)
                         self._summary_ready = True
+                    source = self._publications.setdefault(identity, Publication(self.host.request.uid))
                     retry = identity in self._charged
                     if not retry:
                         if self.capacity is not None and self.capacity.month != month:
@@ -221,16 +253,16 @@ class LiveHeldAudio:
                         live_cap_manifest.publish,
                         self.host.request.uid,
                         path,
-                        identity,
+                        source,
                         metadata,
                         duration,
-                        retry=retry,
                     )
                     # No await between durable publication and retiring bytes.
                     self.seconds += duration
                     self.pending.popleft()
                     self.pending_bytes -= len(data)
                     self._charged.discard(identity)
+                    self._publications.pop(identity, None)
                     cap_hold.record_audio(
                         'live',
                         'held',
@@ -258,7 +290,7 @@ class LiveHeldAudio:
             await self.seal()
             if self.paused and self.seconds:
                 # Upgrade/reset may have queried recovery while the final live
-                # group was still leased. Retry after its distributed cooldown,
+                # tail was still buffered. Retry after its distributed cooldown,
                 # even when no later subscription request arrives.
                 from utils.sync.cap_hold_recovery import continue_after_cooldown
 

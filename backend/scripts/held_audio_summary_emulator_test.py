@@ -18,6 +18,7 @@ from google.cloud.firestore_v1.query import Query
 from google.cloud.firestore_v1.transaction import Transaction
 from database.legal_holds import DestructiveOperationInProgress
 from utils.sync import cap_hold, live_cap_manifest
+from utils.sync.live_cap_publication import Publication
 
 
 def main():
@@ -146,15 +147,16 @@ def main():
             cap_hold, 'upload_held_audio', side_effect=lambda *a, **k: uploads.append(a) or {'audio_path': 'fake'}
         ):
             before = cap_hold.summary_ref(uid).get().to_dict()
-            live_cap_manifest.publish(uid, 'unused', 'minute', {'timestamp': 1000}, 60)
+            source = Publication(uid)
+            live_cap_manifest.publish(uid, 'unused', source, {'timestamp': 1000}, 60)
             live_total = cap_hold.summary_ref(uid).get().to_dict()
             assert live_total['seconds'] == before['seconds'] + 60
             assert live_total['count'] == before['count'] + 1
-            ref = cap_hold.holds(uid).document('minute')
+            ref = cap_hold.holds(uid).document(source.identity)
             assert cap_hold.claim(uid, ref, cap_hold.time.time())
-            live_cap_manifest.publish(uid, 'unused', 'minute', {'timestamp': 1000}, 60, retry=True)
+            live_cap_manifest.publish(uid, 'unused', source, {'timestamp': 1000}, 60)
             ref.set({'state': 'purged', 'live_custody_version': 4})
-            live_cap_manifest.publish(uid, 'unused', 'minute', {'timestamp': 1000}, 60, retry=True)
+            live_cap_manifest.publish(uid, 'unused', source, {'timestamp': 1000}, 60)
             assert len(uploads) == 1
             assert cap_hold.summary_ref(uid).get().to_dict() == live_total
     client.recursive_delete(client.collection('users').document(uid))

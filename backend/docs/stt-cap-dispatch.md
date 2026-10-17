@@ -299,14 +299,25 @@ failed reservations cannot bypass it. Legacy v3 captures retain their old-format
 recovery/reservation handling. Capacity/backpressure failures close with an error,
 never a successful custody receipt. No flag or retention policy changed.
 
-A source holds at most 60 seconds. A receive packet of at most one second may
-straddle a full pending minute before the receive caller awaits publication;
-additional ingress is rejected at the bound. A one-second updater also flushes
-aged partial buffers. SIGKILL/pod loss can lose buffered/in-flight audio; only
-published seconds are reported. There is no client acknowledgement protocol.
+Accepted custody is bounded to 60 seconds across all channels/rates. Async receive
+entry points split a straddling ingress packet at the exact remaining sample,
+await publication, then accept its tail. They preserve full minute objects without
+accepting a 61st second or flushing an unnecessary short object. Synchronous
+capture callbacks retain the strict aggregate guard. The one-second updater
+flushes aged partial buffers; minute rollover starts a new tail timer.
+SIGKILL/pod loss can lose buffered/in-flight accepted audio; only published seconds
+are reported. There is no client acknowledgement protocol.
 
-A generation-zero source identity is derived from capture PCM and context rather
-than encoder randomness. Retry lookup checks the durable hold before uploading.
+Each pending source owns a fresh, opaque server UUID publication token. Callers
+cannot provide/reconstruct its identity or reset a `retry=False` flag. The token
+serializes attempts, consumes its fresh grant before IO, and every later attempt
+checks the durable hold before any upload. A failed commit cleans its uncommitted
+object with an exact generation precondition; a lost successful commit reply is
+protected by the durable receipt. Unknown upload replies use an exceptional
+metadata lookup before guarded cleanup. These failure reads do not affect the
+steady count. Pessimistic server transactions also block non-transactional
+writers; cleanup covers unsuccessful/optimistic publication as well.
+
 Successful recovery keeps a compact purged receipt, so a lost writer reply cannot
 recreate a source after deletion/recovery. Its frozen piece plan stores source
 pointer, exact sample offset/count and decoded PCM hash. Retries decode one local

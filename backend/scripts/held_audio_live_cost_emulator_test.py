@@ -15,7 +15,7 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_held_audio_emulator_secret_key_32_bytes')
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
-from google.api_core.exceptions import Aborted, PreconditionFailed
+from google.api_core.exceptions import Aborted, NotFound, PreconditionFailed
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from google.cloud.firestore_v1.document import DocumentReference
@@ -23,6 +23,7 @@ from google.cloud.firestore_v1.transaction import Transaction
 from google.cloud.firestore_v1.batch import WriteBatch
 from database import legal_holds
 from utils.sync import cap_hold, live_cap_capacity as capacity, live_cap_manifest as manifest
+from utils.sync.live_cap_publication import Publication
 
 
 class Bucket:
@@ -31,6 +32,8 @@ class Bucket:
 
     def __init__(self):
         self.objects = {}
+        self.generations = {}
+        self.fail_next_upload_reply = False
         self.uploads = 0
         self.barrier = None
 
@@ -38,8 +41,19 @@ class Bucket:
         bucket = self
 
         class Blob:
-            def delete(self):
+            generation = None
+
+            def reload(self):
+                if name not in bucket.objects:
+                    raise NotFound('missing source')
+                self.generation = bucket.generations.get(name, 1)
+
+            def delete(self, **kwargs):
+                expected = kwargs.get('if_generation_match')
+                if expected and bucket.generations.get(name, 1) != expected:
+                    raise PreconditionFailed('generation changed')
                 bucket.objects.pop(name, None)
+                bucket.generations.pop(name, None)
 
             def upload_from_file(self, stream, **kwargs):
                 assert kwargs == {
@@ -55,6 +69,11 @@ class Bucket:
                 if name in bucket.objects:
                     raise PreconditionFailed('immutable object already exists')
                 bucket.objects[name] = stream.read()
+                self.generation = 1
+                bucket.generations[name] = 1
+                if bucket.fail_next_upload_reply:
+                    bucket.fail_next_upload_reply = False
+                    raise TimeoutError('synthetic lost successful upload reply')
 
         return Blob()
 
@@ -94,12 +113,13 @@ def main():
             'origin': 'live',
         }
         cap_hold.summary_ref(uid).set({'version': 2, 'seconds': 0, 'count': 0})
+        sources = {i: Publication(uid) for i in range(64)}
         with patch.object(DocumentReference, 'get', get), patch.object(Transaction, '_commit', commit):
             cap_hold.ensure_summary(uid)
             lease = capacity.acquire(uid, '2026-10', 'block')
             for i in range(64):
                 lease.consume()
-                manifest.publish(uid, path, f'minute-{i}', metadata, 60)
+                manifest.publish(uid, path, sources[i], metadata, 60)
             capacity.release(lease)
         assert counts == {'reads': 133, 'writes': 130}, counts
         assert bucket.uploads == 64, bucket.uploads
@@ -126,8 +146,9 @@ def main():
                 raise Aborted('synthetic commit abort')
             return original_commit(tx)
 
+        aborted = Publication(uid)
         with patch.object(Transaction, '_commit', aborted_commit):
-            manifest.publish(uid, path, 'aborted', metadata, 60)
+            manifest.publish(uid, path, aborted, metadata, 60)
         assert cap_hold.summary_ref(uid).get().to_dict()['count'] == 65
 
         # Lost successful commit reply -> writer retry must not upload/count twice.
@@ -135,23 +156,38 @@ def main():
             original_commit(tx)
             raise RuntimeError('synthetic lost commit reply')
 
+        lost = Publication(uid)
         with patch.object(Transaction, '_commit', lost_reply):
             try:
-                manifest.publish(uid, path, 'lost-reply', metadata, 60)
+                manifest.publish(uid, path, lost, metadata, 60)
             except (RuntimeError, ValueError):
                 pass  # SDK rollback may mask a simulated lost successful commit reply.
             else:
                 raise AssertionError('lost reply was not injected')
         uploads = bucket.uploads
-        manifest.publish(uid, path, 'lost-reply', metadata, 60, retry=True)
+        manifest.publish(uid, path, lost, metadata, 60)
         assert bucket.uploads == uploads
         assert cap_hold.summary_ref(uid).get().to_dict()['count'] == 66
-        ref = cap_hold.holds(uid).document('lost-reply')
+        ref = cap_hold.holds(uid).document(lost.identity)
         assert cap_hold.claim(uid, ref, cap_hold.time.time())  # Immediately sealed.
-        bucket.objects.pop(f'chunks/{uid}/cap-held/lost-reply.opus.enc')
+        bucket.objects.pop(f'chunks/{uid}/cap-held/{lost.identity}.opus.enc')
         ref.set({'state': 'purged', 'live_custody_version': 4})
-        manifest.publish(uid, path, 'lost-reply', metadata, 60, retry=True)
+        manifest.publish(uid, path, lost, metadata, 60)
         assert bucket.uploads == uploads and ref.get().to_dict()['state'] == 'purged'
+
+        unknown = Publication(uid)
+        bucket.fail_next_upload_reply = True
+        try:
+            manifest.publish(uid, path, unknown, metadata, 60)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError('ambiguous upload reply was not injected')
+        unknown_path = f'chunks/{uid}/cap-held/{unknown.identity}.opus.enc'
+        assert unknown_path not in bucket.objects
+        assert not cap_hold.holds(uid).document(unknown.identity).get().exists
+        manifest.publish(uid, path, unknown, metadata, 60)
+        assert unknown_path in bucket.objects
 
         # Context reuse is scoped to exact account, transaction AND client.
         @firestore.transactional
@@ -197,7 +233,7 @@ def main():
             cap_hold.release(uid, snapshot.reference, row['lease_token'])
 
         for pieces_count in (1, 4):
-            ref = cap_hold.holds(uid).document(f'minute-{pieces_count}')
+            ref = cap_hold.holds(uid).document(sources[pieces_count].identity)
             snapshot = ref.get()
             counts = {'reads': 0, 'writes': 0}
             with ExitStack() as recovery_stack:
@@ -233,6 +269,30 @@ def main():
             print(
                 f'Recovery coordinator {pieces_count} piece(s): {counts}; provider/ingest/usage and allowance reads excluded, one source GET modeled separately'
             )
+        # A failed publication must clean an orphan even in a deployment using
+        # optimistic concurrency. Rollback releases emulator locks, then inject
+        # marker/purge/late-put before surfacing the failed commit to the writer.
+        failed_uid = uid + '-failed'
+        failed = Publication(failed_uid)
+        failed_path = f'chunks/{failed_uid}/cap-held/{failed.identity}.opus.enc'
+
+        def failed_commit(tx):
+            tx._rollback()
+            client.document(f'account_deletions/{failed_uid}').set({'wipe_status': 'in_progress'})
+            bucket.objects.pop(failed_path, None)
+            bucket.objects[failed_path] = b'synthetic late source'
+            raise RuntimeError('synthetic optimistic conflict after deletion')
+
+        with patch.object(Transaction, '_commit', failed_commit):
+            try:
+                manifest.publish(failed_uid, path, failed, metadata, 60)
+            except (RuntimeError, ValueError):
+                pass
+            else:
+                raise AssertionError('failed commit did not surface')
+        assert failed_path not in bucket.objects
+        assert not cap_hold.holds(failed_uid).document(failed.identity).get().exists
+        client.document(f'account_deletions/{failed_uid}').delete()
         # Real concurrent marker write: starts during GCS upload, cannot finish
         # until the source transaction commits (or is retried and refused).
         original_uid, uid = uid, uid + '-race'
@@ -251,7 +311,7 @@ def main():
 
         bucket.barrier = barrier
         with ThreadPoolExecutor(max_workers=2) as pool:
-            publication = pool.submit(manifest.publish, uid, path, 'delete-race', metadata, 60)
+            publication = pool.submit(manifest.publish, uid, path, Publication(uid), metadata, 60)
             assert entered.wait(5)
             deletion = pool.submit(delete_account)
             assert deleting.wait(5)
@@ -266,7 +326,7 @@ def main():
         assert not bucket.objects and not list(cap_hold.holds(uid).stream())
         uploads = bucket.uploads
         try:
-            manifest.publish(uid, path, 'after-delete', metadata, 60)
+            manifest.publish(uid, path, Publication(uid), metadata, 60)
         except legal_holds.DestructiveOperationInProgress:
             pass
         else:

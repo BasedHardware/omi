@@ -53,8 +53,8 @@ def persistence(monkeypatch, tmp_path):
     monkeypatch.setattr(
         live.live_cap_manifest,
         'publish',
-        lambda uid, path, identity, meta, duration, **kwargs: cap_hold.upload_held_audio(
-            uid, path, identity, meta, immutable=True
+        lambda uid, path, source, meta, duration, **kwargs: cap_hold.upload_held_audio(
+            uid, path, source.identity, meta, immutable=True
         ),
     )
     monkeypatch.setattr(cap_hold, 'release', Mock())
@@ -346,7 +346,7 @@ async def test_two_contiguous_minutes_publish_two_objects_even_across_packet_bou
     rate, total, first = 16000, 120 * 16000, 0
     while first < total:
         frames = min(7350, total - first)
-        hold.append(b'\1\0' * frames, rate, 100 + first / rate, 'a')
+        await hold.append_async(b'\1\0' * frames, rate, 100 + first / rate, 'a')
         await hold.flush()
         first += frames
     await hold.close()
@@ -372,7 +372,7 @@ async def test_minute_publication_does_not_age_and_flush_its_new_tail(host, pers
     hold = live.LiveHeldAudio(host)
     hold.append(b'\1\0' * (59 * 16000 + 8000), 16000, 100, 'a')
     clock[0] = 160.0
-    hold.append(b'\1\0' * 16000, 16000, 159.5, 'a')
+    await hold.append_async(b'\1\0' * 16000, 16000, 159.5, 'a')
     await hold.flush()
     assert [len(data) for data, _, _ in persistence] == [60 * 16000 * 2]
     assert len(next(iter(hold.buffers.values()))[0]) == 16000
@@ -387,3 +387,24 @@ async def test_multisecond_capture_callbacks_fit_the_existing_aggregate_bound(ho
     await hold.close()
     assert hold.seconds == 7
     assert persistence[0][0] == b'\1\0' * 3 * 16000 + b'\2\0' * 4 * 16000
+
+
+async def test_straddle_never_accepts_more_than_sixty_seconds(host, persistence, monkeypatch):
+    hold = live.LiveHeldAudio(host)
+    hold.append(b'\1\0' * (59 * 16000 + 8000), 16000, 100, 'a')
+    with pytest.raises(RuntimeError, match='custody bound'):
+        hold.append(b'\2\0' * 16000, 16000, 159.5, 'a')
+    assert hold.buffered_seconds() == 59.5
+    original = hold.append
+    observed = []
+
+    def append(*args, **kwargs):
+        original(*args, **kwargs)
+        observed.append(hold.buffered_seconds())
+
+    monkeypatch.setattr(hold, 'append', append)
+    await hold.append_async(b'\2\0' * 16000, 16000, 159.5, 'a')
+    await hold.close()
+    assert max(observed) <= 60
+    assert [len(data) for data, _, _ in persistence] == [60 * 32000, 16000]
+    assert b''.join(data for data, _, _ in persistence) == b'\1\0' * (59 * 16000 + 8000) + b'\2\0' * 16000
