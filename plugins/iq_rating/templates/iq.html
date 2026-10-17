@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IQ Rating</title>
+</head>
+<body>
+    <h1>IQ Rating</h1>
+    <div id="app"></div>
+    
+    <script>
+        // This would be replaced with your actual template rendering
+        const uid = '{{ uid }}'; // This is now properly escaped by Jinja2
+        
+        // In a real implementation, you would get the token from the server
+        // and include it in your API calls
+        const token = '{{ token }}'; // This would be generated and passed from the server
+        
+        // Example of how an authenticated API call would look
+        fetch(`/iq-rating/iq?uid=${uid}&iq_rating_token=${token}`)
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+    </script>
+</body>
+</html>

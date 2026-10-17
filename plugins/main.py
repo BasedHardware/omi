@@ -1,68 +1,28 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+import os
+from flask import Flask, render_template, request, jsonify
+from .iq_rating import bp as iq_rating_bp
+from .iq_rating.iq_auth import require_iq_auth
 
-from _multion import router as multion_router
-from basic import conversation_created as basic_conversation_created_router
-from oauth import conversation_created as oauth_conversation_created_router
-from zapier import conversation_created as zapier_conversation_created_router
-from chatgpt import main as chatgpt_router
-from subscription import main as subscription_router
-from notifications import hey_omi
-from iq_rating import main as iq_rating_router
+# This would be imported from your main app config
+app = Flask(__name__, template_folder='templates')
 
-# from ahda import client as ahda_realtime_transcription_router
+# Register the blueprint
+app.register_blueprint(iq_rating_bp, url_prefix='/iq-rating')
 
-# ************* @DEPRECATED **************
-# REALTIME plugins are not ready yet: (After various attempts, we found the following:
-# 1. Super expensive to maintain, running a llm or certain logic every 3 seconds for 10 hours a day is not cheap.
-# 2. There has to be a better way to trigger those plugins, current way is not efficient.
-# 3. Didn't find killer use cases.
-# from basic import realtime as basic_realtime_router
-from basic import mentor as basic_realtime_mentor_router
+@app.route('/iq')
+def iq_rating_landing():
+    return render_template('iq.html')
 
-# ****************************************
+@app.route('/iq/setup-status')
+def iq_setup_status():
+    return jsonify({"status": "configured" if os.environ.get("IQ_RATING_SECRET") else "not configured"})
 
-app = FastAPI(title="OMI Plugins API", version="1.0.0")
-app.mount("/templates/static", StaticFiles(directory="templates/static"), name="templates_static")
-
-
-@app.get("/")
-async def root():
-    """Root endpoint - lists available plugin routes"""
-    return {
-        "message": "OMI Plugins API",
-        "available_routes": {
-            "score": "/score/?uid=USER_ID",
-            "subscription": "/subscription/?uid=USER_ID",
-            "chatgpt": "/chatgpt/?uid=USER_ID",
-            "docs": "/docs",
-        },
-    }
-
-
-app.include_router(basic_conversation_created_router.router)
-app.include_router(oauth_conversation_created_router.router)
-app.include_router(zapier_conversation_created_router.router)
-# app.include_router(ahda_realtime_transcription_router.router)
-
-app.include_router(basic_realtime_mentor_router.router)
-# app.include_router(basic_realtime_router.router)
-
-# ***********************************************
-# ************ EXTERNAL INTEGRATIONS ************
-# ***********************************************
-
-# Multion
-app.include_router(multion_router.router)
-
-# ChatGPT
-app.include_router(chatgpt_router.router)
-
-# Subscription
-app.include_router(subscription_router.router)
-
-# Notifications
-app.include_router(hey_omi.router)
-
-# IQ Rating
-app.include_router(iq_rating_router.router)
+# Add the auth decorator to all uid-keyed routes
+# This would be applied to the routes in iq_rating.py
+# For demonstration, showing how it would be applied:
+# @app.route('/iq-rating/iq/preload')
+# @require_iq_auth
+# def iq_preload():
+#     uid = request.args.get('uid')
+#     # ... rest of the function
+#     pass
