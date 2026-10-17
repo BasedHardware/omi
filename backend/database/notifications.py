@@ -326,19 +326,16 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     return True
 
 
-def get_all_tokens(
-    uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False, firestore_client: Any = None
-) -> list[str]:
+def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False) -> list[str]:
     """Get device and legacy tokens; reuse a selected owner document when supplied.
 
     ``user_document_loaded`` distinguishes an absent legacy field from an unread
     owner, so even tokenless selected owners avoid another parent-document read.
     """
     tokens: List[str] = []
-    client = firestore_client if firestore_client is not None else get_firestore_client()
 
     # Get tokens from new subcollection
-    token_docs = client.collection('users').document(uid).collection('fcm_tokens').stream()
+    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
     for doc in token_docs:
         token_data = _typed_doc(doc)
         token_value = token_data.get('token')
@@ -347,7 +344,7 @@ def get_all_tokens(
 
     # Get legacy token from main user document (backward compatibility)
     if not user_document_loaded:
-        user_ref = client.collection('users').document(uid).get()
+        user_ref = db.collection('users').document(uid).get()
         if getattr(user_ref, "exists", False):
             user_data = _typed_doc(user_ref)
             legacy_value = user_data.get('fcm_token')
@@ -358,12 +355,11 @@ def get_all_tokens(
     return tokens
 
 
-def remove_invalid_token(token: str, *, firestore_client: Any = None) -> None:
+def remove_invalid_token(token: str) -> None:
     """Remove invalid token using collection group query (rare operation)"""
     if not token or not isinstance(token, str) or not token.strip():
         return
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    query = client.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token.strip())).limit(1)
+    query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token.strip())).limit(1)
 
     try:
         for doc in query.stream():
@@ -376,7 +372,7 @@ def remove_invalid_token(token: str, *, firestore_client: Any = None) -> None:
         logger.warning('Failed to query invalid token: %s', e)
 
 
-def remove_bulk_tokens(tokens: list[str], *, firestore_client: Any = None) -> None:
+def remove_bulk_tokens(tokens: list[str]) -> None:
     """Remove multiple invalid tokens efficiently using IN queries and batch deletes"""
     if not tokens:
         return
@@ -386,8 +382,6 @@ def remove_bulk_tokens(tokens: list[str], *, firestore_client: Any = None) -> No
     if not valid_tokens:
         return
 
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-
     # Firestore IN queries support up to 30 items
     chunk_size = 30
     token_chunks = [valid_tokens[i : i + chunk_size] for i in range(0, len(valid_tokens), chunk_size)]
@@ -395,10 +389,10 @@ def remove_bulk_tokens(tokens: list[str], *, firestore_client: Any = None) -> No
     for chunk in token_chunks:
         try:
             # Query for all tokens in this chunk at once
-            query = client.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
+            query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
 
             # Batch delete for efficiency
-            batch = client.batch()
+            batch = db.batch()
             count = 0
 
             for doc in query.stream():
@@ -408,7 +402,7 @@ def remove_bulk_tokens(tokens: list[str], *, firestore_client: Any = None) -> No
                 # Firestore batch limit is 500 operations
                 if count >= 500:
                     batch.commit()
-                    batch = client.batch()
+                    batch = db.batch()
                     count = 0
 
             # Commit remaining deletes
