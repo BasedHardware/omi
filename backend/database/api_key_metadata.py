@@ -77,7 +77,9 @@ class ApiKeyCacheReadResult:
 
 def _coerce_utc_datetime(value: object) -> Optional[datetime]:
     try:
-        parsed: Optional[datetime]
+        if hasattr(value, "to_datetime"):
+            value = value.to_datetime()
+
         if isinstance(value, datetime):
             parsed = value
         elif isinstance(value, str):
@@ -91,7 +93,7 @@ def _coerce_utc_datetime(value: object) -> Optional[datetime]:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
-    except (OverflowError, ValueError):
+    except (OverflowError, ValueError, OSError, TypeError, AttributeError):
         return None
 
 
@@ -119,8 +121,10 @@ def project_api_key_metadata(
     """
     if key_kind not in _PREFIX_PATTERNS:
         raise ValueError(f"Unsupported API key kind: {key_kind}")
-    if not isinstance(document_id, str) or not document_id:
+    if not isinstance(document_id, str) or not document_id.strip():
         raise ValueError("Firestore API key document must have an ID")
+    
+    clean_document_id = document_id.strip()
 
     data = raw if isinstance(raw, dict) else {}
     repairs: set[ApiKeyMetadataRepair] = set()
@@ -131,7 +135,11 @@ def project_api_key_metadata(
         repairs.add(ApiKeyMetadataRepair.NAME)
 
     raw_prefix = data.get("key_prefix")
-    prefix = raw_prefix if isinstance(raw_prefix, str) and _PREFIX_PATTERNS[key_kind].fullmatch(raw_prefix) else None
+    prefix = None
+    if isinstance(raw_prefix, str):
+        clean_prefix = raw_prefix.strip()
+        if _PREFIX_PATTERNS[key_kind].fullmatch(clean_prefix):
+            prefix = clean_prefix
     if prefix is None:
         repairs.add(ApiKeyMetadataRepair.KEY_PREFIX)
 
@@ -146,7 +154,7 @@ def project_api_key_metadata(
 
     return ApiKeyMetadataProjection(
         metadata={
-            "id": document_id,
+            "id": clean_document_id,
             "name": name,
             "key_prefix": prefix or _LEGACY_PREFIXES[key_kind],
             "created_at": created_at,
@@ -169,7 +177,7 @@ def normalize_api_key_scopes(
 
     selected = set(required_scopes)
     if isinstance(value, list):
-        selected.update(scope for scope in value if isinstance(scope, str) and scope in allowed_scopes)
+        selected.update(scope.strip() for scope in value if isinstance(scope, str) and scope.strip() in allowed_scopes)
     return [scope for scope in allowed_scopes if scope in selected]
 
 
@@ -186,9 +194,9 @@ def api_key_scopes_need_repair(
     if not isinstance(value, list):
         return True
     allowed = set(allowed_scopes)
-    if any(not isinstance(scope, str) or scope not in allowed for scope in value):
+    if any(not isinstance(scope, str) or scope.strip() not in allowed for scope in value):
         return True
-    return set(value) != set(normalized or ())
+    return {scope.strip() for scope in value} != set(normalized or ())
 
 
 def normalize_api_key_app_id(value: object, *, default: str) -> str:
