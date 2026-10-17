@@ -90,7 +90,6 @@ void main() {
     });
 
     testWidgets('a saved default template names itself and runs with its app id', (tester) async {
-      SharedPreferencesUtil().defaultSummaryTemplateAppId = 'pg';
       final reprocess = _Reprocess();
       final provider = summaryProvider(
         summaryConversation(),
@@ -98,6 +97,7 @@ void main() {
         catalog: [summaryApp('pg', 'Paul Graham')],
       );
       addTearDown(provider.dispose);
+      provider.setDefaultSummaryTemplateAppId('pg');
       await tester.pumpWidget(summaryHarness(provider, _summaryTab()));
       final l10n = summaryL10n(tester);
 
@@ -238,7 +238,7 @@ void main() {
       await tester.tap(find.byKey(const Key('summary_template_confirm')));
       await tester.pump();
       expect(reprocess.appIds, ['pg']);
-      expect(SharedPreferencesUtil().defaultSummaryTemplateAppId, 'pg');
+      expect(provider.defaultSummaryTemplateAppId, 'pg');
       expect(SharedPreferencesUtil().lastUsedSummarizationAppId, 'pg');
       reprocess.gate!.complete(const ReprocessBusy());
       await tester.pump();

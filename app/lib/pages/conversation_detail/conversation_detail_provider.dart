@@ -6,7 +6,6 @@ import 'package:clock/clock.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 
-import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
@@ -23,7 +22,10 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_generation.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
+
+export 'package:omi/pages/conversation_detail/conversation_summary_generation.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -33,57 +35,11 @@ typedef ConversationReprocessCall = Future<ReprocessResult> Function(String,
     {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
-/// Installed summary templates; throws when the list could not be read (never an empty list).
-typedef EnabledSummaryAppsFetch = Future<List<App>> Function();
-
-/// Templates suggested for one conversation; throws when the list could not be read.
-typedef SuggestedSummaryAppsFetch = Future<List<App>> Function(String conversationId);
-
-/// Where a template list fetch stands. [failed] is distinct from an empty [loaded] list.
-enum SummaryTemplatesLoad { idle, loading, loaded, failed }
-
-/// Why the last summary request on a conversation produced no summary.
-enum SummaryFailureKind {
-  /// The chosen template ran but returned nothing (or the server would not run it).
-  template,
-
-  /// Another writer was already processing the conversation (HTTP 409).
-  busy,
-
-  /// The hourly regenerate limit (HTTP 429).
-  rateLimited,
-
-  /// Anything else.
-  generic,
-}
-
-/// The last failed summary request, scoped to the conversation it was for.
-@immutable
-class SummaryFailure {
-  const SummaryFailure({required this.conversationId, required this.kind, this.appId});
-
-  final String conversationId;
-  final SummaryFailureKind kind;
-
-  /// The template that was asked for; null for Omi's own summary.
-  final String? appId;
-}
-
-/// Whether [conversation] carries the summary a reprocess asked for: the template's non-empty
-/// result when [appId] is set, otherwise a non-empty Omi overview (or any non-empty result).
-bool conversationHasRequestedSummary(ServerConversation conversation, String? appId) {
-  if (appId != null) {
-    return conversation.appResults.any((result) => result.appId == appId && result.content.trim().isNotEmpty);
-  }
-  return conversation.structured.overview.trim().isNotEmpty ||
-      conversation.appResults.any((result) => result.content.trim().isNotEmpty);
-}
-
 /// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
 /// a tab with nothing to show yet uses this to say "loading" or "couldn't load" instead of blank.
 enum ConversationDetailLoad { idle, loading, failed }
 
-class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin, ConversationSummaryGeneration {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
   static const Duration _speakerSummaryQuietPeriod = Duration(seconds: 4);
   ConversationDetailProvider({
@@ -97,30 +53,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
         _fetchConversation = fetchConversation ?? getConversationById,
-        _fetchEnabledSummaryApps = fetchEnabledSummaryApps ?? _fetchInstalledSummaryApps,
-        _fetchSuggestedSummaryApps = fetchSuggestedSummaryApps ?? _fetchConversationSuggestedApps;
+        enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
+        suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
-  final EnabledSummaryAppsFetch _fetchEnabledSummaryApps;
-  final SuggestedSummaryAppsFetch _fetchSuggestedSummaryApps;
-
-  static Future<List<App>> _fetchInstalledSummaryApps() async {
-    final result = await retrieveInstalledChatApps(limit: 100);
-    return switch (result) {
-      ApiSuccess(:final data) => (data.data ?? const [])
-          .map(App.fromGeneratedCatalogItem)
-          .where((app) => !app.deleted && app.worksWithMemories() && app.enabled)
-          .toList(),
-      ApiFailure(:final problem) => throw StateError('installed apps unavailable: ${problem.kind.name}'),
-    };
-  }
-
-  static Future<List<App>> _fetchConversationSuggestedApps(String conversationId) async {
-    final apps = await getConversationSuggestedApps(conversationId);
-    if (apps == null) throw StateError('suggested apps unavailable');
-    return apps;
-  }
-
+  @override
+  final EnabledSummaryAppsFetch enabledSummaryAppsFetch;
+  @override
+  final SuggestedSummaryAppsFetch suggestedSummaryAppsFetch;
   final ConversationDetailFetchCall _fetchConversation;
   final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
@@ -711,6 +651,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     onFailed?.call();
   }
 
+  @override
   AppProvider? appProvider;
   ConversationProvider? conversationProvider;
 
@@ -743,23 +684,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// The template the running reprocess asked for; null while it runs Omi's own summary.
   String? reprocessingAppId;
 
-  SummaryFailure? _summaryFailure;
-
-  /// Why the open conversation's last summary request produced nothing, until the next request
-  /// starts or the reader dismisses it. Null for any other conversation.
-  SummaryFailure? get summaryFailure {
-    final failure = _summaryFailure;
-    if (failure == null || failure.conversationId != conversationOrNull?.id) return null;
-    return failure;
-  }
-
-  /// Hides the failure card (the reader acknowledged it).
-  void dismissSummaryFailure() {
-    if (_summaryFailure == null) return;
-    _summaryFailure = null;
-    notifyListeners();
-  }
-
   /// Bumped by every detail read, by opening another conversation and by a reprocess landing. A
   /// read applies only while it is still the latest, so a slow earlier response (an older poll, the
   /// previous conversation's fetch) can never replace newer data or another conversation's state.
@@ -768,35 +692,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Installed summary templates are the user's, so they survive opening another conversation.
-  // Suggestions belong to one conversation and are dropped when the page shows a different one.
-  final List<App> _cachedEnabledConversationApps = [];
-  final List<App> _cachedSuggestedApps = [];
-  String? _cachedSuggestedAppsConversationId;
-  int _suggestedAppsGeneration = 0;
-  int _enabledAppsGeneration = 0;
-  SummaryTemplatesLoad enabledTemplatesLoad = SummaryTemplatesLoad.idle;
-  SummaryTemplatesLoad suggestedTemplatesLoad = SummaryTemplatesLoad.idle;
-  // Track locally added apps (e.g., from quick template creator) to preserve during refetch
-  final Set<String> _locallyAddedAppIds = {};
-
   List<App> get appsList => appProvider?.apps ?? [];
-
-  /// Returns cached enabled conversation apps
-  List<App> get cachedEnabledConversationApps => _cachedEnabledConversationApps;
-
-  /// Returns cached suggested apps for the open conversation (empty for any other).
-  List<App> get cachedSuggestedApps =>
-      _cachedSuggestedAppsConversationId != null && _cachedSuggestedAppsConversationId == conversationOrNull?.id
-          ? _cachedSuggestedApps
-          : const [];
-
-  void _dropSuggestedApps() {
-    _cachedSuggestedApps.clear();
-    _cachedSuggestedAppsConversationId = null;
-    _suggestedAppsGeneration++;
-    suggestedTemplatesLoad = SummaryTemplatesLoad.idle;
-  }
 
   Structured get structured {
     return conversation.structured;
@@ -812,6 +708,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Substituting another conversation would silently retarget the page, and
   /// destructive actions (delete, visibility, rename) act on whatever this
   /// returns.
+  @override
   ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
@@ -848,6 +745,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   /// Non-null accessor for call sites that already know the conversation is
   /// valid (gestures, async handlers). Build paths use [conversationOrNull].
+  @override
   ServerConversation get conversation {
     final c = conversationOrNull;
     if (c == null) throw StateError("No valid conversation found");
@@ -1018,7 +916,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (list != null) {
       final conv = list.firstWhereOrNull((c) => c.id == conversationId);
       if (conv != null) {
-        if (_cachedConversationId != conv.id) _dropSuggestedApps();
+        if (_cachedConversationId != conv.id) resetSuggestedSummaryApps();
         selectedDate = date;
         _cachedConversationId = conv.id;
         _cachedConversation = conv;
@@ -1155,7 +1053,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     Logger.debug('_reProcessConversation with appId: $appId');
     lastFailedReprocessConversationId = null;
     lastFailedReprocessAppId = null;
-    _summaryFailure = null;
+    recordSummaryFailure(null);
     reprocessingAppId = appId;
     loadingReprocessConversation = true;
     reprocessConversationId = target.id;
@@ -1193,8 +1091,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
       _finishReprocessLoading();
       // Show what the reader asked for, even when the server kept other templates' results first.
-      _summaryViewConversationId = target.id;
-      _summaryViewKey = appId == null ? 'omi' : 'app:$appId';
+      showRequestedSummarySource(target.id, appId);
       notifyListeners();
 
       // Check if the selected app summary is in the apps list.
@@ -1251,7 +1148,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _finishReprocessLoading();
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
-    _summaryFailure = SummaryFailure(conversationId: target.id, kind: kind, appId: appId);
+    recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
     notifyError('REPROCESS_FAILED');
     notifyListeners();
   }
@@ -1259,33 +1156,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Returns the explicit source and body used by every summary surface.
   ConversationSummarySelection getSummarySelection() {
     return ConversationSummarySelection.select(conversation);
-  }
-
-  /// The summary source the Summary tab shows for the open conversation, as `sourceKey`; null
-  /// follows [getSummarySelection].
-  String? _summaryViewKey;
-  String? _summaryViewConversationId;
-
-  /// The summary the Summary tab shows: the source the reader picked (a chip, or the one a
-  /// reprocess just wrote) while the conversation still has it, else [getSummarySelection].
-  ConversationSummarySelection getDisplayedSummarySelection() {
-    final target = conversation;
-    final key = _summaryViewConversationId == target.id ? _summaryViewKey : null;
-    if (key != null) {
-      final picked =
-          ConversationSummarySelection.available(target).firstWhereOrNull((selection) => selection.sourceKey == key);
-      if (picked != null) return picked;
-    }
-    return ConversationSummarySelection.select(target);
-  }
-
-  /// Shows [selection]'s source on the Summary tab.
-  void showSummarySource(ConversationSummarySelection selection) {
-    final target = conversationOrNull;
-    if (target == null) return;
-    _summaryViewConversationId = target.id;
-    _summaryViewKey = selection.sourceKey;
-    notifyListeners();
   }
 
   /// Returns the list of suggested summarization apps for this conversation
@@ -1303,141 +1173,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         .toList();
   }
 
-  /// Fetches and caches enabled conversation apps, keeping [enabledTemplatesLoad] current. A failed
-  /// read keeps whatever was cached and reports [SummaryTemplatesLoad.failed]; it is never an empty
-  /// list. Preserves locally added apps that may not yet be returned by the API.
-  Future<void> fetchAndCacheEnabledConversationApps() async {
-    // Only the newest read may publish: an older one finishing late must not overwrite it.
-    final generation = ++_enabledAppsGeneration;
-    // Not notified: callers start fetches from initState, and the sheet reads idle and loading alike.
-    enabledTemplatesLoad = SummaryTemplatesLoad.loading;
-    List<App> apps;
-    try {
-      apps = await _fetchEnabledSummaryApps();
-    } catch (e) {
-      Logger.debug('Error fetching enabled conversation apps: ${e.runtimeType}');
-      if (_isDisposed || generation != _enabledAppsGeneration) return;
-      enabledTemplatesLoad = SummaryTemplatesLoad.failed;
-      notifyListeners();
-      return;
-    }
-    if (_isDisposed || generation != _enabledAppsGeneration) return;
-
-    // Preserve locally added apps that aren't in the API response yet
-    final locallyAddedApps =
-        _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
-
-    _cachedEnabledConversationApps.clear();
-    _cachedEnabledConversationApps.addAll(apps);
-
-    // Add back locally added apps if they weren't returned by the API
-    for (final localApp in locallyAddedApps) {
-      if (!apps.any((app) => app.id == localApp.id)) {
-        _cachedEnabledConversationApps.add(localApp);
-      } else {
-        // If API returned the app, remove from locally tracked set
-        _locallyAddedAppIds.remove(localApp.id);
-      }
-    }
-    enabledTemplatesLoad = SummaryTemplatesLoad.loaded;
-    notifyListeners();
-  }
-
-  /// Fetches and caches the open conversation's suggested apps, keeping [suggestedTemplatesLoad]
-  /// current. A response for a conversation the page no longer shows is dropped.
-  Future<void> fetchAndCacheSuggestedApps() async {
-    final conversationId = conversationOrNull?.id;
-    if (conversationId == null) return;
-    final generation = ++_suggestedAppsGeneration;
-    suggestedTemplatesLoad = SummaryTemplatesLoad.loading;
-    List<App>? apps;
-    try {
-      apps = await _fetchSuggestedSummaryApps(conversationId);
-    } catch (e) {
-      Logger.debug('Error fetching suggested apps: ${e.runtimeType}');
-    }
-    if (_isDisposed || generation != _suggestedAppsGeneration || conversationOrNull?.id != conversationId) return;
-    _cachedSuggestedApps.clear();
-    if (apps != null) _cachedSuggestedApps.addAll(apps);
-    _cachedSuggestedAppsConversationId = conversationId;
-    suggestedTemplatesLoad = apps == null ? SummaryTemplatesLoad.failed : SummaryTemplatesLoad.loaded;
-    notifyListeners();
-  }
-
-  /// Finds an app by ID from cached apps
-  App? findAppById(String? appId) {
-    if (appId == null) return null;
-
-    final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
-    if (enabledApp != null) return enabledApp;
-
-    final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
-    if (suggestedApp != null) return suggestedApp;
-
-    // The two caches above only fill after the summary sheet fetches. The durable
-    // app catalog (appProvider.apps) is loaded at startup, so a real app_id must
-    // resolve here instead of rendering "Unknown App" until the sheet is opened
-    // (SCA-359).
-    final providerApp = appProvider?.apps.firstWhereOrNull((app) => app.id == appId);
-    return providerApp;
-  }
-
-  /// Enables an app and updates the cached enabled apps list
-  /// Returns true if successful, false otherwise
-  Future<bool> enableApp(App app) async {
-    try {
-      // Make the server call to enable the app
-      final (success, _) = await enableAppServer(app.id);
-      if (_isDisposed) return false;
-
-      if (success) {
-        // Update SharedPreferences
-        SharedPreferencesUtil().enableApp(app.id);
-
-        // Update the app's enabled state
-        app.enabled = true;
-
-        // Add to cached enabled apps if not already there
-        final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
-        if (existingIndex == -1) {
-          _cachedEnabledConversationApps.add(app);
-        } else {
-          _cachedEnabledConversationApps[existingIndex] = app;
-        }
-
-        notifyListeners();
-      }
-
-      return success;
-    } catch (e) {
-      Logger.debug('Error enabling app ${app.id}: $e');
-      return false;
-    }
-  }
-
-  /// Adds an app to the cached enabled conversation apps list
-  /// Used when a new app is created and installed from the quick template creator
-  void addToEnabledConversationApps(App app) {
-    final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
-    if (existingIndex == -1) {
-      _cachedEnabledConversationApps.add(app);
-    } else {
-      _cachedEnabledConversationApps[existingIndex] = app;
-    }
-    // Track this as a locally added app so it's preserved during refetch
-    _locallyAddedAppIds.add(app.id);
-    notifyListeners();
-  }
-
   /// Checks if an app is in the suggested apps list
   bool isAppSuggested(String appId) {
     return getSuggestedApps().contains(appId);
-  }
-
-  /// Checks if a suggested app is available/enabled for the user
-  bool isSuggestedAppAvailable(String appId) {
-    if (appProvider == null) return false;
-    return appProvider!.apps.any((app) => app.id == appId && app.worksWithMemories() && app.enabled);
   }
 
   void setCachedConversation(ServerConversation conversation) {
@@ -1448,7 +1186,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (_cachedConversationId != conversation.id) {
       detailLoad = ConversationDetailLoad.idle;
       _refreshGeneration++;
-      _dropSuggestedApps();
+      resetSuggestedSummaryApps();
     }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
@@ -1647,17 +1385,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  /// The template saved with "Make this my default"; null means Omi's own summary.
-  String? get defaultSummaryTemplateAppId {
-    final id = SharedPreferencesUtil().defaultSummaryTemplateAppId;
-    return id.isEmpty ? null : id;
-  }
-
-  void setDefaultSummaryTemplateAppId(String? appId) {
-    SharedPreferencesUtil().defaultSummaryTemplateAppId = appId ?? '';
-    notifyListeners();
-  }
-
   String? getLastUsedSummarizationAppId() {
     final lastUsedId = SharedPreferencesUtil().lastUsedSummarizationAppId;
     return lastUsedId.isEmpty ? null : lastUsedId;
@@ -1671,6 +1398,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   bool _isDisposed = false;
+
+  @override
+  bool get summaryGenerationDisposed => _isDisposed;
 
   @override
   void dispose() {

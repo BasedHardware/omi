@@ -253,7 +253,12 @@ void main() {
     addTearDown(provider.dispose);
     expect(provider.defaultSummaryTemplateAppId, isNull);
     provider.setDefaultSummaryTemplateAppId('pg');
-    expect(SharedPreferencesUtil().defaultSummaryTemplateAppId, 'pg');
+    expect(provider.defaultSummaryTemplateAppId, 'pg');
+    final otherUser = summaryProvider(summaryConversation());
+    addTearDown(otherUser.dispose);
+    SharedPreferencesUtil().uid = 'someone-else';
+    expect(otherUser.defaultSummaryTemplateAppId, isNull, reason: 'the default is per signed-in user');
+    SharedPreferencesUtil().uid = '';
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     provider.setDefaultSummaryTemplateAppId(null);
     expect(provider.defaultSummaryTemplateAppId, isNull);
