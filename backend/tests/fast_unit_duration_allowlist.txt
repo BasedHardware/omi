@@ -158,15 +158,14 @@ tests/unit/test_client_device_provenance.py::test_record_client_device_upserts_a
 tests/unit/test_conversation_search_date_validation.py::test_bad_start_date_returns_400_not_500
 tests/unit/test_conversation_model_split.py::TestPhase4RuntimeBehavior::test_trends_extractor_signature_callable
 tests/unit/test_daily_notification_timezone_selection.py::test_sub_hour_offset_timezones_are_included_at_target_hour
+# Whole file rides the 1.00s line: routers.chat import amortizes into whichever
+# quota test runs first on a loaded runner — same reason as test_desktop_transcribe.
+tests/unit/test_desktop_message_quota_router.py
 tests/unit/test_desktop_message_quota_router.py::test_desktop_ai_message_does_not_record_quota
+# Same import-amortization flake; whole file borderline on loaded runners.
+tests/unit/test_desktop_migration.py
 # File-isolation import of routers.chat + multipart/STT stubs amortizes into
 # whichever test in this file runs first; CPU sits on the 0.30s fail line.
-# Pre-existing upstream flakes observed on shared runners: this test's CPU
-# sits right on the 1.00s fail line under load (seen on PR #21949 shard runs);
-# the sibling quota test above is already allowlisted for the same reason.
-tests/unit/test_desktop_message_quota_router.py::test_desktop_duplicate_human_message_retries_idempotent_quota_record
-# Same: desktop_migration's import-heavy first test rides the fail line.
-tests/unit/test_desktop_migration.py
 tests/unit/test_desktop_transcribe.py
 tests/unit/test_desktop_transcribe.py::TestDurationBudgetEnforcement::test_multipart_budget_exhausted_429
 tests/unit/test_desktop_transcribe.py::TestDurationBudgetEnforcement::test_octet_stream_budget_exhausted_429
