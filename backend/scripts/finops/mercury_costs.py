@@ -132,7 +132,11 @@ def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
         lower = (day - dt.timedelta(days=29)).isoformat()
         year_lower = anniversary(day, -1)
         required_annual = {d for d in days(year_lower.isoformat(), date) if d > year_lower.isoformat()}
-        annual_complete = not annual or required_annual <= coverage
+        annual_unknown = any(
+            r['category'] == 'unmapped' and r['date'] in required_annual and int(r['transaction_count']) > 0
+            for r in rows
+        )
+        annual_complete = not annual or (required_annual <= coverage and not annual_unknown)
         monthly, annual_monthly, unmapped = Decimal(0), Decimal(0), Decimal(0)
         unmapped_count = 0
         for row in rows:

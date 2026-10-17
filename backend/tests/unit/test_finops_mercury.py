@@ -203,6 +203,12 @@ def test_partial_history_and_unmapped_never_look_complete(mercury):
     assert costs.saas_rows(rows, ['2026-10-17'], config)[0]['inputs_complete'] is True
     config['vendors']['github']['annual'] = True
     assert costs.saas_rows(rows, ['2026-10-17'], config)[0]['annual_history_complete'] is False
+    full_year = coverage(costs, '2025-10-18', '2026-10-17')
+    full_year = [r for r in full_year if r['date'] != '2026-01-01'] + [
+        cash('2026-01-01', 'unmapped', 1200, 'unmapped', 1)
+    ]
+    # An old unknown payment could be an annual bill even if the recent month is mapped.
+    assert costs.saas_rows(full_year, ['2026-10-17'], config)[0]['annual_history_complete'] is False
     config['vendors']['github']['annual'] = False
     rows = [r for r in rows if r['date'] != '2026-10-17'] + [cash('2026-10-17', 'unmapped', 2, 'unmapped', 1)]
     result = costs.saas_rows(rows, ['2026-10-17'], config)[0]

@@ -454,7 +454,8 @@ after they age out of the 90-day API refresh. NUMERIC outputs round to nine deci
 places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
 
 `inputs_complete` requires all 30 posted days, no unmapped transactions in that
-window, and a full preceding year's coverage if any annual vendor is configured.
+window, and a full preceding year's coverage with no unmapped payments if any
+annual vendor is configured.
 This prevents an initial 90-day pull from claiming to know older annual bills.
 The reader should require `inputs_complete=true` and fresh `computed_at` (for
 example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`, and
