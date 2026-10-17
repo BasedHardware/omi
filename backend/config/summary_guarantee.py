@@ -3,7 +3,7 @@
 import math
 import os
 
-from config.batch_pipeline import enabled_for, in_percent_cohort
+from config.batch_pipeline import in_percent_cohort
 
 
 def enabled(uid: str | None = None) -> bool:
@@ -21,7 +21,7 @@ def enabled(uid: str | None = None) -> bool:
     # Preserve the existing explicit enable-all contract at zero only.
     if percent == 0:
         return not owners
-    return enabled_for(uid) and in_percent_cohort(uid, percent)
+    return in_percent_cohort(uid, percent)
 
 
 def repair_enabled() -> bool:

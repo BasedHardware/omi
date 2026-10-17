@@ -5451,8 +5451,8 @@ in the admitted arm. Disabling the ramp takes effect on reconnect; drain existin
 WebSockets before claiming rollback complete.
 
 `FIRST_SUMMARY_DEADLINE_PERCENT=0` preserves the existing summary allowlist/global
-contract. Positive values add the intersection of current batch admission and the
-same percentage bucket to the retained summary allowlist, under
+contract. Positive values add the same percentage bucket to the retained summary
+allowlist independently of batch admission, under
 `FIRST_SUMMARY_DEADLINE_ENABLED`. A positive percentage with an empty summary
 allowlist is cohort-only; at zero an empty list still means global enablement.
 Keep existing allowlists when ramping or rolling back. `SUMMARY_DEBT_REPAIR_ENABLED`

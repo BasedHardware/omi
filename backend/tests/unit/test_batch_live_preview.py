@@ -60,7 +60,7 @@ def host():
     )
 
 
-def test_all_three_cohorts_share_batch_bucket_and_nesting(monkeypatch):
+def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback(monkeypatch):
     enable(monkeypatch, '5')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '5')
@@ -72,8 +72,9 @@ def test_all_three_cohorts_share_batch_bucket_and_nesting(monkeypatch):
         assert summary_guarantee.enabled(owner) == expected
         results.append(expected)
     assert 20 < sum(results) < 80
-    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '1')
-    assert all(not summary_guarantee.enabled(f'synthetic-{i}') or results[i] for i in range(1000))
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    assert not any(batch_pipeline.enabled_for(f'synthetic-{i}') for i in range(1000))
+    assert [summary_guarantee.enabled(f'synthetic-{i}') for i in range(1000)] == results
 
 
 def test_summary_kill_allowlist_legacy_global_and_invalid(monkeypatch):

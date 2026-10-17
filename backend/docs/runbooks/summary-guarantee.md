@@ -12,8 +12,8 @@ its existing outbox obligation by the original acceptance time +
 coalescing, lease/retry and repair retain that original time. This is a dispatch
 budget, not a promise that an unavailable provider finishes in 120 seconds.
 `FIRST_SUMMARY_DEADLINE_PERCENT` defaults to `0`. A positive percentage adds
-batch-admitted owners in the same unsalted batch bucket to the explicit summary
-allowlist. At positive percentages an empty list selects only that cohort; at
+owners in the same unsalted batch bucket to the explicit summary allowlist,
+independently of batch admission so protection survives admission rollback. At positive percentages an empty list selects only that cohort; at
 zero the legacy empty-list/global semantics remain. Retain the existing allowlist
 for a cohort ramp and rollback. Invalid percentages admit no additional owners;
 the global flag still kills every owner. This does not enable summary-debt repair.
