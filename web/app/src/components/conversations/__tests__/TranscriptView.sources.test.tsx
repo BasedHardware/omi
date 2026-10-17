@@ -47,34 +47,38 @@ it('opens a cited transcript group, focuses it and clears its temporary highligh
   vi.useRealTimers();
 });
 
-it('prioritizes a source jump over the audio playback row', () => {
+it('keeps a paused source in view after highlighting and resumes follow on playback changes', () => {
+  vi.useFakeTimers();
   const scroll = vi.fn();
   Element.prototype.scrollIntoView = scroll;
-  render(
-    <TranscriptView
-      currentTime={0}
-      sourceRequest={{ id: 'cited', request: 1 }}
-      segments={[
-        {
-          id: 'playing',
-          text: 'Playing row',
-          start: 0,
-          end: 2,
-          is_user: false,
-          speaker_id: 0,
-        },
-        {
-          id: 'cited',
-          text: 'Cited row',
-          start: 3,
-          end: 4,
-          is_user: false,
-          speaker_id: 1,
-        },
-      ]}
-    />,
+  const request = { id: 'cited', request: 1 };
+  const segments = [
+    {
+      id: 'playing',
+      text: 'Playing row',
+      start: 0,
+      end: 2,
+      is_user: false,
+      speaker_id: 0,
+    },
+    { id: 'cited', text: 'Cited row', start: 3, end: 4, is_user: false, speaker_id: 1 },
+  ];
+  const { rerender } = render(
+    <TranscriptView currentTime={0} sourceRequest={request} segments={segments} />,
   );
   expect(scroll).toHaveBeenCalledTimes(1);
   expect((scroll.mock.contexts[0] as HTMLElement).textContent).toContain('Cited row');
-  expect(screen.getByText('Cited row').closest('[tabindex]')).toHaveFocus();
+  const row = screen.getByText('Cited row').closest('[tabindex]')!;
+  expect(row).toHaveFocus();
+  act(() => {
+    vi.advanceTimersByTime(2500);
+  });
+  expect(row.className).not.toContain('ring-2');
+  expect(scroll).toHaveBeenCalledTimes(1);
+  rerender(
+    <TranscriptView currentTime={1} sourceRequest={request} segments={segments} />,
+  );
+  expect(scroll).toHaveBeenCalledTimes(2);
+  expect((scroll.mock.contexts[1] as HTMLElement).textContent).toContain('Playing row');
+  vi.useRealTimers();
 });
