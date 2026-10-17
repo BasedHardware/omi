@@ -5402,3 +5402,20 @@ and recovery redrives retain their own costs.
 These are source-derived formulas, not measured daily traffic or a billing
 receipt. The existing caller-attributed Firestore budget must accept actual daily
 volume before any future enablement. There is no new client polling loop.
+
+### Terminal empty recognition in the record lane
+
+The default-off `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED` permits a
+`no_recoverable_speech` result only after positive strict VAD, a GPU padded retry
+that returned empty, and an empty independent multilingual recovery. The worker
+persists padded-empty evidence under its lease; CPU recovery pins the paid
+provider before dispatch. This terminal empty span is distinct from silence,
+adds no transcript words and no transcription usage, and releases successful
+siblings through normal projection/client completion. The encrypted artifact
+retains VAD and closed exhaustion evidence; correctness metrics count its captured
+duration under `no_recoverable_speech` and shared fallback telemetry is degraded.
+A completed upload may include `no_recoverable_speech_segments`; it does not claim
+that these spans were silent. Uncertain/provider/validation failures remain held,
+and no further paid intent is granted. The one-owner historical operator and old
+GPU-canary VAD/explicit-epoch-2 route are documented in
+[`batch-pipeline-serving.md`](batch-pipeline-serving.md#terminal-empty-recognition-dark).

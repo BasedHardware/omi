@@ -22,6 +22,7 @@ from database.batch_pipeline_store import FirestoreStore
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
 from utils.batch_pipeline.correctness_metrics import record_labels
+from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -182,7 +183,15 @@ class Projector:
         except ProjectionReplay:
             pass
         else:
-            if entry['result']['outcome'] == 'silence':
+            if entry['result']['outcome'] in {'silence', 'no_recoverable_speech'}:
+                if entry['result']['outcome'] == 'no_recoverable_speech':
+                    payload = self.load_result(item, entry['result']['result_uri'])
+                    if (
+                        entry.get('recovery_version') != 1
+                        or result_outcome(payload) != 'no_recoverable_speech'
+                        or abs(payload['audio_seconds'] - item.duration_seconds) > 0.1
+                    ):
+                        raise ProjectionBlocked('terminal empty recovery evidence required')
                 try:
                     if binding.record_origin:
                         self.assign_record_silence(item, binding, session)

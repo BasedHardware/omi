@@ -855,7 +855,7 @@ def test_exhausted_padded_empty_asr_hands_off_without_fabricating_silence(monkey
     retry = Mock(return_value=[])
     worker, _, saved, _, diarized, _ = setup_worker(words_providers={'parakeet': EmptyWords()}, recover_words=retry)
     results = worker.process_batch([item()])
-    assert results == ([RecoveryWork('a')] if enabled else [])
+    assert results == ([RecoveryWork('a', padded_retry_empty=True)] if enabled else [])
     retry.assert_called_once()
     assert not saved and not diarized
     assert worker.counts['silence'] == 0

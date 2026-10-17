@@ -377,3 +377,68 @@ operator. Do not erase or reset either paid epoch, content claims or result
 receipts. Disabling the flag prevents new dispatches; an already-running provider
 may finish. Completed transcripts are real historical writes and are not undone
 by a flag rollback; correct them only through the normal reviewed content path.
+
+### Terminal empty recognition (dark)
+
+`BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED=false` is the CPU recovery
+kill switch. Deploy the worker from the same change first: its exhausted
+`RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
+lease CAS. Recovery pins/persists its provider before dispatch. With the flag on,
+positive strict local VAD, affirmative GPU padded-empty evidence, and a validated
+empty **multilingual** response produce `no_recoverable_speech`. Timeouts, malformed
+responses, uncertain calls, missing evidence, and provider failures stay held.
+There are no additional calls after exhaustion and no paid-intent resets.
+
+This is an empty-words **terminal degradation**, distinct from silence. The
+encrypted result retains validated positive VAD and closed recognition evidence.
+Projection validates that artifact, assigns no words for the span, and resumes
+normal ordered merge, sibling publication, ledger/client completion and retention.
+This span contributes **zero transcription usage**, while the existing captured
+seconds correctness counter records `event=no_recoverable_speech`. The structured
+log is `event=batch_terminal_empty stage=response_validation
+reason=no_recoverable_speech`; shared fallback telemetry reports `degraded`.
+Completed upload responses retain the compatible `success` outcome and add
+`no_recoverable_speech_segments`; an empty exhausted upload is never reported as
+`expected_silence`. Existing completed results remain readable after flag rollback.
+
+Historical tool: `backend/scripts/batch_pipeline_terminal_empty.py`. It is
+one-owner, cutoff/count-bounded (at most 20), read-only by default, and digest-bound.
+Use `--metadata-only` with `ro-prod` for fence/eligibility counts without audio or
+secrets. Full dry-run needs securely injected `DAVID_UID`, `ENCRYPTION_SECRET` and
+`BUCKET_BATCH_PIPELINE` plus batch-bucket read permission. `ro-prod` cannot read
+that bucket; `prod-operator` currently cannot write Firestore. The lead's existing
+authorized secure runner is required for full census/apply; never print runtime
+material or use a user API. No secret fetching is embedded in the tool.
+
+For old rows lacking provenance, `--attest-pre-provenance-exhaustion` explicitly
+attests the reviewed padded-empty evidence and the multilingual-empty provenance
+of legacy `response_validation/empty_asr` intents. This declaration, all original
+paid intents, VAD decisions, owner, cutoff and any canary epoch are digest-bound.
+It never treats generic failure as empty. The old GPU canary's **spent** epoch 1
+remains intact: strict no-speech creates silence without STT. Positive VAD selects
+`canary_recovery`, requiring explicit `--canary-paid-epoch 2` in both the dry-run
+and approved apply. That is at most **one** independent Modulate call, with normal
+provider/cap/privacy/CAS fences. Words publish normally; a definite empty response
+becomes terminal-empty; an uncertain call stays held. This is separate from the
+previous authorization for 67 other units. Do not enable a canary paid epoch
+without the owner's authorization.
+
+```sh
+# Existing secure runtime injection; no credentials or owner printed.
+nice -n 19 backend/.venv/bin/python backend/scripts/batch_pipeline_terminal_empty.py \
+  --stage prod --quarantined-before 2026-10-17T10:30:00Z --expect-count 6 \
+  --attest-pre-provenance-exhaustion
+# If the canary is VAD-positive and epoch 2 is authorized, repeat the dry-run with
+# --canary-paid-epoch 2. It changes the approval digest.
+# Then repeat the SAME arguments plus --apply --approve-plan-sha256 "$PLAN" \
+# --apply-limit 1; validate the canary, then increase the fixed prefix to 6.
+```
+
+Keep intake paused during this repair. Enable only the new terminal flag on
+integration after deploying CPU and worker artifacts, retaining strict disposition,
+multilingual recovery, serving/recovery and the existing owner fence. Do not
+replace environment files or reset intake defaults. Rollback disables the new
+flag and stops operator invocation; committed projections are not undone and
+spent intents never become retryable. Inspect completion and terminal-empty
+captured-duration rates before any ramp: terminal completion does not prove ASR
+quality or make the unresolved duration disappear from correctness metrics.

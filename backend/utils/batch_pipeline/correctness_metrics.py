@@ -25,7 +25,15 @@ def enabled() -> bool:
 
 
 def record(event: str, *, source: str = 'cpu', seconds: float = 0) -> None:
-    if event not in {'admitted', 'failed', 'recovered', 'committed', 'projection_completed', 'empty_asr_attempt'}:
+    if event not in {
+        'admitted',
+        'failed',
+        'recovered',
+        'committed',
+        'projection_completed',
+        'empty_asr_attempt',
+        'no_recoverable_speech',
+    }:
         raise ValueError('closed transition event required')
     if source not in {'cpu', 'gpu_pump', 'ordered_merge', 'gpu_worker'}:
         raise ValueError('closed transition source required')
