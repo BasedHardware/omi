@@ -356,10 +356,11 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
         canary_sources = {
             'omi-datasource-prometheus': 'prometheus',
             'omi-datasource-cloud-monitoring': 'beuxmaq8oxhq8e',
+            'omi-datasource-gmp': 'gmp-cloud-run',
         }
         if rule.get('uid') in canary_sources:
             # A datasource outage is monitoring infrastructure, not evidence of
-            # an Omi product outage. These two explicit canaries reach Telegram
+            # an Omi product outage. These explicit canaries reach Telegram
             # via the root receiver and must not update a product Instatus page.
             source = canary_sources[rule['uid']]
             assert labels['impact'] == 'infrastructure'
