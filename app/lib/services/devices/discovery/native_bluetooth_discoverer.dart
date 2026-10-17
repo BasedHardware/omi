@@ -35,10 +35,19 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     final previousCallback = BleBridge.instance.peripheralDiscoveredCallback;
 
     BleBridge.instance.peripheralDiscoveredCallback = (BlePeripheral peripheral) {
-      if (peripheral.name.isNotEmpty) {
+      BlePeripheral candidate = peripheral;
+      if (candidate.name.isEmpty && _hasService(candidate, plaudServiceUuid)) {
+        candidate = BlePeripheral(
+          uuid: candidate.uuid,
+          name: 'NotePin',
+          rssi: candidate.rssi,
+          serviceUuids: candidate.serviceUuids,
+        );
+      }
+      if (candidate.name.isNotEmpty) {
         // Deduplicate by UUID
-        results.removeWhere((p) => p.uuid == peripheral.uuid);
-        results.add(peripheral);
+        results.removeWhere((p) => p.uuid == candidate.uuid);
+        results.add(candidate);
       }
     };
 
@@ -147,8 +156,10 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
       type = DeviceType.omi;
     }
 
+    final displayName = p.name.isNotEmpty ? p.name : (_isPlaud(p) ? 'NotePin' : p.name);
+
     return BtDevice(
-      name: p.name,
+      name: displayName,
       id: p.uuid,
       type: type,
       rssi: p.rssi,
