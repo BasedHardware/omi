@@ -20,16 +20,11 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import database.conversations as conversations_db
 from database import conversation_tombstones
 from database._client import db as firestore_db
-from database.vector_db import (
-    delete_action_item_vectors_batch,
-    delete_transcript_chunk_vectors,
-    delete_vector,
-)
-
-
+from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from database.vector_db import delete_transcript_chunk_vectors
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import (
@@ -871,20 +866,22 @@ def _delete_conversation_and_related_data(
             _cancel_open_dated_task_reminders(uid, source_items)
         except Exception as e:
             logger.error(f"Error cancelling task reminders for {conversation_id}: {e}")
-        source_item_ids = [item["id"] for item in (source_items or []) if isinstance(item, dict) and item.get("id")]
-        if source_item_ids:
-            try:
-                delete_action_item_vectors_batch(uid, source_item_ids)
-            except Exception as e:
-                logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
+        # The rows are gone from Firestore but their Pinecone vectors would survive as ghosts:
+        # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
+        # tasks, and a deleted task's vector makes a real new task look like a duplicate.
+        try:
+            if source_items:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
+        except Exception as e:
+            logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
 
     if retain_capture:
         # Sync bridges retain redirect tombstones and original audio: another
         # in-flight worker may still be uploading to that immutable source ID.
         # Propagate errors so the durable ancestry can replay cleanup on retry.
         delete_vector(uid, conversation_id)
-        delete_transcript_chunk_vectors(uid, conversation_id)
         conversations_db._delete_conversation_search_index(uid, conversation_id)
+        delete_transcript_chunk_vectors(uid, conversation_id)
         return
 
     try:

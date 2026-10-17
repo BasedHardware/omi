@@ -340,10 +340,10 @@ def test_update_conversation_action_item_description_syncs_vector_and_reminder(m
     )
     assert "upsert_action_item_vector" in isolated_modules.real_vector_db_funcs
     assert conversations_router.upsert_action_item_vector is isolated_modules.vector_db.upsert_action_item_vector
-    monkeypatch.setattr(
-        conversations_router,
-        "upsert_action_item_vector",
-        lambda uid, item_id, desc: updated_vectors.append((uid, item_id, desc)),
+    assert conversations_router.vector_db is isolated_modules.vector_db
+    isolated_modules.vector_db.upsert_action_item_vector.reset_mock()
+    isolated_modules.vector_db.upsert_action_item_vector.side_effect = (
+        lambda uid, item_id, desc: updated_vectors.append((uid, item_id, desc))
     )
     notifications = ModuleType("utils.notifications")
     notifications.sync_action_item_reminder = lambda **kwargs: synced_reminders.append(kwargs)
@@ -364,6 +364,7 @@ def test_update_conversation_action_item_description_syncs_vector_and_reminder(m
         (UID, "task-armed", "New description"),
         (UID, "task-completed", "New description"),
     ]
+    assert isolated_modules.vector_db.upsert_action_item_vector.call_count == 2
     assert synced_reminders == [
         {
             "user_id": UID,
