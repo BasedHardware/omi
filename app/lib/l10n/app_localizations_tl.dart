@@ -14248,4 +14248,45 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Isinasalin sa teksto ang mga naghihintay mong recording';
+
+  @override
+  String get processingPaused => 'Naka-pause ang pagproseso. Naabot mo na ang limitasyon ngayong buwan.';
+
+  @override
+  String get processingStored =>
+      'Naka-save ang iyong mga recording at transcript. Mananatiling naghihintay ang mga recording hanggang piliin mong iproseso ang mga ito.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration ang naghihintay · Ang pagproseso ngayon ay gagamit ng humigit-kumulang $percent% ngayong buwan';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Humigit-kumulang $hours oras ng pagproseso · $percent% ng allowance ngayong buwan.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Uunahin naming iproseso ang pinakabagong mga recording hanggang sa kasya sa natitirang allowance. Maghihintay ang iba.';
+
+  @override
+  String get processingAction => 'Iproseso ang naghihintay na mga recording';
+
+  @override
+  String get processingProgress => 'Pinoproseso ang iyong naghihintay na mga recording…';
+
+  @override
+  String get processingDeferred => 'Naghihintay ng pagproseso';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pag-uusap ang naghihintay',
+      one: '1 pag-uusap ang naghihintay',
+    );
+    return '$_temp0';
+  }
 }

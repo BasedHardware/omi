@@ -515,6 +515,7 @@ SCHEMA_GROUPS = {
             'TranscriptionAllowanceSnapshot',
             'HeldAudioRecording',
             'HeldAudioSummary',
+            'ProcessingBacklog',
             'UserSubscriptionResponse',
             'UsageStats',
             'UsageHistoryPoint',

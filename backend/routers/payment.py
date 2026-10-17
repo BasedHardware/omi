@@ -30,6 +30,12 @@ from utils.subscription_state_machine import (
 )
 from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
+from utils.processing_backlog import allowance_increased
+from config.stt_cap_dispatch import execution_admission_enabled as funded_processing_enabled
+from utils.processing_backlog_worker import (
+    upgrade as process_backlog_on_upgrade,
+    upgrade_async as process_backlog_on_upgrade_async,
+)
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -794,6 +800,11 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                     clear_fair_use_on_upgrade(uid)
+                    if funded_processing_enabled() and allowance_increased(current_subscription, new_subscription):
+                        process_backlog_on_upgrade(
+                            uid,
+                            f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_start}',
+                        )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -1057,6 +1068,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+                if funded_processing_enabled() and allowance_increased(existing_subscription, subscription):
+                    await process_backlog_on_upgrade_async(uid, f'checkout:{session.get("id")}')
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
@@ -1265,6 +1278,12 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+                    if (
+                        funded_processing_enabled()
+                        and not adopted_active_paid
+                        and allowance_increased(current_subscription, new_subscription)
+                    ):
+                        await process_backlog_on_upgrade_async(uid, f'subscription-upgrade:{event.get("id")}')
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(

@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
@@ -115,9 +116,9 @@ void main() {
     expect(find.byKey(const Key('held_audio_live_banner')), findsNothing);
     capture.receipt(61, resetAt);
     await tester.pump();
-    expect(find.text('Cloud transcription paused'), findsOneWidget);
+    expect(find.text('Processing paused. You\'ve reached this month\'s limit.'), findsOneWidget);
     expect(find.text('2 min recorded since the limit'), findsOneWidget);
-    expect(find.text('Transcribes after your limit resets on Nov 1, 2026'), findsOneWidget);
+    expect(find.text('Waiting for processing'), findsOneWidget);
     capture.receipt(181, resetAt);
     await tester.pump();
     expect(find.text('4 min recorded since the limit'), findsOneWidget);
@@ -139,13 +140,13 @@ void main() {
           child: HeldAudioLiveBanner(
               controller: phone(), gate: true, summary: summary(state: 'recovering', retainLive: false)),
         ));
-    expect(find.text('Cloud transcription paused'), findsOneWidget);
+    expect(find.text('Processing paused. You\'ve reached this month\'s limit.'), findsOneWidget);
     expect(find.text('Transcribing your waiting recordings'), findsNothing);
-    expect(find.text('Transcribes after your limit resets on Dec 1, 2026'), findsOneWidget);
+    expect(find.text('Waiting for processing'), findsOneWidget);
     capture.receipt(61, eventReset, paused: false);
     await tester.pump();
-    expect(find.text('Cloud transcription paused'), findsNothing);
-    expect(find.text('Transcribing your waiting recordings'), findsOneWidget);
+    expect(find.text('Processing paused. You\'ve reached this month\'s limit.'), findsNothing);
+    expect(find.text('Transcribing your waiting recordings'), findsNothing);
   });
 
   testWidgets('home card lists waiting recordings and both actions', (tester) async {
@@ -163,15 +164,15 @@ void main() {
     );
 
     expect(find.byKey(const Key('held_audio_card')), findsOneWidget);
-    expect(find.text('2m waiting to transcribe'), findsOneWidget);
+    expect(find.text('2m waiting'), findsOneWidget);
     expect(
-      find.textContaining('Your recordings are saved and will be transcribed after your limit resets on Nov 1, 2026'),
+      find.textContaining('Your recordings and transcripts are saved.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('held_audio_row_newer')), findsOneWidget);
     expect(find.byKey(const Key('held_audio_row_older')), findsOneWidget);
-    expect(find.text('1m 30s · Waiting to transcribe'), findsOneWidget);
-    expect(find.text('30s · Waiting to transcribe'), findsOneWidget);
+    expect(find.text('1m 30s · Waiting for processing'), findsOneWidget);
+    expect(find.text('30s · Waiting for processing'), findsOneWidget);
     expect(find.byKey(const Key('held_audio_more')), findsNothing);
 
     await tester.tap(find.byKey(const Key('held_audio_upgrade')));
@@ -195,9 +196,9 @@ void main() {
     await tester.pump();
 
     expect(controller.settings.enabled, isTrue);
-    expect(find.textContaining('New recordings will transcribe on this phone'), findsOneWidget);
+    expect(find.textContaining('Your recordings and transcripts are saved.'), findsOneWidget);
     expect(
-      find.textContaining('Waiting recordings will be transcribed after your limit resets on Nov 1, 2026'),
+      find.textContaining('Waiting recordings stay waiting until you choose to process them.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('held_audio_on_phone')), findsNothing);
@@ -243,11 +244,11 @@ void main() {
       ),
     );
     expect(find.byKey(const Key('held_audio_live_banner')), findsOneWidget);
-    expect(find.text('Cloud transcription paused'), findsOneWidget);
-    expect(find.textContaining('Omi keeps recording'), findsOneWidget);
+    expect(find.text('Processing paused. You\'ve reached this month\'s limit.'), findsOneWidget);
+    expect(find.textContaining('Your recordings and transcripts are saved.'), findsOneWidget);
     expect(find.byKey(const Key('held_audio_live_on_phone')), findsOneWidget);
     expect(find.text('2 min recorded since the limit'), findsOneWidget);
-    expect(find.text('Transcribes after your limit resets on Nov 1, 2026'), findsOneWidget);
+    expect(find.text('Waiting for processing'), findsOneWidget);
     await tester.tap(find.byKey(const Key('held_audio_live_upgrade')));
     expect(upgrades, 1);
   });
@@ -282,7 +283,7 @@ void main() {
       ),
     );
     expect(find.byKey(const Key('held_audio_live_banner')), findsNothing);
-    expect(find.text('Cloud transcription paused'), findsNothing);
+    expect(find.text('Processing paused. You\'ve reached this month\'s limit.'), findsNothing);
   });
 
   testWidgets('usage row sits with the phone toggle and plans', (tester) async {
@@ -301,7 +302,7 @@ void main() {
     );
     expect(find.byKey(const Key('held_audio_usage_waiting')), findsOneWidget);
     expect(find.text('2m waiting'), findsOneWidget);
-    expect(find.text('Transcribed after your limit resets on Nov 1, 2026'), findsOneWidget);
+    expect(find.text('Waiting for processing'), findsOneWidget);
     expect(find.text('Always transcribe on this phone'), findsOneWidget);
     expect(find.text('See plans'), findsOneWidget);
     await tester.tap(find.byKey(const Key('held_audio_usage_plans')));
@@ -334,18 +335,218 @@ void main() {
     expect(find.byKey(const Key('held_audio_usage_waiting')), findsNothing);
     expect(find.text('See plans'), findsNothing);
   });
-  testWidgets('recovering holds remove reset promises on home live and settings', (tester) async {
+  testWidgets('legacy recovering never supplies automatic processing choice', (tester) async {
     final held = summary(state: 'recovering', retainLive: false);
     await pump(tester, HeldAudioHomeSection(controller: phone(), gate: true, summary: held));
-    expect(find.text('Transcribing your waiting recordings'), findsWidgets);
     expect(find.textContaining('resets'), findsNothing);
-    expect(find.byKey(const Key('held_audio_upgrade')), findsNothing);
+    expect(find.text('Transcribing your waiting recordings'), findsNothing);
+    expect(find.byKey(const Key('held_audio_upgrade')), findsOneWidget);
     await pump(tester, HeldAudioLiveBanner(controller: phone(), gate: true, summary: held, recordedSeconds: 61));
-    expect(find.text('Transcribing your waiting recordings'), findsOneWidget);
-    expect(find.text('Cloud transcription paused'), findsNothing);
-    expect(find.textContaining('resets'), findsNothing);
-    await pump(tester, HeldAudioUsageSection(controller: phone(), gate: true, summary: held, paid: true));
-    expect(find.text('Transcribing your waiting recordings'), findsOneWidget);
-    expect(find.textContaining('resets'), findsNothing);
+    expect(find.byKey(const Key('held_audio_live_banner')), findsNothing);
+  });
+
+  ProcessingBacklog backlog(String state, {bool exceeds = false}) => ProcessingBacklog(
+        state: state,
+        heldAudioSeconds: 7200,
+        heldAudioCount: 2,
+        deferredConversations: 1,
+        estimatedUnits: 25,
+        estimatedHours: 2.5,
+        estimatedPercent: 12.5,
+        remainingUnits: exceeds ? 10 : 100,
+        exceedsRemaining: exceeds,
+      );
+
+  for (final state in ['capped', 'waiting_choice', 'processing', 'none']) {
+    for (final surface in ['a', 'b', 'c']) {
+      testWidgets('$surface follows server $state even on phone', (tester) async {
+        final value = backlog(state);
+        final controller = phone(enabled: true);
+        final Widget child = switch (surface) {
+          'a' => HeldAudioHomeSection(controller: controller, gate: true, summary: summary(), backlog: value),
+          'b' => HeldAudioLiveBanner(controller: controller, gate: true, recordedSeconds: 60, backlog: value),
+          _ => HeldAudioUsageSection(controller: controller, gate: true, backlog: value, paid: true),
+        };
+        await pump(tester, child);
+        expect(find.byKey(Key('processing_backlog_$surface')), state == 'none' ? findsNothing : findsOneWidget);
+        expect(find.byKey(Key('processing_backlog_process_$surface')),
+            state == 'waiting_choice' ? findsOneWidget : findsNothing);
+        expect(find.textContaining('resets'), findsNothing);
+        if (state == 'waiting_choice') {
+          expect(find.text('2h waiting · Process now uses about 12.5% of this month'), findsOneWidget);
+        }
+        if (state != 'none') expect(find.byKey(Key('processing_backlog_upgrade_$surface')), findsOneWidget);
+      });
+    }
+  }
+
+  testWidgets('waiting length adds held and deferred audio without converting processing estimate', (tester) async {
+    await pump(
+        tester,
+        ProcessingBacklogView(
+            backlog: const ProcessingBacklog(
+                state: 'waiting_choice',
+                heldAudioSeconds: 3600,
+                deferredSeconds: 1800,
+                estimatedHours: 8,
+                estimatedPercent: 12.5),
+            surface: 'a',
+            onUpgrade: () {},
+            onProcess: () async => true));
+    expect(find.text('1h 30m waiting · Process now uses about 12.5% of this month'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining("About 8 hours of processing"), findsOneWidget);
+    await tester.tap(find.text('Not Now').last);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('deferred-only waiting length is actual seconds even with a large estimate', (tester) async {
+    await pump(
+        tester,
+        ProcessingBacklogView(
+            backlog: const ProcessingBacklog(
+                state: 'waiting_choice', deferredSeconds: 900, estimatedHours: 8, estimatedPercent: 12.5),
+            surface: 'a',
+            onUpgrade: () {}));
+    expect(find.text('15m waiting · Process now uses about 12.5% of this month'), findsOneWidget);
+  });
+
+  for (final cancelFromDialog in [false, true]) {
+    testWidgets('cancel choice resets uncertain identity via ${cancelFromDialog ? 'dialog' : 'Not Now'}',
+        (tester) async {
+      final keys = <String>[];
+      final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) async {
+        keys.add(idempotencyKey);
+        return null;
+      });
+      addTearDown(usage.dispose);
+      final value = backlog('waiting_choice');
+      usage.debugSetSubscription(UserSubscriptionResponse(
+          subscription: Subscription(plan: PlanType.plus, status: SubscriptionStatus.active),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 3600,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          processingBacklog: value));
+      expect(await usage.processBacklog(), false); // Seed an uncertain prior action.
+      await pump(
+          tester,
+          ChangeNotifierProvider<UsageProvider>.value(
+              value: usage, child: ProcessingBacklogView(backlog: value, surface: 'a', onUpgrade: () {})));
+      if (cancelFromDialog) {
+        await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('Not Now').last);
+      } else {
+        await tester.tap(find.byKey(const Key('processing_backlog_not_now_a')));
+      }
+      await tester.pumpAndSettle();
+      expect(keys, hasLength(1), reason: 'cancelling must not send a processing request');
+      expect(await usage.processBacklog(), false);
+      expect(keys.last, isNot(keys.first));
+    });
+  }
+
+  testWidgets('Settings backlog and phone toggle align with a clear gap', (tester) async {
+    await pump(
+        tester,
+        Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: HeldAudioUsageSection(
+                controller: phone(), gate: true, backlog: backlog('waiting_choice'), paid: true)));
+    final card = tester.getRect(find.byKey(const Key('processing_backlog_c')));
+    final toggle = tester.getRect(find.byKey(const Key('held_audio_usage_toggle')));
+    expect(card.left, toggle.left);
+    expect(card.right, toggle.right);
+    expect(toggle.top - card.bottom, greaterThanOrEqualTo(OmiSpacing.sm));
+  });
+
+  testWidgets('Not now never invokes processing and Settings still offers the choice', (tester) async {
+    var calls = 0;
+    Future<bool> process() async {
+      calls++;
+      return true;
+    }
+
+    final value = backlog('waiting_choice');
+    await pump(
+        tester,
+        Column(children: [
+          ProcessingBacklogView(backlog: value, surface: 'a', onUpgrade: () {}, onProcess: process),
+          ProcessingBacklogView(backlog: value, surface: 'c', onUpgrade: () {}, onProcess: process),
+        ]));
+    await tester.tap(find.byKey(const Key('processing_backlog_not_now_a')));
+    await tester.pump();
+    expect(calls, 0);
+    expect(find.byKey(const Key('processing_backlog_process_a')), findsNothing);
+    expect(find.byKey(const Key('processing_backlog_process_c')), findsOneWidget);
+  });
+
+  testWidgets('processing confirms server hours and percent with newest-first warning', (tester) async {
+    var calls = 0;
+    await pump(
+        tester,
+        ProcessingBacklogView(
+            backlog: backlog('waiting_choice', exceeds: true),
+            surface: 'a',
+            onUpgrade: () {},
+            onProcess: () async {
+              calls++;
+              return true;
+            }));
+    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(calls, 0);
+    expect(find.textContaining("About 2.5 hours of processing · 12.5% of this month's allowance."), findsOneWidget);
+    expect(find.textContaining("We'll process the newest recordings first"), findsOneWidget);
+    await tester.tap(find.text('Process waiting recordings').last);
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+  });
+
+  testWidgets('declining confirmation leaves everything waiting', (tester) async {
+    var calls = 0;
+    await pump(
+        tester,
+        ProcessingBacklogView(
+            backlog: backlog('waiting_choice'),
+            surface: 'a',
+            onUpgrade: () {},
+            onProcess: () async {
+              calls++;
+              return true;
+            }));
+    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining("We'll process the newest recordings first"), findsNothing);
+    await tester.tap(find.text('Not Now').last);
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    expect(find.byKey(const Key('processing_backlog_process_a')), findsOneWidget);
+  });
+
+  testWidgets('unknown allowance pauses without claiming the monthly budget is exhausted', (tester) async {
+    await pump(
+        tester,
+        ProcessingBacklogView(
+          backlog: const ProcessingBacklog(state: 'capped', budgetExhausted: false),
+          surface: 'a',
+          onUpgrade: () {},
+        ));
+    expect(find.text('Waiting for processing'), findsOneWidget);
+    expect(find.textContaining("You've reached this month's limit"), findsNothing);
+    expect(find.byKey(const Key('processing_backlog_process_a')), findsNothing);
+  });
+
+  testWidgets('explicit gate off hides the additive snapshot', (tester) async {
+    await pump(tester, HeldAudioHomeSection(controller: phone(), gate: false, backlog: backlog('capped')));
+    expect(find.byType(ProcessingBacklogView), findsNothing);
   });
 }

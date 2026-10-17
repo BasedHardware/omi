@@ -42,8 +42,11 @@ latency. Far from cap, concurrent external spending can remain unseen for 900
 seconds. This is not a distributed reservation; accepted provider queues and
 already-admitted batch work may drain. Sync execution and each GPU ASR microbatch
 reauthorize with the current ladder allowance. Exhausted uploads use durable
-holds instead of a ladder 402 or locked transcript; reset/upgrade recovery checks
-the current allowance again. Ladder-only activation bypasses legacy monthly seconds.
+holds instead of a ladder 402 or locked transcript; explicit backlog choice or a
+fitting upgrade intent recovers them and checks the current allowance again.
+Reset does not process backlog. All conversation sources preserve capped transcripts
+with `processing_deferred=true`; first-open cannot consume that backlog. See
+[funded halt and choice](ladder-v1-cutover.md#funded-halt-and-user-chosen-backlog-david-2026-10-18). Ladder-only activation bypasses legacy monthly seconds.
 
 The month reader batches only elapsed day refs, never future days. A normal near-cap
 minute costs three ledger reads plus the existing subscription read. The required

@@ -11746,5 +11746,14 @@
     "heldAudioWaitingOn": "Ita-transcribe pagkatapos i-reset ang limitasyon sa {date}",
     "heldAudioCardTitle": "{duration} na naghihintay ma-transcribe",
     "heldAudioAndMore": "{count, plural, =1{at 1 pa} other{at {count} pa}}",
-    "heldAudioRecovering": "Isinasalin sa teksto ang mga naghihintay mong recording"
+    "heldAudioRecovering": "Isinasalin sa teksto ang mga naghihintay mong recording",
+    "processingPaused": "Naka-pause ang pagproseso. Naabot mo na ang limitasyon ngayong buwan.",
+    "processingStored": "Naka-save ang iyong mga recording at transcript. Mananatiling naghihintay ang mga recording hanggang piliin mong iproseso ang mga ito.",
+    "processingWaiting": "{duration} ang naghihintay · Ang pagproseso ngayon ay gagamit ng humigit-kumulang {percent}% ngayong buwan",
+    "processingEstimate": "Humigit-kumulang {hours} oras ng pagproseso · {percent}% ng allowance ngayong buwan.",
+    "processingNewestFirst": "Uunahin naming iproseso ang pinakabagong mga recording hanggang sa kasya sa natitirang allowance. Maghihintay ang iba.",
+    "processingAction": "Iproseso ang naghihintay na mga recording",
+    "processingProgress": "Pinoproseso ang iyong naghihintay na mga recording…",
+    "processingDeferred": "Naghihintay ng pagproseso",
+    "processingCount": "{count, plural, =1{1 pag-uusap ang naghihintay} other{{count} pag-uusap ang naghihintay}}"
 }

@@ -14242,4 +14242,45 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Deine wartenden Aufnahmen werden transkribiert';
+
+  @override
+  String get processingPaused => 'Verarbeitung pausiert. Du hast das Limit für diesen Monat erreicht.';
+
+  @override
+  String get processingStored =>
+      'Deine Aufnahmen und Transkripte sind gespeichert. Wartende Aufnahmen bleiben gespeichert, bis du ihre Verarbeitung auswählst.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration warten · Jetzt verarbeiten nutzt etwa $percent% dieses Monats';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Etwa $hours Stunden Verarbeitung · $percent% des Kontingents dieses Monats.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Wir verarbeiten zuerst die neuesten Aufnahmen, soweit das Kontingent reicht. Der Rest wartet weiter.';
+
+  @override
+  String get processingAction => 'Wartende Aufnahmen verarbeiten';
+
+  @override
+  String get processingProgress => 'Deine wartenden Aufnahmen werden verarbeitet…';
+
+  @override
+  String get processingDeferred => 'Wartet auf Verarbeitung';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Gespräche warten',
+      one: '1 Gespräch wartet',
+    );
+    return '$_temp0';
+  }
 }

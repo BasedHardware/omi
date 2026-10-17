@@ -14196,4 +14196,45 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Se transcriu înregistrările tale în așteptare';
+
+  @override
+  String get processingPaused => 'Procesarea este în pauză. Ai atins limita pentru această lună.';
+
+  @override
+  String get processingStored =>
+      'Înregistrările și transcrierile tale sunt salvate. Înregistrările în așteptare vor rămâne așa până alegi să le procesezi.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration în așteptare · Procesarea acum folosește aproximativ $percent% din această lună';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Aproximativ $hours ore de procesare · $percent% din cota acestei luni.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Vom procesa mai întâi cele mai noi înregistrări, în limita cotei disponibile. Restul vor rămâne în așteptare.';
+
+  @override
+  String get processingAction => 'Procesează înregistrările în așteptare';
+
+  @override
+  String get processingProgress => 'Se procesează înregistrările în așteptare…';
+
+  @override
+  String get processingDeferred => 'În așteptarea procesării';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații în așteptare',
+      one: '1 conversație în așteptare',
+    );
+    return '$_temp0';
+  }
 }

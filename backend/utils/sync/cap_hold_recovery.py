@@ -10,7 +10,7 @@ import threading
 import time
 
 from anyio import from_thread
-from typing import Any
+from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
 from config.stt_cap_dispatch import execution_admission_enabled as enabled
@@ -34,6 +34,12 @@ from models.conversation import ConversationSource
 
 logger = logging.getLogger(__name__)
 RECONCILIATION_COOLDOWN_SECONDS = 1800
+_backlog_runner: Callable[[str], Awaitable[None]] | None = None
+
+
+def register_backlog_runner(runner: Callable[[str], Awaitable[None]]) -> None:
+    global _backlog_runner
+    _backlog_runner = runner
 
 
 def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
@@ -352,41 +358,31 @@ def _settle_and_erase(uid: str, snapshot: Any, row: dict) -> None:
         _erase(uid, snapshot, row)
 
 
-async def recover(uid: str) -> None:
-    # One cheap distributed cooldown before querying usage or manifests. Failed
-    # Redis means deferred recovery, never duplicate provider dispatch.
-    if not enabled():
-        return
-    acquired = await run_blocking(db_executor, cap_hold.recovery_cooldown, uid)
-    if not acquired:
-        return
-    rows = await run_blocking(db_executor, cap_hold.pending_holds, uid)
-    progressed = False
-    for snapshot in rows:
-        row = snapshot.to_dict() or {}
-        try:
-            if row.get('state') == 'completed':
-                await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
-                progressed = True
-                continue
-            row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
-            if row is None:
-                continue
-            try:
-                if await _recover_row(uid, snapshot, row):
-                    # Completed remains retryable if ledger settlement fails.
-                    # Only successful settlement (or terminal failure) retains it.
-                    if not await _save(uid, snapshot, row, {'state': 'completed'}):
-                        continue
-                    await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
-                    progressed = True
-            finally:
-                await run_blocking(db_executor, cap_hold.release, uid, snapshot.reference, row['lease_token'])
-        except Exception as error:
-            logger.warning('event=stt_cap_recovery outcome=deferred exception_type=%s', type(error).__name__)
+async def recover_selected(uid: str, snapshot: Any) -> bool:
+    """One explicitly selected manifest, retaining existing claim/receipt fences."""
+    row = snapshot.to_dict() or {}
+    if row.get('state') == 'completed':
+        await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+        return True
+    row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
+    if row is None:
+        return False
+    try:
+        if not await _recover_row(uid, snapshot, row):
+            return False
+        if not await _save(uid, snapshot, row, {'state': 'completed'}):
+            return False
+        await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+        return True
+    finally:
+        await run_blocking(db_executor, cap_hold.release, uid, snapshot.reference, row['lease_token'])
 
-    if progressed and len(rows) == 10:
-        continue_after_cooldown(uid)
+
+async def recover(uid: str) -> None:
+    # Legacy request/reset/resume hooks may wake an approved run, but never
+    # create consent. Worker is imported lazily to avoid pipeline import cycles.
+    if enabled() and _backlog_runner is not None:
+        await _backlog_runner(uid)
 
 
 def continue_after_cooldown(uid: str) -> None:

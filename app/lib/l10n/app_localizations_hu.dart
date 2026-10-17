@@ -14193,4 +14193,45 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'A várakozó felvételeid átírása folyamatban';
+
+  @override
+  String get processingPaused => 'A feldolgozás szünetel. Elérted az e havi keretet.';
+
+  @override
+  String get processingStored =>
+      'A felvételeid és átirataid el vannak mentve. A várakozó felvételek addig várnak, amíg a feldolgozásukat nem választod.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration várakozik · A feldolgozás most az e havi keret kb. $percent%-át használja';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Kb. $hours óra feldolgozás · Az e havi keret $percent%-a.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Először a legújabb felvételeket dolgozzuk fel a rendelkezésre álló keretig. A többi tovább várakozik.';
+
+  @override
+  String get processingAction => 'Várakozó felvételek feldolgozása';
+
+  @override
+  String get processingProgress => 'A várakozó felvételeid feldolgozása…';
+
+  @override
+  String get processingDeferred => 'Feldolgozásra vár';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés várakozik',
+      one: '1 beszélgetés várakozik',
+    );
+    return '$_temp0';
+  }
 }

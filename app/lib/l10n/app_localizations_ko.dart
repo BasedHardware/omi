@@ -13940,4 +13940,43 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => '대기 중인 녹음을 텍스트로 변환하고 있어요';
+
+  @override
+  String get processingPaused => '처리가 일시 중지되었습니다. 이번 달 한도에 도달했습니다.';
+
+  @override
+  String get processingStored => '녹음과 전사 내용이 저장되었습니다. 대기 중인 녹음은 처리를 선택할 때까지 대기합니다.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration 대기 중 · 지금 처리하면 이번 달 할당량의 약 $percent%를 사용합니다';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return '약 $hours시간의 처리 · 이번 달 할당량의 $percent%.';
+  }
+
+  @override
+  String get processingNewestFirst => '남은 할당량에 맞춰 최신 녹음부터 처리합니다. 나머지는 대기 상태로 남습니다.';
+
+  @override
+  String get processingAction => '대기 중인 녹음 처리';
+
+  @override
+  String get processingProgress => '대기 중인 녹음을 처리하는 중…';
+
+  @override
+  String get processingDeferred => '처리 대기 중';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대기 중인 대화 $count개',
+      one: '대기 중인 대화 1개',
+    );
+    return '$_temp0';
+  }
 }

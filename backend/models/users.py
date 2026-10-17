@@ -228,6 +228,20 @@ class HeldAudioSummary(BaseModel):
     recordings: List[HeldAudioRecording] = []
 
 
+class ProcessingBacklog(BaseModel):
+    state: Literal['capped', 'waiting_choice', 'processing', 'none']
+    budget_exhausted: bool = False
+    held_audio_count: int = 0
+    held_audio_seconds: int = 0
+    deferred_conversations: int = 0
+    deferred_seconds: int = 0
+    estimated_units: float = 0
+    estimated_hours: float = 0
+    estimated_percent: float = 0
+    remaining_units: Optional[float] = None
+    exceeds_remaining: bool = False
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -259,12 +273,15 @@ class UserSubscriptionResponse(BaseModel):
     # or live capture must be retained. Omitted entirely when unset, not null.
     # Older clients ignore the field.
     held_audio: Optional[HeldAudioSummary] = None
+    processing_backlog: Optional[ProcessingBacklog] = None
 
     @model_serializer(mode='wrap')
     def serialize_optional_held_audio(self, handler):
         data = handler(self)
         if data.get('held_audio') is None:
             data.pop('held_audio', None)
+        if data.get('processing_backlog') is None:
+            data.pop('processing_backlog', None)
         return data
 
 

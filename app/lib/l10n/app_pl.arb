@@ -4355,5 +4355,14 @@
     "heldAudioWaitingOn": "Transkrypcja po zresetowaniu limitu {date}",
     "heldAudioCardTitle": "{duration} czeka na transkrypcję",
     "heldAudioAndMore": "{count, plural, =1{i 1 więcej} other{i {count} więcej}}",
-    "heldAudioRecovering": "Transkrybujemy Twoje oczekujące nagrania"
+    "heldAudioRecovering": "Transkrybujemy Twoje oczekujące nagrania",
+    "processingPaused": "Przetwarzanie wstrzymane. Osiągnięto limit na ten miesiąc.",
+    "processingStored": "Twoje nagrania i transkrypcje są zapisane. Oczekujące nagrania pozostaną w kolejce, aż wybierzesz ich przetworzenie.",
+    "processingWaiting": "{duration} oczekuje · Przetworzenie teraz zużyje około {percent}% miesięcznego limitu",
+    "processingEstimate": "Około {hours} godzin przetwarzania · {percent}% limitu na ten miesiąc.",
+    "processingNewestFirst": "Najpierw przetworzymy najnowsze nagrania w ramach dostępnego limitu. Pozostałe będą nadal oczekiwać.",
+    "processingAction": "Przetwórz oczekujące nagrania",
+    "processingProgress": "Przetwarzanie oczekujących nagrań…",
+    "processingDeferred": "Oczekuje na przetworzenie",
+    "processingCount": "{count, plural, =1{1 rozmowa oczekuje} other{{count} rozmów oczekuje}}"
 }

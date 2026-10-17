@@ -14118,4 +14118,45 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'आपकी प्रतीक्षारत रिकॉर्डिंग का लिप्यंतरण हो रहा है';
+
+  @override
+  String get processingPaused => 'प्रोसेसिंग रुकी हुई है। आप इस महीने की सीमा तक पहुँच गए हैं।';
+
+  @override
+  String get processingStored =>
+      'आपकी रिकॉर्डिंग और ट्रांसक्रिप्ट सहेजे गए हैं। प्रतीक्षारत रिकॉर्डिंग तब तक प्रतीक्षा में रहेंगी जब तक आप उन्हें प्रोसेस करने का विकल्प नहीं चुनते।';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration प्रतीक्षा में · अभी प्रोसेस करने पर इस महीने का लगभग $percent% उपयोग होगा';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'लगभग $hours घंटे की प्रोसेसिंग · इस महीने के कोटे का $percent%।';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'हम उपलब्ध कोटे में सबसे नई रिकॉर्डिंग पहले प्रोसेस करेंगे। बाकी प्रतीक्षा में रहेंगी।';
+
+  @override
+  String get processingAction => 'प्रतीक्षारत रिकॉर्डिंग प्रोसेस करें';
+
+  @override
+  String get processingProgress => 'आपकी प्रतीक्षारत रिकॉर्डिंग प्रोसेस हो रही हैं…';
+
+  @override
+  String get processingDeferred => 'प्रोसेसिंग की प्रतीक्षा में';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count बातचीत प्रतीक्षा में',
+      one: '1 बातचीत प्रतीक्षा में',
+    );
+    return '$_temp0';
+  }
 }

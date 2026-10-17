@@ -4355,5 +4355,14 @@
     "heldAudioWaitingOn": "Transcrito depois que seu limite for redefinido em {date}",
     "heldAudioCardTitle": "{duration} aguardando transcrição",
     "heldAudioAndMore": "{count, plural, =1{e mais 1} other{e mais {count}}}",
-    "heldAudioRecovering": "Transcrevendo suas gravações pendentes"
+    "heldAudioRecovering": "Transcrevendo suas gravações pendentes",
+    "processingPaused": "Processamento pausado. Atingiu o limite deste mês.",
+    "processingStored": "As suas gravações e transcrições estão guardadas. As gravações pendentes continuarão à espera até escolher processá-las.",
+    "processingWaiting": "{duration} em espera · Processar agora usa cerca de {percent}% deste mês",
+    "processingEstimate": "Cerca de {hours} horas de processamento · {percent}% da quota deste mês.",
+    "processingNewestFirst": "Vamos processar primeiro as gravações mais recentes, até ao limite disponível. As restantes continuarão em espera.",
+    "processingAction": "Processar gravações pendentes",
+    "processingProgress": "A processar as suas gravações pendentes…",
+    "processingDeferred": "À espera de processamento",
+    "processingCount": "{count, plural, =1{1 conversa em espera} other{{count} conversas em espera}}"
 }

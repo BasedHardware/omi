@@ -4355,5 +4355,14 @@
     "heldAudioWaitingOn": "Расшифровывается после сброса лимита {date}",
     "heldAudioCardTitle": "Ожидает расшифровки: {duration}",
     "heldAudioAndMore": "{count, plural, =1{и ещё 1} other{и ещё {count}}}",
-    "heldAudioRecovering": "Расшифровываем ваши ожидающие записи"
+    "heldAudioRecovering": "Расшифровываем ваши ожидающие записи",
+    "processingPaused": "Обработка приостановлена. Вы достигли лимита на этот месяц.",
+    "processingStored": "Ваши записи и расшифровки сохранены. Ожидающие записи останутся в ожидании, пока вы не выберете обработку.",
+    "processingWaiting": "{duration} в ожидании · Обработка сейчас использует около {percent}% месячного лимита",
+    "processingEstimate": "Около {hours} часов обработки · {percent}% лимита на этот месяц.",
+    "processingNewestFirst": "Сначала обработаем самые новые записи в пределах доступного лимита. Остальные останутся в ожидании.",
+    "processingAction": "Обработать ожидающие записи",
+    "processingProgress": "Обработка ожидающих записей…",
+    "processingDeferred": "Ожидает обработки",
+    "processingCount": "{count, plural, =1{1 разговор в ожидании} other{{count} разговоров в ожидании}}"
 }

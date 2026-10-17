@@ -13934,4 +13934,43 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => '待機中の録音を文字起こししています';
+
+  @override
+  String get processingPaused => '処理を一時停止しました。今月の上限に達しました。';
+
+  @override
+  String get processingStored => '録音と文字起こしは保存されています。処理を選択するまで、待機中の録音はそのまま保持されます。';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration待機中 · 今すぐ処理すると今月の約$percent%を使用します';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return '約$hours時間の処理 · 今月の利用枠の$percent%。';
+  }
+
+  @override
+  String get processingNewestFirst => '利用枠に収まる分だけ、新しい録音から順に処理します。残りは待機したままになります。';
+
+  @override
+  String get processingAction => '待機中の録音を処理';
+
+  @override
+  String get processingProgress => '待機中の録音を処理しています…';
+
+  @override
+  String get processingDeferred => '処理待ち';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話が待機中',
+      one: '1件の会話が待機中',
+    );
+    return '$_temp0';
+  }
 }

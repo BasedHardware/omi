@@ -260,7 +260,7 @@ async def test_lost_completion_lease_cannot_settle_or_erase_audio(state, monkeyp
     monkeypatch.setattr(recovery, '_recover_row', AsyncMock(return_value=True))
     monkeypatch.setattr(recovery, '_settle_and_erase', Mock())
     recovery.cap_hold.checkpoint.return_value = False
-    await recovery.recover('synthetic')
+    await recovery.recover_selected('synthetic', state.snapshot)
     recovery._settle_and_erase.assert_not_called()
     recovery.cap_hold.release.assert_called_once_with('synthetic', state.snapshot.reference, 'owner-token')
 
@@ -482,31 +482,9 @@ async def test_silent_live_capture_settles_without_provider_or_ambiguous_receipt
     assert recovery.cap_hold.remaining_seconds({**state.row, 'seconds': 60}) == 0
 
 
-@pytest.mark.parametrize('productive', [False, True])
-async def test_productive_full_page_schedules_backlog_continuation_without_another_http_open(monkeypatch, productive):
+async def test_legacy_wake_only_resumes_an_explicit_backlog_runner(monkeypatch):
     monkeypatch.setattr(recovery, 'enabled', lambda: True)
-    monkeypatch.setattr(recovery.cap_hold, 'recovery_cooldown', lambda uid: True)
-    snapshots = [
-        SimpleNamespace(id=f'hold-{i}', reference=Mock(), to_dict=lambda: {'state': 'held', 'lease_token': 'owner'})
-        for i in range(10)
-    ]
-    monkeypatch.setattr(recovery.cap_hold, 'pending_holds', lambda uid: snapshots)
-    monkeypatch.setattr(recovery.cap_hold, 'claim', lambda *args: {'state': 'held', 'lease_token': 'owner'})
-    monkeypatch.setattr(recovery.cap_hold, 'checkpoint', lambda *args: True)
-    monkeypatch.setattr(recovery.cap_hold, 'release', lambda *args: None)
-    monkeypatch.setattr(recovery, '_recover_row', AsyncMock(return_value=productive))
-    monkeypatch.setattr(recovery, '_settle_and_erase', lambda *args: None)
-
-    async def leaf(pool, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(recovery, 'run_blocking', leaf)
-    continued = []
-
-    def schedule(coro, **kwargs):
-        continued.append(kwargs['name'])
-        coro.close()
-
-    monkeypatch.setattr(recovery, 'start_background_task', schedule)
+    runner = AsyncMock()
+    monkeypatch.setattr(recovery, '_backlog_runner', runner)
     await recovery.recover('synthetic')
-    assert continued == (['stt_cap_hold_recovery_continuation'] if productive else [])
+    runner.assert_awaited_once_with('synthetic')

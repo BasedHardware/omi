@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Transkribeeritakse pärast limiidi lähtestamist {date}",
     "heldAudioCardTitle": "{duration} ootab transkribeerimist",
     "heldAudioAndMore": "{count, plural, =1{ja veel 1} other{ja veel {count}}}",
-    "heldAudioRecovering": "Sinu ootel salvestiste transkribeerimine"
+    "heldAudioRecovering": "Sinu ootel salvestiste transkribeerimine",
+    "processingPaused": "Töötlus on peatatud. Oled jõudnud selle kuu piiranguni.",
+    "processingStored": "Sinu salvestised ja transkriptsioonid on salvestatud. Ootel salvestised jäävad ootele, kuni valid nende töötlemise.",
+    "processingWaiting": "{duration} ootel · Kohe töötlemine kasutab umbes {percent}% selle kuu mahust",
+    "processingEstimate": "Umbes {hours} tundi töötlust · {percent}% selle kuu mahust.",
+    "processingNewestFirst": "Töötleme esmalt uusimad salvestised saadaoleva mahu piires. Ülejäänud jäävad ootele.",
+    "processingAction": "Töötle ootel salvestisi",
+    "processingProgress": "Sinu ootel salvestiste töötlemine…",
+    "processingDeferred": "Ootab töötlemist",
+    "processingCount": "{count, plural, =1{1 vestlus ootel} other{{count} vestlust ootel}}"
 }

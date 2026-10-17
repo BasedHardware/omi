@@ -371,6 +371,75 @@ class HeldAudioSummary {
   }
 }
 
+/// Server-owned processing estimate and choice. Never infer a reset/upgrade
+/// decision from the legacy held_audio recovery state or a client clock.
+class ProcessingBacklog {
+  final String state;
+  final bool budgetExhausted;
+  final int heldAudioCount;
+  final int heldAudioSeconds;
+  final int deferredConversations;
+  final int deferredSeconds;
+  final double estimatedUnits;
+  final double estimatedHours;
+  final double estimatedPercent;
+  final double? remainingUnits;
+  final bool exceedsRemaining;
+  final int? processableCount;
+
+  const ProcessingBacklog({
+    required this.state,
+    this.budgetExhausted = true,
+    this.heldAudioCount = 0,
+    this.heldAudioSeconds = 0,
+    this.deferredConversations = 0,
+    this.deferredSeconds = 0,
+    this.estimatedUnits = 0,
+    this.estimatedHours = 0,
+    this.estimatedPercent = 0,
+    this.remainingUnits,
+    this.exceedsRemaining = false,
+    this.processableCount,
+  });
+
+  int get waitingSeconds => heldAudioSeconds + deferredSeconds;
+
+  bool get isCapped => state == 'capped';
+  bool get isWaitingChoice => state == 'waiting_choice';
+  bool get isProcessing => state == 'processing';
+  bool get isVisible => isCapped || isWaitingChoice || isProcessing;
+
+  factory ProcessingBacklog.fromJson(Map<String, dynamic> json) => ProcessingBacklog(
+        state: json['state'] as String? ?? 'none',
+        budgetExhausted: json['budget_exhausted'] as bool? ?? true,
+        heldAudioCount: (json['held_audio_count'] as num?)?.toInt() ?? 0,
+        heldAudioSeconds: (json['held_audio_seconds'] as num?)?.toInt() ?? 0,
+        deferredConversations: (json['deferred_conversations'] as num?)?.toInt() ?? 0,
+        deferredSeconds: (json['deferred_seconds'] as num?)?.toInt() ?? 0,
+        estimatedUnits: (json['estimated_units'] as num?)?.toDouble() ?? 0,
+        estimatedHours: (json['estimated_hours'] as num?)?.toDouble() ?? 0,
+        estimatedPercent: (json['estimated_percent'] as num?)?.toDouble() ?? 0,
+        remainingUnits: (json['remaining_units'] as num?)?.toDouble(),
+        exceedsRemaining: json['exceeds_remaining'] == true,
+        processableCount: (json['processable_count'] as num?)?.toInt(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'state': state,
+        'budget_exhausted': budgetExhausted,
+        'held_audio_count': heldAudioCount,
+        'held_audio_seconds': heldAudioSeconds,
+        'deferred_conversations': deferredConversations,
+        'deferred_seconds': deferredSeconds,
+        'estimated_units': estimatedUnits,
+        'estimated_hours': estimatedHours,
+        'estimated_percent': estimatedPercent,
+        'remaining_units': remainingUnits,
+        'exceeds_remaining': exceedsRemaining,
+        if (processableCount != null) 'processable_count': processableCount,
+      };
+}
+
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -390,6 +459,7 @@ class UserSubscriptionResponse {
   final PhoneCallQuota? phoneCallQuota;
   final TranscriptionAllowanceSnapshot? transcriptionAllowance;
   final HeldAudioSummary? heldAudio;
+  final ProcessingBacklog? processingBacklog;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -409,15 +479,28 @@ class UserSubscriptionResponse {
     this.phoneCallQuota,
     this.transcriptionAllowance,
     this.heldAudio,
+    this.processingBacklog,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
-    return UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
+    return UserSubscriptionResponse.fromGenerated(
+      wire.GeneratedUserSubscriptionResponse.fromJson(json),
+      processingBacklog: json['processing_backlog'] is Map<String, dynamic>
+          ? ProcessingBacklog.fromJson(json['processing_backlog'])
+          : null,
+    );
   }
 
-  factory UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse generated) {
+  factory UserSubscriptionResponse.fromGenerated(
+    wire.GeneratedUserSubscriptionResponse generated, {
+    ProcessingBacklog? processingBacklog,
+  }) {
     return UserSubscriptionResponse(
       subscription: Subscription.fromGenerated(generated.subscription),
+      processingBacklog: processingBacklog ??
+          (generated.toJson()['processing_backlog'] is Map<String, dynamic>
+              ? ProcessingBacklog.fromJson(generated.toJson()['processing_backlog'])
+              : null),
       transcriptionSecondsUsed: generated.transcriptionSecondsUsed,
       transcriptionSecondsLimit: generated.transcriptionSecondsLimit,
       wordsTranscribedUsed: generated.wordsTranscribedUsed,
@@ -462,11 +545,10 @@ class UserSubscriptionResponse {
           : wire.GeneratedHeldAudioSummary(
               state: heldAudio!.state,
               recordings: heldAudio!.recordings
-                  .map((row) => wire.GeneratedHeldAudioRecording(
-                        id: row.id,
-                        seconds: row.seconds,
-                        startedAt: row.startedAt,
-                      ))
+                  .map(
+                    (row) =>
+                        wire.GeneratedHeldAudioRecording(id: row.id, seconds: row.seconds, startedAt: row.startedAt),
+                  )
                   .toList(),
               resetAt: heldAudio!.resetAt,
               retainLive: heldAudio!.retainLive,
@@ -476,5 +558,8 @@ class UserSubscriptionResponse {
     );
   }
 
-  Map<String, dynamic> toJson() => toGenerated().toJson();
+  Map<String, dynamic> toJson() => {
+        ...toGenerated().toJson(),
+        if (processingBacklog != null) 'processing_backlog': processingBacklog!.toJson(),
+      };
 }

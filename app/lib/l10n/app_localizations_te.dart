@@ -14193,4 +14193,45 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'వేచి ఉన్న మీ రికార్డింగ్‌లు లిప్యంతరీకరించబడుతున్నాయి';
+
+  @override
+  String get processingPaused => 'ప్రాసెసింగ్ నిలిపివేయబడింది. మీరు ఈ నెల పరిమితిని చేరుకున్నారు.';
+
+  @override
+  String get processingStored =>
+      'మీ రికార్డింగ్‌లు మరియు లిప్యంతరీకరణలు సేవ్ చేయబడ్డాయి. మీరు ప్రాసెస్ చేయాలని ఎంచుకునే వరకు వేచి ఉన్న రికార్డింగ్‌లు అలాగే ఉంటాయి.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration వేచి ఉంది · ఇప్పుడు ప్రాసెస్ చేస్తే ఈ నెలలో సుమారు $percent% ఉపయోగించబడుతుంది';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'సుమారు $hours గంటల ప్రాసెసింగ్ · ఈ నెల కోటాలో $percent%.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'అందుబాటులో ఉన్న కోటాలో కొత్త రికార్డింగ్‌లను ముందుగా ప్రాసెస్ చేస్తాము. మిగిలినవి వేచి ఉంటాయి.';
+
+  @override
+  String get processingAction => 'వేచి ఉన్న రికార్డింగ్‌లను ప్రాసెస్ చేయండి';
+
+  @override
+  String get processingProgress => 'మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…';
+
+  @override
+  String get processingDeferred => 'ప్రాసెసింగ్ కోసం వేచి ఉంది';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count సంభాషణలు వేచి ఉన్నాయి',
+      one: '1 సంభాషణ వేచి ఉంది',
+    );
+    return '$_temp0';
+  }
 }

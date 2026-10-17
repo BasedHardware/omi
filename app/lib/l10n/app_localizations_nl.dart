@@ -14174,4 +14174,45 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Je wachtende opnamen worden getranscribeerd';
+
+  @override
+  String get processingPaused => 'Verwerking gepauzeerd. Je hebt de limiet van deze maand bereikt.';
+
+  @override
+  String get processingStored =>
+      'Je opnamen en transcripties zijn opgeslagen. Wachtende opnamen blijven wachten totdat je kiest om ze te verwerken.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration in de wacht · Nu verwerken gebruikt ongeveer $percent% van deze maand';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Ongeveer $hours uur verwerking · $percent% van het tegoed van deze maand.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'We verwerken eerst de nieuwste opnamen, tot het beschikbare tegoed op is. De rest blijft wachten.';
+
+  @override
+  String get processingAction => 'Wachtende opnamen verwerken';
+
+  @override
+  String get processingProgress => 'Je wachtende opnamen worden verwerkt…';
+
+  @override
+  String get processingDeferred => 'Wacht op verwerking';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken wachten',
+      one: '1 gesprek wacht',
+    );
+    return '$_temp0';
+  }
 }

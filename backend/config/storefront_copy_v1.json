@@ -113,8 +113,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "You've reached this month's limit",
-        "body": "New recordings are saved and waiting. Choose how to handle them until {date}.",
+        "title": "Processing paused. You've reached this month's limit.",
+        "body": "Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.",
         "upgrade_label": "Upgrade",
         "on_device_label": "Keep going on this phone",
         "dont_ask_again_label": "Don't ask again this month",
@@ -254,8 +254,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "لقد وصلت إلى حد هذا الشهر",
-        "body": "التسجيلات الجديدة محفوظة وبانتظارك. اختر كيف تريد التعامل معها حتى {date}.",
+        "title": "المعالجة متوقفة مؤقتًا. لقد بلغت حد هذا الشهر.",
+        "body": "تم حفظ تسجيلاتك ونصوصك. ستبقى التسجيلات قيد الانتظار حتى تختار معالجتها.",
         "upgrade_label": "ترقية",
         "on_device_label": "تابع على هذا الهاتف",
         "dont_ask_again_label": "لا تسألني مرة أخرى هذا الشهر",
@@ -392,8 +392,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Вы дасягнулі ліміту на гэты месяц",
-        "body": "Новыя запісы захаваны і чакаюць. Выберыце, як з імі працаваць да {date}.",
+        "title": "Апрацоўка прыпынена. Вы дасягнулі ліміту на гэты месяц.",
+        "body": "Вашы запісы і расшыфроўкі захаваны. Запісы будуць чакаць, пакуль вы не выбераце іх апрацоўку.",
         "upgrade_label": "Абнавіць",
         "on_device_label": "Працягнуць на гэтым тэлефоне",
         "dont_ask_again_label": "Не пытаць зноў у гэтым месяцы",
@@ -512,8 +512,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Достигнахте лимита за този месец",
-        "body": "Новите записи се запазват и чакат. Изберете как да ги обработите до {date}.",
+        "title": "Обработката е на пауза. Достигнахте лимита за този месец.",
+        "body": "Записите и транскрипциите ви са запазени. Чакащите записи ще останат така, докато изберете да ги обработите.",
         "upgrade_label": "Надградете",
         "on_device_label": "Продължете на този телефон",
         "dont_ask_again_label": "Не питай отново този месец",
@@ -632,8 +632,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "এই মাসের সীমায় পৌঁছেছেন",
-        "body": "নতুন রেকর্ডিং সংরক্ষিত হয়ে অপেক্ষা করছে। {date} পর্যন্ত এগুলো কীভাবে সামলাবেন তা বেছে নিন।",
+        "title": "প্রক্রিয়াকরণ থামানো হয়েছে। আপনি এই মাসের সীমায় পৌঁছেছেন।",
+        "body": "আপনার রেকর্ডিং ও প্রতিলিপি সংরক্ষিত আছে। আপনি প্রক্রিয়া করার সিদ্ধান্ত না নেওয়া পর্যন্ত অপেক্ষমাণ রেকর্ডিং অপেক্ষায় থাকবে।",
         "upgrade_label": "আপগ্রেড",
         "on_device_label": "এই ফোনেই চালিয়ে যান",
         "dont_ask_again_label": "এই মাসে আর জিজ্ঞেস করবেন না",
@@ -767,8 +767,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Dostigli ste ograničenje za ovaj mjesec",
-        "body": "Nove snimke su sačuvane i čekaju. Odaberite kako ćete ih obraditi do {date}.",
+        "title": "Obrada je pauzirana. Dostigli ste limit za ovaj mjesec.",
+        "body": "Vaši snimci i transkripti su sačuvani. Snimci na čekanju ostaju na čekanju dok ne odaberete obradu.",
         "upgrade_label": "Nadogradi",
         "on_device_label": "Nastavite na ovom telefonu",
         "dont_ask_again_label": "Ne pitaj ponovo ovaj mjesec",
@@ -887,8 +887,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Has arribat al límit d'aquest mes",
-        "body": "Els nous enregistraments es desen i esperen. Tria com vols gestionar-los fins al {date}.",
+        "title": "Processament en pausa. Has arribat al límit d'aquest mes.",
+        "body": "Les gravacions i transcripcions estan desades. Les gravacions pendents esperaran fins que decideixis processar-les.",
         "upgrade_label": "Actualitza",
         "on_device_label": "Continua en aquest telèfon",
         "dont_ask_again_label": "No tornis a preguntar aquest mes",
@@ -1022,8 +1022,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Dosáhli jste limitu tohoto měsíce",
-        "body": "Nové nahrávky se ukládají a čekají. Vyberte, jak s nimi naložit do {date}.",
+        "title": "Zpracování pozastaveno. Dosáhli jste limitu pro tento měsíc.",
+        "body": "Vaše nahrávky a přepisy jsou uložené. Čekající nahrávky zůstanou čekat, dokud se nerozhodnete je zpracovat.",
         "upgrade_label": "Upgradovat",
         "on_device_label": "Pokračovat na tomto telefonu",
         "dont_ask_again_label": "Tento měsíc se už neptat",
@@ -1142,8 +1142,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Du har nået denne måneds grænse",
-        "body": "Nye optagelser er gemt og venter. Vælg, hvordan du vil håndtere dem indtil {date}.",
+        "title": "Behandlingen er sat på pause. Du har nået denne måneds grænse.",
+        "body": "Dine optagelser og transskriptioner er gemt. Ventende optagelser venter, indtil du vælger at behandle dem.",
         "upgrade_label": "Opgrader",
         "on_device_label": "Fortsæt på denne telefon",
         "dont_ask_again_label": "Spørg ikke igen denne måned",
@@ -1262,8 +1262,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Sie haben das Limit für diesen Monat erreicht",
-        "body": "Neue Aufnahmen werden gespeichert und warten. Wählen Sie bis {date}, wie Sie damit umgehen möchten.",
+        "title": "Verarbeitung pausiert. Du hast das Limit für diesen Monat erreicht.",
+        "body": "Deine Aufnahmen und Transkripte sind gespeichert. Wartende Aufnahmen bleiben gespeichert, bis du ihre Verarbeitung auswählst.",
         "upgrade_label": "Upgraden",
         "on_device_label": "Auf diesem Telefon weitermachen",
         "dont_ask_again_label": "Diesen Monat nicht mehr fragen",
@@ -1382,8 +1382,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Φτάσατε το όριο αυτού του μήνα",
-        "body": "Οι νέες εγγραφές αποθηκεύονται και περιμένουν. Επιλέξτε πώς θέλετε να τις χειριστείτε έως τις {date}.",
+        "title": "Η επεξεργασία διακόπηκε. Φτάσατε το όριο αυτού του μήνα.",
+        "body": "Οι εγγραφές και οι απομαγνητοφωνήσεις σας αποθηκεύτηκαν. Οι εγγραφές σε αναμονή θα περιμένουν μέχρι να επιλέξετε την επεξεργασία τους.",
         "upgrade_label": "Αναβάθμιση",
         "on_device_label": "Συνεχίστε σε αυτό το τηλέφωνο",
         "dont_ask_again_label": "Να μην ξαναρωτηθώ αυτόν τον μήνα",
@@ -1502,8 +1502,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Has llegado al límite de este mes",
-        "body": "Las nuevas grabaciones se guardan y esperan. Elige cómo quieres gestionarlas hasta el {date}.",
+        "title": "Procesamiento en pausa. Has alcanzado el límite de este mes.",
+        "body": "Tus grabaciones y transcripciones están guardadas. Las grabaciones pendientes esperarán hasta que decidas procesarlas.",
         "upgrade_label": "Mejorar",
         "on_device_label": "Seguir en este teléfono",
         "dont_ask_again_label": "No volver a preguntar este mes",
@@ -1622,8 +1622,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Olete selle kuu piirini jõudnud",
-        "body": "Uued salvestised salvestatakse ja ootavad. Valige, kuidas neid kuni {date} käsitleda.",
+        "title": "Töötlus on peatatud. Oled jõudnud selle kuu piiranguni.",
+        "body": "Sinu salvestised ja transkriptsioonid on salvestatud. Ootel salvestised jäävad ootele, kuni valid nende töötlemise.",
         "upgrade_label": "Uuenda",
         "on_device_label": "Jätka sellel telefonil",
         "dont_ask_again_label": "Ära küsi sel kuul uuesti",
@@ -1742,8 +1742,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "به سقف این ماه رسیده‌اید",
-        "body": "ضبط‌های جدید ذخیره شده‌اند و منتظرند. تا {date} انتخاب کنید که با آن‌ها چه کنید.",
+        "title": "پردازش متوقف شد. به سقف این ماه رسیده‌اید.",
+        "body": "ضبط‌ها و متن‌های شما ذخیره شده‌اند. ضبط‌های منتظر تا زمانی که پردازش را انتخاب کنید در انتظار می‌مانند.",
         "upgrade_label": "ارتقا",
         "on_device_label": "روی این تلفن ادامه دهید",
         "dont_ask_again_label": "این ماه دیگر نپرس",
@@ -1862,8 +1862,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Olet saavuttanut tämän kuukauden rajan",
-        "body": "Uudet nauhoitukset tallennetaan ja odottavat. Valitse, miten niitä käsitellään {date} asti.",
+        "title": "Käsittely keskeytetty. Olet saavuttanut tämän kuun rajan.",
+        "body": "Tallenteesi ja litterointisi on tallennettu. Odottavat tallenteet pysyvät odottamassa, kunnes valitset niiden käsittelyn.",
         "upgrade_label": "Päivitä",
         "on_device_label": "Jatka tällä puhelimella",
         "dont_ask_again_label": "Älä kysy uudelleen tänä kuukautena",
@@ -1982,8 +1982,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Vous avez atteint la limite de ce mois-ci",
-        "body": "Les nouveaux enregistrements sont sauvegardés et en attente. Choisissez comment les traiter jusqu'au {date}.",
+        "title": "Traitement en pause. Vous avez atteint la limite de ce mois.",
+        "body": "Vos enregistrements et transcriptions sont sauvegardés. Les enregistrements en attente le resteront jusqu'à ce que vous choisissiez de les traiter.",
         "upgrade_label": "Mettre à niveau",
         "on_device_label": "Continuer sur ce téléphone",
         "dont_ask_again_label": "Ne plus demander ce mois-ci",
@@ -2102,8 +2102,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "הגעת למגבלה של החודש הזה",
-        "body": "הקלטות חדשות נשמרות וממתינות. בחר איך לטפל בהן עד {date}.",
+        "title": "העיבוד הושהה. הגעת למגבלה של החודש.",
+        "body": "ההקלטות והתמלילים שלך נשמרו. ההקלטות הממתינות יישארו בהמתנה עד לבחירתך לעבד אותן.",
         "upgrade_label": "שדרג",
         "on_device_label": "המשך בטלפון הזה",
         "dont_ask_again_label": "אל תשאל שוב החודש",
@@ -2222,8 +2222,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "आप इस महीने की सीमा तक पहुँच गए हैं",
-        "body": "नई रिकॉर्डिंग सेव हो गई हैं और इंतज़ार कर रही हैं। {date} तक चुनें कि इन्हें कैसे संभालना है।",
+        "title": "प्रोसेसिंग रुकी हुई है। आप इस महीने की सीमा तक पहुँच गए हैं।",
+        "body": "आपकी रिकॉर्डिंग और ट्रांसक्रिप्ट सहेजे गए हैं। प्रतीक्षारत रिकॉर्डिंग तब तक प्रतीक्षा में रहेंगी जब तक आप उन्हें प्रोसेस करने का विकल्प नहीं चुनते।",
         "upgrade_label": "अपग्रेड करें",
         "on_device_label": "इस फ़ोन पर जारी रखें",
         "dont_ask_again_label": "इस महीने दोबारा न पूछें",
@@ -2342,8 +2342,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Dostigli ste ograničenje za ovaj mjesec",
-        "body": "Nove snimke su spremljene i čekaju. Odaberite kako ćete ih obraditi do {date}.",
+        "title": "Obrada je pauzirana. Dosegnuli ste ograničenje za ovaj mjesec.",
+        "body": "Vaše snimke i transkripti su spremljeni. Snimke na čekanju čekat će dok ne odaberete obradu.",
         "upgrade_label": "Nadogradi",
         "on_device_label": "Nastavite na ovom telefonu",
         "dont_ask_again_label": "Ne pitajte ponovno ovaj mjesec",
@@ -2462,8 +2462,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Elérte a havi keretet",
-        "body": "Az új felvételek mentésre kerültek és várakoznak. Válassza ki, hogyan kezeli őket eddig: {date}.",
+        "title": "A feldolgozás szünetel. Elérted az e havi keretet.",
+        "body": "A felvételeid és átirataid el vannak mentve. A várakozó felvételek addig várnak, amíg a feldolgozásukat nem választod.",
         "upgrade_label": "Frissítés",
         "on_device_label": "Folytatás ezen a telefonon",
         "dont_ask_again_label": "Ne kérdezze újra ebben a hónapban",
@@ -2582,8 +2582,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Anda telah mencapai batas bulan ini",
-        "body": "Rekaman baru tersimpan dan menunggu. Pilih cara menanganinya sampai {date}.",
+        "title": "Pemrosesan dijeda. Anda telah mencapai batas bulan ini.",
+        "body": "Rekaman dan transkrip Anda disimpan. Rekaman yang menunggu akan tetap menunggu hingga Anda memilih untuk memprosesnya.",
         "upgrade_label": "Tingkatkan",
         "on_device_label": "Lanjutkan di ponsel ini",
         "dont_ask_again_label": "Jangan tanya lagi bulan ini",
@@ -2702,8 +2702,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Hai raggiunto il limite di questo mese",
-        "body": "Le nuove registrazioni vengono salvate e attendono. Scegli come gestirle fino al {date}.",
+        "title": "Elaborazione in pausa. Hai raggiunto il limite di questo mese.",
+        "body": "Le registrazioni e le trascrizioni sono salvate. Le registrazioni in attesa rimarranno tali finché non sceglierai di elaborarle.",
         "upgrade_label": "Aggiorna",
         "on_device_label": "Continua su questo telefono",
         "dont_ask_again_label": "Non chiedere più questo mese",
@@ -2822,8 +2822,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "今月の上限に達しました",
-        "body": "新しい録音は保存され、待機しています。{date} までの扱い方を選んでください。",
+        "title": "処理を一時停止しました。今月の上限に達しました。",
+        "body": "録音と文字起こしは保存されています。処理を選択するまで、待機中の録音はそのまま保持されます。",
         "upgrade_label": "アップグレード",
         "on_device_label": "このスマートフォンで続ける",
         "dont_ask_again_label": "今月は再度表示しない",
@@ -2942,8 +2942,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ನೀವು ತಲುಪಿದ್ದೀರಿ",
-        "body": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ ಮತ್ತು ಕಾಯುತ್ತಿವೆ. {date} ರವರೆಗೆ ಅವುಗಳನ್ನು ಹೇಗೆ ನಿರ್ವಹಿಸಬೇಕೆಂದು ಆಯ್ಕೆಮಾಡಿ.",
+        "title": "ಪ್ರಕ್ರಿಯೆ ವಿರಾಮಗೊಂಡಿದೆ. ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ.",
+        "body": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಪ್ರತಿಲಿಪಿಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ನೀವು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತವೆ.",
         "upgrade_label": "ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
         "on_device_label": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಮುಂದುವರಿಸಿ",
         "dont_ask_again_label": "ಈ ತಿಂಗಳು ಮತ್ತೆ ಕೇಳಬೇಡಿ",
@@ -3062,8 +3062,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "이번 달 한도에 도달했어요",
-        "body": "새 녹음은 저장되어 대기 중이에요. {date}까지 처리 방법을 선택하세요.",
+        "title": "처리가 일시 중지되었습니다. 이번 달 한도에 도달했습니다.",
+        "body": "녹음과 전사 내용이 저장되었습니다. 대기 중인 녹음은 처리를 선택할 때까지 대기합니다.",
         "upgrade_label": "업그레이드",
         "on_device_label": "이 휴대폰에서 계속하기",
         "dont_ask_again_label": "이번 달에는 다시 묻지 않기",
@@ -3200,8 +3200,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Pasiekėte šio mėnesio limitą",
-        "body": "Nauji įrašai išsaugoti ir laukia. Pasirinkite, ką su jais daryti iki {date}.",
+        "title": "Apdorojimas pristabdytas. Pasiekėte šio mėnesio limitą.",
+        "body": "Jūsų įrašai ir išklotinės išsaugoti. Laukiantys įrašai lauks, kol pasirinksite juos apdoroti.",
         "upgrade_label": "Atnaujinti",
         "on_device_label": "Tęskite šiame telefone",
         "dont_ask_again_label": "Šį mėnesį daugiau neklausti",
@@ -3335,8 +3335,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Jūs esat sasniedzis šī mēneša limitu",
-        "body": "Jaunie ieraksti ir saglabāti un gaida. Izvēlieties, kā tos apstrādāt līdz {date}.",
+        "title": "Apstrāde apturēta. Sasniegts šī mēneša limits.",
+        "body": "Jūsu ieraksti un atšifrējumi ir saglabāti. Gaidošie ieraksti gaidīs, līdz izvēlēsieties tos apstrādāt.",
         "upgrade_label": "Jaunināt",
         "on_device_label": "Turpiniet šajā tālrunī",
         "dont_ask_again_label": "Šomēnes vairs nejautāt",
@@ -3467,8 +3467,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Ја достигнавте границата за овој месец",
-        "body": "Новите снимки се зачувани и чекаат. Изберете како да ги обработите до {date}.",
+        "title": "Обработката е паузирана. Го достигнавте лимитот за овој месец.",
+        "body": "Вашите снимки и транскрипти се зачувани. Снимките на чекање ќе чекаат додека не изберете да ги обработите.",
         "upgrade_label": "Надгради",
         "on_device_label": "Продолжете на овој телефон",
         "dont_ask_again_label": "Не прашувај повторно овој месец",
@@ -3587,8 +3587,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "तुम्ही या महिन्याची मर्यादा गाठली आहे",
-        "body": "नवीन रेकॉर्डिंग सेव्ह झाल्या आहेत आणि प्रतीक्षेत आहेत. {date} पर्यंत त्या कशा हाताळायच्या ते निवडा.",
+        "title": "प्रक्रिया थांबवली आहे. तुम्ही या महिन्याची मर्यादा गाठली आहे.",
+        "body": "तुमची रेकॉर्डिंग आणि प्रतिलेख जतन केले आहेत. तुम्ही प्रक्रिया करण्याची निवड करेपर्यंत प्रतीक्षेतील रेकॉर्डिंग प्रतीक्षेतच राहतील.",
         "upgrade_label": "अपग्रेड करा",
         "on_device_label": "या फोनवर सुरू ठेवा",
         "dont_ask_again_label": "या महिन्यात पुन्हा विचारू नका",
@@ -3707,8 +3707,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Anda telah mencapai had bulan ini",
-        "body": "Rakaman baharu disimpan dan menunggu. Pilih cara mengendalikannya sehingga {date}.",
+        "title": "Pemprosesan dijeda. Anda telah mencapai had bulan ini.",
+        "body": "Rakaman dan transkrip anda disimpan. Rakaman yang menunggu akan terus menunggu sehingga anda memilih untuk memprosesnya.",
         "upgrade_label": "Naik Taraf",
         "on_device_label": "Teruskan pada telefon ini",
         "dont_ask_again_label": "Jangan tanya lagi bulan ini",
@@ -3827,8 +3827,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Je hebt de limiet van deze maand bereikt",
-        "body": "Nieuwe opnames worden bewaard en wachten. Kies hoe je ze wilt verwerken tot {date}.",
+        "title": "Verwerking gepauzeerd. Je hebt de limiet van deze maand bereikt.",
+        "body": "Je opnamen en transcripties zijn opgeslagen. Wachtende opnamen blijven wachten totdat je kiest om ze te verwerken.",
         "upgrade_label": "Upgraden",
         "on_device_label": "Ga door op deze telefoon",
         "dont_ask_again_label": "Niet meer vragen deze maand",
@@ -3947,8 +3947,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Du har nådd grensen for denne måneden",
-        "body": "Nye opptak lagres og venter. Velg hvordan de skal håndteres til {date}.",
+        "title": "Behandlingen er satt på pause. Du har nådd denne månedens grense.",
+        "body": "Opptakene og transkripsjonene dine er lagret. Ventende opptak venter til du velger å behandle dem.",
         "upgrade_label": "Oppgrader",
         "on_device_label": "Fortsett på denne telefonen",
         "dont_ask_again_label": "Ikke spør igjen denne måneden",
@@ -4085,8 +4085,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Osiągnięto limit na ten miesiąc",
-        "body": "Nowe nagrania są zapisane i czekają. Wybierz, co z nimi zrobić do {date}.",
+        "title": "Przetwarzanie wstrzymane. Osiągnięto limit na ten miesiąc.",
+        "body": "Twoje nagrania i transkrypcje są zapisane. Oczekujące nagrania pozostaną w kolejce, aż wybierzesz ich przetworzenie.",
         "upgrade_label": "Ulepsz",
         "on_device_label": "Kontynuuj na tym telefonie",
         "dont_ask_again_label": "Nie pytaj ponownie w tym miesiącu",
@@ -4205,8 +4205,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Você atingiu o limite deste mês",
-        "body": "As novas gravações são salvas e ficam aguardando. Escolha como lidar com elas até {date}.",
+        "title": "Processamento pausado. Atingiu o limite deste mês.",
+        "body": "As suas gravações e transcrições estão guardadas. As gravações pendentes continuarão à espera até escolher processá-las.",
         "upgrade_label": "Atualizar",
         "on_device_label": "Continuar neste celular",
         "dont_ask_again_label": "Não perguntar de novo neste mês",
@@ -4325,8 +4325,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Ai atins limita lunii acesteia",
-        "body": "Înregistrările noi sunt salvate și așteaptă. Alege cum vrei să le tratezi până pe {date}.",
+        "title": "Procesarea este în pauză. Ai atins limita pentru această lună.",
+        "body": "Înregistrările și transcrierile tale sunt salvate. Înregistrările în așteptare vor rămâne așa până alegi să le procesezi.",
         "upgrade_label": "Actualizează",
         "on_device_label": "Continuă pe acest telefon",
         "dont_ask_again_label": "Nu mai întreba în această lună",
@@ -4445,8 +4445,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Вы достигли лимита этого месяца",
-        "body": "Новые записи сохраняются и ждут. Выберите, что с ними делать, до {date}.",
+        "title": "Обработка приостановлена. Вы достигли лимита на этот месяц.",
+        "body": "Ваши записи и расшифровки сохранены. Ожидающие записи останутся в ожидании, пока вы не выберете обработку.",
         "upgrade_label": "Обновить",
         "on_device_label": "Продолжить на этом телефоне",
         "dont_ask_again_label": "Больше не спрашивать в этом месяце",
@@ -4565,8 +4565,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Dosiahli ste limit tohto mesiaca",
-        "body": "Nové nahrávky sa ukladajú a čakajú. Vyberte si, ako ich spracovať do {date}.",
+        "title": "Spracovanie pozastavené. Dosiahli ste limit na tento mesiac.",
+        "body": "Vaše nahrávky a prepisy sú uložené. Čakajúce nahrávky zostanú čakať, kým si nevyberiete ich spracovanie.",
         "upgrade_label": "Upgradovať",
         "on_device_label": "Pokračovať na tomto telefóne",
         "dont_ask_again_label": "Tento mesiac sa už nepýtať",
@@ -4685,8 +4685,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Dosegli ste omejitev tega meseca",
-        "body": "Nova snemanja so shranjena in čakajo. Izberite, kako jih želite obravnavati do {date}.",
+        "title": "Obdelava je začasno ustavljena. Dosegli ste omejitev za ta mesec.",
+        "body": "Vaši posnetki in prepisi so shranjeni. Čakajoči posnetki bodo čakali, dokler ne izberete obdelave.",
         "upgrade_label": "Nadgradi",
         "on_device_label": "Nadaljujte na tem telefonu",
         "dont_ask_again_label": "Tega meseca ne sprašujte več",
@@ -4805,8 +4805,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Достигли сте ограничење за овај месец",
-        "body": "Нова снимања се чувају и чекају. Изаберите како да их обрадите до {date}.",
+        "title": "Обрада је паузирана. Достигли сте ограничење за овај месец.",
+        "body": "Ваши снимци и транскрипти су сачувани. Снимци на чекању ће чекати док не изаберете обраду.",
         "upgrade_label": "Надоградите",
         "on_device_label": "Наставите на овом телефону",
         "dont_ask_again_label": "Не питајте више овог месеца",
@@ -4925,8 +4925,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Du har nått den här månadens gräns",
-        "body": "Nya inspelningar sparas och väntar. Välj hur du vill hantera dem till {date}.",
+        "title": "Bearbetningen är pausad. Du har nått månadens gräns.",
+        "body": "Dina inspelningar och transkriptioner är sparade. Väntande inspelningar väntar tills du väljer att bearbeta dem.",
         "upgrade_label": "Uppgradera",
         "on_device_label": "Fortsätt på den här telefonen",
         "dont_ask_again_label": "Fråga inte igen den här månaden",
@@ -5045,8 +5045,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "இந்த மாத வரம்பை அடைந்துவிட்டீர்கள்",
-        "body": "புதிய பதிவுகள் சேமிக்கப்பட்டு காத்திருக்கின்றன. {date} வரை அவற்றை எப்படிக் கையாள்வது என்பதைத் தேர்ந்தெடுக்கவும்.",
+        "title": "செயலாக்கம் இடைநிறுத்தப்பட்டது. இந்த மாத வரம்பை அடைந்துவிட்டீர்கள்.",
+        "body": "உங்கள் பதிவுகளும் உரைகளும் சேமிக்கப்பட்டுள்ளன. நீங்கள் செயலாக்கத் தேர்ந்தெடுக்கும் வரை காத்திருக்கும் பதிவுகள் காத்திருக்கும்.",
         "upgrade_label": "மேம்படுத்து",
         "on_device_label": "இந்த தொலைபேசியிலேயே தொடரவும்",
         "dont_ask_again_label": "இந்த மாதம் மீண்டும் கேட்க வேண்டாம்",
@@ -5165,8 +5165,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "మీరు ఈ నెల పరిమితిని చేరుకున్నారు",
-        "body": "కొత్త రికార్డింగ్‌లు సేవ్ చేయబడి వేచి ఉన్నాయి. {date} వరకు వాటిని ఎలా నిర్వహించాలో ఎంచుకోండి.",
+        "title": "ప్రాసెసింగ్ నిలిపివేయబడింది. మీరు ఈ నెల పరిమితిని చేరుకున్నారు.",
+        "body": "మీ రికార్డింగ్‌లు మరియు లిప్యంతరీకరణలు సేవ్ చేయబడ్డాయి. మీరు ప్రాసెస్ చేయాలని ఎంచుకునే వరకు వేచి ఉన్న రికార్డింగ్‌లు అలాగే ఉంటాయి.",
         "upgrade_label": "అప్‌గ్రేడ్",
         "on_device_label": "ఈ ఫోన్‌లో కొనసాగించండి",
         "dont_ask_again_label": "ఈ నెల మళ్లీ అడగవద్దు",
@@ -5285,8 +5285,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว",
-        "body": "การบันทึกใหม่จะถูกเก็บไว้และรอดำเนินการ เลือกวิธีจัดการก่อนวันที่ {date}",
+        "title": "หยุดประมวลผลชั่วคราว คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว",
+        "body": "บันทึกเสียงและข้อความถอดเสียงของคุณถูกบันทึกไว้ บันทึกที่รออยู่จะยังรอจนกว่าคุณจะเลือกประมวลผล",
         "upgrade_label": "อัปเกรด",
         "on_device_label": "ใช้งานต่อบนโทรศัพท์เครื่องนี้",
         "dont_ask_again_label": "ไม่ต้องถามอีกในเดือนนี้",
@@ -5405,8 +5405,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Naabot mo na ang limitasyon ngayong buwan",
-        "body": "Naka-save at naghihintay ang mga bagong recording. Piliin kung paano ito hahawakan hanggang {date}.",
+        "title": "Naka-pause ang pagproseso. Naabot mo na ang limitasyon ngayong buwan.",
+        "body": "Naka-save ang iyong mga recording at transcript. Mananatiling naghihintay ang mga recording hanggang piliin mong iproseso ang mga ito.",
         "upgrade_label": "I-upgrade",
         "on_device_label": "Magpatuloy sa phone na ito",
         "dont_ask_again_label": "Huwag nang itanong ngayong buwan",
@@ -5525,8 +5525,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Bu ayın sınırına ulaştınız",
-        "body": "Yeni kayıtlar kaydedildi ve bekliyor. {date} tarihine kadar bunları nasıl işleyeceğinizi seçin.",
+        "title": "İşleme duraklatıldı. Bu ayın sınırına ulaştınız.",
+        "body": "Kayıtlarınız ve dökümleriniz kaydedildi. Bekleyen kayıtlar, işlemeyi seçene kadar beklemeye devam eder.",
         "upgrade_label": "Yükselt",
         "on_device_label": "Bu telefonda devam edin",
         "dont_ask_again_label": "Bu ay bir daha sorma",
@@ -5645,8 +5645,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Ви досягли ліміту цього місяця",
-        "body": "Нові записи збережено й очікують. Оберіть, що з ними робити до {date}.",
+        "title": "Обробку призупинено. Ви досягли ліміту на цей місяць.",
+        "body": "Ваші записи й розшифровки збережено. Записи в очікуванні чекатимуть, доки ви не виберете їх обробку.",
         "upgrade_label": "Оновити",
         "on_device_label": "Продовжити на цьому телефоні",
         "dont_ask_again_label": "Більше не запитувати цього місяця",
@@ -5765,8 +5765,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "آپ اس مہینے کی حد تک پہنچ گئے ہیں",
-        "body": "نئی ریکارڈنگز محفوظ ہو کر انتظار میں ہیں۔ {date} تک انہیں سنبھالنے کا طریقہ منتخب کریں۔",
+        "title": "پروسیسنگ روک دی گئی ہے۔ آپ اس مہینے کی حد تک پہنچ گئے ہیں۔",
+        "body": "آپ کی ریکارڈنگز اور متن محفوظ ہیں۔ منتظر ریکارڈنگز تب تک منتظر رہیں گی جب تک آپ انہیں پروسیس کرنے کا انتخاب نہیں کرتے۔",
         "upgrade_label": "اپ گریڈ کریں",
         "on_device_label": "اس فون پر جاری رکھیں",
         "dont_ask_again_label": "اس مہینے دوبارہ نہ پوچھیں",
@@ -5885,8 +5885,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "Bạn đã đạt giới hạn của tháng này",
-        "body": "Các bản ghi mới đã được lưu và đang chờ. Chọn cách xử lý chúng đến {date}.",
+        "title": "Đã tạm dừng xử lý. Bạn đã đạt giới hạn tháng này.",
+        "body": "Bản ghi âm và bản chép lời của bạn đã được lưu. Các bản ghi đang chờ sẽ tiếp tục chờ cho đến khi bạn chọn xử lý.",
         "upgrade_label": "Nâng cấp",
         "on_device_label": "Tiếp tục trên điện thoại này",
         "dont_ask_again_label": "Không hỏi lại trong tháng này",
@@ -6005,8 +6005,8 @@
         "screen_context"
       ],
       "at_cap": {
-        "title": "你已达到本月上限",
-        "body": "新的录音已保存并等待处理。请选择在 {date} 前如何处理。",
+        "title": "处理已暂停。你已达到本月上限。",
+        "body": "你的录音和转录文本已保存。等待中的录音会继续等待，直到你选择处理。",
         "upgrade_label": "升级",
         "on_device_label": "在这部手机上继续",
         "dont_ask_again_label": "本月不再询问",

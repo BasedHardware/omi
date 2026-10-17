@@ -14232,4 +14232,45 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'காத்திருக்கும் உங்கள் பதிவுகள் எழுத்தாக்கப்படுகின்றன';
+
+  @override
+  String get processingPaused => 'செயலாக்கம் இடைநிறுத்தப்பட்டது. இந்த மாத வரம்பை அடைந்துவிட்டீர்கள்.';
+
+  @override
+  String get processingStored =>
+      'உங்கள் பதிவுகளும் உரைகளும் சேமிக்கப்பட்டுள்ளன. நீங்கள் செயலாக்கத் தேர்ந்தெடுக்கும் வரை காத்திருக்கும் பதிவுகள் காத்திருக்கும்.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration காத்திருக்கிறது · இப்போது செயலாக்கினால் இந்த மாதத்தின் சுமார் $percent% பயன்படுத்தப்படும்';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'சுமார் $hours மணிநேர செயலாக்கம் · இந்த மாத ஒதுக்கீட்டில் $percent%.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'கிடைக்கும் ஒதுக்கீட்டிற்குள் புதிய பதிவுகளை முதலில் செயலாக்குவோம். மீதமுள்ளவை காத்திருக்கும்.';
+
+  @override
+  String get processingAction => 'காத்திருக்கும் பதிவுகளைச் செயலாக்கு';
+
+  @override
+  String get processingProgress => 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
+
+  @override
+  String get processingDeferred => 'செயலாக்கத்திற்குக் காத்திருக்கிறது';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள் காத்திருக்கின்றன',
+      one: '1 உரையாடல் காத்திருக்கிறது',
+    );
+    return '$_temp0';
+  }
 }

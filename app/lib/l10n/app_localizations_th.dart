@@ -14065,4 +14065,44 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'กำลังถอดเสียงการบันทึกที่รออยู่ของคุณ';
+
+  @override
+  String get processingPaused => 'หยุดประมวลผลชั่วคราว คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว';
+
+  @override
+  String get processingStored =>
+      'บันทึกเสียงและข้อความถอดเสียงของคุณถูกบันทึกไว้ บันทึกที่รออยู่จะยังรอจนกว่าคุณจะเลือกประมวลผล';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return 'รออยู่ $duration · ประมวลผลตอนนี้ใช้ประมาณ $percent% ของเดือนนี้';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'ประมวลผลประมาณ $hours ชั่วโมง · $percent% ของโควตาเดือนนี้';
+  }
+
+  @override
+  String get processingNewestFirst => 'เราจะประมวลผลบันทึกใหม่ล่าสุดก่อนตามโควตาที่เหลือ ส่วนที่เหลือจะยังรออยู่';
+
+  @override
+  String get processingAction => 'ประมวลผลบันทึกที่รออยู่';
+
+  @override
+  String get processingProgress => 'กำลังประมวลผลบันทึกที่รออยู่…';
+
+  @override
+  String get processingDeferred => 'รอประมวลผล';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count การสนทนารออยู่',
+      one: '1 การสนทนารออยู่',
+    );
+    return '$_temp0';
+  }
 }

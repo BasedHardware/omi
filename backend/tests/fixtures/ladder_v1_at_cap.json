@@ -1,6 +1,6 @@
 {
-  "title": "You've reached this month's limit",
-  "body": "New recordings are saved and waiting. Choose how to handle them until Nov 1.",
+  "title": "Processing paused. You've reached this month's limit.",
+  "body": "Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.",
   "upgrade_label": "Upgrade",
   "on_device_label": "Keep going on this phone",
   "dont_ask_again_label": "Don't ask again this month",

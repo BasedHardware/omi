@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Wird transkribiert, nachdem Ihr Limit am {date} zurückgesetzt wird",
     "heldAudioCardTitle": "{duration} warten auf Transkription",
     "heldAudioAndMore": "{count, plural, =1{und 1 weitere} other{und {count} weitere}}",
-    "heldAudioRecovering": "Deine wartenden Aufnahmen werden transkribiert"
+    "heldAudioRecovering": "Deine wartenden Aufnahmen werden transkribiert",
+    "processingPaused": "Verarbeitung pausiert. Du hast das Limit für diesen Monat erreicht.",
+    "processingStored": "Deine Aufnahmen und Transkripte sind gespeichert. Wartende Aufnahmen bleiben gespeichert, bis du ihre Verarbeitung auswählst.",
+    "processingWaiting": "{duration} warten · Jetzt verarbeiten nutzt etwa {percent}% dieses Monats",
+    "processingEstimate": "Etwa {hours} Stunden Verarbeitung · {percent}% des Kontingents dieses Monats.",
+    "processingNewestFirst": "Wir verarbeiten zuerst die neuesten Aufnahmen, soweit das Kontingent reicht. Der Rest wartet weiter.",
+    "processingAction": "Wartende Aufnahmen verarbeiten",
+    "processingProgress": "Deine wartenden Aufnahmen werden verarbeitet…",
+    "processingDeferred": "Wartet auf Verarbeitung",
+    "processingCount": "{count, plural, =1{1 Gespräch wartet} other{{count} Gespräche warten}}"
 }

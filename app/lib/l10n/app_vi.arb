@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Chuyển thành chữ sau khi giới hạn đặt lại vào {date}",
     "heldAudioCardTitle": "{duration} đang chờ phiên âm",
     "heldAudioAndMore": "{count, plural, =1{và 1 bản nữa} other{và {count} bản nữa}}",
-    "heldAudioRecovering": "Đang chuyển các bản ghi đang chờ của bạn thành văn bản"
+    "heldAudioRecovering": "Đang chuyển các bản ghi đang chờ của bạn thành văn bản",
+    "processingPaused": "Đã tạm dừng xử lý. Bạn đã đạt giới hạn tháng này.",
+    "processingStored": "Bản ghi âm và bản chép lời của bạn đã được lưu. Các bản ghi đang chờ sẽ tiếp tục chờ cho đến khi bạn chọn xử lý.",
+    "processingWaiting": "{duration} đang chờ · Xử lý ngay dùng khoảng {percent}% hạn mức tháng này",
+    "processingEstimate": "Khoảng {hours} giờ xử lý · {percent}% hạn mức tháng này.",
+    "processingNewestFirst": "Chúng tôi sẽ xử lý các bản ghi mới nhất trước, trong hạn mức còn lại. Phần còn lại sẽ tiếp tục chờ.",
+    "processingAction": "Xử lý bản ghi đang chờ",
+    "processingProgress": "Đang xử lý các bản ghi đang chờ của bạn…",
+    "processingDeferred": "Đang chờ xử lý",
+    "processingCount": "{count, plural, =1{1 cuộc trò chuyện đang chờ} other{{count} cuộc trò chuyện đang chờ}}"
 }

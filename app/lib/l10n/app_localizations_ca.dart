@@ -14208,4 +14208,45 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'S’estan transcrivint les gravacions pendents';
+
+  @override
+  String get processingPaused => 'Processament en pausa. Has arribat al límit d\'aquest mes.';
+
+  @override
+  String get processingStored =>
+      'Les gravacions i transcripcions estan desades. Les gravacions pendents esperaran fins que decideixis processar-les.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration en espera · Processar ara fa servir aproximadament el $percent% d\'aquest mes';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Unes $hours hores de processament · $percent% de la quota d\'aquest mes.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Processarem primer les gravacions més recents fins on arribi la quota. La resta continuarà en espera.';
+
+  @override
+  String get processingAction => 'Processa les gravacions pendents';
+
+  @override
+  String get processingProgress => 'S\'estan processant les gravacions pendents…';
+
+  @override
+  String get processingDeferred => 'En espera de processament';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count converses en espera',
+      one: '1 conversa en espera',
+    );
+    return '$_temp0';
+  }
 }

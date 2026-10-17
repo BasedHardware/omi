@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Getranscribeerd nadat je limiet op {date} wordt gereset",
     "heldAudioCardTitle": "{duration} wacht op transcriptie",
     "heldAudioAndMore": "{count, plural, =1{en nog 1} other{en nog {count}}}",
-    "heldAudioRecovering": "Je wachtende opnamen worden getranscribeerd"
+    "heldAudioRecovering": "Je wachtende opnamen worden getranscribeerd",
+    "processingPaused": "Verwerking gepauzeerd. Je hebt de limiet van deze maand bereikt.",
+    "processingStored": "Je opnamen en transcripties zijn opgeslagen. Wachtende opnamen blijven wachten totdat je kiest om ze te verwerken.",
+    "processingWaiting": "{duration} in de wacht · Nu verwerken gebruikt ongeveer {percent}% van deze maand",
+    "processingEstimate": "Ongeveer {hours} uur verwerking · {percent}% van het tegoed van deze maand.",
+    "processingNewestFirst": "We verwerken eerst de nieuwste opnamen, tot het beschikbare tegoed op is. De rest blijft wachten.",
+    "processingAction": "Wachtende opnamen verwerken",
+    "processingProgress": "Je wachtende opnamen worden verwerkt…",
+    "processingDeferred": "Wacht op verwerking",
+    "processingCount": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}"
 }

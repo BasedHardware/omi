@@ -193,7 +193,7 @@ def test_at_cap_backend_owned_copy_golden(monkeypatch, cap_presentation):
     assert at_cap['on_device_upgrade_line'] == 'Upgrade to Pro for speaker separation and higher accuracy'
 
 
-def test_at_cap_body_uses_the_locale_date_not_the_reset_label(monkeypatch, cap_presentation):
+def test_at_cap_body_preserves_recordings_without_automatic_reset_promise(monkeypatch, cap_presentation):
     sheet_for, ladder_catalog = cap_presentation
 
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
@@ -212,13 +212,16 @@ def test_at_cap_body_uses_the_locale_date_not_the_reset_label(monkeypatch, cap_p
         )
         return response.at_cap.body
 
-    assert body(None) == 'New recordings are saved and waiting. Choose how to handle them until Nov 1.'
-    assert body('es') == 'Las nuevas grabaciones se guardan y esperan. Elige cómo quieres gestionarlas hasta el 1 nov.'
-    assert 'se reinicia' not in body('es')
-    assert body('ja') == '新しい録音は保存され、待機しています。11月1日 までの扱い方を選んでください。'
-    assert 'リセット' not in body('ja')
-    assert body('ar') == 'التسجيلات الجديدة محفوظة وبانتظارك. اختر كيف تريد التعامل معها حتى 1 نوفمبر.'
-    assert 'يُعاد' not in body('ar')
+    assert (
+        body(None)
+        == 'Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.'
+    )
+    assert (
+        body('es')
+        == 'Tus grabaciones y transcripciones están guardadas. Las grabaciones pendientes esperarán hasta que decidas procesarlas.'
+    )
+    assert body('ja') == '録音と文字起こしは保存されています。処理を選択するまで、待機中の録音はそのまま保持されます。'
+    assert body('ar') == 'تم حفظ تسجيلاتك ونصوصك. ستبقى التسجيلات قيد الانتظار حتى تختار معالجتها.'
 
 
 def test_atomic_daily_reservations_boundary_and_reset():

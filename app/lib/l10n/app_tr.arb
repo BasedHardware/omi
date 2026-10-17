@@ -4355,5 +4355,14 @@
     "heldAudioWaitingOn": "Limit {date} tarihinde sıfırlandıktan sonra yazıya dökülür",
     "heldAudioCardTitle": "{duration} yazıya dökülmeyi bekliyor",
     "heldAudioAndMore": "{count, plural, =1{ve 1 tane daha} other{ve {count} tane daha}}",
-    "heldAudioRecovering": "Bekleyen kayıtlarınız yazıya dökülüyor"
+    "heldAudioRecovering": "Bekleyen kayıtlarınız yazıya dökülüyor",
+    "processingPaused": "İşleme duraklatıldı. Bu ayın sınırına ulaştınız.",
+    "processingStored": "Kayıtlarınız ve dökümleriniz kaydedildi. Bekleyen kayıtlar, işlemeyi seçene kadar beklemeye devam eder.",
+    "processingWaiting": "{duration} bekliyor · Şimdi işleme bu ayın yaklaşık %{percent} kadarını kullanır",
+    "processingEstimate": "Yaklaşık {hours} saatlik işleme · Bu ayın kotasının %{percent} kadarı.",
+    "processingNewestFirst": "Önce en yeni kayıtları kullanılabilir kotaya sığdığı kadar işleriz. Kalanlar beklemeye devam eder.",
+    "processingAction": "Bekleyen kayıtları işle",
+    "processingProgress": "Bekleyen kayıtlarınız işleniyor…",
+    "processingDeferred": "İşlenmeyi bekliyor",
+    "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}"
 }

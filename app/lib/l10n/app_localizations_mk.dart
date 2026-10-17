@@ -14199,4 +14199,45 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Се транскрибираат вашите снимки на чекање';
+
+  @override
+  String get processingPaused => 'Обработката е паузирана. Го достигнавте лимитот за овој месец.';
+
+  @override
+  String get processingStored =>
+      'Вашите снимки и транскрипти се зачувани. Снимките на чекање ќе чекаат додека не изберете да ги обработите.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration на чекање · Обработката сега користи околу $percent% од месечниот лимит';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Околу $hours часа обработка · $percent% од лимитот за овој месец.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Прво ќе ги обработиме најновите снимки до достапниот лимит. Останатите ќе останат на чекање.';
+
+  @override
+  String get processingAction => 'Обработи снимки на чекање';
+
+  @override
+  String get processingProgress => 'Обработка на вашите снимки на чекање…';
+
+  @override
+  String get processingDeferred => 'Чека обработка';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговори на чекање',
+      one: '1 разговор на чекање',
+    );
+    return '$_temp0';
+  }
 }

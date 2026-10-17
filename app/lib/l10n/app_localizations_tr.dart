@@ -14147,4 +14147,45 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Bekleyen kayıtlarınız yazıya dökülüyor';
+
+  @override
+  String get processingPaused => 'İşleme duraklatıldı. Bu ayın sınırına ulaştınız.';
+
+  @override
+  String get processingStored =>
+      'Kayıtlarınız ve dökümleriniz kaydedildi. Bekleyen kayıtlar, işlemeyi seçene kadar beklemeye devam eder.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration bekliyor · Şimdi işleme bu ayın yaklaşık %$percent kadarını kullanır';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Yaklaşık $hours saatlik işleme · Bu ayın kotasının %$percent kadarı.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Önce en yeni kayıtları kullanılabilir kotaya sığdığı kadar işleriz. Kalanlar beklemeye devam eder.';
+
+  @override
+  String get processingAction => 'Bekleyen kayıtları işle';
+
+  @override
+  String get processingProgress => 'Bekleyen kayıtlarınız işleniyor…';
+
+  @override
+  String get processingDeferred => 'İşlenmeyi bekliyor';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma bekliyor',
+      one: '1 konuşma bekliyor',
+    );
+    return '$_temp0';
+  }
 }

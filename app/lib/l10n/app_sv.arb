@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Transkriberas efter att din gräns återställs {date}",
     "heldAudioCardTitle": "{duration} väntar på transkribering",
     "heldAudioAndMore": "{count, plural, =1{och 1 till} other{och {count} till}}",
-    "heldAudioRecovering": "Transkriberar dina väntande inspelningar"
+    "heldAudioRecovering": "Transkriberar dina väntande inspelningar",
+    "processingPaused": "Bearbetningen är pausad. Du har nått månadens gräns.",
+    "processingStored": "Dina inspelningar och transkriptioner är sparade. Väntande inspelningar väntar tills du väljer att bearbeta dem.",
+    "processingWaiting": "{duration} väntar · Bearbetning nu använder cirka {percent}% av denna månad",
+    "processingEstimate": "Cirka {hours} timmars bearbetning · {percent}% av månadens kvot.",
+    "processingNewestFirst": "Vi bearbetar de senaste inspelningarna först, så långt kvoten räcker. Resten fortsätter att vänta.",
+    "processingAction": "Bearbeta väntande inspelningar",
+    "processingProgress": "Bearbetar dina väntande inspelningar…",
+    "processingDeferred": "Väntar på bearbetning",
+    "processingCount": "{count, plural, =1{1 samtal väntar} other{{count} samtal väntar}}"
 }

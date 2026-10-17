@@ -102,8 +102,9 @@ def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatc
         as_dict=lambda: {'mode': 'managed', 'remaining_seconds': None, 'reason': 'available'},
     )
     monkeypatch.setattr(route, 'resolve_transcription_allowance', lambda *a, **kw: allowance)
+    monkeypatch.setattr(route.funded_processing, 'allowance', lambda *a, **kw: allowance)
+    monkeypatch.setattr(route.processing_backlog.store, 'read', lambda uid: {})
     monkeypatch.setattr(route, 'fresh_cache_reads', lambda *a: nullcontext())
-    monkeypatch.setattr(held_audio_summary, '_kick_held_recovery', lambda uid: None)
     monkeypatch.setattr(held_audio_summary, '_load_summary', lambda uid: {'version': 2, 'seconds': 12, 'count': 1})
     monkeypatch.setattr(held_audio_summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 20, 'seconds': 12}])
     app = FastAPI()
@@ -117,5 +118,6 @@ def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatc
     if flag == 'true':
         assert payload['held_audio']['state'] == 'recovering'
         assert payload['held_audio']['seconds'] == 12
+        assert payload['processing_backlog']['state'] == 'waiting_choice'
     else:
         assert 'held_audio' not in payload

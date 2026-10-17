@@ -5,7 +5,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.stt_cap_dispatch import enabled
+from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from models.users import HeldAudioRecording, HeldAudioSummary
 from utils.stt_cap_dispatch import funded_allowance
 from utils.sync.cap_hold import holds, whole_seconds, ensure_summary, remaining_seconds
@@ -117,15 +117,8 @@ def client_held_audio(
     )
 
 
-def _kick_held_recovery(uid: str) -> None:
-    from utils.sync.cap_hold_recovery import kick
-
-    kick(uid)
-
-
 def attach_subscription_held_audio(response: Any, uid: str, allowance: Any, subscription: Any = None) -> None:
-    """Kick recovery and attach the summary. No-op, and no field, when dispatch enforcement is off."""
+    """Attach the summary without starting recovery. No-op, and no field, when dispatch enforcement is off."""
     if not enabled():
         return
-    _kick_held_recovery(uid)
     response.held_audio = client_held_audio(uid, allowance=allowance, subscription=subscription)

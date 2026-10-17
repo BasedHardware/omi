@@ -11746,5 +11746,14 @@
     "heldAudioWaitingOn": "پس از بازنشانی سقف در {date} پیاده می شود",
     "heldAudioCardTitle": "{duration} در انتظار رونویسی",
     "heldAudioAndMore": "{count, plural, =1{و 1 مورد دیگر} other{و {count} مورد دیگر}}",
-    "heldAudioRecovering": "در حال رونویسی ضبط‌های منتظر شما"
+    "heldAudioRecovering": "در حال رونویسی ضبط‌های منتظر شما",
+    "processingPaused": "پردازش متوقف شد. به سقف این ماه رسیده‌اید.",
+    "processingStored": "ضبط‌ها و متن‌های شما ذخیره شده‌اند. ضبط‌های منتظر تا زمانی که پردازش را انتخاب کنید در انتظار می‌مانند.",
+    "processingWaiting": "{duration} در انتظار · پردازش اکنون حدود {percent}% از سهم این ماه را مصرف می‌کند",
+    "processingEstimate": "حدود {hours} ساعت پردازش · {percent}% از سهم این ماه.",
+    "processingNewestFirst": "جدیدترین ضبط‌ها را ابتدا تا حد سهم باقی‌مانده پردازش می‌کنیم. بقیه در انتظار می‌مانند.",
+    "processingAction": "پردازش ضبط‌های منتظر",
+    "processingProgress": "در حال پردازش ضبط‌های منتظر شما…",
+    "processingDeferred": "در انتظار پردازش",
+    "processingCount": "{count, plural, =1{۱ گفتگو در انتظار} other{{count} گفتگو در انتظار}}"
 }

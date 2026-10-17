@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/subscription.dart';
+import 'processing_backlog_view.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -42,7 +43,7 @@ void openHeldAudioPlans(BuildContext context) {
 class HeldAudioCardView extends StatelessWidget {
   const HeldAudioCardView({
     super.key,
-    this.recovering = false,
+    required this.atCap,
     required this.seconds,
     required this.resetOn,
     required this.phoneEligible,
@@ -51,7 +52,7 @@ class HeldAudioCardView extends StatelessWidget {
     required this.onTranscribeOnPhone,
   });
 
-  final bool recovering;
+  final bool atCap;
   final int seconds;
   final DateTime resetOn;
   final bool phoneEligible;
@@ -63,14 +64,8 @@ class HeldAudioCardView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (seconds <= 0) return const SizedBox.shrink();
     final l10n = context.l10n;
-    final dates = OmiDateFormat.of(context);
     final duration = OmiDuration.compact(seconds, l10n);
-    final date = dates.date(resetOn);
-    final body = recovering
-        ? l10n.heldAudioRecovering
-        : phoneChosen
-            ? l10n.heldAudioPhoneChosenBody(date)
-            : l10n.heldAudioSavedBody(date);
+    final body = l10n.processingStored;
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
       child: Container(
@@ -93,22 +88,25 @@ class HeldAudioCardView extends StatelessWidget {
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
-                    child: Text(recovering ? l10n.heldAudioRecovering : l10n.heldAudioCardTitle(duration),
-                        style: OmiType.headline)),
+                  child: Text(
+                    atCap ? l10n.processingPaused : l10n.heldAudioWaiting(duration),
+                    style: OmiType.headline,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: OmiSpacing.xxs),
-            if (!recovering) Text(body, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
+            if (atCap) Text(l10n.heldAudioWaiting(duration), style: OmiType.subhead),
+            Text(body, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
             const SizedBox(height: OmiSpacing.sm),
-            if (!recovering)
-              OmiButton(
-                key: const Key('held_audio_upgrade'),
-                label: l10n.upgrade,
-                size: OmiButtonSize.compact,
-                expand: true,
-                onPressed: onUpgrade,
-              ),
-            if (!recovering && phoneEligible && !phoneChosen) ...[
+            OmiButton(
+              key: const Key('held_audio_upgrade'),
+              label: l10n.upgrade,
+              size: OmiButtonSize.compact,
+              expand: true,
+              onPressed: onUpgrade,
+            ),
+            if (phoneEligible && !phoneChosen) ...[
               const SizedBox(height: OmiSpacing.xs),
               OmiButton.secondary(
                 key: const Key('held_audio_on_phone'),
@@ -154,8 +152,8 @@ class HeldAudioRecordingRow extends StatelessWidget {
             Text(l10n.heldAudioRecordingTitle(dates.timestamp(started)), style: OmiType.body),
             const SizedBox(height: 2),
             Text(
-              recovering ? l10n.heldAudioRecovering : l10n.heldAudioRecordingSubtitle(duration),
-              style: OmiType.footnote.copyWith(color: OmiColors.warning),
+              recovering ? l10n.processingProgress : '$duration · ${l10n.processingDeferred}',
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
             ),
           ],
         ),
@@ -165,10 +163,21 @@ class HeldAudioRecordingRow extends StatelessWidget {
 }
 
 class HeldAudioHomeSection extends StatelessWidget {
-  const HeldAudioHomeSection({super.key, this.controller, this.summary, this.gate, this.onUpgrade, this.onPhone});
+  const HeldAudioHomeSection({
+    super.key,
+    this.controller,
+    this.summary,
+    this.backlog,
+    this.onProcess,
+    this.gate,
+    this.onUpgrade,
+    this.onPhone,
+  });
 
   final OnDeviceTranscriptionController? controller;
   final HeldAudioSummary? summary;
+  final ProcessingBacklog? backlog;
+  final Future<bool> Function()? onProcess;
   final bool? gate;
   final VoidCallback? onUpgrade;
   final VoidCallback? onPhone;
@@ -179,16 +188,53 @@ class HeldAudioHomeSection extends StatelessWidget {
     return ListenableBuilder(
       listenable: resolved,
       builder: (context, _) {
-        final active = gate ?? resolved.isActive;
+        final processing = backlog ??
+            ((summary == null && gate != false)
+                ? context.select<UsageProvider, ProcessingBacklog?>((p) => p.subscription?.processingBacklog)
+                : null);
+        final active = gate ?? (processing != null || resolved.isActive);
         final held = summary ??
-            (active ? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio) : null);
-        if (!active || held == null || held.seconds <= 0) return const SizedBox.shrink();
+            (active && backlog == null
+                ? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio)
+                : null);
+        if (!active) return const SizedBox.shrink();
+        if (processing != null) {
+          if (!processing.isVisible) return const SizedBox.shrink();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ProcessingBacklogView(
+                backlog: processing,
+                surface: 'a',
+                onUpgrade: onUpgrade ?? () => openHeldAudioPlans(context),
+                onProcess: onProcess,
+                phoneAction: heldAudioPhoneEligible(resolved) && !resolved.settings.enabled
+                    ? OmiButton.tertiary(
+                        label: context.l10n.onDeviceTranscribeOnPhone,
+                        onPressed: onPhone ?? () => unawaited(chooseHeldAudioOnPhone(context, resolved)),
+                      )
+                    : null,
+              ),
+              for (final recording in held?.recordings ?? <HeldAudioRecording>[])
+                HeldAudioRecordingRow(recording: recording, recovering: processing.isProcessing),
+              if ((held?.count ?? 0) > (held?.recordings.length ?? 0))
+                Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  child: Text(
+                    context.l10n.heldAudioAndMore(held!.count - held.recordings.length),
+                    style: OmiType.footnote,
+                  ),
+                ),
+            ],
+          );
+        }
+        if (held == null || held.seconds <= 0) return const SizedBox.shrink();
         final phone = heldAudioPhoneEligible(resolved);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             HeldAudioCardView(
-              recovering: held.isRecovering,
+              atCap: held.retainLive,
               seconds: held.seconds,
               resetOn: heldAudioCalendarDate(held.resetAt),
               phoneEligible: phone,
@@ -196,8 +242,7 @@ class HeldAudioHomeSection extends StatelessWidget {
               onUpgrade: onUpgrade ?? () => openHeldAudioPlans(context),
               onTranscribeOnPhone: onPhone ?? () => unawaited(chooseHeldAudioOnPhone(context, resolved)),
             ),
-            for (final recording in held.recordings)
-              HeldAudioRecordingRow(recording: recording, recovering: held.isRecovering),
+            for (final recording in held.recordings) HeldAudioRecordingRow(recording: recording, recovering: false),
             if (held.count > held.recordings.length)
               Padding(
                 padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
@@ -244,9 +289,9 @@ class HeldAudioLiveBannerView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l10n.heldAudioLiveTitle, style: OmiType.headline),
+            Text(l10n.processingPaused, style: OmiType.headline),
             const SizedBox(height: OmiSpacing.xxs),
-            Text(l10n.heldAudioLiveBody, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
+            Text(l10n.processingStored, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
             const SizedBox(height: OmiSpacing.sm),
             OmiButton(
               key: const Key('held_audio_live_upgrade'),
@@ -295,7 +340,7 @@ class HeldAudioLivePlaceholder extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            l10n.heldAudioTranscribesOn(OmiDateFormat.of(context).date(resetOn)),
+            l10n.processingDeferred,
             textAlign: TextAlign.center,
             style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
           ),
@@ -306,11 +351,22 @@ class HeldAudioLivePlaceholder extends StatelessWidget {
 }
 
 class HeldAudioLiveBanner extends StatelessWidget {
-  const HeldAudioLiveBanner(
-      {super.key, this.controller, this.summary, this.gate, this.recordedSeconds, this.onUpgrade, this.onPhone});
+  const HeldAudioLiveBanner({
+    super.key,
+    this.controller,
+    this.summary,
+    this.backlog,
+    this.onProcess,
+    this.gate,
+    this.recordedSeconds,
+    this.onUpgrade,
+    this.onPhone,
+  });
 
   final OnDeviceTranscriptionController? controller;
   final HeldAudioSummary? summary;
+  final ProcessingBacklog? backlog;
+  final Future<bool> Function()? onProcess;
   final bool? gate;
   final int? recordedSeconds;
   final VoidCallback? onUpgrade;
@@ -322,19 +378,29 @@ class HeldAudioLiveBanner extends StatelessWidget {
     return ListenableBuilder(
       listenable: resolved,
       builder: (context, _) {
-        final active = gate ?? resolved.isActive;
+        final processing = backlog ??
+            ((summary == null && gate != false)
+                ? context.select<UsageProvider, ProcessingBacklog?>((p) => p.subscription?.processingBacklog)
+                : null);
+        final active = gate ?? (processing != null || resolved.isActive);
         if (!active) return const SizedBox.shrink();
-        // Live receipts can arrive before the next subscription refresh. Watch
-        // capture even when its last response omitted held_audio entirely.
-        final live = recordedSeconds == null ? context.watch<CaptureProvider>().liveHeldAudio : null;
-        final held = summary ?? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio);
-        if (held?.isRecovering == true && live?.paused != true) {
-          return Padding(
-            key: const Key('held_audio_live_recovering'),
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            child: Text(context.l10n.heldAudioRecovering, style: OmiType.subhead),
+        if (processing != null) {
+          return ProcessingBacklogView(
+            backlog: processing,
+            surface: 'b',
+            onUpgrade: onUpgrade ?? () => openHeldAudioPlans(context),
+            onProcess: onProcess,
+            phoneAction: heldAudioPhoneEligible(resolved) && !resolved.settings.enabled
+                ? OmiButton.tertiary(
+                    label: context.l10n.onDeviceTranscribeOnPhone,
+                    onPressed: onPhone ?? () => unawaited(chooseHeldAudioOnPhone(context, resolved)),
+                  )
+                : null,
           );
         }
+        // Receipts cover the period before the next subscription refresh.
+        final live = recordedSeconds == null ? context.watch<CaptureProvider>().liveHeldAudio : null;
+        final held = summary ?? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio);
         final paused = live?.paused ?? held?.retainLive ?? false;
         final resetAt = live != null && live.resetAt > 0 ? live.resetAt : held?.resetAt ?? 0;
         if (!paused) return const SizedBox.shrink();
@@ -365,6 +431,8 @@ class HeldAudioUsageSection extends StatelessWidget {
     super.key,
     this.controller,
     this.summary,
+    this.backlog,
+    this.onProcess,
     this.gate,
     this.showSaveToggle = false,
     this.paid,
@@ -374,6 +442,8 @@ class HeldAudioUsageSection extends StatelessWidget {
 
   final OnDeviceTranscriptionController? controller;
   final HeldAudioSummary? summary;
+  final ProcessingBacklog? backlog;
+  final Future<bool> Function()? onProcess;
   final bool? gate;
   final bool showSaveToggle;
   final bool? paid;
@@ -386,40 +456,65 @@ class HeldAudioUsageSection extends StatelessWidget {
     return ListenableBuilder(
       listenable: resolved,
       builder: (context, _) {
-        final active = gate ?? resolved.isActive;
+        final processing = backlog ??
+            ((summary == null && gate != false)
+                ? context.select<UsageProvider, ProcessingBacklog?>((p) => p.subscription?.processingBacklog)
+                : null);
+        final active = gate ?? (processing != null || resolved.isActive);
         final held = summary ??
-            (active ? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio) : null);
-        if (!active || held == null || held.seconds <= 0) return const SizedBox.shrink();
+            (active && backlog == null
+                ? context.select<UsageProvider, HeldAudioSummary?>((p) => p.subscription?.heldAudio)
+                : null);
+        if (!active ||
+            (processing == null && (held == null || held.seconds <= 0)) ||
+            (processing != null && !processing.isVisible)) return const SizedBox.shrink();
         final l10n = context.l10n;
-        final duration = OmiDuration.compact(held.seconds, l10n);
-        final date = OmiDateFormat.of(context).date(heldAudioCalendarDate(held.resetAt));
+        final duration = OmiDuration.compact(held?.seconds ?? 0, l10n);
         final paidPlan = paid ??
             (showSaveToggle ||
                 context.select<UsageProvider, bool>((p) => p.subscription?.subscription.plan.isPaid ?? false));
+        final showPhoneToggle = paidPlan && heldAudioPhoneEligible(resolved);
         return Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm),
-          child: OmiSettingsGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OmiSettingsRow(
-                key: const Key('held_audio_usage_waiting'),
-                title: l10n.heldAudioWaiting(duration),
-                subtitle: held.isRecovering ? l10n.heldAudioRecovering : l10n.heldAudioWaitingOn(date),
-              ),
-              if (paidPlan && heldAudioPhoneEligible(resolved))
-                OmiSettingsRow.toggle(
-                  key: const Key('held_audio_usage_toggle'),
-                  title: l10n.onDeviceSaveLiveHours,
-                  subtitle: l10n.onDeviceSaveLiveHoursSubtitle,
-                  value: resolved.settings.saveLiveHours,
-                  onChanged: onSaveLiveHours ??
-                      (value) => unawaited(resolved.updateSettings(resolved.settings.copyWith(saveLiveHours: value))),
+              if (processing != null)
+                ProcessingBacklogView(
+                  backlog: processing,
+                  surface: 'c',
+                  onUpgrade: onUpgrade ?? () => openHeldAudioPlans(context),
+                  onProcess: onProcess,
                 ),
-              OmiSettingsRow(
-                key: const Key('held_audio_usage_plans'),
-                title: l10n.paywallComparePlans,
-                onTap: onUpgrade ?? () => openHeldAudioPlans(context),
-                showChevron: true,
-              ),
+              if (processing != null && showPhoneToggle) const SizedBox(height: OmiSpacing.sm),
+              if (processing == null || showPhoneToggle)
+                OmiSettingsGroup(
+                  children: [
+                    if (processing == null)
+                      OmiSettingsRow(
+                        key: const Key('held_audio_usage_waiting'),
+                        title: l10n.heldAudioWaiting(duration),
+                        subtitle: l10n.processingDeferred,
+                      ),
+                    if (showPhoneToggle)
+                      OmiSettingsRow.toggle(
+                        key: const Key('held_audio_usage_toggle'),
+                        title: l10n.onDeviceSaveLiveHours,
+                        subtitle: l10n.onDeviceSaveLiveHoursSubtitle,
+                        value: resolved.settings.saveLiveHours,
+                        onChanged: onSaveLiveHours ??
+                            (value) =>
+                                unawaited(resolved.updateSettings(resolved.settings.copyWith(saveLiveHours: value))),
+                      ),
+                    if (processing == null)
+                      OmiSettingsRow(
+                        key: const Key('held_audio_usage_plans'),
+                        title: l10n.paywallComparePlans,
+                        onTap: onUpgrade ?? () => openHeldAudioPlans(context),
+                        showChevron: true,
+                      ),
+                  ],
+                ),
             ],
           ),
         );

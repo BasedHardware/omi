@@ -25112,6 +25112,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing your waiting recordings'**
   String get heldAudioRecovering;
+
+  /// No description provided for @processingPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing paused. You\'ve reached this month\'s limit.'**
+  String get processingPaused;
+
+  /// No description provided for @processingStored.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.'**
+  String get processingStored;
+
+  /// No description provided for @processingWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} waiting · Process now uses about {percent}% of this month'**
+  String processingWaiting(String duration, String percent);
+
+  /// No description provided for @processingEstimate.
+  ///
+  /// In en, this message translates to:
+  /// **'About {hours} hours of processing · {percent}% of this month\'s allowance.'**
+  String processingEstimate(String hours, String percent);
+
+  /// No description provided for @processingNewestFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll process the newest recordings first, up to what fits. The rest will stay waiting.'**
+  String get processingNewestFirst;
+
+  /// No description provided for @processingAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Process waiting recordings'**
+  String get processingAction;
+
+  /// No description provided for @processingProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing your waiting recordings…'**
+  String get processingProgress;
+
+  /// No description provided for @processingDeferred.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for processing'**
+  String get processingDeferred;
+
+  /// No description provided for @processingCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}'**
+  String processingCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

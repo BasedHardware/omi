@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Transkribē pēc limita atiestatīšanas {date}",
     "heldAudioCardTitle": "{duration} gaida transkribēšanu",
     "heldAudioAndMore": "{count, plural, =1{un vēl 1} other{un vēl {count}}}",
-    "heldAudioRecovering": "Tiek transkribēti jūsu gaidošie ieraksti"
+    "heldAudioRecovering": "Tiek transkribēti jūsu gaidošie ieraksti",
+    "processingPaused": "Apstrāde apturēta. Sasniegts šī mēneša limits.",
+    "processingStored": "Jūsu ieraksti un atšifrējumi ir saglabāti. Gaidošie ieraksti gaidīs, līdz izvēlēsieties tos apstrādāt.",
+    "processingWaiting": "{duration} gaida · Apstrāde tagad izmantos aptuveni {percent}% no mēneša limita",
+    "processingEstimate": "Aptuveni {hours} stundas apstrādes · {percent}% no šī mēneša limita.",
+    "processingNewestFirst": "Vispirms apstrādāsim jaunākos ierakstus līdz pieejamajam limitam. Pārējie turpinās gaidīt.",
+    "processingAction": "Apstrādāt gaidošos ierakstus",
+    "processingProgress": "Notiek gaidošo ierakstu apstrāde…",
+    "processingDeferred": "Gaida apstrādi",
+    "processingCount": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}"
 }

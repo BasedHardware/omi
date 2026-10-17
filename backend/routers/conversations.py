@@ -1,3 +1,4 @@
+from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
 import os
@@ -283,6 +284,8 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
     """Claim once and run in the background; failure remains retryable."""
     conversation_id = conversation.get('id')
     if not conversation_id or not conversation.get('jit_first_open'):
+        return
+    if conversation.get('processing_deferred') or not generated_compute_allowed(uid, 'conv_folder'):
         return
     try:
         token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
@@ -1083,7 +1086,7 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred'):
+    if conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
     else:
         _dispatch_first_open_work(uid, conversation)
@@ -2317,10 +2320,12 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
+    require_generated_compute(uid, 'daily_summary')
     try:
-        summary = generate_summary_with_prompt(
-            full_transcript, request.prompt, language_code=conversation.language or 'en'
-        )
+        with generated_compute_scope(uid):
+            summary = generate_summary_with_prompt(
+                full_transcript, request.prompt, language_code=conversation.language or 'en'
+            )
     except SummaryProviderError as exc:
         # The provider failed on its own account, so this is an upstream failure and not a fault
         # of the request: report it as one instead of as a 500 the client cannot act on.

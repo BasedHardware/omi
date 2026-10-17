@@ -14148,4 +14148,45 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Mentranskripsikan rekaman Anda yang menunggu';
+
+  @override
+  String get processingPaused => 'Pemrosesan dijeda. Anda telah mencapai batas bulan ini.';
+
+  @override
+  String get processingStored =>
+      'Rekaman dan transkrip Anda disimpan. Rekaman yang menunggu akan tetap menunggu hingga Anda memilih untuk memprosesnya.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration menunggu · Proses sekarang memakai sekitar $percent% jatah bulan ini';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Sekitar $hours jam pemrosesan · $percent% jatah bulan ini.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Kami akan memproses rekaman terbaru terlebih dahulu sesuai sisa jatah. Sisanya akan tetap menunggu.';
+
+  @override
+  String get processingAction => 'Proses rekaman yang menunggu';
+
+  @override
+  String get processingProgress => 'Memproses rekaman Anda yang menunggu…';
+
+  @override
+  String get processingDeferred => 'Menunggu pemrosesan';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan menunggu',
+      one: '1 percakapan menunggu',
+    );
+    return '$_temp0';
+  }
 }

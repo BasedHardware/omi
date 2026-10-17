@@ -14128,4 +14128,45 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Sinu ootel salvestiste transkribeerimine';
+
+  @override
+  String get processingPaused => 'Töötlus on peatatud. Oled jõudnud selle kuu piiranguni.';
+
+  @override
+  String get processingStored =>
+      'Sinu salvestised ja transkriptsioonid on salvestatud. Ootel salvestised jäävad ootele, kuni valid nende töötlemise.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration ootel · Kohe töötlemine kasutab umbes $percent% selle kuu mahust';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Umbes $hours tundi töötlust · $percent% selle kuu mahust.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Töötleme esmalt uusimad salvestised saadaoleva mahu piires. Ülejäänud jäävad ootele.';
+
+  @override
+  String get processingAction => 'Töötle ootel salvestisi';
+
+  @override
+  String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
+
+  @override
+  String get processingDeferred => 'Ootab töötlemist';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust ootel',
+      one: '1 vestlus ootel',
+    );
+    return '$_temp0';
+  }
 }

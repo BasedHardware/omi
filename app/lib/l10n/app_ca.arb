@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Es transcriu després que el límit es restableixi el {date}",
     "heldAudioCardTitle": "{duration} pendents de transcriure",
     "heldAudioAndMore": "{count, plural, =1{i 1 més} other{i {count} més}}",
-    "heldAudioRecovering": "S’estan transcrivint les gravacions pendents"
+    "heldAudioRecovering": "S’estan transcrivint les gravacions pendents",
+    "processingPaused": "Processament en pausa. Has arribat al límit d'aquest mes.",
+    "processingStored": "Les gravacions i transcripcions estan desades. Les gravacions pendents esperaran fins que decideixis processar-les.",
+    "processingWaiting": "{duration} en espera · Processar ara fa servir aproximadament el {percent}% d'aquest mes",
+    "processingEstimate": "Unes {hours} hores de processament · {percent}% de la quota d'aquest mes.",
+    "processingNewestFirst": "Processarem primer les gravacions més recents fins on arribi la quota. La resta continuarà en espera.",
+    "processingAction": "Processa les gravacions pendents",
+    "processingProgress": "S'estan processant les gravacions pendents…",
+    "processingDeferred": "En espera de processament",
+    "processingCount": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}"
 }

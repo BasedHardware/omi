@@ -13914,4 +13914,43 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => '正在转写等待中的录音';
+
+  @override
+  String get processingPaused => '处理已暂停。你已达到本月上限。';
+
+  @override
+  String get processingStored => '你的录音和转录文本已保存。等待中的录音会继续等待，直到你选择处理。';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration等待中 · 立即处理将使用本月约$percent%的额度';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return '约$hours小时的处理 · 本月额度的$percent%。';
+  }
+
+  @override
+  String get processingNewestFirst => '我们会在剩余额度内优先处理最新的录音，其余录音将继续等待。';
+
+  @override
+  String get processingAction => '处理等待中的录音';
+
+  @override
+  String get processingProgress => '正在处理等待中的录音…';
+
+  @override
+  String get processingDeferred => '等待处理';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count段对话等待中',
+      one: '1段对话等待中',
+    );
+    return '$_temp0';
+  }
 }

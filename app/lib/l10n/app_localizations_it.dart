@@ -14210,4 +14210,45 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Trascrizione delle tue registrazioni in attesa';
+
+  @override
+  String get processingPaused => 'Elaborazione in pausa. Hai raggiunto il limite di questo mese.';
+
+  @override
+  String get processingStored =>
+      'Le registrazioni e le trascrizioni sono salvate. Le registrazioni in attesa rimarranno tali finché non sceglierai di elaborarle.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration in attesa · Elaborare ora usa circa il $percent% di questo mese';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Circa $hours ore di elaborazione · $percent% della quota di questo mese.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Elaboreremo prima le registrazioni più recenti, entro la quota disponibile. Le altre rimarranno in attesa.';
+
+  @override
+  String get processingAction => 'Elabora registrazioni in attesa';
+
+  @override
+  String get processingProgress => 'Elaborazione delle registrazioni in attesa…';
+
+  @override
+  String get processingDeferred => 'In attesa di elaborazione';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversazioni in attesa',
+      one: '1 conversazione in attesa',
+    );
+    return '$_temp0';
+  }
 }

@@ -11746,5 +11746,14 @@
     "heldAudioWaitingOn": "Prepisano po ponastavitvi omejitve {date}",
     "heldAudioCardTitle": "{duration} čaka na prepis",
     "heldAudioAndMore": "{count, plural, =1{in še 1} other{in še {count}}}",
-    "heldAudioRecovering": "Prepisujemo vaše čakajoče posnetke"
+    "heldAudioRecovering": "Prepisujemo vaše čakajoče posnetke",
+    "processingPaused": "Obdelava je začasno ustavljena. Dosegli ste omejitev za ta mesec.",
+    "processingStored": "Vaši posnetki in prepisi so shranjeni. Čakajoči posnetki bodo čakali, dokler ne izberete obdelave.",
+    "processingWaiting": "{duration} čaka · Obdelava zdaj porabi približno {percent}% mesečne kvote",
+    "processingEstimate": "Približno {hours} ur obdelave · {percent}% kvote tega meseca.",
+    "processingNewestFirst": "Najprej bomo obdelali najnovejše posnetke do razpoložljive kvote. Ostali bodo še naprej čakali.",
+    "processingAction": "Obdelaj čakajoče posnetke",
+    "processingProgress": "Obdelovanje vaših čakajočih posnetkov…",
+    "processingDeferred": "Čaka na obdelavo",
+    "processingCount": "{count, plural, =1{1 pogovor čaka} other{{count} pogovorov čaka}}"
 }

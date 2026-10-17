@@ -1197,24 +1197,41 @@ def enforce_chat_quota(
     """Block or allow a chat request based on the user's plan + usage.
 
     - Flagged ladder/Free shared budgets pause chat at 100%, including BYOK.
-    - Otherwise BYOK users with an LLM key attached: allowed, no Omi-side cost —
+    - Shared funded-compute admission also pauses legacy/overage tiers at cap.
+    - Otherwise BYOK users with a validated LLM provider key attached: allowed —
       unless ``byok_exempt`` is False, for surfaces that only ever spend Omi's
       own key regardless of the user's (the realtime hub mints platform tokens).
-    - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
+    - Below the funded cap, plans whose catalog exhaustion policy is overage
+      are ALLOWED — the call is
       served and the excess accrues a charge. See ``utils.overage``.
     - Hard-capped plans: blocked → 402, which the chat endpoint converts into
       a canned AI reply for mobile UX. Plus and Unlimited-v2 are explicitly
       hard-capped by the catalog.
     """
-    # Release-probe traffic is the deploy gate proving the candidate can chat at
-    # all — never paywall it, or the gate hard-blocks its own deploys once the
-    # probe's turns exhaust the Free cap.
+    # Import at call time: funded_processing imports this module's allowance
+    # resolver, so importing its adapter at module scope would close a cycle.
+    from utils.generated_compute import require_generated_compute
+
+    funded_kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
+
+    # Release probes retain their legacy question-quota exemption. The flagged
+    # funded cap still applies, so denial cannot first occur inside their stream.
     if uid == RELEASE_PROBE_UID:
+        require_generated_compute(
+            uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
+        )
         return
 
     # The flagged shared budget pauses chat on every ladder tier, including Free.
     if ladder_v1.enforce_chat_budget(uid, firestore_client=firestore_client):
         return
+
+    # Admission must fail before chat persists a turn or constructs an SSE
+    # response, including legacy/overage tiers under funded-seconds enforcement.
+    # Keep ladder's existing chat_at_cap detail above and the both-off path.
+    require_generated_compute(
+        uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
+    )
 
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;

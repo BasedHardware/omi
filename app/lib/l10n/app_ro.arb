@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Transcris după resetarea limitei pe {date}",
     "heldAudioCardTitle": "{duration} în așteptarea transcrierii",
     "heldAudioAndMore": "{count, plural, =1{și încă 1} other{și încă {count}}}",
-    "heldAudioRecovering": "Se transcriu înregistrările tale în așteptare"
+    "heldAudioRecovering": "Se transcriu înregistrările tale în așteptare",
+    "processingPaused": "Procesarea este în pauză. Ai atins limita pentru această lună.",
+    "processingStored": "Înregistrările și transcrierile tale sunt salvate. Înregistrările în așteptare vor rămâne așa până alegi să le procesezi.",
+    "processingWaiting": "{duration} în așteptare · Procesarea acum folosește aproximativ {percent}% din această lună",
+    "processingEstimate": "Aproximativ {hours} ore de procesare · {percent}% din cota acestei luni.",
+    "processingNewestFirst": "Vom procesa mai întâi cele mai noi înregistrări, în limita cotei disponibile. Restul vor rămâne în așteptare.",
+    "processingAction": "Procesează înregistrările în așteptare",
+    "processingProgress": "Se procesează înregistrările în așteptare…",
+    "processingDeferred": "În așteptarea procesării",
+    "processingCount": "{count, plural, =1{1 conversație în așteptare} other{{count} conversații în așteptare}}"
 }

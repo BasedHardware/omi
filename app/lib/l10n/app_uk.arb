@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Розшифровується після скидання ліміту {date}",
     "heldAudioCardTitle": "{duration} очікує на транскрипцію",
     "heldAudioAndMore": "{count, plural, =1{і ще 1} other{і ще {count}}}",
-    "heldAudioRecovering": "Транскрибуємо ваші записи в очікуванні"
+    "heldAudioRecovering": "Транскрибуємо ваші записи в очікуванні",
+    "processingPaused": "Обробку призупинено. Ви досягли ліміту на цей місяць.",
+    "processingStored": "Ваші записи й розшифровки збережено. Записи в очікуванні чекатимуть, доки ви не виберете їх обробку.",
+    "processingWaiting": "{duration} в очікуванні · Обробка зараз використає близько {percent}% місячного ліміту",
+    "processingEstimate": "Близько {hours} годин обробки · {percent}% ліміту на цей місяць.",
+    "processingNewestFirst": "Спочатку обробимо найновіші записи в межах доступного ліміту. Решта залишаться в очікуванні.",
+    "processingAction": "Обробити записи в очікуванні",
+    "processingProgress": "Обробка записів в очікуванні…",
+    "processingDeferred": "Очікує на обробку",
+    "processingCount": "{count, plural, =1{1 розмова в очікуванні} other{{count} розмов в очікуванні}}"
 }

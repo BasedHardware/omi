@@ -14181,4 +14181,45 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get processingPaused => 'ಪ್ರಕ್ರಿಯೆ ವಿರಾಮಗೊಂಡಿದೆ. ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ.';
+
+  @override
+  String get processingStored =>
+      'ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಪ್ರತಿಲಿಪಿಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ನೀವು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತವೆ.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration ಕಾಯುತ್ತಿದೆ · ಈಗ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿದರೆ ಈ ತಿಂಗಳ ಸುಮಾರು $percent% ಬಳಸುತ್ತದೆ';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'ಸುಮಾರು $hours ಗಂಟೆಗಳ ಪ್ರಕ್ರಿಯೆ · ಈ ತಿಂಗಳ ಕೋಟಾದ $percent%.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'ಲಭ್ಯವಿರುವ ಕೋಟಾದೊಳಗೆ ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಮೊದಲು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತೇವೆ. ಉಳಿದವು ಕಾಯುತ್ತವೆ.';
+
+  @override
+  String get processingAction => 'ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ';
+
+  @override
+  String get processingProgress => 'ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get processingDeferred => 'ಪ್ರಕ್ರಿಯೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಂಭಾಷಣೆಗಳು ಕಾಯುತ್ತಿವೆ',
+      one: '1 ಸಂಭಾಷಣೆ ಕಾಯುತ್ತಿದೆ',
+    );
+    return '$_temp0';
+  }
 }

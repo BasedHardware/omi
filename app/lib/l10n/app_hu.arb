@@ -4416,5 +4416,14 @@
     "heldAudioWaitingOn": "Átírás a keret {date} napi visszaállása után",
     "heldAudioCardTitle": "{duration} vár átírásra",
     "heldAudioAndMore": "{count, plural, =1{és még 1} other{és még {count}}}",
-    "heldAudioRecovering": "A várakozó felvételeid átírása folyamatban"
+    "heldAudioRecovering": "A várakozó felvételeid átírása folyamatban",
+    "processingPaused": "A feldolgozás szünetel. Elérted az e havi keretet.",
+    "processingStored": "A felvételeid és átirataid el vannak mentve. A várakozó felvételek addig várnak, amíg a feldolgozásukat nem választod.",
+    "processingWaiting": "{duration} várakozik · A feldolgozás most az e havi keret kb. {percent}%-át használja",
+    "processingEstimate": "Kb. {hours} óra feldolgozás · Az e havi keret {percent}%-a.",
+    "processingNewestFirst": "Először a legújabb felvételeket dolgozzuk fel a rendelkezésre álló keretig. A többi tovább várakozik.",
+    "processingAction": "Várakozó felvételek feldolgozása",
+    "processingProgress": "A várakozó felvételeid feldolgozása…",
+    "processingDeferred": "Feldolgozásra vár",
+    "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}"
 }

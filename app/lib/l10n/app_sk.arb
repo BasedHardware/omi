@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Prepísané po obnovení limitu {date}",
     "heldAudioCardTitle": "Na prepis čaká {duration}",
     "heldAudioAndMore": "{count, plural, =1{a 1 ďalšia} other{a {count} ďalších}}",
-    "heldAudioRecovering": "Prepisujeme vaše čakajúce nahrávky"
+    "heldAudioRecovering": "Prepisujeme vaše čakajúce nahrávky",
+    "processingPaused": "Spracovanie pozastavené. Dosiahli ste limit na tento mesiac.",
+    "processingStored": "Vaše nahrávky a prepisy sú uložené. Čakajúce nahrávky zostanú čakať, kým si nevyberiete ich spracovanie.",
+    "processingWaiting": "{duration} čaká · Spracovanie teraz využije približne {percent}% mesačného limitu",
+    "processingEstimate": "Približne {hours} hodín spracovania · {percent}% limitu na tento mesiac.",
+    "processingNewestFirst": "Najskôr spracujeme najnovšie nahrávky do výšky dostupného limitu. Zvyšok zostane čakať.",
+    "processingAction": "Spracovať čakajúce nahrávky",
+    "processingProgress": "Spracúvanie čakajúcich nahrávok…",
+    "processingDeferred": "Čaká na spracovanie",
+    "processingCount": "{count, plural, =1{1 čakajúca konverzácia} other{{count} čakajúcich konverzácií}}"
 }

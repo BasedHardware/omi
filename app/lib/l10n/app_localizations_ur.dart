@@ -14149,4 +14149,44 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'آپ کی منتظر ریکارڈنگز کو متن میں بدلا جا رہا ہے';
+
+  @override
+  String get processingPaused => 'پروسیسنگ روک دی گئی ہے۔ آپ اس مہینے کی حد تک پہنچ گئے ہیں۔';
+
+  @override
+  String get processingStored =>
+      'آپ کی ریکارڈنگز اور متن محفوظ ہیں۔ منتظر ریکارڈنگز تب تک منتظر رہیں گی جب تک آپ انہیں پروسیس کرنے کا انتخاب نہیں کرتے۔';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration منتظر · ابھی پروسیس کرنے سے اس مہینے کا تقریباً $percent% استعمال ہوگا';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'تقریباً $hours گھنٹے کی پروسیسنگ · اس مہینے کے کوٹے کا $percent%۔';
+  }
+
+  @override
+  String get processingNewestFirst => 'ہم دستیاب کوٹے میں تازہ ترین ریکارڈنگز پہلے پروسیس کریں گے۔ باقی منتظر رہیں گی۔';
+
+  @override
+  String get processingAction => 'منتظر ریکارڈنگز پروسیس کریں';
+
+  @override
+  String get processingProgress => 'آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…';
+
+  @override
+  String get processingDeferred => 'پروسیسنگ کی منتظر';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگوئیں منتظر',
+      one: '1 گفتگو منتظر',
+    );
+    return '$_temp0';
+  }
 }

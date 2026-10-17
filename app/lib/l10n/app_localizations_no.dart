@@ -14139,4 +14139,45 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Transkriberer opptakene dine som venter';
+
+  @override
+  String get processingPaused => 'Behandlingen er satt på pause. Du har nådd denne månedens grense.';
+
+  @override
+  String get processingStored =>
+      'Opptakene og transkripsjonene dine er lagret. Ventende opptak venter til du velger å behandle dem.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration venter · Behandling nå bruker omtrent $percent% av denne måneden';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Omtrent $hours timer behandling · $percent% av månedens kvote.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Vi behandler de nyeste opptakene først, så langt kvoten rekker. Resten vil fortsatt vente.';
+
+  @override
+  String get processingAction => 'Behandle ventende opptak';
+
+  @override
+  String get processingProgress => 'Behandler ventende opptak…';
+
+  @override
+  String get processingDeferred => 'Venter på behandling';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler venter',
+      one: '1 samtale venter',
+    );
+    return '$_temp0';
+  }
 }

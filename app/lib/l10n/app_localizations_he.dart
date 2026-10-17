@@ -14036,4 +14036,43 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'מתמללים את ההקלטות הממתינות שלך';
+
+  @override
+  String get processingPaused => 'העיבוד הושהה. הגעת למגבלה של החודש.';
+
+  @override
+  String get processingStored => 'ההקלטות והתמלילים שלך נשמרו. ההקלטות הממתינות יישארו בהמתנה עד לבחירתך לעבד אותן.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration בהמתנה · עיבוד עכשיו ישתמש בכ־$percent% מהמכסה החודשית';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'כ־$hours שעות עיבוד · $percent% מהמכסה של החודש.';
+  }
+
+  @override
+  String get processingNewestFirst => 'נעבד תחילה את ההקלטות החדשות ביותר עד לגבול המכסה הזמינה. השאר יישארו בהמתנה.';
+
+  @override
+  String get processingAction => 'עיבוד הקלטות ממתינות';
+
+  @override
+  String get processingProgress => 'ההקלטות הממתינות שלך בעיבוד…';
+
+  @override
+  String get processingDeferred => 'ממתין לעיבוד';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count שיחות בהמתנה',
+      one: 'שיחה אחת בהמתנה',
+    );
+    return '$_temp0';
+  }
 }

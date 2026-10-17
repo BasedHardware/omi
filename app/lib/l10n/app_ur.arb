@@ -11746,5 +11746,14 @@
     "heldAudioWaitingOn": "حد {date} کو ری سیٹ ہونے کے بعد نقل ہوگی",
     "heldAudioCardTitle": "{duration} ٹرانسکرپشن کے انتظار میں",
     "heldAudioAndMore": "{count, plural, =1{اور 1 مزید} other{اور {count} مزید}}",
-    "heldAudioRecovering": "آپ کی منتظر ریکارڈنگز کو متن میں بدلا جا رہا ہے"
+    "heldAudioRecovering": "آپ کی منتظر ریکارڈنگز کو متن میں بدلا جا رہا ہے",
+    "processingPaused": "پروسیسنگ روک دی گئی ہے۔ آپ اس مہینے کی حد تک پہنچ گئے ہیں۔",
+    "processingStored": "آپ کی ریکارڈنگز اور متن محفوظ ہیں۔ منتظر ریکارڈنگز تب تک منتظر رہیں گی جب تک آپ انہیں پروسیس کرنے کا انتخاب نہیں کرتے۔",
+    "processingWaiting": "{duration} منتظر · ابھی پروسیس کرنے سے اس مہینے کا تقریباً {percent}% استعمال ہوگا",
+    "processingEstimate": "تقریباً {hours} گھنٹے کی پروسیسنگ · اس مہینے کے کوٹے کا {percent}%۔",
+    "processingNewestFirst": "ہم دستیاب کوٹے میں تازہ ترین ریکارڈنگز پہلے پروسیس کریں گے۔ باقی منتظر رہیں گی۔",
+    "processingAction": "منتظر ریکارڈنگز پروسیس کریں",
+    "processingProgress": "آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…",
+    "processingDeferred": "پروسیسنگ کی منتظر",
+    "processingCount": "{count, plural, =1{1 گفتگو منتظر} other{{count} گفتگوئیں منتظر}}"
 }

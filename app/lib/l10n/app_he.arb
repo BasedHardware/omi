@@ -11746,5 +11746,14 @@
     "heldAudioWaitingOn": "מתומלל אחרי שהמכסה תתאפס ב-{date}",
     "heldAudioCardTitle": "{duration} של הקלטות ממתינות לתמלול",
     "heldAudioAndMore": "{count, plural, =1{ועוד 1} other{ועוד {count}}}",
-    "heldAudioRecovering": "מתמללים את ההקלטות הממתינות שלך"
+    "heldAudioRecovering": "מתמללים את ההקלטות הממתינות שלך",
+    "processingPaused": "העיבוד הושהה. הגעת למגבלה של החודש.",
+    "processingStored": "ההקלטות והתמלילים שלך נשמרו. ההקלטות הממתינות יישארו בהמתנה עד לבחירתך לעבד אותן.",
+    "processingWaiting": "{duration} בהמתנה · עיבוד עכשיו ישתמש בכ־{percent}% מהמכסה החודשית",
+    "processingEstimate": "כ־{hours} שעות עיבוד · {percent}% מהמכסה של החודש.",
+    "processingNewestFirst": "נעבד תחילה את ההקלטות החדשות ביותר עד לגבול המכסה הזמינה. השאר יישארו בהמתנה.",
+    "processingAction": "עיבוד הקלטות ממתינות",
+    "processingProgress": "ההקלטות הממתינות שלך בעיבוד…",
+    "processingDeferred": "ממתין לעיבוד",
+    "processingCount": "{count, plural, =1{שיחה אחת בהמתנה} other{{count} שיחות בהמתנה}}"
 }

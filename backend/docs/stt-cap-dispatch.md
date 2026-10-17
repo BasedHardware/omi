@@ -79,14 +79,15 @@ another provider. A preparing/failed source job still owns its retry; its holds
 cannot race it into STT. Only settlement of every referenced hold completes the
 content ledger. Holds that were never acknowledged await the source job's retry.
 
-The existing `locked_content_recovery` authenticated-request path kicks an async
-recovery pass independently of its once-per-month unlock receipt and legacy reset
-flag. `GET /v1/users/me/subscription` also kicks that same recovery, without
-waiting for it, while dispatch enforcement is on, so opening the app after a
-reset starts transcription of held audio. The flagged API sync router registers the recovery callback; auth-only and
-pusher images do not load the sync pipeline. A distributed 60-second cooldown
-bounds requests; token-fenced renewable leases prevent concurrent processing of
-a hold. At reset or upgrade, current
+Monthly reset and ordinary auth no longer start funded backlog work. Subscription
+reads resume only an already chosen, current-month run. The authenticated
+`POST /v1/users/processing-backlog/process` endpoint requires `Idempotency-Key`;
+a durable receipt prevents duplicate consent even after the original job finishes.
+A choice captures its month, cutoff and estimated remaining allowance. Renewable
+job and hold leases fence concurrent workers. Payment checkout/plan-change intent
+starts recovery only if the whole estimate fits; otherwise the same waiting-choice
+surface is shown. New recordings after reset process normally; older held audio
+and deferred text stay waiting. For every explicitly chosen provider request, current
 funded allowance and the existing hard abuse restrictions must pass again before
 every new recovered provider request. Already persisted receipts can settle at
 the cap without another provider call. Recovery
@@ -180,10 +181,11 @@ cross-process admission race.
   auto-remove synced copies after 30 days, and existing installs keep the setting
   off unless the user opts in. The on-device runner does not transcribe those
   synced copies. Transcribing the waiting backlog on the phone is a follow-up.
-  Waiting recordings are transcribed after the account's limit resets, when the
-  user opens the app: the subscription response kicks the existing fenced recovery.
-  The date is the server's transcription-meter reset (00:00 UTC on the 1st, including
-  legacy Plus, whose Stripe period end is not the minute counter). Live capture
+  At cap the UI says processing is paused. After reset the server returns a
+  waiting choice with estimated allowance hours/percent. Process waiting recordings
+  requires explicit confirmation; Not now leaves them waiting. When the estimate
+  exceeds remaining allowance, the worker processes newest-first up to what fits
+  and leaves the rest waiting. Reset remains 00:00 UTC on the 1st, including legacy Plus. Live capture
   keeps recording while cloud transcription pauses. The first suppressed live
   packet emits a session-scoped `stt_cap_live_held` UI receipt. Its `session_id`,
   `paused` and `held_seconds` fields report only durably published live seconds.
@@ -212,7 +214,7 @@ suppression and sync hold/recovery paths. Ladder allowance comes from units;
 legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds
 the decoded capture before VAD; v2 archives/queues it and holds in the coordinator.
-Reset or upgrade recovery rechecks the current ladder budget before dispatch.
+Explicit-choice or fitting-upgrade recovery rechecks the current ladder budget before dispatch.
 
 Live sessions carry numeric remaining units, debited from accepted provider PCM
 at the pinned provider speech rate (silence is conservatively included). Shared
@@ -376,8 +378,10 @@ rebuild/publish and deletion/retry fences. Afterwards transactional piece-level
 deltas maintain the total. It counts pending frozen-piece seconds, removes successful
 or silent receipts immediately, and retains failed-reconciliation seconds.
 Subscription HTTP serialization omits only an absent `held_audio`, preserving all
-other null fields. A funded user with pending holds receives `state=recovering`;
-clients render “Transcribing your waiting recordings” without a reset promise.
+other null fields. `held_audio` remains an additive compatibility view. The
+`processing_backlog` state is the authority for new clients: capped, waiting_choice,
+processing or none. A funded account with pending holds is waiting_choice until
+explicit consent, or a fitting checkout/plan-change intent, creates a run.
 
 Local migration verification (loopback Firestore only):
 

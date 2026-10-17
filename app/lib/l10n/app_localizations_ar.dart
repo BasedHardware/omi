@@ -14057,4 +14057,43 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'جارٍ تحويل تسجيلاتك المنتظرة إلى نص';
+
+  @override
+  String get processingPaused => 'المعالجة متوقفة مؤقتًا. لقد بلغت حد هذا الشهر.';
+
+  @override
+  String get processingStored => 'تم حفظ تسجيلاتك ونصوصك. ستبقى التسجيلات قيد الانتظار حتى تختار معالجتها.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration قيد الانتظار · المعالجة الآن تستخدم نحو $percent% من حصة هذا الشهر';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'نحو $hours ساعات من المعالجة · $percent% من حصة هذا الشهر.';
+  }
+
+  @override
+  String get processingNewestFirst => 'سنعالج أحدث التسجيلات أولًا ضمن الحصة المتاحة. وسيبقى الباقي قيد الانتظار.';
+
+  @override
+  String get processingAction => 'معالجة التسجيلات المنتظرة';
+
+  @override
+  String get processingProgress => 'جارٍ معالجة تسجيلاتك المنتظرة…';
+
+  @override
+  String get processingDeferred => 'في انتظار المعالجة';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count محادثات قيد الانتظار',
+      one: 'محادثة واحدة قيد الانتظار',
+    );
+    return '$_temp0';
+  }
 }

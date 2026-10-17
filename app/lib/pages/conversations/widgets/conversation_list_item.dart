@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -114,6 +115,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.captureGroup?.revision,
         conversation.summaryRetryable,
         conversation.isLocked,
+        conversation.processingDeferred,
       );
 
   @override
@@ -469,7 +471,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded;
-    final discardedSnippet = discarded ? conversationSnippet(widget.conversation) : '';
+    final discardedSnippet =
+        discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '';
     return Stack(
       children: [
         Column(
@@ -512,6 +515,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
+                      if (widget.conversation.processingDeferred) const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
                       if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),

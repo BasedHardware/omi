@@ -323,6 +323,66 @@ class GeneratedHeldAudioSummary {
   }
 }
 
+class GeneratedProcessingBacklog {
+  final bool budgetExhausted;
+  final int deferredConversations;
+  final int deferredSeconds;
+  final double estimatedHours;
+  final double estimatedPercent;
+  final double estimatedUnits;
+  final bool exceedsRemaining;
+  final int heldAudioCount;
+  final int heldAudioSeconds;
+  final double? remainingUnits;
+  final String state;
+
+  const GeneratedProcessingBacklog({
+    this.budgetExhausted = false,
+    this.deferredConversations = 0,
+    this.deferredSeconds = 0,
+    this.estimatedHours = 0,
+    this.estimatedPercent = 0,
+    this.estimatedUnits = 0,
+    this.exceedsRemaining = false,
+    this.heldAudioCount = 0,
+    this.heldAudioSeconds = 0,
+    this.remainingUnits,
+    required this.state,
+  });
+
+  factory GeneratedProcessingBacklog.fromJson(Map<String, dynamic> json) {
+    return GeneratedProcessingBacklog(
+      budgetExhausted: _required(_readFieldValue<bool>(_readField(json, const ["budget_exhausted"]), "budget_exhausted", _readBool, requiredField: false, nullable: false, defaultValue: false), "budget_exhausted"),
+      deferredConversations: _required(_readFieldValue<int>(_readField(json, const ["deferred_conversations"]), "deferred_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "deferred_conversations"),
+      deferredSeconds: _required(_readFieldValue<int>(_readField(json, const ["deferred_seconds"]), "deferred_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "deferred_seconds"),
+      estimatedHours: _required(_readFieldValue<double>(_readField(json, const ["estimated_hours"]), "estimated_hours", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "estimated_hours"),
+      estimatedPercent: _required(_readFieldValue<double>(_readField(json, const ["estimated_percent"]), "estimated_percent", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "estimated_percent"),
+      estimatedUnits: _required(_readFieldValue<double>(_readField(json, const ["estimated_units"]), "estimated_units", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "estimated_units"),
+      exceedsRemaining: _required(_readFieldValue<bool>(_readField(json, const ["exceeds_remaining"]), "exceeds_remaining", _readBool, requiredField: false, nullable: false, defaultValue: false), "exceeds_remaining"),
+      heldAudioCount: _required(_readFieldValue<int>(_readField(json, const ["held_audio_count"]), "held_audio_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "held_audio_count"),
+      heldAudioSeconds: _required(_readFieldValue<int>(_readField(json, const ["held_audio_seconds"]), "held_audio_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "held_audio_seconds"),
+      remainingUnits: _readFieldValue<double>(_readField(json, const ["remaining_units"]), "remaining_units", _readDouble, requiredField: false, nullable: true),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'budget_exhausted': budgetExhausted,
+      'deferred_conversations': deferredConversations,
+      'deferred_seconds': deferredSeconds,
+      'estimated_hours': estimatedHours,
+      'estimated_percent': estimatedPercent,
+      'estimated_units': estimatedUnits,
+      'exceeds_remaining': exceedsRemaining,
+      'held_audio_count': heldAudioCount,
+      'held_audio_seconds': heldAudioSeconds,
+      'remaining_units': remainingUnits,
+      'state': state,
+    };
+  }
+}
+
 class GeneratedUserSubscriptionResponse {
   final List<GeneratedSubscriptionPlan> availablePlans;
   final bool chatQuotaAllowed;
@@ -335,6 +395,7 @@ class GeneratedUserSubscriptionResponse {
   final int insightsGainedLimit;
   final int insightsGainedUsed;
   final GeneratedPhoneCallQuota? phoneCallQuota;
+  final GeneratedProcessingBacklog? processingBacklog;
   final bool showSubscriptionUi;
   final GeneratedSubscription subscription;
   final GeneratedTranscriptionAllowanceSnapshot? transcriptionAllowance;
@@ -355,6 +416,7 @@ class GeneratedUserSubscriptionResponse {
     required this.insightsGainedLimit,
     required this.insightsGainedUsed,
     this.phoneCallQuota,
+    this.processingBacklog,
     this.showSubscriptionUi = true,
     required this.subscription,
     this.transcriptionAllowance,
@@ -377,6 +439,7 @@ class GeneratedUserSubscriptionResponse {
       insightsGainedLimit: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_limit"]), "insights_gained_limit", _readInt, requiredField: true, nullable: false), "insights_gained_limit"),
       insightsGainedUsed: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_used"]), "insights_gained_used", _readInt, requiredField: true, nullable: false), "insights_gained_used"),
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
+      processingBacklog: _readFieldValue<GeneratedProcessingBacklog>(_readField(json, const ["processing_backlog"]), "processing_backlog", (value) => _readObject(value, GeneratedProcessingBacklog.fromJson), requiredField: false, nullable: true),
       showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
       subscription: _required(_readFieldValue<GeneratedSubscription>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedSubscription.fromJson), requiredField: true, nullable: false), "subscription"),
       transcriptionAllowance: _readFieldValue<GeneratedTranscriptionAllowanceSnapshot>(_readField(json, const ["transcription_allowance"]), "transcription_allowance", (value) => _readObject(value, GeneratedTranscriptionAllowanceSnapshot.fromJson), requiredField: false, nullable: true),
@@ -400,6 +463,7 @@ class GeneratedUserSubscriptionResponse {
       'insights_gained_limit': insightsGainedLimit,
       'insights_gained_used': insightsGainedUsed,
       'phone_call_quota': phoneCallQuota?.toJson(),
+      'processing_backlog': processingBacklog?.toJson(),
       'show_subscription_ui': showSubscriptionUi,
       'subscription': subscription.toJson(),
       'transcription_allowance': transcriptionAllowance?.toJson(),

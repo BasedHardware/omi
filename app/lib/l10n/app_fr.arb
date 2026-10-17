@@ -4355,5 +4355,14 @@
     "heldAudioWaitingOn": "Transcrit après la réinitialisation de votre limite le {date}",
     "heldAudioCardTitle": "{duration} en attente de transcription",
     "heldAudioAndMore": "{count, plural, =1{et 1 de plus} other{et {count} de plus}}",
-    "heldAudioRecovering": "Transcription de vos enregistrements en attente"
+    "heldAudioRecovering": "Transcription de vos enregistrements en attente",
+    "processingPaused": "Traitement en pause. Vous avez atteint la limite de ce mois.",
+    "processingStored": "Vos enregistrements et transcriptions sont sauvegardés. Les enregistrements en attente le resteront jusqu'à ce que vous choisissiez de les traiter.",
+    "processingWaiting": "{duration} en attente · Traiter maintenant utilise environ {percent}% de ce mois",
+    "processingEstimate": "Environ {hours} heures de traitement · {percent}% du quota de ce mois.",
+    "processingNewestFirst": "Nous traiterons d'abord les enregistrements les plus récents, dans la limite du quota disponible. Le reste restera en attente.",
+    "processingAction": "Traiter les enregistrements en attente",
+    "processingProgress": "Traitement de vos enregistrements en attente…",
+    "processingDeferred": "En attente de traitement",
+    "processingCount": "{count, plural, =1{1 conversation en attente} other{{count} conversations en attente}}"
 }

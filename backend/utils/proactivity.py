@@ -1,6 +1,7 @@
 """Server-only composition boundary for v2 producers and delivery."""
 
 from __future__ import annotations
+from utils.generated_compute import generated_compute_allowed
 
 import json
 import logging
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def _admit(uid: str, producer: str) -> None:
+    if not generated_compute_allowed(uid, 'proactive_notification', allow_byok=False):
+        raise ProactivityDenied('usage_budget_exhausted')
     producer_for(producer)
     if not proactivity_flags.enabled(uid):
         raise ProactivityDenied('disabled')

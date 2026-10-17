@@ -14177,4 +14177,45 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Transkrybujemy Twoje oczekujące nagrania';
+
+  @override
+  String get processingPaused => 'Przetwarzanie wstrzymane. Osiągnięto limit na ten miesiąc.';
+
+  @override
+  String get processingStored =>
+      'Twoje nagrania i transkrypcje są zapisane. Oczekujące nagrania pozostaną w kolejce, aż wybierzesz ich przetworzenie.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration oczekuje · Przetworzenie teraz zużyje około $percent% miesięcznego limitu';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Około $hours godzin przetwarzania · $percent% limitu na ten miesiąc.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Najpierw przetworzymy najnowsze nagrania w ramach dostępnego limitu. Pozostałe będą nadal oczekiwać.';
+
+  @override
+  String get processingAction => 'Przetwórz oczekujące nagrania';
+
+  @override
+  String get processingProgress => 'Przetwarzanie oczekujących nagrań…';
+
+  @override
+  String get processingDeferred => 'Oczekuje na przetworzenie';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rozmów oczekuje',
+      one: '1 rozmowa oczekuje',
+    );
+    return '$_temp0';
+  }
 }

@@ -29,6 +29,22 @@ description: "Create and retrieve conversations via the Developer API"
 
 ---
 
+## Saved transcripts awaiting processing
+
+When funded processing is paused at an account's allowance limit, conversation
+creation still preserves the submitted transcript or external text. An additive
+`processing_deferred: true` field identifies a saved conversation waiting for
+cloud summaries, memories, tasks, and app processing. Its completed capture status
+does not imply that those generated results exist. Reading or reopening the
+conversation preserves this waiting state.
+
+A monthly allowance reset admits new recordings while saved waiting recordings
+remain waiting. The user chooses whether to process that backlog in the app,
+after reviewing its estimated allowance use. If it cannot all fit, the newest
+recordings that fit are processed and the remainder stays waiting. An upgrade
+can start backlog processing automatically when the estimate fits the upgraded
+allowance. Transcript retrieval remains available throughout.
+
 ## Get Conversations
 
 <Card title="GET /v1/dev/user/conversations" icon="download" color="#22c55e" horizontal>

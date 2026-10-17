@@ -14183,4 +14183,45 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Расшифровываем ваши ожидающие записи';
+
+  @override
+  String get processingPaused => 'Обработка приостановлена. Вы достигли лимита на этот месяц.';
+
+  @override
+  String get processingStored =>
+      'Ваши записи и расшифровки сохранены. Ожидающие записи останутся в ожидании, пока вы не выберете обработку.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration в ожидании · Обработка сейчас использует около $percent% месячного лимита';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Около $hours часов обработки · $percent% лимита на этот месяц.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Сначала обработаем самые новые записи в пределах доступного лимита. Остальные останутся в ожидании.';
+
+  @override
+  String get processingAction => 'Обработать ожидающие записи';
+
+  @override
+  String get processingProgress => 'Обработка ожидающих записей…';
+
+  @override
+  String get processingDeferred => 'Ожидает обработки';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговоров в ожидании',
+      one: '1 разговор в ожидании',
+    );
+    return '$_temp0';
+  }
 }

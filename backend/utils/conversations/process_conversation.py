@@ -1,3 +1,5 @@
+from utils import funded_processing
+from utils.processing_backlog import defer_estimate
 import os
 import json
 import random
@@ -2408,6 +2410,30 @@ def _is_ingress_create(
 
 # Bound for reject-log provenance only. Schema caps are larger; logs must stay
 # a single line even when the payload never passed validation.
+def _store_budget_waiting(uid, conversation, *, client_projection=None):
+    initial = _is_ingress_create(conversation)
+    estimate = defer_estimate(conversation)
+    # Model-free title only; preserve every transcript and external text field.
+    structured = _build_deferred_structured(conversation)
+    result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
+    _attach_client_projection(result, client_projection)
+    result.processing_deferred = True
+    result.deferred = False
+    result.discarded = False
+    result.status = ConversationStatus.completed
+    result.external_data = {**(result.external_data or {}), 'processing_backlog_estimate': estimate}
+    payload = omit_null_processing_state(strip_client_processing(result.model_dump()))
+    payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    payload['jit_first_open'] = None
+    if initial:
+        if client_projection is not None:
+            payload.update(client_processing_mutation(client_projection))
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+    return result, persisted
+
+
 def _store_deferred_conversation(
     uid: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
@@ -2789,6 +2815,7 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
 
 @spelling_context_run
 @conversation_scope
+@funded_processing.scoped
 def process_conversation(
     uid: str,
     language_code: str,
@@ -2816,6 +2843,7 @@ def process_conversation(
     ``user_kept`` is the stored ``sync_relevance_user_kept`` restore marker,
     which the wire model does not carry; it outranks every relevance tier.
     """
+    backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
     # Snapshot before this call replaces structured or status. Sync intake's
@@ -2875,6 +2903,14 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
+    if funded_processing.enabled():
+        waiting = bool(getattr(conversation, 'processing_deferred', False))
+        if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
+            stored, persisted = _store_budget_waiting(uid, conversation, client_projection=client_projection)
+            report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+            return stored
+        if waiting:
+            conversation.processing_deferred = False
     # The synthetic release-probe identity (dev pusher release lane) is
     # exempt from the desktop deferral gates below so the probe certifies
     # the full terminal desktop path end to end. New desktop gates must
@@ -2920,7 +2956,7 @@ def process_conversation(
     # Flag off leaves the legacy branch below byte-identical.
     # The stale-marker clear below is applied only when this branch actually
     # consulted the policy and continued to process_normally (paid upgrade).
-    clear_stale_terminal_marker = False
+    clear_stale_terminal_marker = backlog_authorized
     if (
         # `uid` is required, not optional: the flag is necessary but never
         # sufficient, and `free_tier_local_processing_enabled(None)` is answered
@@ -2997,6 +3033,7 @@ def process_conversation(
     # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
     elif (
         not force_process
+        and not backlog_authorized
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
@@ -3416,6 +3453,8 @@ def process_conversation(
 
 
 def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], token: str) -> None:
+    if conversation_data.get('processing_deferred') or not funded_processing.processing_allowed(uid):
+        raise RuntimeError('first-open work waiting for funded processing')
     from utils.conversations.jit_first_open_worker import run_first_open_derived_work as run
 
     run(uid, conversation_data, token)

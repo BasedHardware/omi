@@ -11746,5 +11746,14 @@
     "heldAudioWaitingOn": "Transkribuje se nakon što se limit resetuje {date}",
     "heldAudioCardTitle": "{duration} чека на препис",
     "heldAudioAndMore": "{count, plural, =1{i još 1} other{i još {count}}}",
-    "heldAudioRecovering": "Транскрибујемо ваше снимке на чекању"
+    "heldAudioRecovering": "Транскрибујемо ваше снимке на чекању",
+    "processingPaused": "Обрада је паузирана. Достигли сте ограничење за овај месец.",
+    "processingStored": "Ваши снимци и транскрипти су сачувани. Снимци на чекању ће чекати док не изаберете обраду.",
+    "processingWaiting": "{duration} на чекању · Обрада сада користи око {percent}% овог месеца",
+    "processingEstimate": "Око {hours} сати обраде · {percent}% месечне квоте.",
+    "processingNewestFirst": "Прво ћемо обрадити најновије снимке до доступне квоте. Остали остају на чекању.",
+    "processingAction": "Обради снимке на чекању",
+    "processingProgress": "Обрада ваших снимака на чекању…",
+    "processingDeferred": "Чека обраду",
+    "processingCount": "{count, plural, =1{1 разговор на чекању} other{{count} разговора на чекању}}"
 }

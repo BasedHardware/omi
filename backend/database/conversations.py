@@ -1,4 +1,4 @@
-from database import conversation_visibility_counts
+from database import conversation_visibility_counts, processing_backlog
 from utils.conversations import summary_delivery
 import copy
 import hashlib
@@ -1007,12 +1007,16 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            processing_backlog.stage_transition(
+                transaction, uid, conversation_ref.id, existing, write_data, firestore_client=db
+            )
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
         write_data.setdefault('has_photos', False)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        processing_backlog.stage_transition(transaction, uid, conversation_ref.id, {}, write_data, firestore_client=db)
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
@@ -1192,6 +1196,9 @@ def persist_processing_result_with_lifecycle(
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        processing_backlog.stage_transition(
+            transaction, uid, conversation_ref.id, existing, write_data, firestore_client=db
+        )
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1242,7 +1249,20 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     try:
-        conversation_ref.create(conversation_data)
+        if conversation_data.get('processing_deferred'):
+
+            @firestore.transactional
+            def create_waiting(transaction):
+                if conversation_ref.get(transaction=transaction).exists:
+                    raise AlreadyExists('conversation exists')
+                processing_backlog.stage_transition(
+                    transaction, uid, conversation_ref.id, {}, conversation_data, firestore_client=db
+                )
+                transaction.create(conversation_ref, conversation_data)
+
+            run_transactional(db, create_waiting)
+        else:
+            conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):
         # The conversation exists but may be new to the search index (writer
         # lag, backfill gap); the read-back sync converges it either way.
@@ -2185,6 +2205,10 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    from config.stt_cap_dispatch import execution_admission_enabled
+
+    if execution_admission_enabled():
+        processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
     invalidate_people_stats_cache(uid)

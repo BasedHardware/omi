@@ -8893,6 +8893,11 @@
             ],
             "title": "Processing Conversation Id"
           },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
+          },
           "processing_memory_id": {
             "anyOf": [
               {
@@ -9374,6 +9379,11 @@
           "meeting_treatment_eligible": {
             "default": false,
             "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
             "type": "boolean"
           },
           "status": {
@@ -10148,6 +10158,11 @@
               }
             ],
             "title": "Processing Conversation Id"
+          },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
           },
           "processing_memory_id": {
             "anyOf": [
@@ -24752,6 +24767,16 @@
               }
             ]
           },
+          "processing_backlog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingBacklog"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "show_subscription_ui": {
             "default": true,
             "title": "Show Subscription Ui",
@@ -25367,6 +25392,81 @@
           }
         },
         "title": "ProcessConversationRequest",
+        "type": "object"
+      },
+      "ProcessingBacklog": {
+        "properties": {
+          "budget_exhausted": {
+            "default": false,
+            "title": "Budget Exhausted",
+            "type": "boolean"
+          },
+          "deferred_conversations": {
+            "default": 0,
+            "title": "Deferred Conversations",
+            "type": "integer"
+          },
+          "deferred_seconds": {
+            "default": 0,
+            "title": "Deferred Seconds",
+            "type": "integer"
+          },
+          "estimated_hours": {
+            "default": 0,
+            "title": "Estimated Hours",
+            "type": "number"
+          },
+          "estimated_percent": {
+            "default": 0,
+            "title": "Estimated Percent",
+            "type": "number"
+          },
+          "estimated_units": {
+            "default": 0,
+            "title": "Estimated Units",
+            "type": "number"
+          },
+          "exceeds_remaining": {
+            "default": false,
+            "title": "Exceeds Remaining",
+            "type": "boolean"
+          },
+          "held_audio_count": {
+            "default": 0,
+            "title": "Held Audio Count",
+            "type": "integer"
+          },
+          "held_audio_seconds": {
+            "default": 0,
+            "title": "Held Audio Seconds",
+            "type": "integer"
+          },
+          "remaining_units": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Units"
+          },
+          "state": {
+            "enum": [
+              "capped",
+              "waiting_choice",
+              "processing",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ProcessingBacklog",
         "type": "object"
       },
       "ProductMemorySearchItem": {
@@ -36677,6 +36777,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processing_backlog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingBacklog"
               },
               {
                 "type": "null"
@@ -76310,6 +76420,94 @@
           }
         ],
         "summary": "Set Private Cloud Sync",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/processing-backlog/process": {
+      "post": {
+        "operationId": "process_waiting_recordings_v1_users_processing_backlog_process_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessingBacklog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Process Waiting Recordings",
         "tags": [
           "v1"
         ]

@@ -17,7 +17,8 @@ def account(uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any 
     if subscription is _UNRESOLVED:
         from database import users as users_db
 
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=False)
+        kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
+        subscription = users_db.get_user_valid_subscription(uid, provision=False, **kwargs)
     return policy.entitlements(subscription)
 
 
@@ -54,10 +55,17 @@ def budget_snapshot(
 ):
     if not policy.budget_enforcement_enabled():
         return None
-    kwargs = {'session_cache': session_cache} if session_cache is not None else {}
     # Historical coverage gaps are our metering uncertainty, never a reason to
     # deny a subscriber. The projection prices each ambiguous quantity once.
-    snapshot = usage_snapshot(uid, subscription, firestore_client=firestore_client, **kwargs)
+    if session_cache is None:
+        # Share the same bounded UID/client sessions as pipeline admission.
+        # Keep imports behind the flag-off return; these readers own no IO at import.
+        from database.funded_usage_session import budget_session
+
+        with budget_session(uid, firestore_client=firestore_client) as session:
+            snapshot = usage_snapshot(uid, subscription, firestore_client=firestore_client, session_cache=session.units)
+    else:
+        snapshot = usage_snapshot(uid, subscription, firestore_client=firestore_client, session_cache=session_cache)
     coverage = (snapshot or {}).get('completeness', {})
     if any(
         coverage.get(key, 0) > 0

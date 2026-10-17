@@ -14165,4 +14165,45 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Tiek transkribēti jūsu gaidošie ieraksti';
+
+  @override
+  String get processingPaused => 'Apstrāde apturēta. Sasniegts šī mēneša limits.';
+
+  @override
+  String get processingStored =>
+      'Jūsu ieraksti un atšifrējumi ir saglabāti. Gaidošie ieraksti gaidīs, līdz izvēlēsieties tos apstrādāt.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration gaida · Apstrāde tagad izmantos aptuveni $percent% no mēneša limita';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Aptuveni $hours stundas apstrādes · $percent% no šī mēneša limita.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Vispirms apstrādāsim jaunākos ierakstus līdz pieejamajam limitam. Pārējie turpinās gaidīt.';
+
+  @override
+  String get processingAction => 'Apstrādāt gaidošos ierakstus';
+
+  @override
+  String get processingProgress => 'Notiek gaidošo ierakstu apstrāde…';
+
+  @override
+  String get processingDeferred => 'Gaida apstrādi';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sarunas gaida',
+      one: '1 saruna gaida',
+    );
+    return '$_temp0';
+  }
 }

@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Ditranskripsi selepas had ditetapkan semula pada {date}",
     "heldAudioCardTitle": "{duration} menunggu transkripsi",
     "heldAudioAndMore": "{count, plural, =1{dan 1 lagi} other{dan {count} lagi}}",
-    "heldAudioRecovering": "Mentranskripsikan rakaman anda yang menunggu"
+    "heldAudioRecovering": "Mentranskripsikan rakaman anda yang menunggu",
+    "processingPaused": "Pemprosesan dijeda. Anda telah mencapai had bulan ini.",
+    "processingStored": "Rakaman dan transkrip anda disimpan. Rakaman yang menunggu akan terus menunggu sehingga anda memilih untuk memprosesnya.",
+    "processingWaiting": "{duration} menunggu · Proses sekarang menggunakan kira-kira {percent}% kuota bulan ini",
+    "processingEstimate": "Kira-kira {hours} jam pemprosesan · {percent}% kuota bulan ini.",
+    "processingNewestFirst": "Kami akan memproses rakaman terkini dahulu mengikut kuota yang tersedia. Selebihnya akan terus menunggu.",
+    "processingAction": "Proses rakaman yang menunggu",
+    "processingProgress": "Memproses rakaman anda yang menunggu…",
+    "processingDeferred": "Menunggu pemprosesan",
+    "processingCount": "{count, plural, =1{1 perbualan menunggu} other{{count} perbualan menunggu}}"
 }

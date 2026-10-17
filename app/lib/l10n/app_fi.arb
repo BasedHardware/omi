@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Litteroidaan, kun rajasi nollautuu {date}",
     "heldAudioCardTitle": "{duration} odottaa litterointia",
     "heldAudioAndMore": "{count, plural, =1{ja 1 muu} other{ja {count} muuta}}",
-    "heldAudioRecovering": "Odotuksella olevia tallenteitasi litteroidaan"
+    "heldAudioRecovering": "Odotuksella olevia tallenteitasi litteroidaan",
+    "processingPaused": "Käsittely keskeytetty. Olet saavuttanut tämän kuun rajan.",
+    "processingStored": "Tallenteesi ja litterointisi on tallennettu. Odottavat tallenteet pysyvät odottamassa, kunnes valitset niiden käsittelyn.",
+    "processingWaiting": "{duration} odottaa · Käsittely nyt käyttää noin {percent}% tämän kuun kiintiöstä",
+    "processingEstimate": "Noin {hours} tuntia käsittelyä · {percent}% tämän kuun kiintiöstä.",
+    "processingNewestFirst": "Käsittelemme uusimmat tallenteet ensin käytettävissä olevan kiintiön rajoissa. Loput jäävät odottamaan.",
+    "processingAction": "Käsittele odottavat tallenteet",
+    "processingProgress": "Käsitellään odottavia tallenteitasi…",
+    "processingDeferred": "Odottaa käsittelyä",
+    "processingCount": "{count, plural, =1{1 keskustelu odottaa} other{{count} keskustelua odottaa}}"
 }

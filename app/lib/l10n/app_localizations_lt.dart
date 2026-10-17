@@ -14159,4 +14159,44 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Transkribuojami jūsų laukiantys įrašai';
+
+  @override
+  String get processingPaused => 'Apdorojimas pristabdytas. Pasiekėte šio mėnesio limitą.';
+
+  @override
+  String get processingStored =>
+      'Jūsų įrašai ir išklotinės išsaugoti. Laukiantys įrašai lauks, kol pasirinksite juos apdoroti.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration laukia · Apdoroti dabar naudoja apie $percent% šio mėnesio limito';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Apie $hours val. apdorojimo · $percent% šio mėnesio limito.';
+  }
+
+  @override
+  String get processingNewestFirst => 'Pirmiausia apdorosime naujausius įrašus pagal likusį limitą. Kiti liks laukti.';
+
+  @override
+  String get processingAction => 'Apdoroti laukiančius įrašus';
+
+  @override
+  String get processingProgress => 'Apdorojami laukiantys įrašai…';
+
+  @override
+  String get processingDeferred => 'Laukia apdorojimo';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pokalbių laukia',
+      one: '1 pokalbis laukia',
+    );
+    return '$_temp0';
+  }
 }

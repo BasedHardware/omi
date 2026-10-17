@@ -14140,4 +14140,45 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Odotuksella olevia tallenteitasi litteroidaan';
+
+  @override
+  String get processingPaused => 'Käsittely keskeytetty. Olet saavuttanut tämän kuun rajan.';
+
+  @override
+  String get processingStored =>
+      'Tallenteesi ja litterointisi on tallennettu. Odottavat tallenteet pysyvät odottamassa, kunnes valitset niiden käsittelyn.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration odottaa · Käsittely nyt käyttää noin $percent% tämän kuun kiintiöstä';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Noin $hours tuntia käsittelyä · $percent% tämän kuun kiintiöstä.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Käsittelemme uusimmat tallenteet ensin käytettävissä olevan kiintiön rajoissa. Loput jäävät odottamaan.';
+
+  @override
+  String get processingAction => 'Käsittele odottavat tallenteet';
+
+  @override
+  String get processingProgress => 'Käsitellään odottavia tallenteitasi…';
+
+  @override
+  String get processingDeferred => 'Odottaa käsittelyä';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua odottaa',
+      one: '1 keskustelu odottaa',
+    );
+    return '$_temp0';
+  }
 }

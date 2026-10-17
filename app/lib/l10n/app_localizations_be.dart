@@ -14170,4 +14170,45 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Транскрыбуем вашы запісы ў чаканні';
+
+  @override
+  String get processingPaused => 'Апрацоўка прыпынена. Вы дасягнулі ліміту на гэты месяц.';
+
+  @override
+  String get processingStored =>
+      'Вашы запісы і расшыфроўкі захаваны. Запісы будуць чакаць, пакуль вы не выбераце іх апрацоўку.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration у чаканні · Апрацаваць зараз — каля $percent% месячнага ліміту';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Каля $hours гадзін апрацоўкі · $percent% ліміту на гэты месяц.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Спачатку апрацуем найноўшыя запісы ў межах даступнага ліміту. Астатнія будуць чакаць.';
+
+  @override
+  String get processingAction => 'Апрацаваць запісы ў чаканні';
+
+  @override
+  String get processingProgress => 'Апрацоўваем запісы ў чаканні…';
+
+  @override
+  String get processingDeferred => 'Чакае апрацоўкі';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count размоў у чаканні',
+      one: '1 размова ў чаканні',
+    );
+    return '$_temp0';
+  }
 }

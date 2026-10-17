@@ -17190,5 +17190,41 @@
             }
         }
     },
-    "heldAudioRecovering": "Transcribing your waiting recordings"
+    "heldAudioRecovering": "Transcribing your waiting recordings",
+    "processingPaused": "Processing paused. You've reached this month's limit.",
+    "processingStored": "Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.",
+    "processingWaiting": "{duration} waiting · Process now uses about {percent}% of this month",
+    "@processingWaiting": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            },
+            "percent": {
+                "type": "String"
+            }
+        }
+    },
+    "processingEstimate": "About {hours} hours of processing · {percent}% of this month's allowance.",
+    "@processingEstimate": {
+        "placeholders": {
+            "hours": {
+                "type": "String"
+            },
+            "percent": {
+                "type": "String"
+            }
+        }
+    },
+    "processingNewestFirst": "We'll process the newest recordings first, up to what fits. The rest will stay waiting.",
+    "processingAction": "Process waiting recordings",
+    "processingProgress": "Processing your waiting recordings…",
+    "processingDeferred": "Waiting for processing",
+    "processingCount": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
+    "@processingCount": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    }
 }

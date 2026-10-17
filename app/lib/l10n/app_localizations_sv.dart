@@ -14142,4 +14142,45 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Transkriberar dina väntande inspelningar';
+
+  @override
+  String get processingPaused => 'Bearbetningen är pausad. Du har nått månadens gräns.';
+
+  @override
+  String get processingStored =>
+      'Dina inspelningar och transkriptioner är sparade. Väntande inspelningar väntar tills du väljer att bearbeta dem.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration väntar · Bearbetning nu använder cirka $percent% av denna månad';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Cirka $hours timmars bearbetning · $percent% av månadens kvot.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Vi bearbetar de senaste inspelningarna först, så långt kvoten räcker. Resten fortsätter att vänta.';
+
+  @override
+  String get processingAction => 'Bearbeta väntande inspelningar';
+
+  @override
+  String get processingProgress => 'Bearbetar dina väntande inspelningar…';
+
+  @override
+  String get processingDeferred => 'Väntar på bearbetning';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtal väntar',
+      one: '1 samtal väntar',
+    );
+    return '$_temp0';
+  }
 }

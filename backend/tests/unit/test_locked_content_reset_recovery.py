@@ -298,7 +298,7 @@ def test_initial_enablement_drains_backlog_midmonth(env):
 
 
 @pytest.mark.parametrize('dispatch', [False, True])
-def test_cap_audio_recovery_is_kicked_even_with_legacy_reset_flag_off(env, monkeypatch, dispatch):
+def test_monthly_reset_never_kicks_cap_audio_recovery(env, monkeypatch, dispatch):
     from unittest.mock import Mock
 
     fake = ModuleType('utils.sync.cap_hold_recovery')
@@ -309,5 +309,5 @@ def test_cap_audio_recovery_is_kicked_even_with_legacy_reset_flag_off(env, monke
     env.module.register_cap_audio_recovery(fake.kick)
     env.module.recover_locked_content('test-user', now=NOW)
     env.module.recover_locked_content('test-user', now=NOW)
-    assert fake.kick.call_count == 2
+    fake.kick.assert_not_called()
     env.state.get.assert_not_called()

@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "ถอดความหลังจากขีดจำกัดรีเซ็ตในวันที่ {date}",
     "heldAudioCardTitle": "{duration} รอการถอดเสียง",
     "heldAudioAndMore": "{count, plural, =1{และอีก 1 รายการ} other{และอีก {count} รายการ}}",
-    "heldAudioRecovering": "กำลังถอดเสียงการบันทึกที่รออยู่ของคุณ"
+    "heldAudioRecovering": "กำลังถอดเสียงการบันทึกที่รออยู่ของคุณ",
+    "processingPaused": "หยุดประมวลผลชั่วคราว คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว",
+    "processingStored": "บันทึกเสียงและข้อความถอดเสียงของคุณถูกบันทึกไว้ บันทึกที่รออยู่จะยังรอจนกว่าคุณจะเลือกประมวลผล",
+    "processingWaiting": "รออยู่ {duration} · ประมวลผลตอนนี้ใช้ประมาณ {percent}% ของเดือนนี้",
+    "processingEstimate": "ประมวลผลประมาณ {hours} ชั่วโมง · {percent}% ของโควตาเดือนนี้",
+    "processingNewestFirst": "เราจะประมวลผลบันทึกใหม่ล่าสุดก่อนตามโควตาที่เหลือ ส่วนที่เหลือจะยังรออยู่",
+    "processingAction": "ประมวลผลบันทึกที่รออยู่",
+    "processingProgress": "กำลังประมวลผลบันทึกที่รออยู่…",
+    "processingDeferred": "รอประมวลผล",
+    "processingCount": "{count, plural, =1{1 การสนทนารออยู่} other{{count} การสนทนารออยู่}}"
 }

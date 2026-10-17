@@ -711,7 +711,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       void updateEntitlement() {
         final held = onDevice.isActive ? usage.subscription?.heldAudio : null;
         onDevice.updateEntitlement(
-          atCap: usage.isOutOfCredits || (held?.retainLive ?? false),
+          atCap: usage.isOutOfCredits || (usage.subscription?.processingBacklog?.isCapped ?? held?.retainLive ?? false),
           paid: usage.subscription?.subscription.plan.isPaid ?? false,
         );
       }
@@ -730,14 +730,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         final sync = ServiceManager.instance().wal.getSyncs().phone;
         if (sync is LocalWalSyncImpl) {
           _onDeviceRunner = OnDeviceRunner(
-              sync: sync,
-              controller: onDevice,
-              publish: (row) {
-                if (!mounted) return;
-                context.read<ConversationProvider>().upsertConversation(row);
-                unawaited(context.read<LocalRecordingsProvider>().refresh());
-              },
-              recordings: () => context.read<LocalRecordingsProvider>().recordings);
+            sync: sync,
+            controller: onDevice,
+            publish: (row) {
+              if (!mounted) return;
+              context.read<ConversationProvider>().upsertConversation(row);
+              unawaited(context.read<LocalRecordingsProvider>().refresh());
+            },
+            recordings: () => context.read<LocalRecordingsProvider>().recordings,
+          );
           unawaited(_onDeviceRunner!.start());
         }
       });

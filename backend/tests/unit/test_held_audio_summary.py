@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from models.users import HeldAudioSummary
-from utils.sync import cap_hold
+from utils.sync import cap_hold, cap_hold_recovery
 from utils.sync import held_audio_summary as summary
 
 
@@ -121,14 +121,14 @@ def test_plus_anniversary_is_not_the_minute_counter_reset():
     assert summary.plan_reset_at(plus, now) == int(datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp())
 
 
-def test_subscription_open_kicks_recovery_only_when_dispatch_is_on(monkeypatch):
+def test_subscription_open_never_creates_recovery_intent(monkeypatch):
     kicked = []
     monkeypatch.setattr(summary, 'enabled', lambda: False)
 
     def kick(uid):
         kicked.append(uid)
 
-    monkeypatch.setattr(summary, '_kick_held_recovery', kick)
+    monkeypatch.setattr(cap_hold_recovery, 'kick', kick)
     response = SimpleNamespace()
     summary.attach_subscription_held_audio(response, 'synthetic', SimpleNamespace(managed=False))
     assert kicked == []
@@ -138,7 +138,7 @@ def test_subscription_open_kicks_recovery_only_when_dispatch_is_on(monkeypatch):
     monkeypatch.setattr(summary, '_load_summary', lambda uid: {'seconds': 5, 'count': 1})
     monkeypatch.setattr(summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 9, 'seconds': 5}])
     summary.attach_subscription_held_audio(response, 'synthetic', SimpleNamespace(managed=False))
-    assert kicked == ['synthetic']
+    assert kicked == []
     assert response.held_audio.seconds == 5
 
 

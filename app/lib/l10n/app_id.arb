@@ -4355,5 +4355,14 @@
     "heldAudioWaitingOn": "Ditranskripsi setelah batas direset pada {date}",
     "heldAudioCardTitle": "{duration} menunggu ditranskripsi",
     "heldAudioAndMore": "{count, plural, =1{dan 1 lainnya} other{dan {count} lainnya}}",
-    "heldAudioRecovering": "Mentranskripsikan rekaman Anda yang menunggu"
+    "heldAudioRecovering": "Mentranskripsikan rekaman Anda yang menunggu",
+    "processingPaused": "Pemrosesan dijeda. Anda telah mencapai batas bulan ini.",
+    "processingStored": "Rekaman dan transkrip Anda disimpan. Rekaman yang menunggu akan tetap menunggu hingga Anda memilih untuk memprosesnya.",
+    "processingWaiting": "{duration} menunggu · Proses sekarang memakai sekitar {percent}% jatah bulan ini",
+    "processingEstimate": "Sekitar {hours} jam pemrosesan · {percent}% jatah bulan ini.",
+    "processingNewestFirst": "Kami akan memproses rekaman terbaru terlebih dahulu sesuai sisa jatah. Sisanya akan tetap menunggu.",
+    "processingAction": "Proses rekaman yang menunggu",
+    "processingProgress": "Memproses rekaman Anda yang menunggu…",
+    "processingDeferred": "Menunggu pemrosesan",
+    "processingCount": "{count, plural, =1{1 percakapan menunggu} other{{count} percakapan menunggu}}"
 }

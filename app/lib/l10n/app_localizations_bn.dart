@@ -14130,4 +14130,45 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'আপনার অপেক্ষমাণ রেকর্ডিংগুলো প্রতিলিপি করা হচ্ছে';
+
+  @override
+  String get processingPaused => 'প্রক্রিয়াকরণ থামানো হয়েছে। আপনি এই মাসের সীমায় পৌঁছেছেন।';
+
+  @override
+  String get processingStored =>
+      'আপনার রেকর্ডিং ও প্রতিলিপি সংরক্ষিত আছে। আপনি প্রক্রিয়া করার সিদ্ধান্ত না নেওয়া পর্যন্ত অপেক্ষমাণ রেকর্ডিং অপেক্ষায় থাকবে।';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration অপেক্ষমাণ · এখন প্রক্রিয়া করলে এই মাসের প্রায় $percent% ব্যবহার হবে';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'প্রায় $hours ঘণ্টার প্রক্রিয়াকরণ · এই মাসের বরাদ্দের $percent%।';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'আমরা উপলব্ধ সীমার মধ্যে নতুন রেকর্ডিংগুলো আগে প্রক্রিয়া করব। বাকিগুলো অপেক্ষায় থাকবে।';
+
+  @override
+  String get processingAction => 'অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করুন';
+
+  @override
+  String get processingProgress => 'আপনার অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করা হচ্ছে…';
+
+  @override
+  String get processingDeferred => 'প্রক্রিয়াকরণের অপেক্ষায়';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি কথোপকথন অপেক্ষমাণ',
+      one: '১টি কথোপকথন অপেক্ষমাণ',
+    );
+    return '$_temp0';
+  }
 }

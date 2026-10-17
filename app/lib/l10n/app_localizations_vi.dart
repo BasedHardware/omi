@@ -14135,4 +14135,45 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Đang chuyển các bản ghi đang chờ của bạn thành văn bản';
+
+  @override
+  String get processingPaused => 'Đã tạm dừng xử lý. Bạn đã đạt giới hạn tháng này.';
+
+  @override
+  String get processingStored =>
+      'Bản ghi âm và bản chép lời của bạn đã được lưu. Các bản ghi đang chờ sẽ tiếp tục chờ cho đến khi bạn chọn xử lý.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration đang chờ · Xử lý ngay dùng khoảng $percent% hạn mức tháng này';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Khoảng $hours giờ xử lý · $percent% hạn mức tháng này.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Chúng tôi sẽ xử lý các bản ghi mới nhất trước, trong hạn mức còn lại. Phần còn lại sẽ tiếp tục chờ.';
+
+  @override
+  String get processingAction => 'Xử lý bản ghi đang chờ';
+
+  @override
+  String get processingProgress => 'Đang xử lý các bản ghi đang chờ của bạn…';
+
+  @override
+  String get processingDeferred => 'Đang chờ xử lý';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuộc trò chuyện đang chờ',
+      one: '1 cuộc trò chuyện đang chờ',
+    );
+    return '$_temp0';
+  }
 }

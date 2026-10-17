@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Transkriberes etter at grensen nullstilles {date}",
     "heldAudioCardTitle": "{duration} venter på transkribering",
     "heldAudioAndMore": "{count, plural, =1{og 1 til} other{og {count} til}}",
-    "heldAudioRecovering": "Transkriberer opptakene dine som venter"
+    "heldAudioRecovering": "Transkriberer opptakene dine som venter",
+    "processingPaused": "Behandlingen er satt på pause. Du har nådd denne månedens grense.",
+    "processingStored": "Opptakene og transkripsjonene dine er lagret. Ventende opptak venter til du velger å behandle dem.",
+    "processingWaiting": "{duration} venter · Behandling nå bruker omtrent {percent}% av denne måneden",
+    "processingEstimate": "Omtrent {hours} timer behandling · {percent}% av månedens kvote.",
+    "processingNewestFirst": "Vi behandler de nyeste opptakene først, så langt kvoten rekker. Resten vil fortsatt vente.",
+    "processingAction": "Behandle ventende opptak",
+    "processingProgress": "Behandler ventende opptak…",
+    "processingDeferred": "Venter på behandling",
+    "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}"
 }

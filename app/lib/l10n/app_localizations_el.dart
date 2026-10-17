@@ -14228,4 +14228,45 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get heldAudioRecovering => 'Γίνεται απομαγνητοφώνηση των εγγραφών σας σε αναμονή';
+
+  @override
+  String get processingPaused => 'Η επεξεργασία διακόπηκε. Φτάσατε το όριο αυτού του μήνα.';
+
+  @override
+  String get processingStored =>
+      'Οι εγγραφές και οι απομαγνητοφωνήσεις σας αποθηκεύτηκαν. Οι εγγραφές σε αναμονή θα περιμένουν μέχρι να επιλέξετε την επεξεργασία τους.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration σε αναμονή · Η επεξεργασία τώρα χρησιμοποιεί περίπου $percent% του μήνα';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Περίπου $hours ώρες επεξεργασίας · $percent% του μηνιαίου ορίου.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Θα επεξεργαστούμε πρώτα τις νεότερες εγγραφές μέχρι το διαθέσιμο όριο. Οι υπόλοιπες θα παραμείνουν σε αναμονή.';
+
+  @override
+  String get processingAction => 'Επεξεργασία εγγραφών σε αναμονή';
+
+  @override
+  String get processingProgress => 'Γίνεται επεξεργασία των εγγραφών σε αναμονή…';
+
+  @override
+  String get processingDeferred => 'Σε αναμονή επεξεργασίας';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες σε αναμονή',
+      one: '1 συνομιλία σε αναμονή',
+    );
+    return '$_temp0';
+  }
 }

@@ -4320,5 +4320,14 @@
     "heldAudioWaitingOn": "Транскрибира се, след като лимитът се нулира на {date}",
     "heldAudioCardTitle": "{duration} чакат транскрибиране",
     "heldAudioAndMore": "{count, plural, =1{и още 1} other{и още {count}}}",
-    "heldAudioRecovering": "Транскрибираме чакащите ви записи"
+    "heldAudioRecovering": "Транскрибираме чакащите ви записи",
+    "processingPaused": "Обработката е на пауза. Достигнахте лимита за този месец.",
+    "processingStored": "Записите и транскрипциите ви са запазени. Чакащите записи ще останат така, докато изберете да ги обработите.",
+    "processingWaiting": "{duration} чакат · Обработката сега използва около {percent}% от месечния лимит",
+    "processingEstimate": "Около {hours} часа обработка · {percent}% от лимита за този месец.",
+    "processingNewestFirst": "Ще обработим първо най-новите записи до наличния лимит. Останалите ще продължат да чакат.",
+    "processingAction": "Обработване на чакащите записи",
+    "processingProgress": "Обработване на чакащите ви записи…",
+    "processingDeferred": "Чака обработка",
+    "processingCount": "{count, plural, =1{1 чакащ разговор} other{{count} чакащи разговора}}"
 }
