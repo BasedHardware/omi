@@ -112,3 +112,7 @@ def recovery_enabled_for(owner_id: str) -> bool:
 def empty_asr_disposition_enabled() -> bool:
     """Dark strict-VAD disposition; accepted paid intents are never reset."""
     return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def projection_contention_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
