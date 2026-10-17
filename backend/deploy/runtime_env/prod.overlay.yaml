@@ -832,7 +832,7 @@ overlay:
           FREE_TIER_LOCAL_PROCESSING_COHORT:
             value: ''
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            value: 'true'
+            value: 'false'
             category: rollout
           SYNC_REPROCESS_COALESCE_ENABLED:
             value: 'true'
@@ -1193,7 +1193,7 @@ overlay:
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            value: 'true'
+            value: 'false'
             category: rollout
           SYNC_REPROCESS_COALESCE_ENABLED:
             value: 'true'
