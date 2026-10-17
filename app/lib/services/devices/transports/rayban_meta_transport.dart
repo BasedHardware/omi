@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/rayban_meta_bridge.dart';
+import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
@@ -15,7 +17,8 @@ import 'device_transport.dart';
 /// layer speaks, mirroring WatchTransport.
 class RayBanMetaTransport extends DeviceTransport {
   final String _deviceId;
-  final RayBanMetaHostAPI _hostAPI = RayBanMetaHostAPI();
+  final String? deviceName;
+  final RayBanMetaHostAPI _hostAPI;
   final StreamController<DeviceTransportState> _connectionStateController;
   final Map<String, StreamController<List<int>>> _streamControllers = {};
 
@@ -29,8 +32,9 @@ class RayBanMetaTransport extends DeviceTransport {
   static bool _lastGlassesRouteActive = false;
   static String _lastCameraState = 'stopped';
 
-  RayBanMetaTransport(this._deviceId)
-      : _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
+  RayBanMetaTransport(this._deviceId, {this.deviceName, RayBanMetaHostAPI? hostAPI})
+      : _hostAPI = hostAPI ?? RayBanMetaHostAPI(),
+        _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
     _ensureBridgeSetup();
     _instances.add(this);
   }
@@ -265,7 +269,23 @@ class RayBanMetaTransport extends DeviceTransport {
   Future<void> startAudioCapture() async {
     try {
       final mode = await _hostAPI.getAvailabilityMode();
-      await _hostAPI.startAudioCapture(mode == 'audio_only' ? _deviceId : null);
+      String? targetUid;
+      if (mode == 'audio_only') {
+        targetUid = _deviceId;
+      } else {
+        final inputs = await _hostAPI.getBluetoothHfpInputs();
+        final match = inputs.firstWhereOrNull((input) {
+          if (deviceName != null && deviceName!.isNotEmpty && input.name.toLowerCase() == deviceName!.toLowerCase()) {
+            return true;
+          }
+          return RayBanMetaDiscoverer.looksLikeMetaGlasses(input.name);
+        });
+        if (match == null) {
+          throw StateError('Ray-Ban Meta microphone is unavailable');
+        }
+        targetUid = match.uid;
+      }
+      await _hostAPI.startAudioCapture(targetUid);
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error starting audio capture: $e');
       rethrow;
