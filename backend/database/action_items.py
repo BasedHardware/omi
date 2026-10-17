@@ -1305,6 +1305,7 @@ def retire_action_items_for_conversation(
                 'completed': False,
                 'completed_at': None,
                 'superseded_by': replacement_id,
+                'sync_requested': False,
                 'updated_at': now,
             },
         )
@@ -1370,7 +1371,7 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     pending_export: List[Dict[str, Any]] = []
     for doc in pending_docs:
         data: Dict[str, Any] = typed_doc(doc)
-        if data.get('exported') is True:
+        if data.get('deleted') or data.get('exported') is True:
             continue
         data['id'] = doc.id
         pending_export.append(prepare_action_item_for_read(data))
@@ -1386,6 +1387,8 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     synced_items: List[Dict[str, Any]] = []
     for doc in synced_docs:
         data = typed_doc(doc)
+        if data.get('deleted'):
+            continue
         data['id'] = doc.id
         synced_items.append(prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
