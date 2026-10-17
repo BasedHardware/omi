@@ -21,6 +21,56 @@ from utils.conversation_continuity import (
 
 logger = logging.getLogger(__name__)
 
+# A Firestore document id is a path segment: a '/' (or a NUL) in a caller-supplied
+# identifier silently retargets the write, so identifiers are bounded and rejected.
+IDENTIFIER_MAX_LENGTH = 256
+DEFAULT_CONTINUATION_TIMEOUT = 300
+MIN_CONTINUATION_TIMEOUT = 1
+MAX_CONTINUATION_TIMEOUT = 24 * 60 * 60
+
+
+def _clean_identifier(value: Any, field: str) -> str | None:
+    """Return a usable Firestore document id, or ``None`` when the value is not one."""
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned or len(cleaned) > IDENTIFIER_MAX_LENGTH:
+        return None
+    if any(bad in cleaned for bad in ('/', '\\', '\x00')):
+        return None
+    return cleaned
+
+
+def _clean_timeout(value: Any) -> int:
+    """Clamp a caller-supplied continuation timeout to a sane window."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return DEFAULT_CONTINUATION_TIMEOUT
+    return max(MIN_CONTINUATION_TIMEOUT, min(int(value), MAX_CONTINUATION_TIMEOUT))
+
+
+def _elapsed_seconds(now: datetime, then: datetime) -> float:
+    """Seconds from ``then`` to ``now``, aligning naive and aware values.
+
+    Firestore hands back offset-naive datetimes while callers pass aware ones, and
+    subtracting the two raises ``TypeError``. A naive value is read as UTC.
+    """
+    if now.tzinfo is None and then.tzinfo is not None:
+        now = now.replace(tzinfo=then.tzinfo)
+    elif now.tzinfo is not None and then.tzinfo is None:
+        then = then.replace(tzinfo=now.tzinfo)
+    return (now - then).total_seconds()
+
+
+def _clean_proposal(proposed: Any) -> dict[str, str] | None:
+    """Validate a proposed continuation binding before it can be adopted."""
+    if not isinstance(proposed, Mapping):
+        return None
+    conversation_id = _clean_identifier(proposed.get('conversation_id'), 'conversation id')
+    recording_session_id = _clean_identifier(proposed.get('recording_session_id'), 'recording session id')
+    if conversation_id is None or recording_session_id is None:
+        return None
+    return {'conversation_id': conversation_id, 'recording_session_id': recording_session_id}
+
 
 def _read_calendar_window(uid: str, row: Mapping[str, Any], client: Any, transaction: Any = None) -> Mapping[str, Any]:
     identity = calendar_continuity_identity(row)
@@ -59,12 +109,15 @@ def calendar_continuity_row(
     identity = calendar_continuity_identity(row)
     if identity is None:
         return row
+    clean_uid = _clean_identifier(uid, 'uid')
+    if clean_uid is None:
+        return row
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()
         cid = row.get('id')
         if transaction is not None or not isinstance(cid, str) or not cid:
-            return _read_calendar_window(uid, row, client, transaction)
-        ref = client.collection('users').document(uid).collection('conversations').document(cid)
+            return _read_calendar_window(clean_uid, row, client, transaction)
+        ref = client.collection('users').document(clean_uid).collection('conversations').document(cid)
 
         @firestore.transactional
         def cache(transaction: Any) -> Mapping[str, Any]:
@@ -76,7 +129,7 @@ def calendar_continuity_row(
                 # A previous poll may already have cached this window, or a
                 # concurrent owner may have changed the event. Use fresh metadata.
                 return {**row, 'external_data': current.get('external_data')}
-            hydrated = _read_calendar_window(uid, current, client, transaction)
+            hydrated = _read_calendar_window(clean_uid, current, client, transaction)
             if hydrated is not current:
                 transaction.update(ref, {'external_data': hydrated['external_data']})
                 return {**row, 'external_data': hydrated['external_data']}
@@ -114,63 +167,90 @@ def resolve_live_continuation(
     lifecycle owner cleans up an unexposed losing proposal through fenced deletion.
     No transcript is read, decoded, or rewritten here.
     """
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    user = client.collection('users').document(uid)
-    root = user.collection('recording_sessions').document(origin_id)
+    clean_uid = _clean_identifier(uid, 'uid')
+    clean_origin_id = _clean_identifier(origin_id, 'origin_id')
+    clean_source = _clean_identifier(source, 'source')
+    clean_device_id = _clean_identifier(device_id, 'device_id') if device_id is not None else None
+    if clean_uid is None or clean_origin_id is None or clean_source is None:
+        return None, None
+    bounded_timeout = _clean_timeout(timeout)
+    clean_proposal = _clean_proposal(proposed)
 
-    @firestore.transactional
-    def resolve(transaction: Any) -> tuple[dict[str, str] | None, dict[str, str] | None]:
-        cache_updates: list[tuple[Any, Mapping[str, Any]]] = []
+    try:
+        client = firestore_client if firestore_client is not None else get_firestore_client()
+        user = client.collection('users').document(clean_uid)
+        root = user.collection('recording_sessions').document(clean_origin_id)
 
-        def hydrate(ref: Any, row: Mapping[str, Any]) -> Mapping[str, Any]:
-            hydrated = calendar_continuity_row(uid, row, firestore_client=client, transaction=transaction)
-            if hydrated is not row:
-                cache_updates.append((ref, hydrated['external_data']))
-            return hydrated
+        @firestore.transactional
+        def resolve(transaction: Any) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+            cache_updates: list[tuple[Any, Mapping[str, Any]]] = []
 
-        try:
-            original = root.get(transaction=transaction).to_dict() or {}
-            if original.get('uid') != uid or original.get('recording_session_id') != origin_id:
-                # Do not invent a canonical recording binding when dual-write failed.
-                return None, None
-            pointer = original.get('live_continuation') or {}
-            cid, sid = pointer.get('conversation_id'), pointer.get('recording_session_id')
-            retired = None
-            if isinstance(cid, str) and isinstance(sid, str):
-                ref = user.collection('conversations').document(cid)
-                row = ref.get(transaction=transaction).to_dict() or {}
-                row = hydrate(ref, row)
-                if resumable_continuation(row, source=source, device_id=device_id, now=now, timeout=timeout):
-                    return {'conversation_id': cid, 'recording_session_id': sid}, None
-                finish = row.get('finished_at')
-                if (
-                    row.get('source') == source
-                    and row.get('client_device_id') == device_id
-                    and not row.get('is_locked')
-                    and isinstance(finish, datetime)
-                    and gap_splits((now - finish).total_seconds(), continuation_timeout(row, timeout))
+            def hydrate(ref: Any, row: Mapping[str, Any]) -> Mapping[str, Any]:
+                hydrated = calendar_continuity_row(clean_uid, row, firestore_client=client, transaction=transaction)
+                if hydrated is not row:
+                    cache_updates.append((ref, hydrated['external_data']))
+                return hydrated
+
+            try:
+                original = root.get(transaction=transaction).to_dict() or {}
+                if original.get('uid') != clean_uid or original.get('recording_session_id') != clean_origin_id:
+                    # Do not invent a canonical recording binding when dual-write failed.
+                    return None, None
+                pointer = original.get('live_continuation') or {}
+                cid, sid = pointer.get('conversation_id'), pointer.get('recording_session_id')
+                retired = None
+                if isinstance(cid, str) and isinstance(sid, str):
+                    ref = user.collection('conversations').document(cid)
+                    row = ref.get(transaction=transaction).to_dict() or {}
+                    row = hydrate(ref, row)
+                    if resumable_continuation(
+                        row, source=clean_source, device_id=clean_device_id, now=now, timeout=bounded_timeout
+                    ):
+                        return {'conversation_id': cid, 'recording_session_id': sid}, None
+                    finish = row.get('finished_at')
+                    if (
+                        row.get('source') == clean_source
+                        and row.get('client_device_id') == clean_device_id
+                        and not row.get('is_locked')
+                        and isinstance(finish, datetime)
+                        and gap_splits(_elapsed_seconds(now, finish), continuation_timeout(row, bounded_timeout))
+                    ):
+                        retired = {'conversation_id': cid, 'recording_session_id': sid}
+                if clean_proposal is None:
+                    return None, None
+                candidate = (
+                    user.collection('conversations')
+                    .document(clean_proposal['conversation_id'])
+                    .get(transaction=transaction)
+                    .to_dict()
+                    or {}
+                )
+                candidate = hydrate(
+                    user.collection('conversations').document(clean_proposal['conversation_id']), candidate
+                )
+                if not resumable_continuation(
+                    candidate, source=clean_source, device_id=clean_device_id, now=now, timeout=bounded_timeout
                 ):
-                    retired = {'conversation_id': cid, 'recording_session_id': sid}
-            if proposed is None:
-                return None, None
-            candidate = (
-                user.collection('conversations')
-                .document(proposed['conversation_id'])
-                .get(transaction=transaction)
-                .to_dict()
-                or {}
-            )
-            candidate = hydrate(user.collection('conversations').document(proposed['conversation_id']), candidate)
-            if not resumable_continuation(candidate, source=source, device_id=device_id, now=now, timeout=timeout):
-                return None, None
-            adopted = dict(proposed)
-            transaction.update(root, {'live_continuation': adopted})
-            return adopted, retired
+                    return None, None
+                adopted = dict(clean_proposal)
+                transaction.update(root, {'live_continuation': adopted})
+                return adopted, retired
 
-        finally:
-            # Every return has completed its reads, including a rejected pointer
-            # followed by a candidate read. Cache only the external metadata.
-            for ref, external in cache_updates:
-                transaction.update(ref, {'external_data': external})
+            finally:
+                # Every return has completed its reads, including a rejected pointer
+                # followed by a candidate read. Cache only the external metadata.
+                for ref, external in cache_updates:
+                    transaction.update(ref, {'external_data': external})
 
-    return resolve(client.transaction())
+        return resolve(client.transaction())
+    except Exception as error:
+        logger.warning('live_continuation_lookup outcome=unavailable exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='other',
+            from_mode='live_continuation',
+            to_mode='silence_boundary',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return None, None
