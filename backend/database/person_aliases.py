@@ -1,11 +1,13 @@
 """Stable person rename and bounded exact-alias retention."""
 
 from datetime import datetime, timezone
-from database import chat_edits
 from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
+
+from database import chat_edits
+from database._client import get_firestore_client
 
 
 def normalized_person_alias(value: Any) -> str | None:
@@ -62,15 +64,20 @@ def update_person_name_transaction(
 
 
 def rename_person_retaining_aliases(
-    db_client: Any, uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None
+    db_client: Any,
+    uid: str,
+    person_id: str,
+    name: str,
+    *,
+    expected_chat_state: dict | None = None,
 ) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
-
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    client = db_client or get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
     try:
         if expected_chat_state is not None:
-            return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
-        return update_person_name_transaction(db_client.transaction(), person_ref, name)
+            return update_person_name_transaction(client.transaction(), person_ref, name, expected_chat_state)
+        return update_person_name_transaction(client.transaction(), person_ref, name)
     except NotFound:
         return False
 
@@ -100,41 +107,58 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
 
 def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
     """Soft-dismiss an owner-scoped person and map concurrent deletion to missing."""
-
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    client = db_client or get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
     try:
-        return dismiss_person_transaction(db_client.transaction(), person_ref)
+        return dismiss_person_transaction(client.transaction(), person_ref)
     except NotFound:
         return False
 
 
 def list_people(
-    db_client: Any, uid: str, *, include_dismissed: bool = False, limit: Optional[int] = None
+    db_client: Any,
+    uid: str,
+    *,
+    include_dismissed: bool = False,
+    limit: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """List owner-scoped people, hiding soft-dismissed records by default."""
-
-    people_ref = db_client.collection('users').document(uid).collection('people')
+    client = db_client or get_firestore_client()
+    people_ref = client.collection('users').document(uid).collection('people')
     if limit is not None:
         people_ref = people_ref.limit(limit)
     result = []
-    for person in people_ref.stream():
-        data = person.to_dict()
-        if not include_dismissed and data.get('is_dismissed') is True:
-            continue
-        data.setdefault('id', person.id)
-        result.append(data)
+    try:
+        for person in people_ref.stream():
+            data = person.to_dict()
+            if not isinstance(data, dict):
+                continue
+            if not include_dismissed and data.get('is_dismissed') is True:
+                continue
+            data.setdefault('id', person.id)
+            result.append(data)
+    except Exception:
+        return []
     return result
 
 
 def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
     """Find the first active owner-scoped person with an exact display name."""
-
-    people_ref = db_client.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name))
-    for person in query.stream():
-        data = person.to_dict()
-        if data.get('is_dismissed') is True:
-            continue
-        data.setdefault('id', person.id)
-        return data
+    normalized_name = normalized_person_alias(name)
+    if normalized_name is None:
+        return None
+    client = db_client or get_firestore_client()
+    people_ref = client.collection('users').document(uid).collection('people')
+    query = people_ref.where(filter=FieldFilter('name', '==', normalized_name))
+    try:
+        for person in query.stream():
+            data = person.to_dict()
+            if not isinstance(data, dict):
+                continue
+            if data.get('is_dismissed') is True:
+                continue
+            data.setdefault('id', person.id)
+            return data
+    except Exception:
+        return None
     return None
