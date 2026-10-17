@@ -34,9 +34,8 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                 return  # Includes purged receipts; never recreate recovered audio.
             attempted = True
             source.put_started = True
+            source.fields = {}  # A later failed put must not inherit a deleted generation.
             fields = cap_hold.upload_held_audio(uid, path, identity, metadata, immutable=True)
-            if not fields.get('audio_generation') and source.fields.get('audio_generation'):
-                fields['audio_generation'] = source.fields['audio_generation']
             source.fields = dict(fields)
             body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
             tx.create(ref, {**body, 'live_custody_version': 4})  # Already sealed; no mutable stream lease.
@@ -60,7 +59,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
             try:
                 generation = fields.get('audio_generation')
                 if not generation:
-                    blob.reload()  # Ambiguous upload reply; exceptional Class B only.
+                    blob.reload(timeout=10, retry=None)  # Ambiguous reply; exceptional Class B only.
                     generation = blob.generation
                 if not generation:
                     raise RuntimeError('held source generation unavailable for cleanup')

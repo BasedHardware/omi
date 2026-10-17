@@ -33,6 +33,7 @@ class Bucket:
     def __init__(self):
         self.objects = {}
         self.generations = {}
+        self.generation_counter = 0
         self.fail_next_upload_reply = False
         self.uploads = 0
         self.barrier = None
@@ -43,7 +44,7 @@ class Bucket:
         class Blob:
             generation = None
 
-            def reload(self):
+            def reload(self, **kwargs):
                 if name not in bucket.objects:
                     raise NotFound('missing source')
                 self.generation = bucket.generations.get(name, 1)
@@ -69,8 +70,9 @@ class Bucket:
                 if name in bucket.objects:
                     raise PreconditionFailed('immutable object already exists')
                 bucket.objects[name] = stream.read()
-                self.generation = 1
-                bucket.generations[name] = 1
+                bucket.generation_counter += 1
+                self.generation = bucket.generation_counter
+                bucket.generations[name] = self.generation
                 if bucket.fail_next_upload_reply:
                     bucket.fail_next_upload_reply = False
                     raise TimeoutError('synthetic lost successful upload reply')
@@ -188,6 +190,33 @@ def main():
         assert not cap_hold.holds(uid).document(unknown.identity).get().exists
         manifest.publish(uid, path, unknown, metadata, 60)
         assert unknown_path in bucket.objects
+
+        # Real GCS generations change after delete/recreate. A second ambiguous
+        # upload must not reuse the generation receipt from a cleaned attempt.
+        repeated = Publication(uid)
+        repeated_path = f'chunks/{uid}/cap-held/{repeated.identity}.opus.enc'
+
+        def rejected_commit(tx):
+            raise RuntimeError('synthetic failed publication')
+
+        with patch.object(Transaction, '_commit', rejected_commit):
+            try:
+                manifest.publish(uid, path, repeated, metadata, 60)
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('commit failure not injected')
+        assert repeated_path not in bucket.objects
+        bucket.fail_next_upload_reply = True
+        try:
+            manifest.publish(uid, path, repeated, metadata, 60)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError('second upload reply failure not injected')
+        assert repeated_path not in bucket.objects, 'cleanup reused the previous generation'
+        manifest.publish(uid, path, repeated, metadata, 60)
+        assert repeated_path in bucket.objects
 
         # Context reuse is scoped to exact account, transaction AND client.
         @firestore.transactional

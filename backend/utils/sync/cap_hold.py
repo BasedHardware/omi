@@ -108,8 +108,10 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
             except PreconditionFailed:
                 if not immutable:
                     raise
-                # The content-derived live identity names the same plaintext;
+                # The immutable capture identity names the same plaintext;
                 # preserve the first authenticated object across upload retries.
+                if codec == 'ogg_opus':
+                    blob.reload(timeout=10, retry=None)  # Retry-only generation provenance.
         encoded_metadata = encrypt(json.dumps(metadata), uid)
         fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if codec == 'ogg_opus':
