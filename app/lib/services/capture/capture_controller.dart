@@ -779,6 +779,9 @@ class CaptureController extends ChangeNotifier
   /// frozen while muted, and reset on each cut (manual or the 15-min rotation).
   int? get offlineRecordingElapsedSeconds {
     if (_offlineSessionStartSeconds == 0) return null;
+    if (offlineMuted && _offlineMuteStartedAt == null) {
+      _offlineMuteStartedAt = _nowSeconds;
+    }
     final end = _offlineMuteStartedAt ?? (_now().millisecondsSinceEpoch ~/ 1000);
     final secs = end - _offlineSessionStartSeconds;
     return secs < 0 ? 0 : secs;
@@ -802,8 +805,6 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
     try {
       final committed = await pending;
-      if (committed.revision != _preferences.capturePolicy.revision) return committed.revision;
-      await _setIngressAuthorized(!committed.muted && _capture.stagedReadModel.pendantOwns);
       if (committed.muted) {
         if (_offlineSessionStartSeconds != 0) _offlineMuteStartedAt ??= _nowSeconds;
         updateRecordingState(RecordingState.pause);
@@ -811,6 +812,11 @@ class CaptureController extends ChangeNotifier
         _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
         _offlineMuteStartedAt = null;
       }
+      if (committed.revision != _preferences.capturePolicy.revision) {
+        notifyListeners();
+        return committed.revision;
+      }
+      await _setIngressAuthorized(!committed.muted && _capture.stagedReadModel.pendantOwns);
       notifyListeners();
       return committed.revision;
     } catch (_) {
