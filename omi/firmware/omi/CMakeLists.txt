@@ -35,10 +35,14 @@ if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
     list(APPEND core_sources src/lib/core/storage.c)
 endif()
 
+# Button gesture recogniser shared with the DevKit firmware (host-tested in ../common/test).
+list(APPEND core_sources ${CMAKE_CURRENT_SOURCE_DIR}/../common/button_gesture.c)
+
 target_sources(app PRIVATE ${core_sources} ${app_sources})
 target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
 )
 
 if(CONFIG_OMI_CODEC_OPUS)

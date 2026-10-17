@@ -18,8 +18,11 @@ target_sources(app PRIVATE
     src/storage.c
     src/usb.c
     src/wdog_facade.c
+    # Button gesture recogniser shared with the CV1 firmware (host-tested in ../common/test).
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common/button_gesture.c
 	# src/nfc.c future release
 )
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 
 target_sources_ifdef(CONFIG_OMI_CODEC_OPUS app PRIVATE
     src/lib/opus-1.2.1/A2NLSF.c

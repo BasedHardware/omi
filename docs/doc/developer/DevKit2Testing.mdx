@@ -124,11 +124,33 @@ After connecting to the BLE notification service, these events fire:
 |------------|--------|
 | `1` | Single tap |
 | `2` | Double tap |
-| `3` | Long press (~3 seconds) |
-| `4` | Button pressed down |
-| `5` | Button released |
+| `6` | Triple tap |
+| `5` | Button released (follows every tap gesture, and any hold shorter than the power-off long press) |
+| — | Long press (~3 seconds) powers the device off; nothing is sent |
 
-Verify that each physical action sends the correct BLE packet.
+Codes `3` (long press) and `4` (button pressed down) are reserved for older firmware and are no longer emitted.
+Taps must be shorter than 300 ms and separated by less than 350 ms to count as one gesture; single and double taps are
+reported once that window closes, triple taps on the third release. The recogniser lives in
+`omi/firmware/common/button_gesture.c` and is host-tested by `omi/firmware/common/test/run.sh`.
+
+In the app, single/double/triple tap each run the action configured under Settings → Device Settings (Ask a Question, Mute/Unmute,
+End Conversation, Star Conversation, or Do Nothing). The long-press power-off gesture is fixed in firmware.
+
+With no saved choice, single tap asks a question, double tap mutes/unmutes, and
+triple tap ends the conversation. An explicitly saved double-tap choice keeps its
+historical value (0 = end conversation, 1 = ask a question, 2 = star conversation);
+only the unset default changes from end conversation to mute/unmute.
+
+A new app still accepts older firmware's hold-to-talk events (`3`, then `5` on
+release). Older firmware cannot produce a triple-tap event. An older app paired
+with the new firmware no longer receives `3`/`4`, loses that legacy hold-to-talk
+path, and cannot use the new triple-tap action (`6`). Coordinate app and firmware
+rollout accordingly.
+
+Host tests verify the event sequence and the 350 ms single/double-tap reporting
+window. Physical CV1/DevKit validation is still pending: verify the BLE packets,
+long-press power-off, legacy/new app combinations, and whether the tap timing feels
+right. Host tests do not establish real-device timing or firmware build success.
 
 ---
 
