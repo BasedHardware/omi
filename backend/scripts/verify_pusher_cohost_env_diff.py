@@ -327,7 +327,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
-    | _BATCH_PIPELINE_LISTEN_ONLY,
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
