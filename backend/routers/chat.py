@@ -1462,6 +1462,25 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
+    try:
+        return _upload_chat_files(files, uid, thumbs_name, thumb_source_by_name, files_chat)
+    finally:
+        # Any thumbnail left in the temp dir after a mid-batch failure leaks
+        # disk — unlink whatever wasn't already consumed and removed.
+        for p in thumb_source_by_name.values():
+            try:
+                Path(p).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _upload_chat_files(
+    files: List[UploadFile],
+    uid: str,
+    thumbs_name: list,
+    thumb_source_by_name: dict,
+    files_chat: list,
+) -> List[FileChat]:
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1534,59 +1553,14 @@ def upload_file_chat_v1(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
-    for file in files:
-        # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
-        safe_suffix = Path(file.filename).name if file.filename else "upload"
-        temp_file = Path(tempfile.gettempdir()) / f"{uuid.uuid4().hex}_{safe_suffix}"
-        try:
-            with temp_file.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-
+    try:
+        return _upload_chat_files(files, uid, thumbs_name, thumb_source_by_name, files_chat)
+    finally:
+        for p in thumb_source_by_name.values():
             try:
-                result = FileChatTool.upload(temp_file, file_name=safe_suffix)
-            except UnsupportedChatFileError as error:
-                raise HTTPException(status_code=400, detail=str(error))
-
-            thumb_name = result.get("thumbnail_name", "")
-            if thumb_name != "":
-                thumbnail_path = result.get("thumbnail", "")
-                if thumbnail_path:
-                    thumbs_name.append(thumbnail_path)
-                    thumb_source_by_name[thumb_name] = thumbnail_path
-
-            filechat = FileChat(
-                id=str(uuid.uuid4()),
-                name=result.get("file_name", ""),
-                mime_type=result.get("mime_type", ""),
-                openai_file_id=result.get("file_id", ""),
-                created_at=datetime.now(timezone.utc),
-                thumb_name=thumb_name,
-            )
-            files_chat.append(filechat)
-        finally:
-            if temp_file.exists():
-                temp_file.unlink()
-
-    if len(thumbs_name) > 0:
-        thumbs_path = storage.upload_multi_chat_files(thumbs_name, uid)
-        for fc in files_chat:
-            if not fc.is_image():
-                continue
-            source_path = thumb_source_by_name.get(fc.thumb_name, "")
-            thumb_path = thumbs_path.get(source_path, "")
-            fc.thumbnail = thumb_path
-            # cleanup file thumb
-            if source_path:
-                Path(source_path).unlink(missing_ok=True)
-
-    # save db
-    files_chat_dict = [fc.model_dump() for fc in files_chat]
-
-    chat_db.add_multi_files(uid, files_chat_dict)
-
-    response = [fc.model_dump() for fc in files_chat]
-
-    return response
+                Path(p).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 @router.post(
@@ -1674,8 +1648,12 @@ def rate_message(
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
     rating = data.rating
+    if rating not in (1, -1, None):
+        raise HTTPException(status_code=422, detail='rating must be 1, -1, or null')
 
-    snapshot = chat_db.update_message_rating(uid, message_id, rating) or {}
+    snapshot = chat_db.update_message_rating(uid, message_id, rating)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail='Message not found')
     value = rating if rating is not None else 0
     platform = (x_app_platform or '').strip().lower()
     if platform not in ('desktop', 'mobile'):
@@ -1708,22 +1686,25 @@ def rate_message(
         app_build=app_build if app_build != 'unknown' else None,
     )
 
-    # Try to submit feedback to LangSmith
+    # Try to submit feedback to LangSmith — the update snapshot usually
+    # already carries langsmith_run_id; only re-read when it doesn't.
     try:
-        message_result = chat_db.get_message(uid, message_id)
-        if message_result:
-            message, _ = message_result
-            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
-            if not langsmith_run_id and isinstance(message, dict):
-                langsmith_run_id = message.get('langsmith_run_id')
+        langsmith_run_id = snapshot.get('langsmith_run_id')
+        if not langsmith_run_id:
+            message_result = chat_db.get_message(uid, message_id)
+            if message_result:
+                message, _ = message_result
+                langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+                if not langsmith_run_id and isinstance(message, dict):
+                    langsmith_run_id = message.get('langsmith_run_id')
 
-            if langsmith_run_id:
-                score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
-                submit_langsmith_feedback(
-                    run_id=langsmith_run_id,
-                    score=score,
-                    key="chat_message_rating",
-                )
+        if langsmith_run_id:
+            score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
+            submit_langsmith_feedback(
+                run_id=langsmith_run_id,
+                score=score,
+                key="chat_message_rating",
+            )
     except Exception as e:
         logger.error(f"LangSmith feedback submission error (non-fatal): {e}")
 
@@ -1739,15 +1720,22 @@ def share_chat_messages(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a shareable link for chat messages."""
-    message_ids = data.message_ids
+    message_ids = list(dict.fromkeys(data.message_ids))
     if not message_ids:
         raise HTTPException(status_code=400, detail='No message IDs provided')
 
-    # Validate messages belong to user
+    # Validate messages belong to user — and none is reported: a public link
+    # must never expose content the reporter flagged.
     for mid in message_ids:
         msg = chat_db.get_message(uid, mid)
         if not msg:
             raise HTTPException(status_code=404, detail=f'Message {mid} not found')
+        message = msg[0] if isinstance(msg, tuple) else msg
+        reported = getattr(message, 'reported', None)
+        if reported is None and isinstance(message, dict):
+            reported = message.get('reported')
+        if reported:
+            raise HTTPException(status_code=400, detail=f'Message {mid} cannot be shared')
 
     display_name = get_user_display_name(uid)
     token = uuid.uuid4().hex
@@ -1773,6 +1761,10 @@ def get_shared_chat_messages(token: str):
         msg_result = chat_db.get_message(sender_uid, mid)
         if msg_result:
             message, _ = msg_result
+            # A message reported after the share was created stays hidden —
+            # the flag outranks the token.
+            if getattr(message, 'reported', False) or (isinstance(message, dict) and message.get('reported')):
+                continue
             messages.append(
                 {
                     "id": message.id,

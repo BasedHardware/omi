@@ -234,6 +234,15 @@ class File:
         return string.lower()
 
 
+def _unlink_thumbnail(file: "File") -> None:
+    thumbnail_path = getattr(file, 'thumbnail_path', None)
+    if thumbnail_path:
+        try:
+            Path(thumbnail_path).unlink(missing_ok=True)
+        except OSError:
+            logger.warning('thumbnail cleanup failed for %s', thumbnail_path, exc_info=True)
+
+
 def _requested_file_limit(file_ids: List[str]) -> int:
     # Keep the recent-file default, but include a complete ten-photo channel album.
     return min(10, max(9, len(file_ids)))
@@ -284,8 +293,14 @@ class FileChatTool:
                 upload_file = (Path(file_name).name, f) if file_name else f
                 response = openai.files.create(file=upload_file, purpose=cast(Any, file.purpose))
             except openai.BadRequestError as error:
+                _unlink_thumbnail(file)
                 # The provider rejects the extension (audio/video, archives it does not index).
                 raise _unsupported_chat_file_error(file_path) from error
+            except Exception:
+                # A generated thumbnail must not outlive the failed upload —
+                # it leaks a file in the temp dir on every retry.
+                _unlink_thumbnail(file)
+                raise
             if response:
                 file.file_id = response.id
                 file.file_name = response.filename
@@ -530,3 +545,16 @@ class FileChatTool:
                 except Exception as error:
                     logger.error('file chat file deletion failed error_type=%s', type(error).__name__)
             chat_db.delete_multi_files(self.uid, files)
+        # The surviving session document must not keep stale file_ids —
+        # a later cleanup would chase ids that no longer exist.
+        try:
+            session_ref = (
+                chat_db.db.collection('users')
+                .document(self.uid)
+                .collection('chat_sessions')
+                .document(self.chat_session_id)
+            )
+            if session_ref.get().exists:
+                session_ref.update({'file_ids': []})
+        except Exception:
+            logger.warning('chat session file_ids clear failed for %s', self.chat_session_id, exc_info=True)
