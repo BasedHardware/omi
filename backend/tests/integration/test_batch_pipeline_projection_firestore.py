@@ -1064,12 +1064,13 @@ def test_authoritative_append_preserves_manual_text_translation_and_ids(lane, mo
     assert len(active_rows(lane)) == 1
     stored = active_rows(lane)[0]['transcript_segments']
     retained = next(s for s in stored if s['id'] == original['id'])
-    for field in ('text', 'original_text', 'translations', 'id', 'person_id', 'speaker_label_source'):
+    for field in ('text', 'translations', 'id', 'person_id', 'speaker_label_source'):
         assert retained[field] == original[field]
     assert all(s['speaker_id_scope'].startswith('final:batch:') for s in stored)
     projected = transcripts.project(lane.uid, active_rows(lane)[0], firestore_client=lane.client)
     edited = next(s for s in projected['transcript_segments'] if s['id'] == original['id'])
     assert edited['text'] == 'We discussed the plan.'
+    assert edited['original_text'] == original['text']
     assert lane.user.collection('transcript_corrections').document(row['id']).get().to_dict() == overlay
 
 
