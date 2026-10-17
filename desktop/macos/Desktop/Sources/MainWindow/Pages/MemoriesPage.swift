@@ -1948,6 +1948,9 @@ class MemoriesViewModel: ObservableObject {
       let resolvedId = replacement?.id ?? memory.id
 
       if let replacement {
+        // syncServerMemories upserts the replacement record. The superseded row
+        // lingers locally until the next background orphan-prune reconcile
+        // (softDeleteSyncedOrphans) runs and tombstones it.
         try await MemoryStorage.shared.syncServerMemories([replacement])
         if selectedMemory?.id == memory.id {
           selectedMemory = replacement

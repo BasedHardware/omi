@@ -21,6 +21,8 @@ import {
   fenceRendererConversationOwner,
   setRendererConversationSelection
 } from '../jit/rendererConversationBinding'
+import { decodeUidFromIdToken } from '../auth/omiAuth'
+import { setAssistantSettingsOwner } from './assistantSettings'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
 export function registerPiMonoHandlers(): void {
@@ -42,8 +44,13 @@ export function registerPiMonoHandlers(): void {
     // kernel chat + control tools. Fail closed, never fall back to the decode path.
     // On sign-out (session === null) it resets to default.
     const current = getPiMonoSession()
+    const rawUid = current?.token ? decodeUidFromIdToken(current.token) : null
+    setAssistantSettingsOwner(rawUid || null)
     const uid = current ? await verifyFirebaseIdToken(current.token) : null
     setControlPlaneOwner(uid)
+    if (uid && !rawUid) {
+      setAssistantSettingsOwner(uid)
+    }
     // Keep the renderer-selection projection fenced to the same verified host
     // owner. A token refresh for the same account preserves the selected chat;
     // sign-out or an account switch drops it before any JIT analysis can capture

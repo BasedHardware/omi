@@ -77,11 +77,16 @@ import {
   __resetPiMonoSessionForTests,
   __setByokKeyStoreForTests
 } from '../codingAgent/piMonoSession'
-import type { ByokKeyStore } from '../agentKernel/byokStore'
 import {
   rendererConversationBinding,
   resetRendererConversationBindingForTests
 } from '../jit/rendererConversationBinding'
+import {
+  getAssistantSettingsOwner,
+  registerAssistantSettingsHandlers,
+  _resetAssistantSettingsForTests
+} from './assistantSettings'
+import type { AssistantSettingsView } from '../../shared/types'
 
 const verify = vi.mocked(verifyFirebaseIdToken)
 const noByok = { getAllKeys: () => ({}) } as unknown as ByokKeyStore
@@ -104,12 +109,15 @@ beforeEach(() => {
   resetRendererConversationBindingForTests()
   __resetPiMonoSessionForTests()
   __setByokKeyStoreForTests(noByok)
+  _resetAssistantSettingsForTests()
   registerPiMonoHandlers()
+  registerAssistantSettingsHandlers()
 })
 
 afterEach(() => {
   resetControlPlaneForTests()
   __resetPiMonoSessionForTests()
+  _resetAssistantSettingsForTests()
 })
 
 describe('pimono:setSession — control-plane owner wiring', () => {
@@ -190,5 +198,36 @@ describe('pimono:setSession — control-plane owner wiring', () => {
 
     expect(selection({}, 'chat-old')).toBe(false)
     expect(rendererConversationBinding()).toBeNull()
+  })
+
+  it('binds assistant settings owner on session relay and protects against mismatched writes', async () => {
+    const fakeToken = `h.${Buffer.from(JSON.stringify({ user_id: 'account-A', sub: 'account-A' })).toString('base64url')}.s`
+    verify.mockResolvedValue('account-A')
+
+    await setSession({ token: fakeToken, desktopApiBase: base })
+    expect(getAssistantSettingsOwner()).toBe('account-A')
+
+    const setSettingsHandler = handlers.get('assistants:setSettings')
+    if (!setSettingsHandler) throw new Error('assistants:setSettings was not registered')
+
+    // Stale write from previous user is dropped
+    const staleResult = setSettingsHandler(
+      {},
+      { memoryEnabled: true },
+      'account-old'
+    ) as AssistantSettingsView
+    expect(staleResult.memoryEnabled).toBe(false)
+
+    // Matching owner write succeeds
+    const validResult = setSettingsHandler(
+      {},
+      { memoryEnabled: true },
+      'account-A'
+    ) as AssistantSettingsView
+    expect(validResult.memoryEnabled).toBe(true)
+
+    // Sign out clears the owner
+    await setSession(null)
+    expect(getAssistantSettingsOwner()).toBeNull()
   })
 })
