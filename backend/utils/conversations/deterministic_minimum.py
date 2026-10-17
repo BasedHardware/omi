@@ -145,8 +145,9 @@ def build_deterministic_minimum_structured(
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
     no action items, no events. Every other field keeps its model default."""
+    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if enabled() else {}
     return Structured(
-        **({'title_provenance': 'server_minimum'} if enabled() else {}),
+        **metadata,
         title=deterministic_minimum_title(
             conversation,
             source_label=source_label,
