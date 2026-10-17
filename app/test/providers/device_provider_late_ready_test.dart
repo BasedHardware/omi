@@ -567,4 +567,35 @@ void main() {
       async.flushTimers();
     });
   });
+
+  test('finishing a firmware update re-initiates connection after prepareDFU disconnected the pendant', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      expect(manageCalls, 1);
+
+      provider.prepareDFU();
+      async.elapse(const Duration(seconds: 2));
+      expect(unmanageCalls, 1, reason: 'prepareDFU disconnects the pendant before starting DFU');
+      expect(provider.isConnected, isFalse);
+
+      // Simulate tapping Done after firmware update finishes: resetFirmwareUpdateState
+      // followed by FirmwareUpdateDone initiateConnection must call manageDevice once
+      // so native clears manuallyDisconnected and reconnects the pendant.
+      provider.resetFirmwareUpdateState();
+      provider.initiateConnection('FirmwareUpdateDone', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 5));
+
+      expect(manageCalls, 2);
+      expect(provider.isConnected, isTrue);
+      expect(provider.connectedDevice?.id, _deviceId);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
 }
