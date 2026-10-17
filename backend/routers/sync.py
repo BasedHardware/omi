@@ -31,6 +31,7 @@ from database import fair_use as fair_use_db
 from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
+from database.memories import historical_scan_memo_scope
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
 from database.sync_jobs import (
@@ -2271,29 +2272,33 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
 
         job_dir = f'syncing/{uid}/{job_id}'
         try:
-            await _run_full_pipeline_background_async(
-                job_id,
-                uid,
-                blob_paths,
-                source,
-                should_lock,
-                job_dir,
-                conversation_id,
-                geolocation=geolocation,
-                task_mode=True,
-                client_device_id=client_device_id,
-                client_platform=client_platform,
-                sync_lane=sync_lane,
-                content_id=content_id,
-                run_lock_token=lock_token if ledger_fence_active else None,
-                content_run_bound=ledger_fence_active,
-                ledger_fence_active=ledger_fence_active,
-                **({'raw_capture_paths': raw_capture_paths} if raw_capture_paths else {}),
-                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
-                recording_session_id=recording_session_id,
-                audio_start_seconds=audio_start_seconds,
-                audio_end_seconds=audio_end_seconds,
-            )
+            # One memo per locked task attempt, in the pipeline's async context.
+            # run_blocking copies this context into each executor leaf; scope exit
+            # closes inherited memo references even if a cancelled leaf outlives us.
+            with historical_scan_memo_scope(uid):
+                await _run_full_pipeline_background_async(
+                    job_id,
+                    uid,
+                    blob_paths,
+                    source,
+                    should_lock,
+                    job_dir,
+                    conversation_id,
+                    geolocation=geolocation,
+                    task_mode=True,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
+                    sync_lane=sync_lane,
+                    content_id=content_id,
+                    run_lock_token=lock_token if ledger_fence_active else None,
+                    content_run_bound=ledger_fence_active,
+                    ledger_fence_active=ledger_fence_active,
+                    **({'raw_capture_paths': raw_capture_paths} if raw_capture_paths else {}),
+                    **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                    recording_session_id=recording_session_id,
+                    audio_start_seconds=audio_start_seconds,
+                    audio_end_seconds=audio_end_seconds,
+                )
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
             await finalize_sync_job_superseded(
