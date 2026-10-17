@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Límite de resúmenes alcanzado",
     "summaryLimitBody": "Has regenerado varios resúmenes en la última hora. Inténtalo de nuevo más tarde.",
     "summaryFailedTitle": "No se pudo resumir",
-    "summaryFailedBody": "Algo salió mal al resumir esta conversación."
+    "summaryFailedBody": "Algo salió mal al resumir esta conversación.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

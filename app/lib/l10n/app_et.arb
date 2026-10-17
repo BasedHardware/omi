@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Kokkuvõtete limiit on täis",
     "summaryLimitBody": "Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.",
     "summaryFailedTitle": "Kokkuvõtet ei õnnestunud teha",
-    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti."
+    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

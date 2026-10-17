@@ -4317,5 +4317,7 @@
     "summaryLimitTitle": "Elérted az összefoglalók korlátját",
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",
     "summaryFailedTitle": "Nem sikerült összefoglalni",
-    "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben."
+    "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

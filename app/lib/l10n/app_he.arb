@@ -11644,5 +11644,7 @@
     "summaryLimitTitle": "הגעת למגבלת הסיכומים",
     "summaryLimitBody": "יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.",
     "summaryFailedTitle": "לא ניתן היה לסכם",
-    "summaryFailedBody": "משהו השתבש בעת סיכום השיחה הזו."
+    "summaryFailedBody": "משהו השתבש בעת סיכום השיחה הזו.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

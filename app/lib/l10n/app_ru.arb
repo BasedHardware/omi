@@ -4256,5 +4256,7 @@
     "summaryLimitTitle": "Достигнут лимит сводок",
     "summaryLimitBody": "За последний час вы несколько раз пересоздали сводки. Повторите попытку позже.",
     "summaryFailedTitle": "Не удалось обобщить",
-    "summaryFailedBody": "При обобщении этого разговора что-то пошло не так."
+    "summaryFailedBody": "При обобщении этого разговора что-то пошло не так.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Sasniegts kopsavilkumu limits",
     "summaryLimitBody": "Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.",
     "summaryFailedTitle": "Neizdevās apkopot",
-    "summaryFailedBody": "Apkopojot šo sarunu, radās kļūda."
+    "summaryFailedBody": "Apkopojot šo sarunu, radās kļūda.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

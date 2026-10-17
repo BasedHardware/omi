@@ -4256,5 +4256,7 @@
     "summaryLimitTitle": "Özet sınırına ulaşıldı",
     "summaryLimitBody": "Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.",
     "summaryFailedTitle": "Özetlenemedi",
-    "summaryFailedBody": "Bu konuşma özetlenirken bir sorun oluştu."
+    "summaryFailedBody": "Bu konuşma özetlenirken bir sorun oluştu.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

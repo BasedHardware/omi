@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "सारांश की सीमा पूरी हो गई",
     "summaryLimitBody": "आपने पिछले एक घंटे में कई सारांश दोबारा बनाए हैं। बाद में फिर से कोशिश करें।",
     "summaryFailedTitle": "सारांश नहीं बन सका",
-    "summaryFailedBody": "इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।"
+    "summaryFailedBody": "इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

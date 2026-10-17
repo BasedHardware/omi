@@ -13815,4 +13815,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Coś poszło nie tak podczas podsumowywania tej rozmowy.';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

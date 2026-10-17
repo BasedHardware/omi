@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "تم بلوغ حد الملخصات",
     "summaryLimitBody": "لقد أعدت إنشاء عدة ملخصات خلال الساعة الماضية. حاول مرة أخرى لاحقًا.",
     "summaryFailedTitle": "تعذر التلخيص",
-    "summaryFailedBody": "حدث خطأ ما أثناء تلخيص هذه المحادثة."
+    "summaryFailedBody": "حدث خطأ ما أثناء تلخيص هذه المحادثة.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -24518,6 +24518,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Something went wrong while summarizing this conversation.'**
   String get summaryFailedBody;
+
+  /// Title for the optional onboarding step that invites connecting Telegram
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with Omi on Telegram'**
+  String get onboardingChatOnTelegramTitle;
+
+  /// Supporting line for the optional onboarding Telegram connect step
+  ///
+  /// In en, this message translates to:
+  /// **'Text Omi like you do in the app — right from Telegram.'**
+  String get onboardingChatOnTelegramBody;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

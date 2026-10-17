@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "S'ha arribat al límit de resums",
     "summaryLimitBody": "Has tornat a generar diversos resums durant l'última hora. Torna-ho a provar més tard.",
     "summaryFailedTitle": "No s'ha pogut resumir",
-    "summaryFailedBody": "Alguna cosa ha anat malament en resumir aquesta conversa."
+    "summaryFailedBody": "Alguna cosa ha anat malament en resumir aquesta conversa.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

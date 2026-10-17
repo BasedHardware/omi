@@ -13830,4 +13830,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Hiba történt a beszélgetés összefoglalása közben.';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

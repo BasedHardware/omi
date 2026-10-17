@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Досягнуто ліміту підсумків",
     "summaryLimitBody": "За останню годину ви кілька разів повторно створили підсумки. Спробуйте пізніше.",
     "summaryFailedTitle": "Не вдалося підсумувати",
-    "summaryFailedBody": "Під час підсумовування цієї розмови сталася помилка."
+    "summaryFailedBody": "Під час підсумовування цієї розмови сталася помилка.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

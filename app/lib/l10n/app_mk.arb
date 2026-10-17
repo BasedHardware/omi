@@ -11644,5 +11644,7 @@
     "summaryLimitTitle": "Достигнато е ограничувањето за резимеа",
     "summaryLimitBody": "Во последниот час повеќе пати повторно генериравте резимеа. Обидете се повторно подоцна.",
     "summaryFailedTitle": "Не може да се сумира",
-    "summaryFailedBody": "Нешто тргна наопаку при сумирањето на овој разговор."
+    "summaryFailedBody": "Нешто тргна наопаку при сумирањето на овој разговор.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

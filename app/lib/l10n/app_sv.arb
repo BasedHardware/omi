@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Gränsen för sammanfattningar har nåtts",
     "summaryLimitBody": "Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.",
     "summaryFailedTitle": "Det gick inte att sammanfatta",
-    "summaryFailedBody": "Något gick fel när det här samtalet skulle sammanfattas."
+    "summaryFailedBody": "Något gick fel när det här samtalet skulle sammanfattas.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

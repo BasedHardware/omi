@@ -11644,5 +11644,7 @@
     "summaryLimitTitle": "Naabot na ang limitasyon ng buod",
     "summaryLimitBody": "Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.",
     "summaryFailedTitle": "Hindi ma-summarize",
-    "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito."
+    "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

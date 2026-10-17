@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "已达到摘要次数上限",
     "summaryLimitBody": "你在过去一小时内多次重新生成了摘要。请稍后再试。",
     "summaryFailedTitle": "无法生成摘要",
-    "summaryFailedBody": "总结此对话时出了点问题。"
+    "summaryFailedBody": "总结此对话时出了点问题。",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

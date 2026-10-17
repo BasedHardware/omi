@@ -13833,4 +13833,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'A apărut o problemă la rezumarea acestei conversații.';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

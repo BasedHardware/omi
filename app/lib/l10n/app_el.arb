@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Συμπληρώθηκε το όριο συνόψεων",
     "summaryLimitBody": "Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.",
     "summaryFailedTitle": "Δεν ήταν δυνατή η σύνοψη",
-    "summaryFailedBody": "Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας."
+    "summaryFailedBody": "Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

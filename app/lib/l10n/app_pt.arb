@@ -4256,5 +4256,7 @@
     "summaryLimitTitle": "Limite de resumos atingido",
     "summaryLimitBody": "Você gerou novamente vários resumos na última hora. Tente novamente mais tarde.",
     "summaryFailedTitle": "Não foi possível resumir",
-    "summaryFailedBody": "Algo deu errado ao resumir esta conversa."
+    "summaryFailedBody": "Algo deu errado ao resumir esta conversa.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

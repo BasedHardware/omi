@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "Had ringkasan dicapai",
     "summaryLimitBody": "Anda telah menjana semula beberapa ringkasan dalam sejam yang lalu. Cuba lagi nanti.",
     "summaryFailedTitle": "Tidak dapat meringkaskan",
-    "summaryFailedBody": "Sesuatu tidak kena semasa meringkaskan perbualan ini."
+    "summaryFailedBody": "Sesuatu tidak kena semasa meringkaskan perbualan ini.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

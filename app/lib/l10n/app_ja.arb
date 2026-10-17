@@ -4221,5 +4221,7 @@
     "summaryLimitTitle": "要約の上限に達しました",
     "summaryLimitBody": "過去 1 時間に何度も要約を再生成しました。しばらくしてからもう一度お試しください。",
     "summaryFailedTitle": "要約できませんでした",
-    "summaryFailedBody": "この会話の要約中に問題が発生しました。"
+    "summaryFailedBody": "この会話の要約中に問題が発生しました。",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

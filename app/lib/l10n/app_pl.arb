@@ -4256,5 +4256,7 @@
     "summaryLimitTitle": "Osiągnięto limit podsumowań",
     "summaryLimitBody": "W ciągu ostatniej godziny kilkakrotnie wygenerowano ponownie podsumowania. Spróbuj ponownie później.",
     "summaryFailedTitle": "Nie udało się podsumować",
-    "summaryFailedBody": "Coś poszło nie tak podczas podsumowywania tej rozmowy."
+    "summaryFailedBody": "Coś poszło nie tak podczas podsumowywania tej rozmowy.",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }
