@@ -498,7 +498,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     device.name = name;
     if (pairedDevice?.id == device.id) {
       pairedDevice!.name = name;
-      SharedPreferencesUtil().btDevice = pairedDevice!;
+      _persistPairedDevice();
     }
     SharedPreferencesUtil().deviceName = name;
     notifyListeners();
