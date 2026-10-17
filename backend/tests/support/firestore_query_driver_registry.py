@@ -2942,6 +2942,12 @@ _add(
         neutrals={'limit': (10, 'bounded recovery page; does not affect filters')},
     )
 )
+_add(
+    DriverEntry(
+        'utils.sync.held_audio_summary._load_rows',
+        base={'uid': UID},
+    )
+)
 _add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(
