@@ -225,7 +225,9 @@ export function TranscriptView({
 }: TranscriptViewProps) {
   const groupedSegments = useMemo(() => groupSegmentsBySpeaker(segments), [segments]);
   const sourceGroupRef = useRef<HTMLDivElement>(null);
-  const [highlightedSource, setHighlightedSource] = useState<string | null>(null);
+  const [highlightedSource, setHighlightedSource] = useState<string | null>(
+    sourceRequest?.id ?? null,
+  );
   useEffect(() => {
     if (!sourceRequest) return;
     setHighlightedSource(sourceRequest.id);
@@ -250,13 +252,13 @@ export function TranscriptView({
 
   // Auto-scroll to keep active segment in view during playback
   useEffect(() => {
-    if (activeGroupRef.current && currentTime !== undefined) {
+    if (!highlightedSource && activeGroupRef.current && currentTime !== undefined) {
       activeGroupRef.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
     }
-  }, [currentTime]);
+  }, [currentTime, highlightedSource]);
 
   // Find the active group index for highlighting
   const activeGroupIndex = useMemo(() => {

@@ -46,3 +46,35 @@ it('opens a cited transcript group, focuses it and clears its temporary highligh
   expect(row.className).not.toContain('ring-2');
   vi.useRealTimers();
 });
+
+it('prioritizes a source jump over the audio playback row', () => {
+  const scroll = vi.fn();
+  Element.prototype.scrollIntoView = scroll;
+  render(
+    <TranscriptView
+      currentTime={0}
+      sourceRequest={{ id: 'cited', request: 1 }}
+      segments={[
+        {
+          id: 'playing',
+          text: 'Playing row',
+          start: 0,
+          end: 2,
+          is_user: false,
+          speaker_id: 0,
+        },
+        {
+          id: 'cited',
+          text: 'Cited row',
+          start: 3,
+          end: 4,
+          is_user: false,
+          speaker_id: 1,
+        },
+      ]}
+    />,
+  );
+  expect(scroll).toHaveBeenCalledTimes(1);
+  expect((scroll.mock.contexts[0] as HTMLElement).textContent).toContain('Cited row');
+  expect(screen.getByText('Cited row').closest('[tabindex]')).toHaveFocus();
+});
