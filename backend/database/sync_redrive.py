@@ -10,7 +10,7 @@ from prometheus_client import Gauge
 
 from database._client import get_firestore_client
 from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
-from utils.sync.redrive_policy import enabled, legacy_convergence_enabled
+from utils.sync.redrive_policy import enabled as enabled, legacy_convergence_enabled as legacy_convergence_enabled
 
 COLLECTION = 'sync_redrive_required'
 STATS_COLLECTION = 'sync_redrive_stats'
@@ -35,7 +35,7 @@ def prepare(transaction: Any, client: Any, uid: str, job_id: str, payload: dict,
         raise ValueError('redrive custody identity conflict')
     deadline = payload.get('source_deadline_at')
     exact = isinstance(deadline, datetime) and deadline.tzinfo is not None
-    deadline = deadline if exact else accepted_at
+    deadline = deadline if isinstance(deadline, datetime) and deadline.tzinfo is not None else accepted_at
     nearest = stats.get('nearest_deadline_at')
     return {
         'ref': ref,
@@ -114,7 +114,11 @@ def converge_legacy_completion(
     client = firestore_client or get_firestore_client()
     claim = sync_content_reference(client, uid, content_id).get().to_dict() or {}
     result = claim.get('result')
-    if claim.get('status') != 'completed' or not is_valid_completed_sync_content_result(result):
+    if (
+        not isinstance(result, dict)
+        or claim.get('status') != 'completed'
+        or not is_valid_completed_sync_content_result(result)
+    ):
         return None
     mutation = fenced_finalize_sync_job_from_durable_ledger(job_id, run_lock_token, result)
     if not mutation.applied:

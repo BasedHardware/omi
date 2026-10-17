@@ -335,6 +335,7 @@ def retire_expired(
                 return False
             job = _data(pending.get(transaction=transaction))
             payload = job.get('payload') or {}
+            accepted = job.get('accepted_at', current)
             if job.get('uid') != uid or job.get('job_id') != job_id:
                 return False
         else:
@@ -345,6 +346,7 @@ def retire_expired(
             ):
                 return False
             payload = owner.get('active_payload') or {}
+            accepted = owner.get('active_accepted_at', current)
         content_id = payload.get('content_id')
         ledger = None
         claim = {}
@@ -374,7 +376,6 @@ def retire_expired(
                 or claim.get('ledger_run_epoch') is not None
             ):
                 return False
-            accepted = job.get('accepted_at', current) if epoch is None else owner.get('active_accepted_at', current)
             prepared = sync_redrive.prepare(transaction, client, uid, job_id, payload, accepted)
         if claim.get('job_id') == job_id and not durable_completed:
             if (
