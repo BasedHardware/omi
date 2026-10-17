@@ -139,6 +139,10 @@ CONNECT_BACKOFF = Counter(
     ['provider', 'event'],
 )
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
+CHAIN_EXHAUSTED_SKIPPED = Counter(
+    'omi_stt_chain_exhausted_skipped_total',
+    'Chain endings where every leg was skipped by pod-local policy and no provider was dialled',
+)
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
 RECONNECT = Counter(
     'omi_stt_reconnect_total', 'Bounded live STT reconnect decisions', ['provider', 'reason', 'outcome']

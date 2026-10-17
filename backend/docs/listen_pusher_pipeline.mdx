@@ -1440,6 +1440,23 @@ crash: the rebuild arms log one
 while the `omi_fallback_event ... outcome=exhausted` WARNING and the typed
 `stt_failed` client status carry the operational signal. Untyped dial faults
 keep the `STT failover connect raised` traceback for diagnosis.
+A dial in which every leg was skipped by pod-local policy and no provider was
+asked — the window's occupied admission slot, occupied half-open probes,
+account benches, or open backoff leases — is not an earned exhaustion. On a
+fresh session (an episode whose dial ledger is untouched) the chain raises
+typed `ProviderChainUnavailable` instead: the receiver's park arm sends
+`stt_failed` with `reason=provider_unavailable`, `retryable=true` and a
+`retry_after` derived from the open circuits' and account benches'
+remaining cooldowns (floor 5s, cap 300s), keeps buffered audio for the
+reconnect replay, and the client reconnects when the gate has room. This
+replaces the 2026-10-17 behavior that closed such clients with 1011 and fed
+the `STT failover chain exhausted` storm (x289/30m; x160 exhausted events
+ended `to=unavailable subtype=admission` after x463 full-slot refusals).
+`omi_stt_chain_exhausted_skipped_total` counts these park endings separately
+from earned exhaustions (`omi_stt_chain_exhausted_total`). A mid-session
+rebuild that dials nothing still terminates — its episode ledger already
+spent real dials, so the skips carry the session's own evidence, and the dead
+leg's buffered audio reaches the client through the terminal flush.
 A process-local full window and its five-second capacity cooldown are skipped
 in static/shadow serving as well. A refused or circuit-open Parakeet primary
 cannot block the remaining non-account rescue leg. Terminal rebuild failure

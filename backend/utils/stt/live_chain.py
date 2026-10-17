@@ -20,7 +20,13 @@ from utils.stt.live_failure import PendingLiveFailover, fallback_metric_reason
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
 from utils.stt.live_reason import normalize_live_stt_reason
 from utils.stt.live_signal import provider_observation
-from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY, WINDOW_ADMISSION
+from utils.stt.live_metrics import (
+    CHAIN_EXHAUSTED,
+    CHAIN_EXHAUSTED_SKIPPED,
+    LEG_ATTEMPTS,
+    ROUTING_DECISION_LATENCY,
+    WINDOW_ADMISSION,
+)
 from utils.stt.live_health import health, bounded_language, mode as routing_mode
 from utils.stt.live_router import (
     connecting_target,
@@ -385,6 +391,11 @@ async def connect_configured_chain(
     prior_capacity_subtype: str | None = None
     prior_outcome: LiveLegOutcome | None = None
     attempted = False
+    # Real provider contact, as opposed to ``attempted``: set only after an
+    # attempt clears the pod-local gates (dial budget, recovery reservation)
+    # and actually invokes ``connect()``. A chain that ends with every leg
+    # skipped never proved a provider unusable.
+    dialed = False
     primary_open = False
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
     capacity_blocked = set()
@@ -696,7 +707,7 @@ async def connect_configured_chain(
         on_close: Callable[[], None],
         backoff_lease: ConnectLease,
     ) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
+        nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted, dialed
         socket = None
         recovery = current_recovery.get()
         dial_budget = recovery.dial_budget() if recovery is not None else None
@@ -718,6 +729,10 @@ async def connect_configured_chain(
                 on_close()
                 backoff_lease.finish()
                 return None
+            # Past every pod-local gate: the provider is about to be asked for
+            # real. From here the dial's answer (success or failure) is chain
+            # evidence — unlike the skips above, which prove nothing.
+            dialed = True
             token = connecting_target.set(target)
             try:
                 if dial_budget is not None:
@@ -1067,6 +1082,69 @@ async def connect_configured_chain(
             break
     if optional_handover:
         raise RejectedStream(prior_reason)
+
+    # Terminal answer, split by evidence: ``dialed`` says at least one leg was
+    # really asked (its connect() ran), so exhaustion was earned by the
+    # providers' answers. Zero dials on an episode that never dialled anything
+    # (``attempted_targets`` empty) is the fresh-session shape: every leg was
+    # skipped by pod-local policy — the window's full admission slot, open
+    # circuits or benches, backoff leases — and no provider, this session or
+    # any earlier one, was ever asked. Terminating the session on unasked
+    # providers turned the full window slot (x463 refused stt_selection events
+    # per 30m, 2026-10-17) into x160 `to=unavailable subtype=admission`
+    # exhausted events: clients were closed with 1011 and reconnected into the
+    # same full slot, feeding the `STT failover chain exhausted` storm
+    # (x289/30m). The graceful arm answers ProviderChainUnavailable instead:
+    # the receiver's existing park path delivers the typed stt_failed backoff
+    # (retryable=true, retry_after) and the client reconnects when the slot or
+    # a circuit has room — the same contract an all-benched chain already
+    # gets. A mid-session walk keeps the terminal answer even when it dials
+    # nothing: its episode ledger already spent real dials, so the skips carry
+    # this session's evidence, and the dead leg's buffered audio still reaches
+    # the client through the terminal flush. An episode that is itself terminal
+    # (exhausted, client departed, expired) keeps it too.
+    episode = current_recovery.get() if recovery_on else None
+    episode_untouched = (
+        episode is not None
+        and not episode.attempted_targets
+        and not episode.exhausted
+        and not episode.client_has_left()
+        and not episode.episode_expired()
+    )
+    if recovery_on and not dialed and episode_untouched:
+        waits = [
+            circuit.account_cooldown_seconds_remaining
+            for circuit in (_circuit_for_primary(service) for service in configured_candidates)
+            if circuit.state == 'open'
+        ]
+        # Canary targets are gated by their own target-level circuit, not the
+        # family default; an open target endpoint is as real a wait as the
+        # family's, and omitting it would park the client shorter than the
+        # gate actually holds.
+        for target in routes:
+            target_entry = target[1] if len(target) > 1 else None
+            circuit_entry = None if target_entry is None else target_circuit(target_entry, None)
+            if circuit_entry is not None and circuit_entry.state == 'open':
+                waits.append(circuit_entry.account_cooldown_seconds_remaining)
+        account_waits = [
+            state.bench_until - time.time()
+            for state in fleet_states.values()
+            if state.bench == 'account' and state.excluded
+        ]
+        waits.extend(account_waits)
+        retry_after = min(max(5, int(max(waits, default=0) + 0.999)), 300)
+        CHAIN_EXHAUSTED_SKIPPED.inc()
+        # One bounded line per parked dial replaces the per-session
+        # `STT failover chain exhausted` ERROR: same single-line signal, no
+        # false terminal-exhaustion storm while the gates are busy.
+        logger.warning(
+            'event=stt_chain_parked every leg skipped before dial ' 'reason=%s subtype=%s retry_after=%d',
+            prior_reason,
+            prior_capacity_subtype or 'none',
+            retry_after,
+        )
+        raise ProviderChainUnavailable(retry_after)
+
     CHAIN_EXHAUSTED.inc()
     pending = PendingLiveFailover(
         component='stt_selection',

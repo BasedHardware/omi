@@ -586,6 +586,10 @@ is latched per receiver, and ring-pressure exhaustion closes through the
 ordinary terminal send path rather than repeating rebuilds per packet.
 
 Metrics: `omi_stt_chain_exhausted_total` increments once per terminal chain;
+`omi_stt_chain_exhausted_skipped_total` increments when the chain ended with
+every leg skipped by pod-local policy and no provider dialled (fresh sessions
+park with the typed `provider_unavailable` backoff instead of terminating —
+see `docs/listen_pusher_pipeline.mdx`);
 `omi_stt_leg_attempts_total{to_mode,outcome}` counts successful and failed actual
 connections; shared `omi_stt_stream_close_total{provider,reason}` counts typed
 budget/quota and authentication refusals at the provider boundary;
