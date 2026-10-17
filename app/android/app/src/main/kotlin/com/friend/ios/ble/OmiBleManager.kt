@@ -40,6 +40,7 @@ class OmiBleManager private constructor(private val application: Application) {
         private const val RSSI_HISTORY_LIMIT = 120
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
         private const val PREFS_BATTERY = "battery_history"
+        private const val PREFS_BLE_ADDRESS_TYPES = "ble_device_address_types"
         private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
         private const val DIAGNOSTICS_SERVICE = "19b10040-e8f2-537e-4f6c-d104768a1214"
         private const val DIAGNOSTICS_CHAR = "19b10041-e8f2-537e-4f6c-d104768a1214"
@@ -111,6 +112,28 @@ class OmiBleManager private constructor(private val application: Application) {
     val mainHandler = Handler(Looper.getMainLooper())
 
     val connectedGatts = ConcurrentHashMap<String, BluetoothGatt>()
+    val discoveredDevices = ConcurrentHashMap<String, BluetoothDevice>()
+
+    internal fun saveAddressType(address: String, addressType: Int) {
+        try {
+            application.getSharedPreferences(PREFS_BLE_ADDRESS_TYPES, Context.MODE_PRIVATE)
+                .edit()
+                .putInt(address.uppercase(), addressType)
+                .apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "saveAddressType failed for $address: ${e.message}")
+        }
+    }
+
+    internal fun getPersistedAddressType(address: String): Int? {
+        return try {
+            val prefs = application.getSharedPreferences(PREFS_BLE_ADDRESS_TYPES, Context.MODE_PRIVATE)
+            val addr = address.uppercase()
+            if (prefs.contains(addr)) prefs.getInt(addr, BluetoothDevice.ADDRESS_TYPE_RANDOM) else null
+        } catch (e: Exception) {
+            null
+        }
+    }
     private val readCompletions = ConcurrentHashMap<String, (Result<ByteArray>) -> Unit>()
     private val writeCompletions = ConcurrentHashMap<String, (Result<Unit>) -> Unit>()
 
@@ -251,6 +274,7 @@ class OmiBleManager private constructor(private val application: Application) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val device = result.device
                 val address = device.address.uppercase()
+                discoveredDevices[address] = device
                 val record = result.scanRecord
                 val name = discoveredPeripheralName(
                     advertisedName = record?.deviceName,
@@ -309,9 +333,12 @@ class OmiBleManager private constructor(private val application: Application) {
     fun connectGatt(address: String, autoConnect: Boolean): BluetoothGatt? {
         val addr = address.uppercase()
         val adapter = bluetoothAdapter ?: return null
-        // Use getRemoteLeDevice with ADDRESS_TYPE_RANDOM to specify the correct address type.
-        val device = if (android.os.Build.VERSION.SDK_INT >= 34) {
-            adapter.getRemoteLeDevice(addr, BluetoothDevice.ADDRESS_TYPE_RANDOM)
+        // Prefer the scan-discovered BluetoothDevice (which preserves the air-observed address type
+        // for public peripherals like OMI Glass); next check persisted address type from prior successful
+        // connections (to handle reconnects after process restart); fall back to ADDRESS_TYPE_RANDOM on API 34+.
+        val device = discoveredDevices[addr] ?: if (Build.VERSION.SDK_INT >= 34) {
+            val addressType = resolveAddressTypeForConnect(null, getPersistedAddressType(addr))
+            adapter.getRemoteLeDevice(addr, addressType)
         } else {
             adapter.getRemoteDevice(addr)
         }
@@ -793,6 +820,9 @@ class OmiBleManager private constructor(private val application: Application) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        saveAddressType(address, gatt.device.addressType)
+                    }
 
                     // Discover services
                     enqueueCommand {
@@ -963,3 +993,9 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 }
+
+internal fun resolveAddressTypeForConnect(
+    discoveredType: Int?,
+    persistedType: Int?,
+    defaultType: Int = BluetoothDevice.ADDRESS_TYPE_RANDOM
+): Int = discoveredType ?: persistedType ?: defaultType
