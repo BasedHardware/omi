@@ -29,7 +29,7 @@ class ChatSessionResponse(BaseModel):
     updated_at: datetime = Field(description='Last update timestamp (UTC).')
     app_id: Optional[str] = Field(default=None, description='App/plugin the session belongs to; null for main chat.')
     plugin_id: Optional[str] = Field(default=None, description='Mirrors app_id for cross-platform query compatibility.')
-    message_count: int = Field(description='Number of messages in the session.')
+    message_count: int = Field(ge=0, description='Number of messages in the session.')
     starred: bool = Field(description='Whether the user starred the session.')
     channel: Optional[str] = Field(default=None, description='Messaging channel for a channel session.')
     channel_link_id: Optional[str] = Field(default=None, description='Link that owns a channel session.')
@@ -75,24 +75,24 @@ class SaveMessageResponse(BaseModel):
     session_id: Optional[str] = Field(default=None, description='Chat session the message belongs to.')
     created: bool = Field(description='True if a new message was created; False for an idempotent retry.')
     updated: bool = Field(default=False, description='True when a newer canonical journal revision replaced payload.')
-    journal_revision: Optional[int] = Field(default=None, description='Highest canonical journal revision stored.')
+    journal_revision: Optional[int] = Field(default=None, ge=0, description='Highest canonical journal revision stored.')
 
 
 class DeleteMessagesResponse(BaseModel):
     """Ack for ``DELETE /v2/desktop/messages`` — carries the deleted count."""
 
     status: str = Field(description='Human-readable status message, e.g. "ok".')
-    deleted_count: int = Field(description='Number of messages deleted.')
+    deleted_count: int = Field(ge=0, description='Number of messages deleted.')
 
 
 class InitialMessageResponse(BaseModel):
     """Response for ``POST /v2/chat/initial-message``."""
 
-    message: str = Field(description='Generated greeting message text.')
-    message_id: str = Field(description='Identifier of the generated message.')
+    message: str = Field(min_length=1, description='Generated greeting message text.')
+    message_id: str = Field(min_length=1, description='Identifier of the generated message.')
 
 
 class GenerateTitleResponse(BaseModel):
     """Response for ``POST /v2/chat/generate-title``."""
 
-    title: str = Field(description='Generated session title.')
+    title: str = Field(min_length=1, description='Generated session title.')
