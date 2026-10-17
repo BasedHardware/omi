@@ -1311,8 +1311,8 @@ class ChatProvider: ObservableObject {
   @Published var claudeAuthUrl: String?
   /// Prevent duplicate browser launches for the same explicit User Claude flow.
   private var claudeAuthLaunchRequested = false
-  /// Settings' Connect Claude is waiting for the runtime's sign-in URL.
-  private var claudeConnectRequested = false
+  /// When Settings' Connect Claude last asked the runtime for a sign-in URL.
+  private var claudeConnectRequestedAt: Date?
   /// The current process has observed a successful explicit OAuth callback.
   /// Passive settings refreshes must not erase that state when Claude stores the
   /// token in its foreign Keychain item instead of the legacy config file.
@@ -2298,13 +2298,18 @@ class ChatProvider: ObservableObject {
       errorMessage = "Unable to start Claude sign-in. Try again."
       return
     }
-    claudeConnectRequested = true
+    claudeConnectRequestedAt = Date()
     await resolvedAgentClient().requestProviderAuth()
   }
 
-  /// A turn's `auth_required` never opens the browser by itself; it waits for Connect.
-  nonisolated static func opensClaudeSignIn(connectRequested: Bool, authUrl: String?) -> Bool {
-    connectRequested && authUrl != nil
+  /// The runtime answers Connect within a second or two. A request it never answered
+  /// must not let a later, unrelated `auth_required` open the browser.
+  nonisolated static let claudeConnectAnswerWindow: TimeInterval = 30
+
+  /// A turn's `auth_required` never opens the browser by itself; only a recent Connect does.
+  nonisolated static func opensClaudeSignIn(connectRequestedAt: Date?, now: Date, authUrl: String?) -> Bool {
+    guard let connectRequestedAt, authUrl != nil else { return false }
+    return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
   }
 
   private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
@@ -2326,8 +2331,10 @@ class ChatProvider: ObservableObject {
     claudeAuthUrl = authUrl
     // Provider auth is distinct from the Pro upgrade sheet.
     isClaudeAuthRequired = false
-    if Self.opensClaudeSignIn(connectRequested: claudeConnectRequested, authUrl: authUrl) {
-      claudeConnectRequested = false
+    let opensSignIn = Self.opensClaudeSignIn(
+      connectRequestedAt: claudeConnectRequestedAt, now: Date(), authUrl: authUrl)
+    if authUrl != nil { claudeConnectRequestedAt = nil }
+    if opensSignIn {
       claudeAuthLaunchRequested = false
       startClaudeAuth()
     }
