@@ -28,7 +28,10 @@ statuses for other integrations. Task snapshots validate before cache adoption. 
 checks use that verdict, never the presence of a serialized access token.
 
 Task authorization keeps the prior default until the server confirms the new
-grant, then persists the selection. Failure to persist the default remains
+grant, then persists the selection. A selection owns its attempt from the
+confirmation dialog through launch, polling and save; choosing another app while
+an earlier authorization is still launching retires it (latest selection wins).
+A launch that throws reports failure and leaves no loading state behind. Failure to persist the default remains
 retryable. An unfinished browser flow shows instructions and a manual status
 check; it never becomes an endless spinner or a confirmed grant.
 
@@ -39,6 +42,8 @@ check; it never becomes an endless spinner or a confirmed grant.
 - [x] Terminal, retryable read failures preserve saved connection information.
 - [x] Fresh post-auth reads fence old reads and account changes.
 - [x] Task selection follows server-confirmed authorization.
+- [x] Latest task selection wins even while an older authorization is still
+      launching; late receipts after page or account changes do nothing.
 - [x] Hermetic production-widget, native-bridge and provider regressions.
 - [ ] Merge the fix and ship an Android store release (also validate iOS).
 - [ ] On Samsung S26 Ultra, complete referral Google signup and return to Omi.
@@ -54,3 +59,38 @@ not. No account contents or recordings are changed by this fix.
 References:
 - https://pub.dev/packages/url_launcher#checking-supported-schemes
 - https://developers.googleblog.com/upcoming-security-changes-to-googles-oauth-20-authorization-endpoint-in-embedded-webviews/
+
+## Completion audit after #21381
+
+The first PR was merged while the audit continued. The follow-up closes the
+remaining mobile and web client gaps:
+
+- Native Calendar/Gmail and task authorization keep checking when the grant is
+  saved after foreground return; default selection follows the confirmed grant.
+- Marketplace setup uses a typed successful boolean verdict, serial probes,
+  bounded initial/detail reads and explicit retry. Failed responses and absent
+  endpoints cannot claim setup complete. Only explicit setup/enable intent may
+  auto-install after confirmation.
+- MCP waits for approval AND the server's enable receipt, bounds creation/status
+  calls, retries an existing registration, cancels on leaving and cannot pop a
+  different route from a late callback.
+- External settings/home pages join affiliate signup in the system browser;
+  embedded Google popup handling and spoofed user agents are retired. URL/uid
+  construction, server-stored grants and conversation data are preserved.
+- Vendor completion probes use the documented uid contract without forwarding
+  Omi's Firebase bearer token; vendor failures cannot expire the Omi session.
+- Web referral activation has one token/request/body deadline, a working manual
+  retry and account/route ownership fences. It does not automatically retry an
+  eligibility rejection or alter the desktop referral destination.
+
+Release requires the follow-up mobile AND web changes, plus #21355's web helper
+proxy/client together. As of 2026-10-16, #21355 is open (mergeable, CI green,
+no approval); its review notes that the callback configuration and a real
+provider round trip are not yet demonstrated. Roll out the web helper proxy and
+this client in one coordinated deploy, never this client alone. Verify the
+Firebase/Google/Apple callback configuration in `web/app/docs/firebase-auth.md`
+from #21355 and perform real Google and Apple sign-ins, including on Samsung
+S26 Ultra. Mocked and hermetic tests do not verify production sign-in.
+The unspecified general Try Again screen still requires the reporter's screen,
+version and integration names; this audit does not invent its cause or close the
+customer incident from code merge.
