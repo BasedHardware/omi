@@ -125,6 +125,10 @@ enum DefaultsKey: String {
   /// (contract §3/§9). Absent key means enabled (default on) — see
   /// `MeetingNoteScreenshotsFeature.isEnabled`.
   case meetingNoteScreenshotsEnabled = "meetingNoteScreenshotsEnabled"
+  /// Explicit local opt-in for read-only pre-meeting context in Conversations.
+  case meetingMemoryBriefsEnabled = "meetingMemoryBriefsEnabled"
+  /// Last meeting brief dismissed on this Mac; includes owner identity to prevent cross-account carryover.
+  case meetingMemoryBriefDismissedKey = "meetingMemoryBriefDismissedKey"
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
