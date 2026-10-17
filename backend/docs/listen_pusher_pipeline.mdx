@@ -5444,9 +5444,12 @@ and configured targets remain authoritative (the checked-in prod allocation is
 Provider/model/language policy and the managed chain's health, account, capacity
 and failover gates remain authoritative; vendor failover is still available.
 Admission is pinned before a cap-paused return and stays fixed on resume.
-Batch-treated sessions are excluded from both arms of the separate live-demand
-experiment before capture or socket metering; its visibility policy does not
-switch these sessions back to vendors. There is no silent/none-preview mode. Batch ownership and final
+While the retirement percentage is positive, the entire eligible population
+(treatment and controls) is excluded from the separate live-demand experiment.
+Controls use normal configured routing; treatment prefers TDT windows. At zero,
+the previous live-demand behavior is preserved. Parity capture refreshes route
+and request metadata before the first provider event, retaining cap-paused
+client audio. Selection is applied once per connection. There is no silent/none-preview mode. Batch ownership and final
 transcript projection are unchanged. Unknown or unsupported language profiles
 retain existing live STT.
 Compatible listen **and pusher** artifacts and all-live batch qualification must

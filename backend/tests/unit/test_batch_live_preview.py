@@ -1,6 +1,7 @@
 """Batch cohort alignment, durable coverage and actual vendor-write denominators."""
 
 import asyncio
+import json
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -18,6 +19,8 @@ from models.conversation import Conversation
 from utils.conversations import lifecycle
 from routers.listen.receiver import ListenReceiver
 from routers.listen.lane_meter import LiveLaneMeter
+from routers.listen.parity_capture import ListenParityCapture
+from testing.parity_pack_v0.schema import RequestFingerprint
 
 
 @pytest.fixture(autouse=True)
@@ -159,16 +162,18 @@ def test_actual_selector_prefers_configured_parakeet_and_retains_policy(monkeypa
     assert h.stt_service == streaming.STTService.parakeet
     assert h.stt_model == 'parakeet-window'
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0')
-    assert batch_preview.capture_batch_preview(h)
-    assert h.stt_service == streaming.STTService.soniox
+    unavailable = host()
+    assert batch_preview.capture_batch_preview(unavailable)
+    assert unavailable.stt_service == streaming.STTService.soniox
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     assert h.demand_telemetry.batch_cohort == 'admitted'
     monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
     assert demand_routing.attach_live_demand(SimpleNamespace(host=h)) is None
     # No configured Parakeet: keep the configured vendor, never add a provider.
     monkeypatch.setattr(streaming, 'stt_service_models', ['soniox'])
-    assert batch_preview.capture_batch_preview(h)
-    assert h.stt_service == streaming.STTService.soniox
+    missing = host()
+    assert batch_preview.capture_batch_preview(missing)
+    assert missing.stt_service == streaming.STTService.soniox
     monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
     assert batch_preview.capture_batch_preview(h)  # Existing connection remains pinned.
     assert h.demand_telemetry.batch_cohort == 'admitted'
@@ -340,3 +345,80 @@ def test_window_preference_supersedes_hintable_vendor_only_when_policy_permits(m
         )[0]
         == streaming.STTService.soniox
     )
+
+
+def test_active_preview_controls_are_isolated_and_use_normal_policy(monkeypatch):
+    enable(monkeypatch)
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '1')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://synthetic.invalid')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-key')
+    monkeypatch.setattr(streaming, 'stt_service_models', ['soniox', 'parakeet-window'])
+    h = host()
+    h.request.uid = next(
+        f'synthetic-control-{i}' for i in range(100) if not batch_live_preview.selected(f'synthetic-control-{i}')
+    )
+    h.stt_service = streaming.STTService.parakeet
+    h.stt_model = 'parakeet-window'
+    attached = telemetry.attach_demand_telemetry(h, 'admitted')
+    h._demand_cohort = 'admitted'
+    assert not batch_preview.capture_batch_preview(h)
+    assert h.batch_preview_isolated
+    assert attached.batch_cohort == 'eligible_control'
+    assert h._demand_cohort == attached.cohort == 'ineligible'
+    assert h.stt_service == streaming.STTService.soniox
+    assert demand_routing.attach_live_demand(SimpleNamespace(host=h)) is None
+
+
+def test_zero_preview_percent_preserves_existing_live_demand_treatment(monkeypatch):
+    enable(monkeypatch)
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
+    monkeypatch.setattr(batch_preview, 'get_stt_service_for_language', lambda *a, **k: pytest.fail('dark reselection'))
+    h = host()
+    attached = telemetry.attach_demand_telemetry(h, 'admitted')
+    h._demand_cohort = 'admitted'
+    assert not batch_preview.capture_batch_preview(h)
+    assert not h.batch_preview_isolated
+    assert attached.batch_cohort == 'eligible_control'
+    assert attached.cohort == 'admitted'
+    assert demand_routing.attach_live_demand(SimpleNamespace(host=h)).eligible
+
+
+def test_preview_reselection_refreshes_parity_and_keeps_cap_paused_audio(monkeypatch, tmp_path):
+    enable(monkeypatch)
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://synthetic.invalid')
+    monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-key')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
+    monkeypatch.setattr(streaming, 'stt_service_models', ['soniox', 'parakeet-window'])
+    h = host()
+    h.request.codec, h.request.sample_rate, h.request.channels = 'pcm16', 8000, 1
+    initial = dict(codec='pcm16', sample_rate=8000, channels=1, language='en', provider='soniox', model='soniox')
+    h.parity_capture = ListenParityCapture.from_environ(
+        principal_id=h.request.uid,
+        session_id='synthetic-session',
+        provider='soniox',
+        model='soniox',
+        request=initial,
+        environ=dict(
+            OMI_ENV_STAGE='dev',
+            OMI_PARITY_PACK_CAPTURE='1',
+            OMI_PARITY_PACK_ALLOWED_PRINCIPALS=h.request.uid,
+            OMI_PARITY_PACK_ROOT=str(tmp_path),
+        ),
+    )
+    assert h.parity_capture.enabled
+    assert batch_preview.capture_batch_preview(h, select_provider=False)
+    h.parity_capture.observe_client_audio(b'synthetic-paused-capture')
+    assert batch_preview.capture_batch_preview(h)
+    h.parity_capture.observe_outbound_stt(b'synthetic-window-request')
+    h.parity_capture.persist()
+    cassette = json.loads(next((tmp_path / 'cassettes').glob('*.json')).read_text())
+    assert cassette['identity']['route_or_model'] == 'parakeet-window'
+    expected = {**initial, 'provider': 'parakeet', 'model': 'parakeet-window'}
+    assert cassette['request_fingerprint'] == RequestFingerprint.from_request(expected).as_dict()
+    assert [event['direction'] for event in cassette['events']] == ['client', 'outbound']
+    assert not h.parity_capture.reselect(provider='soniox', model='soniox', request=initial)
+    monkeypatch.setattr(
+        batch_preview, 'get_stt_service_for_language', lambda *a, **k: pytest.fail('resume reselection')
+    )
+    assert batch_preview.capture_batch_preview(h)

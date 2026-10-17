@@ -1,16 +1,22 @@
 """Dark, batch-hash live vendor retirement; final transcript ownership is durable."""
 
+import math
 import os
 
 from config.batch_pipeline import in_percent_cohort, record_capture_eligible
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
-def selected(uid: str) -> bool:
+def rollout_percent() -> float:
     try:
-        return in_percent_cohort(uid, float(os.getenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')))
+        value = float(os.getenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0'))
+        return value if math.isfinite(value) and 0 <= value <= 100 else 0
     except ValueError:
-        return False
+        return 0
+
+
+def selected(uid: str) -> bool:
+    return in_percent_cohort(uid, rollout_percent())
 
 
 def language_qualified(host, capture: dict) -> bool:
