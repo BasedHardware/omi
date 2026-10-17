@@ -457,3 +457,5 @@ tests/unit/test_backend_listen_helm_defaults.py::test_windowed_live_rollout_is_p
 tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traffic_types[False-dedicated]
 # 2026-10-16: scripted 8-turn hunt with 26 proposals, verification and exact undo (0.32-0.41s CPU under load). Assertions still run.
 tests/unit/test_dream_replay.py::test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo
+# 2026-10-17: parses runtime and fixture manifests to reject a false live-bucket validation claim (0.7-1.1s CPU under runner load). Assertions still run.
+tests/unit/test_frame_request_bucket_contract.py::test_runtime_manifest_alone_cannot_claim_live_bucket_validation

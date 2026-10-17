@@ -5489,3 +5489,56 @@ that these spans were silent. Uncertain/provider/validation failures remain held
 and no further paid intent is granted. The one-owner historical operator and old
 GPU-canary VAD/explicit-epoch-2 route are documented in
 [`batch-pipeline-serving.md`](batch-pipeline-serving.md#terminal-empty-recognition-dark).
+
+
+### Dark batch-covered live preview
+
+`BATCH_LIVE_STT_RETIRE_PERCENT` defaults to `0` and uses the exact unsalted batch
+admission bucket. Before the first live socket, listen requires the prepared
+conversation's durable `record_lane_owner=batch_live_v1`, matching conversation
+ID, current batch/live admission, private-cloud sync, platform keys, single
+channel, a declared TDT-supported language with a fully supported expected-language
+profile, and pusher enabled. Resumed legacy
+records never qualify just because the owner is admitted. The already loaded
+conversation snapshot is reduced to scalar eligibility fields; transcripts and
+photos are never retained by this gate. Fresh capture resolves the privacy level
+through the existing write resolver before stamping ownership, so E2EE remains
+excluded and the write performs no second privacy lookup. No new Firestore scan
+is introduced.
+
+Selected sessions prefer configured `parakeet-window`, reusing the resident
+self-hosted TDT model. The internal preference is passed only by this dark gate;
+existing client engine hints keep their previous semantics. Window allocation
+and configured targets remain authoritative (the checked-in prod allocation is
+100%). No RNNT model load or new GPU deployment is proposed.
+Provider/model/language policy and the managed chain's health, account, capacity
+and failover gates remain authoritative; vendor failover is still available.
+Admission is pinned before a cap-paused return and stays fixed on resume.
+While the retirement percentage is positive, the entire eligible population
+(treatment and controls) is excluded from the separate live-demand experiment.
+Controls use normal configured routing; treatment prefers TDT windows. At zero,
+the previous live-demand behavior is preserved. Parity capture refreshes route
+and request metadata before the first provider event, retaining cap-paused
+client audio. Selection is applied once per connection. There is no silent/none-preview mode. Batch ownership and final
+transcript projection are unchanged. Unknown or unsupported language profiles
+retain existing live STT.
+Compatible listen **and pusher** artifacts and all-live batch qualification must
+precede this ramp; Cloud Run deployment alone does not install GKE artifacts.
+
+`omi_batch_live_stt_capture_audio_seconds_total{batch_cohort}` counts decoded
+capture; `omi_batch_live_stt_provider_wire_audio_seconds_total{provider,batch_cohort}`
+counts successful paid PCM writes, including replay, with admission pinned before
+dialing. Labels are only `admitted`, `eligible_control`, `ineligible` plus provider.
+Compare Soniox wire seconds / capture seconds between arms and before/after ramp;
+wire hours are `/3600`, not vendor acknowledgements or an invoice. Missing series
+or zero capture exposure cannot establish savings. Paid failover remains visible
+in the admitted arm. Disabling the ramp takes effect on reconnect; drain existing
+WebSockets before claiming rollback complete.
+
+`FIRST_SUMMARY_DEADLINE_PERCENT=0` preserves the existing summary allowlist/global
+contract. Positive values add the same percentage bucket to the retained summary
+allowlist independently of batch admission, under
+`FIRST_SUMMARY_DEADLINE_ENABLED`. A positive percentage with an empty summary
+allowlist is cohort-only; at zero an empty list still means global enablement.
+Keep existing allowlists when ramping or rolling back. `SUMMARY_DEBT_REPAIR_ENABLED`
+remains false. The 120-second budget is dispatch, not model completion.

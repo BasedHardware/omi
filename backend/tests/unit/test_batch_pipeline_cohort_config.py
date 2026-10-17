@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.batch_pipeline import enabled_for, recovery_owners
+from config.batch_pipeline import recovery_owners
 
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
@@ -45,21 +45,30 @@ def hosts(config):
     }
 
 
-def test_only_david_is_admitted_on_every_sync_host(manifest, monkeypatch):
+def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():
-            for key in ('BATCH_PIPELINE_ENABLED', 'BATCH_PIPELINE_PERCENT', 'BATCH_PIPELINE_UID_ALLOWLIST'):
-                monkeypatch.setenv(key, env[key]['value'])
-            assert enabled_for(UID) is (stage == 'prod')
-            for excluded in ('', 'another-owner', UID + '-suffix'):
-                assert not enabled_for(excluded)
+            assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            if stage == 'prod':
+                assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
+                assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
+            else:
+                allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
+                assert allowlist is None or allowlist.get('value', '') == ''
             assert env['BATCH_PIPELINE_WORKER_ENABLED']['value'] == 'false'
             assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED']['value'] == 'false'
             if stage == 'dev':
                 assert env['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'false'
-                assert env['BATCH_PIPELINE_UID_ALLOWLIST']['value'] == ''
+                assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
+    assert listen_chart_envs[0].get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
+    assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
+    prod_hosts = hosts(manifest['prod'])
+    assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
+    assert prod_hosts['backend-sync-backfill']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '0'
+    assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
 def test_quarantine_recovery_is_david_only_on_prod_integration(

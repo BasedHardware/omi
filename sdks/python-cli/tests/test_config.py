@@ -70,6 +70,42 @@ def test_load_invalid_utf8_records_unicode_error(config_path: Path) -> None:
     assert "not valid UTF-8" in config.load_error
 
 
+def test_load_unreadable_file_records_error_instead_of_raising(config_path: Path) -> None:
+    """A config that exists but cannot be opened must degrade like a parse
+    failure. Before this was handled, the OSError escaped load() and every
+    command — including `omi version` — died on the generic last-chance
+    handler, which is the one situation the empty-Config path is for."""
+    config_path.mkdir(parents=True)  # exists, but is not a readable file
+    config = cfg.load()
+    assert config.path == config_path
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+
+
+def test_version_succeeds_with_unreadable_config(config_path: Path, cli_runner) -> None:
+    """`omi version` must keep working when the config cannot be read at all."""
+    config_path.mkdir(parents=True)
+    result = cli_runner.invoke(app, ["version"])
+    assert result.exit_code == 0, result.output
+    assert "omi-cli" in result.output
+
+
+def test_save_refuses_to_overwrite_unreadable_config(config_path: Path) -> None:
+    """The load_error from an unreadable file must also arm save()'s guard, so
+    a write command cannot replace config it was never able to read."""
+    config_path.mkdir(parents=True)
+    config = cfg.load()
+    assert config.was_load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+    assert config_path.is_dir()
+
+
 def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
     """save() must refuse to overwrite a file that failed to parse on load:
     a write command would otherwise silently destroy profiles/credentials the

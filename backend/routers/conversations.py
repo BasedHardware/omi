@@ -997,6 +997,7 @@ def get_conversations(
         folder_id=folder_id,
         starred=starred,
         budget=budget,
+        list_fields_only=True,
     )
 
     redact_conversations_for_list(conversations)

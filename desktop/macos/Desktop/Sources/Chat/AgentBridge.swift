@@ -679,6 +679,10 @@ actor AgentBridge {
     return supplied
   }
 
+  func requestProviderAuth() async {
+    await runtime.requestProviderAuth()
+  }
+
   func setGlobalAuthHandlers(
     onAuthRequired: AuthRequiredHandler?,
     onAuthSuccess: AuthSuccessHandler?

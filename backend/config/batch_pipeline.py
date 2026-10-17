@@ -31,8 +31,15 @@ def enabled_for(owner_id: str) -> bool:
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
     owners = {value.strip() for value in os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', '').split(',') if value.strip()}
+    return owner_id in owners or in_percent_cohort(owner_id, percent)
+
+
+def in_percent_cohort(owner_id: str, percent: float) -> bool:
+    """Shared unsalted admission bucket; invalid percentages never admit."""
+    if not owner_id or not math.isfinite(percent) or not 0 <= percent <= 100:
+        return False
     bucket = int.from_bytes(hashlib.sha256(owner_id.encode()).digest()[:4], 'big') / 2**32 * 100
-    return owner_id in owners or bucket < percent
+    return bucket < percent
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:

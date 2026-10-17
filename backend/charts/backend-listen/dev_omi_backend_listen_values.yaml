@@ -122,6 +122,10 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: ""
+  - name: FIRST_SUMMARY_DEADLINE_PERCENT
+    value: "0"
+  - name: BATCH_LIVE_STT_RETIRE_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_SERVING_ENABLED
@@ -200,7 +204,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS

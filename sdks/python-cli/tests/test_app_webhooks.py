@@ -403,6 +403,17 @@ def test_target_rejects_an_address_omi_will_not_deliver_to() -> None:
         assert "never receives an event" in (report.detail or "")
 
 
+def test_target_rejects_a_non_public_address_in_its_ipv4_mapped_form() -> None:
+    # A dual-stack resolver can answer with ::ffff:a.b.c.d for the same host
+    # that returns a.b.c.d elsewhere. Omi refuses the delivery either way, so
+    # the check has to agree with itself whichever form it is handed.
+    for address in ("100.64.0.1", "::ffff:100.64.0.1"):
+        report = webhook_target.inspect_target("http://tailscale.test/webhook", resolver=lambda _: [address])
+        assert not report.ok, address
+        assert "non-public address" in report.summary
+        assert address in report.summary
+
+
 def test_target_rejects_a_scheme_and_a_host_omi_cannot_use() -> None:
     assert not webhook_target.inspect_target("ftp://example.com/webhook").ok
     unresolvable = webhook_target.inspect_target(

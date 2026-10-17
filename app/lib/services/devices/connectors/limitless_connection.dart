@@ -40,6 +40,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _isInitialized = false;
   bool _isReinitializing = false;
   bool _pendingReinit = false;
+  bool _closed = false;
+  Future<void>? _disconnectOperation;
   bool _isBatchMode = false;
   final Duration _streamHealthWindow;
   final Duration _storageStatusTimeout;
@@ -78,25 +80,53 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
     _resetClockDriftCapture();
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    try {
+      await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    } on DeviceConnectionTimeoutException {
+      // DeviceService preserves the native transport after a launch timeout.
+      // Keep the device-specific setup alive too, including its first RX subscription.
+      _listenForTransportReconnects();
+      if (status == DeviceConnectionState.connected) unawaited(_handleTransportReconnected());
+      rethrow;
+    }
 
+    final epoch = connectionEpoch;
+    await _completeInitialSetup(epoch);
+    _listenForTransportReconnects();
+    // A drop/ready may have occurred during the initial settle/clock waits.
+    if (epoch != connectionEpoch) await _handleTransportReconnected();
+  }
+
+  bool _isCurrentSession(int epoch) =>
+      !_closed && status == DeviceConnectionState.connected && connectionEpoch == epoch;
+
+  void _listenForTransportReconnects() {
+    if (_closed) return;
+    _transportReconnectSubscription ??= transport.connectionStateStream
+        .where((s) => s == DeviceTransportState.connected)
+        .listen((_) => unawaited(_handleTransportReconnected()));
+  }
+
+  Future<void> _completeInitialSetup(int epoch) async {
     await Future.delayed(const Duration(seconds: 1));
+    if (!_isCurrentSession(epoch)) return;
 
     _attachRxSubscription();
 
     // Wait the same 1s settle window as before, but return early if a Type-8
     // clock arrives so we measure drift before SetCurrentTime (#5734).
     await _awaitPreSyncClock(const Duration(seconds: 1));
+    if (!_isCurrentSession(epoch)) return;
 
-    await _initialize();
-
-    _transportReconnectSubscription = transport.connectionStateStream
-        .where((s) => s == DeviceTransportState.connected)
-        .listen((_) => _handleTransportReconnected());
+    await _initialize(epoch);
   }
 
   @override
-  Future<void> disconnect() async {
+  Future<void> disconnect() => _disconnectOperation ??= _disconnect();
+
+  Future<void> _disconnect() async {
+    _closed = true;
+    _pendingReinit = false;
     _cancelStreamHealthWatch();
     await _transportReconnectSubscription?.cancel();
     _transportReconnectSubscription = null;
@@ -108,6 +138,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await super.disconnect();
   }
 
+  @override
+  void onPhysicalConnectionLost() => _cancelStreamHealthWatch();
+
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
     _rxSubscription =
@@ -115,6 +148,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _handleTransportReconnected() async {
+    if (!_isCurrentSession(connectionEpoch)) return;
     if (_isReinitializing) {
       _pendingReinit = true;
       return;
@@ -123,18 +157,40 @@ class LimitlessDeviceConnection extends DeviceConnection {
     try {
       do {
         _pendingReinit = false;
-        _attachRxSubscription();
-        await _reinitializeAfterReconnect();
-      } while (_pendingReinit);
+        final epoch = connectionEpoch;
+        if (!_isCurrentSession(epoch)) return;
+        if (_isInitialized) {
+          _attachRxSubscription();
+          await _reinitializeAfterReconnect(epoch);
+        } else {
+          // The first native ready can arrive after connect() has already timed out.
+          // Retry a transient setup failure once, without a reconnect/reset loop.
+          for (var attempt = 0; attempt < 2; attempt++) {
+            try {
+              _resetProtocolSessionForReconnect();
+              _resetClockDriftCapture();
+              await _completeInitialSetup(epoch);
+              break;
+            } catch (_) {
+              if (!_isCurrentSession(epoch)) break;
+              if (attempt == 1) rethrow;
+              await Future<void>.delayed(const Duration(milliseconds: 400));
+              if (!_isCurrentSession(epoch)) break;
+            }
+          }
+        }
+      } while (_pendingReinit && !_closed);
+    } catch (e, stack) {
+      DebugLogManager.logError(e, stack, 'Limitless late connection setup failed');
     } finally {
       _isReinitializing = false;
     }
   }
 
-  Future<void> _reinitializeAfterReconnect() async {
+  Future<void> _reinitializeAfterReconnect(int epoch) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
     // The native drain engine owns the control characteristic during a flash drain.
-    if (_isBatchMode) return;
+    if (_isBatchMode || !_isCurrentSession(epoch)) return;
     try {
       _resetProtocolSessionForReconnect();
 
@@ -143,12 +199,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
       // state when recording restarts with an invalid clock.
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
+      if (!_isCurrentSession(epoch)) return;
       await Future.delayed(const Duration(milliseconds: 400));
+      if (!_isCurrentSession(epoch) || _isBatchMode) return;
 
       if (!_realtimeSuppressed) {
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
-        _armStreamHealthWatch(reason: 'bluetooth_reconnect');
+        if (!_isCurrentSession(epoch)) return;
+        if (!_realtimeSuppressed) _armStreamHealthWatch(reason: 'bluetooth_reconnect');
       }
       DebugLogManager.logInfo('Limitless device re-initialized after reconnect', {
         'timeSynced': true,
@@ -161,13 +220,16 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   Future<void> setRealtimeAudioSuppressed(bool suppressed) async {
+    if (_closed) return;
     _realtimeSuppressed = suppressed;
     if (suppressed) _cancelStreamHealthWatch();
-    if (!_isInitialized || _isBatchMode) return;
+    final epoch = connectionEpoch;
+    if (!_isInitialized || _isBatchMode || !_isCurrentSession(epoch)) return;
     try {
       final cmd = _encodeEnableDataStream(enable: !suppressed);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
-      if (!suppressed) _armStreamHealthWatch(reason: 'realtime_resumed');
+      if (!_isCurrentSession(epoch)) return;
+      if (!suppressed && !_realtimeSuppressed) _armStreamHealthWatch(reason: 'realtime_resumed');
       DebugLogManager.logInfo('Limitless realtime ${suppressed ? 'suppressed' : 'resumed'} (Transcribe Later)');
     } catch (e) {
       Logger.debug('Limitless: setRealtimeAudioSuppressed($suppressed) failed: $e');
@@ -179,7 +241,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // The Limitless pendant stops streaming BLE audio after an extended period
     // without a live server connection. Re-send the enable-data-stream command
     // so it resumes, just as _reinitializeAfterReconnect() does after BT reconnect.
-    await _reinitializeAfterReconnect();
+    if (_isInitialized) await _handleTransportReconnected();
   }
 
   @override
@@ -236,8 +298,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
   }
 
-  Future<void> _initialize() async {
+  Future<void> _initialize(int epoch) async {
     try {
+      if (!_isCurrentSession(epoch)) return;
       // Freeze drift capture *before* SetCurrentTime leaves the phone so a
       // Type-8 arriving during the write cannot be mistaken for pre-sync RTC (#5734).
       _timeSynced = true;
@@ -245,13 +308,26 @@ class LimitlessDeviceConnection extends DeviceConnection {
       // pendant-clock RX during the connect listen window above.
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
+      if (!_isCurrentSession(epoch)) return;
       await Future.delayed(const Duration(seconds: 1));
+      if (!_isCurrentSession(epoch)) return;
 
       // Command 2: Enable data streaming (skipped in Transcribe Later — pendant records to flash)
       if (!_realtimeSuppressed) {
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+        if (!_isCurrentSession(epoch)) return;
         await Future.delayed(const Duration(seconds: 1));
+        if (!_isCurrentSession(epoch)) return;
+        // A mode change during setup must win even before _isInitialized admits
+        // ordinary mode writes. Reconcile changes arriving during the write too.
+        var appliedSuppression = false;
+        while (appliedSuppression != _realtimeSuppressed) {
+          appliedSuppression = _realtimeSuppressed;
+          await transport.writeCharacteristic(
+              limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream(enable: !appliedSuppression));
+          if (!_isCurrentSession(epoch)) return;
+        }
       }
 
       _isInitialized = true;
@@ -261,6 +337,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         if (_clockDriftOffsetMs != null) 'clockDriftOffsetMs': _clockDriftOffsetMs,
       });
     } catch (e) {
+      if (!_isCurrentSession(epoch)) return;
       Logger.debug('Limitless: Initialization failed: $e');
       DebugLogManager.logError(e, null, 'Limitless initialization failed');
       rethrow;
@@ -268,7 +345,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   void _handleNotification(List<int> data) {
-    if (data.isEmpty) return;
+    if (_closed || data.isEmpty) return;
     if (_rxPacketsSinceStreamActivation == 0) {
       Logger.debug('Limitless: First RX packet observed after stream activation');
       DebugLogManager.logEvent('limitless_first_rx_packet', {'bytes': data.length});
@@ -1984,9 +2061,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
-    if (!_isInitialized) {
+    if (_closed) {
       return null;
     }
+
+    // Capture may bind as soon as native reports connected, while the pendant's
+    // clock/stream setup is still settling. Keep that listener for the first frames.
 
     final wrapperController = StreamController<List<int>>();
     StreamSubscription? audioSubscription;
