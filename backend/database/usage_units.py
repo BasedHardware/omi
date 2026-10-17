@@ -240,13 +240,13 @@ def _ambiguous_quantity(leaf, quantity):
     amount, units, missing = _historical_quantity(leaf, quantity)
     if not units or not missing:
         return 0
-    return min(amount, missing) if quantity == 'events' else amount
+    return min(int(amount), missing) if quantity == 'events' else amount
 
 
 def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
     total = float(leaf.get(quantity, 0))
     if not enforcing or funding in EXCLUDED_FUNDING:
-        return total
+        return int(total) if quantity == 'events' else total
     historical, units, missing = _historical_quantity(leaf, quantity)
     covered = max(0, total - historical - float(leaf.get(unpriced, 0)))
     # Only historical units may establish historical coverage. A new priced
@@ -254,7 +254,7 @@ def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
     # Mixed historical priced statuses remain ambiguous, never double-billed.
     if units or funding == 'omi' and not missing:
         covered += historical
-    return covered
+    return int(covered) if quantity == 'events' else covered
 
 
 def get_usage_units(

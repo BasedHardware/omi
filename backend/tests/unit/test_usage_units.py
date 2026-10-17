@@ -344,6 +344,7 @@ def test_mixed_old_and_new_hour_and_day_documents_report_unprojected_residuals(u
     assert completeness['unprojected_transcription_seconds'] == 70
     assert completeness['unprojected_hourly_docs'] == 1
     assert completeness['unprojected_gateway_attempts'] == 5
+    assert type(completeness['unprojected_gateway_attempts']) is int
     assert completeness['unprojected_gateway_days'] == 1
 
 
@@ -679,5 +680,6 @@ def test_historical_and_new_gateway_attempts_remain_disjoint(units, monkeypatch,
     residual = (not old_priced) + (new_status == 'missing')
     expected = (1000000 if old_priced else 0) + new_units + int(residual * standard_chat_units() * 1_000_000)
     assert result['completeness']['unprojected_gateway_attempts'] == residual
+    assert type(result['completeness']['unprojected_gateway_attempts']) is int
     assert result['completeness']['ambiguous_priced_gateway_attempts'] == 0
     assert result['used_units'] == expected / 1_000_000
