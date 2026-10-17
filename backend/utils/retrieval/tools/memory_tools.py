@@ -326,7 +326,7 @@ def get_memories_tool(
                     break
         memories = omit_channel_private(visible[max(offset, 0) : target_end], configurable)
     except Exception as e:
-        logger.error("get_memories_tool retrieval failed error_type=%s", type(e).__name__)
+        logger.error("get_memories_tool retrieval failed error_type=%s", type(e).__name__, exc_info=True)
         return lookup_failed('memories')
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
@@ -581,9 +581,5 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        error_msg = f"Error performing memory search: {str(e)}"
-        logger.info(f"❌ search_memories_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error searching memories: {str(e)}"
+        logger.error(f"❌ Error searching memories: {e}", exc_info=True)
+        return "Error searching memories. Please try again."
