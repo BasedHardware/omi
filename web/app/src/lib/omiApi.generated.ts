@@ -5273,6 +5273,13 @@ export interface SummaryTaskReference {
   expected_description: string;
 }
 
+export interface SurfaceStateRequest {
+  foreground: boolean;
+  session_id: string;
+  surface_open: boolean;
+  transcript_visible: boolean;
+}
+
 export interface SyncBatchItem {
   apple_reminder_id?: string | null;
   completed?: boolean | null;
@@ -6896,6 +6903,7 @@ export interface OmiApiSchemas {
   "SubscriptionPlan": SubscriptionPlan;
   "SubscriptionStatus": SubscriptionStatus;
   "SummaryTaskReference": SummaryTaskReference;
+  "SurfaceStateRequest": SurfaceStateRequest;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
   "SyncCaptureManifestFile": SyncCaptureManifestFile;
@@ -10831,6 +10839,16 @@ export interface OmiApiPaths {
       operationId: "put_budget_choice_v1_users_budget_choice_put";
       responses: {
         "200": BudgetChoiceWriteResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/client-state": {
+    post: {
+      operationId: "report_surface_state_v1_users_client_state_post";
+      responses: {
+        "200": UserStatusResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19573,6 +19591,27 @@ export async function put_budget_choice_v1_users_budget_choice_put(header: { X_A
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function report_surface_state_v1_users_client_state_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SurfaceStateRequest, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/client-state`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summaries_v1_users_daily_summaries_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummariesResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries`;
@@ -22505,4 +22544,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 513 client methods generated.
+// Total: 514 client methods generated.

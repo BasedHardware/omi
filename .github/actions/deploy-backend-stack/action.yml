@@ -707,6 +707,34 @@ runs:
       run: |
         case "$SYNC_MEMORY" in 6Gi|8Gi) ;; *) echo 'backend-sync memory must be 6Gi or 8Gi' >&2; exit 1 ;; esac
 
+    - name: Resolve live sync maxScale
+      id: live-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+        # Service-level caps are the live ops control; older services may only have a revision cap.
+        # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
+        MAX_SCALE="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+            [.[] | select(.metadata.name == $service)]
+            | if length > 1 then error("Duplicate Cloud Run service") else
+                (.[0].metadata.annotations["run.googleapis.com/maxScale"]
+                 // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
+                 // "50") end
+            | if type == "string" and test("^[1-9][0-9]*$") then .
+              else error("Invalid Cloud Run maxScale") end
+            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
+            | if length > 3 then "50"
+              elif tonumber > 500 then "50" else . end')"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
       id: deploy-backend-sync
       uses: google-github-actions/deploy-cloudrun@v3
@@ -723,7 +751,7 @@ runs:
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_sync_identity_flags }}
           --cpu=2
-          --max-instances=50
+          --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
           --memory=${{ inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}

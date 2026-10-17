@@ -586,15 +586,25 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Dev keeps Dream disabled, but these processing hosts declare its bindings.
-    # Derive fixtures from the manifest, including the empty dev allowlist.
+    # These fixtures exercise unrelated gateway/secret failures. Carry explicit
+    # Dream and demand defaults from the manifest, including empty allowlists.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     services = manifest['environments']['dev']['cloud_run']['services']
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         bindings = services[service]['env']
         entries = ',\n'.join(
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
-            for name in ('DREAM_AGENT_ELIGIBILITY', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_ON_DEMAND_ENABLED')
+            for name in (
+                'DREAM_AGENT_ELIGIBILITY',
+                'DREAM_AGENT_UID_ALLOWLIST',
+                'DREAM_ON_DEMAND_ENABLED',
+                'DEMAND_PROCESSING_ENABLED',
+                'DEMAND_PROCESSING_LAZY_ENABLED',
+                'DEMAND_PROCESSING_TOOL_ENABLED',
+                'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
+                'DEMAND_PROCESSING_UID_ALLOWLIST',
+                'DEMAND_PROCESSING_PERCENT',
+            )
         )
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
@@ -1814,6 +1824,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
@@ -1837,6 +1848,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2140,6 +2152,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
@@ -2164,6 +2177,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2222,6 +2236,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
@@ -2245,6 +2260,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},

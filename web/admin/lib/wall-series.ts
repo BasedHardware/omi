@@ -1,3 +1,11 @@
+import {
+  readRollup,
+  preferRollup,
+  rollupStatus,
+  RollupRead,
+  RollupStatus,
+} from "./wall-rollup";
+import { RollupRequest } from "./wall-rollup-sql";
 /** Omi TV v3 chart series. Same definitions as the v2 snapshot (`wall-metrics`):
  * the snapshot's own complete periods are reused verbatim and win on every date
  * they cover, so each chart's latest point is the stat above it. Only older
@@ -110,6 +118,8 @@ type Billing = {
 } | null;
 export interface SeriesSources {
   query: Query;
+  rollup?: RollupRead;
+  rollupStatus?: () => Promise<RollupStatus>;
   shopify: typeof fetchShopifyWeek;
   billing: () => Promise<Billing>;
   finops: (today: string) => Promise<FinopsHistory>;
@@ -120,6 +130,8 @@ export interface SeriesSources {
 }
 export const defaultSeriesSources: SeriesSources = {
   query: queryPosthog,
+  rollup: readRollup,
+  rollupStatus,
   shopify: fetchShopifyWeek,
   billing: async () => {
     const { computeBillingInfraCosts } = await import(
@@ -207,16 +219,28 @@ export function legJobs(
   now: Date
 ): Record<LegName, () => Promise<unknown>> {
   const end = utcDay(now);
+  const read = (request: RollupRequest, sql: string) =>
+    preferRollup(sources.rollup, request, () => sources.query(sql));
   const back = (weeks: number) => shiftDay(end, -7 * weeks);
   // Snapshot periods 0–5 come from the wall payload; read only 6–11.
-  const history = (build: (stop: Date, n: number) => string, stop: Date) =>
-    periodQueries(
-      sources.query,
-      build,
+  const history = (
+    build: (stop: Date, n: number) => string,
+    stop: Date,
+    request: (stop: Date, n: number) => RollupRequest
+  ) => {
+    const requests = new Map<string, RollupRequest>();
+    return periodQueries(
+      (sql) => read(requests.get(sql)!, sql),
+      (stop, n) => {
+        const sql = build(stop, n);
+        requests.set(sql, request(stop, n));
+        return sql;
+      },
       shiftDay(stop, -7 * SNAPSHOT_PERIODS),
       7,
       COHORT_WEEKS - SNAPSHOT_PERIODS
     ).then((rows) => offsetRows(rows, SNAPSHOT_PERIODS));
+  };
   // Week 0 is the snapshot's own MAU; read 30-day windows at earlier week
   // ends (ARPMAU) and one day earlier (cost/MAU, settled D−2).
   const mauWeeks = async (from: number, to: number) => {
@@ -224,7 +248,10 @@ export function legJobs(
     let failure: string | null = null;
     for (let week = from; week < to; week++) {
       try {
-        const rows = await sources.query(mauOffsetsQuery(back(week), [0, 1]));
+        const rows = await read(
+          { kind: "mau", end: back(week), offsets: [0, 1] },
+          mauOffsetsQuery(back(week), [0, 1])
+        );
         for (const r of rows) out[7 * week + Number(r[0])] = Number(r[1]);
       } catch (error) {
         failure ||= wallFailure("PostHog", error);
@@ -236,16 +263,43 @@ export function legJobs(
   return {
     growth: () =>
       periods(GROWTH_WEEKS, (p) =>
-        sources.query(weeklyGrowthQuery(back(p), 1))
+        read(
+          { kind: "growth", end: back(p), periods: 1 },
+          weeklyGrowthQuery(back(p), 1)
+        )
       ),
-    activationHistory: () => history((stop, n) => cohortQuery(stop, 7, n), end),
-    captureSource: () => sources.query(captureSourceQuery(end)),
-    retainedHistory: () => history((stop, n) => cohortQuery(stop, 37, n), end),
-    establishedHistory: () => history(establishedQuery, completeWeek(now).end),
+    activationHistory: () =>
+      history(
+        (stop, n) => cohortQuery(stop, 7, n),
+        end,
+        (end, periods) => ({ kind: "cohort", end, periods, maturity: 7 })
+      ),
+    captureSource: () =>
+      read({ kind: "capture", end }, captureSourceQuery(end)),
+    retainedHistory: () =>
+      history(
+        (stop, n) => cohortQuery(stop, 37, n),
+        end,
+        (end, periods) => ({ kind: "cohort", end, periods, maturity: 37 })
+      ),
+    establishedHistory: () =>
+      history(establishedQuery, completeWeek(now).end, (end, periods) => ({
+        kind: "established",
+        end,
+        periods,
+      })),
     // One cohort per read; partial cohorts are kept and only the missing retried.
     curve: () =>
       periods(CURVE_COHORTS, (p) =>
-        sources.query(retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end))
+        read(
+          {
+            kind: "curve",
+            end: shiftDay(end, -7 * (p + 1)),
+            periods: 1,
+            observedEnd: end,
+          },
+          retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end)
+        )
       ),
     mauRecent: () => mauWeeks(1, 2),
     mauHistory: () => mauWeeks(2, MONEY_WEEKS),
@@ -1322,6 +1376,13 @@ export async function seriesPayload(
       states.map((s) => s.doc?.entry),
       filling
     );
+    const rollup = await sources
+      .rollupStatus?.()
+      .catch(() => ({ through: null, reason: "unavailable" }));
+    if (rollup)
+      status.text += ` · rollup ${
+        rollup.through || rollup.reason || "unavailable"
+      }`;
     frames.gaps = [
       { metric: "Data through", missing: status.text, reason: "" },
       ...(frames.gaps || []),

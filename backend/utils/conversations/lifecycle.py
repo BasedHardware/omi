@@ -938,7 +938,19 @@ def request_finalization(
         return dict(intent) | {'route': 'pusher'}
 
     try:
-        enqueue_listen_finalization_job(intent['job_id'], int(intent['dispatch_generation'] or 1))
+        from utils.conversations.demand_processing import schedule
+        from utils.cloud_tasks import listen_finalization_binding
+
+        generation = int(intent['dispatch_generation'] or 1)
+        if schedule(
+            uid,
+            intent['job_id'],
+            {'job_id': intent['job_id'], 'dispatch_generation': generation},
+            listen_finalization_binding(),
+            f"listen-finalization-{intent['job_id']}-{generation}",
+        ):
+            return dict(intent) | {'route': 'cloud_tasks'}
+        enqueue_listen_finalization_job(intent['job_id'], generation)
     except Exception:
         record_fallback(
             component='pusher',

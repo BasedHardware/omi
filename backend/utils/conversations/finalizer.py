@@ -349,6 +349,13 @@ async def finalize_persisted_conversation(
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         stage = 'derived_effects'
+        from utils.conversations.demand_processing import lazy_enrichment_enabled
+
+        lazy_effects = lazy_enrichment_enabled(uid) and not skip_derived_effects and not conversation.discarded
+        if lazy_effects:
+            from utils.sync.reprocess import mark_effects
+
+            await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
         # Completed-row replays have no coordinator bundle. Summary indexing is
         # independent of JIT folder/apps receipts and terminal intelligence
         # suppression, but must share the same winning fanout claim.
@@ -372,7 +379,7 @@ async def finalize_persisted_conversation(
                     'smart_merge'
                 ) != conversation_data.get('smart_merge'):
                     OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
-                else:
+                elif not lazy_effects:
                     await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
         except Exception as error:
             OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
@@ -393,7 +400,7 @@ async def finalize_persisted_conversation(
             )
         elif derived_effects:
             await run_blocking(postprocess_executor, derived_effects[0])
-        elif not getattr(conversation, 'discarded', False):
+        elif not lazy_effects and not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.

@@ -143,7 +143,6 @@ environments:
     project: based-hardware
     jobs:
       - name: messaging-maintenance-hourly
-        lifecycle: planned
         region: us-central1
         schedule: "17 * * * *"
         time_zone: Etc/UTC
@@ -153,7 +152,7 @@ environments:
           uri: https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/jobs/messaging-maintenance-job:run
           method: POST
           oauth:
-            service_account: messaging-maintenance-scheduler@based-hardware.iam.gserviceaccount.com
+            service_account: msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com
             scope: https://www.googleapis.com/auth/cloud-platform
         retry:
           max_backoff: 3600s
@@ -358,3 +357,23 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/workflows/gcp_frame_request_retention_job.yml
+      - name: omi-tv-rollup-daily
+        lifecycle: planned
+        region: us-central1
+        schedule: "15 2 * * *"
+        time_zone: Etc/UTC
+        state: PAUSED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/jobs/omi-tv-rollup:run
+          method: POST
+          oauth:
+            service_account: finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: web/admin/jobs/omi-tv-rollup/README.md
