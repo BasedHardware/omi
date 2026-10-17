@@ -14,12 +14,14 @@ import {
   seriesPayload,
   SeriesSources,
   STORE_FAIL_LIMIT,
+  UNIT_DAYS,
 } from "../wall-series";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import {
   LEASE_MS,
   memorySeriesStore,
   mergeLegDoc,
+  readThroughStore,
   SeriesStore,
 } from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
@@ -42,11 +44,11 @@ async function query(sql: string) {
       [0, "__days_1", 20, 0, 0, 0],
       [0, "__days_7", 14, 0, 0, 0],
     ]);
-  if (sql.includes("spans"))
-    return stamp([
-      [0, 1000],
-      [1, 990],
-    ]);
+  if (sql.includes("spans")) {
+    // Every daily offset the query asks for.
+    const offsets = /ARRAY JOIN \[([\d,]+)\]/.exec(sql)![1].split(",");
+    return stamp(offsets.map((o) => [Number(o), 1000 - Number(o)]));
+  }
   if (sql.includes("active_weeks"))
     return stamp([
       [0, 0, 100, 60],
@@ -368,6 +370,71 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect(gaps.every((g) => String(g.missing).length <= 24)).toBe(true);
   });
 
+  it("draws unit economics daily from the first FinOps book day and compares per-user stats a week back", async () => {
+    const s = sources();
+    // The book starts 20 days ago, like FinOps' 2026-09-18 start.
+    s.finops = vi.fn(async () => ({
+      mrr: Object.fromEntries(
+        Object.entries(finopsMrr).filter(
+          ([day]) => day >= isoDay(shiftDay(end, -20))
+        )
+      ),
+    }));
+    const wall = await computeWall(s, now);
+    const f = await all(wall, s);
+    const days = (rows: Row[]) => rows.map((r) => String(r.date).slice(0, 10));
+    const daily = (from: number, to: number) =>
+      Array.from({ length: from - to + 1 }, (_, i) =>
+        isoDay(shiftDay(end, -from + i))
+      );
+    // A book read falls back one day, so the first point is the day before
+    // the book starts; nothing is drawn (or zero) before it.
+    expect(days(f.revenue.arpmau)).toEqual(daily(21, 1));
+    expect(days(f.health.costPerMau)).toEqual(daily(UNIT_DAYS, 2));
+    // Every daily point has its own 30-day MAU read (seven offsets per read).
+    for (const r of f.revenue.arpmau) expect(r.mau).toBeGreaterThan(0);
+    expect(s.query).toHaveBeenCalledWith(
+      expect.stringContaining("ARRAY JOIN [0,1,2,3,4,5,6]")
+    );
+    // Per user and cost / user priors: the point seven days earlier.
+    expect(f.headline.arpmau[0].date).toBe(
+      `${isoDay(shiftDay(end, -8))}T00:00:00Z`
+    );
+    expect(f.headline.costPerMau).toEqual([
+      {
+        date: `${isoDay(shiftDay(end, -9))}T00:00:00Z`,
+        value: f.health.costPerMau.at(-8)?.costPerMau,
+      },
+      {
+        date: `${isoDay(shiftDay(end, -2))}T00:00:00Z`,
+        value: f.health.costPerMau.at(-1)?.costPerMau,
+      },
+    ]);
+  });
+
+  it("shades the maturing span from each cohort line's last point to now", async () => {
+    const s = sources();
+    const wall = await computeWall(s, now);
+    const f = await all(wall, s);
+    // Cohorts roll daily: week one ends 8 days back, retained 38 days back.
+    expect(f.activation.maturing).toEqual([
+      { date: `${isoDay(shiftDay(end, -8))}T00:00:00Z`, maturing: 1 },
+      { date: now.toISOString(), maturing: 1 },
+    ]);
+    expect(f.activation.activation.at(-1)?.date).toBe(
+      f.activation.maturing[0].date
+    );
+    expect(f.activation.capture.at(-1)?.date).toBe(
+      f.activation.maturing[0].date
+    );
+    expect(f.retention.retainedMaturing[0].date).toBe(
+      `${isoDay(shiftDay(end, -38))}T00:00:00Z`
+    );
+    expect(f.retention.retained.at(-1)?.date).toBe(
+      f.retention.retainedMaturing[0].date
+    );
+  });
+
   it("never anchors to fixture money and uses same-source FinOps change for the MRR delta", async () => {
     const s = sources();
     const wall = await computeWall(s, now);
@@ -538,6 +605,38 @@ describe("v3 series converge across Cloud Run instances", () => {
     expect(resumed.frames.weekly).toHaveLength(VISIBLE_WEEKS);
   });
 
+  it("lets a dev server serve shared legs but fill only in its own memory", async () => {
+    const shared = memorySeriesStore();
+    await seriesPayload("growth", Promise.resolve(null), now, {
+      ...sources(),
+      store: shared,
+    });
+    const before = JSON.stringify(Array.from(shared.docs.entries()));
+    const writes = vi.spyOn(shared, "write");
+    const leases = vi.spyOn(shared, "acquire");
+    const dev = { ...sources(), store: readThroughStore(shared) };
+    const growth = await seriesPayload(
+      "growth",
+      Promise.resolve(null),
+      now,
+      dev
+    );
+    expect(dev.query).not.toHaveBeenCalled(); // the shared leg is served
+    expect(growth.frames.weekly).toHaveLength(VISIBLE_WEEKS);
+    const revenue = await seriesPayload(
+      "revenue",
+      Promise.resolve(null),
+      now,
+      dev
+    ); // a leg the shared store lacks fills locally
+    expect(dev.query).toHaveBeenCalled();
+    expect(revenue.gaps).toEqual({});
+    expect(revenue.frames.arpmau.length).toBeGreaterThan(1);
+    expect(writes).not.toHaveBeenCalled();
+    expect(leases).not.toHaveBeenCalled();
+    expect(JSON.stringify(Array.from(shared.docs.entries()))).toBe(before);
+  });
+
   it("keeps the headline whole when only older MAU windows time out", async () => {
     const s = { ...sources(), store: memorySeriesStore() };
     let mauReads = 0;
@@ -547,15 +646,15 @@ describe("v3 series converge across Cloud Run instances", () => {
       return query(sql);
     });
     const head = await seriesPayload("headline", Promise.resolve(null), now, s);
-    expect(head.gaps).not.toHaveProperty("mauRecent");
+    expect(head.gaps).not.toHaveProperty("mauPrior");
     const revenue = await seriesPayload(
       "revenue",
       Promise.resolve(null),
       now,
       s
     );
-    expect(revenue.gaps).toHaveProperty("mauHistory");
-    expect(revenue.gaps).not.toHaveProperty("mauRecent");
+    expect(revenue.gaps).toHaveProperty("mauDaily");
+    expect(revenue.gaps).not.toHaveProperty("mauPrior");
   });
 
   it("logs one aggregate line per leg attempt and a data-through status", async () => {
@@ -844,6 +943,44 @@ describe("the snapshot is shared and never served cold as settled", () => {
     expect(f.headline.activation.at(-1)?.value).toBe(
       f.activation.activation.at(-1)?.total
     );
+  });
+
+  it("serves the last good on a new instance whose first store read is slow", async () => {
+    const store = memorySeriesStore();
+    const retain = vi.fn();
+    await wallPayload(now, computeWith(sources()), retain, store);
+    await Promise.all(retain.mock.calls.map(([work]) => work));
+    await all(await wallPayload(now, undefined, () => {}, store), {
+      ...sources(),
+      store,
+    });
+
+    resetWallCache(); // a new revision's first request: the store channel opens slowly
+    resetSeriesCache();
+    const slow: SeriesStore = {
+      ...store,
+      read: (name) =>
+        new Promise((resolve) => setTimeout(resolve, 3_000)).then(() =>
+          store.read(name)
+        ),
+    };
+    const b = sources();
+    const compute = vi.fn(computeWith(b));
+    const pending = Promise.all([
+      wallPayload(now, compute, () => {}, slow),
+      seriesPayload("revenue", Promise.resolve(null), now, {
+        ...b,
+        store: slow,
+      }),
+    ]);
+    await vi.advanceTimersByTimeAsync(3_000);
+    const [wall, revenue] = await pending;
+    expect(compute).not.toHaveBeenCalled();
+    expect(wall.refreshing).toBeFalsy();
+    expect(value(wall, "growth.wau").value).not.toBeNull();
+    expect(b.query).not.toHaveBeenCalled();
+    expect(revenue.gaps).toEqual({});
+    expect(revenue.frames.mrr.length).toBeGreaterThan(0);
   });
 
   it("reports refreshing with no null points dated today while a cold refresh has no last good", async () => {

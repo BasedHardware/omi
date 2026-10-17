@@ -1189,6 +1189,8 @@ class TestSyncRouterStructure:
 
 def _load_sync_router_for_fast_path():
     """Load routers/sync.py with heavy deps stubbed for fast-path behavioral tests."""
+    from services import summary_debt_repair  # noqa: F401 - load before flat database stubs
+
     import contextvars
     import importlib.util
     from io import BytesIO

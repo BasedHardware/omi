@@ -2996,3 +2996,12 @@ _add(
         patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
     )
 )
+
+
+_add(
+    DriverEntry(
+        'database.summary_debt_queries.due_conversations',
+        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
+        domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
+    )
+)

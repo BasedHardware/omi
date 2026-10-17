@@ -78,7 +78,9 @@ it("growth freshness derives only from app activity anchors, never identity rows
   expect(growth.query).toContain(
     "anchors AS (SELECT actor,MIN(anchor) anchor FROM data WHERE kind='activity' GROUP BY actor)"
   );
-  expect(growth.query).not.toContain("kind='identity' GROUP BY actor),\n      labelled");
+  expect(growth.query).not.toContain(
+    "kind='identity' GROUP BY actor),\n      labelled"
+  );
 });
 it("extracts closed days with a one-day MCP probe and keyset pages, never OFFSET", () => {
   const sql = dailyExtractQuery(day, "a'\\b");
@@ -178,9 +180,7 @@ it("caps the rollup status lookup at one second and keeps filling the cache", as
   const first = await rollupStatus(slow);
   expect(Date.now() - started).toBeLessThan(2_000);
   expect(first.through).toBeNull();
-  expect(["slow", "unavailable", "no completed days"]).toContain(
-    first.reason
-  );
+  expect(["slow", "unavailable", "no completed days"]).toContain(first.reason);
   // The background lookup still populates the cache once it finishes.
   release?.([{ through: "2026-10-11" }]);
   await new Promise((r) => setTimeout(r, 20));
@@ -248,8 +248,8 @@ it("all PostHog legs can choose rollups; v2 snapshot wins the last point and spl
     "retainedHistory",
     "establishedHistory",
     "curve",
-    "mauRecent",
-    "mauHistory",
+    "mauPrior",
+    "mauDaily",
   ] as const)
     await jobs[leg]();
   expect(query).not.toHaveBeenCalled();

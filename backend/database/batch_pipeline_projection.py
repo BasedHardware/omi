@@ -117,7 +117,7 @@ class ProjectionStore:
                 snapshot = ref.get(transaction=transaction)
                 old = snapshot.to_dict() if snapshot.exists else None
                 if receipt.get('state') == 'ready':
-                    return old or {}, True
+                    return {**(old or {}), '_wake': False}, True
                 row, result = operation(old)
                 if old is None and session.job.get('priority') != 0:
                     from utils.cloud_tasks import is_sync_backfill_routing_enabled
