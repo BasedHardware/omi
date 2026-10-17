@@ -1235,3 +1235,77 @@ def test_redrive_job_tolerates_missing_document(db, monkeypatch):
     monkeypatch.setattr(registry.firestore, 'transactional', lambda fn: failing_commit)
     # Must return None instead of raising NotFound
     assert registry.redrive_job('missing_uid', 'job', 1) is None
+
+
+@pytest.mark.parametrize('active', [False, True])
+def test_dark_guard_transfers_expired_obligation_to_durable_custody(db, monkeypatch, active):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    _register('a', 'lost', 0, db=db)
+    original = db.docs[(registry.PENDING_COLLECTION, 'lost')]['payload']
+    epoch = registry.claim_next('a', now=NOW)['epoch'] if active else None
+    assert registry.retire_expired('a', 'lost', epoch=epoch, now=NOW)
+    custody = db.docs[(sync_redrive.COLLECTION, 'lost')]
+    assert custody['status'] == 'redrive_required'
+    assert custody['payload'] == original
+    assert registry.pending_head('a') is None
+    assert not registry.get_owner('a').get('active_job_id')
+    assert db.docs[(sync_redrive.STATS_COLLECTION, 'backlog')]['count'] == 1
+    sync_redrive.refresh_metrics(firestore_client=db)
+    assert sync_redrive.BACKLOG._value.get() == 1
+    assert sync_redrive.DEADLINE._value.get() > 0
+    assert sync_redrive.UNKNOWN_DEADLINE._value.get() == 1
+
+
+def test_dark_guard_keeps_partial_progress_and_counts_repeated_missing_job_once(db, monkeypatch):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    payload = {'uid': 'a', 'job_id': 'lost', 'content_id': 'content', 'raw_blob_paths': ['syncing/a/lost/pcm16.bin']}
+    path = ('users', 'a', 'sync_content_ledger', 'content')
+    partial = {'status': 'retryable', 'processed_segment_ids': ['segment'], 'partial_result': {'total_segments': 2}}
+    db.docs[path] = copy.deepcopy(partial)
+    assert sync_redrive.preserve_missing_job('a', 'lost', payload, firestore_client=db) == 'redrive_required'
+    assert sync_redrive.preserve_missing_job('a', 'lost', payload, firestore_client=db) == 'redrive_required'
+    assert db.docs[path] == partial
+    assert db.docs[(sync_redrive.STATS_COLLECTION, 'backlog')]['count'] == 1
+
+
+def test_dark_guard_completed_content_retires_without_creating_redrive(db, monkeypatch):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    _register('a', 'lost', 0, db=db)
+    pending = db.docs[(registry.PENDING_COLLECTION, 'lost')]
+    pending['payload']['content_id'] = 'content'
+    db.docs[('users', 'a', 'sync_content_ledger', 'content')] = {
+        'status': 'completed',
+        'result': {'total_segments': 0, 'failed_segments': 0, 'errors': [], 'outcome': 'expected_silence'},
+    }
+    assert registry.retire_expired('a', 'lost', now=NOW)
+    assert (sync_redrive.COLLECTION, 'lost') not in db.docs
+
+
+def test_dark_guard_does_not_steal_bound_run_or_another_content_owner(db, monkeypatch):
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    for claim in (
+        {'status': 'processing', 'job_id': 'other'},
+        {'status': 'processing', 'job_id': 'lost', 'ledger_run_token': 'bound'},
+    ):
+        _register('a', 'lost', 0, db=db)
+        db.docs[(registry.PENDING_COLLECTION, 'lost')]['payload']['content_id'] = 'content'
+        db.docs[('users', 'a', 'sync_content_ledger', 'content')] = claim
+        assert not registry.retire_expired('a', 'lost', now=NOW)
+        assert (registry.PENDING_COLLECTION, 'lost') in db.docs
+
+
+def test_guard_independent_of_old_retirement_switch(retirement, monkeypatch):
+    from database import sync_redrive
+
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    _register('a', 'expired', 0, db=retirement)
+    _register('a', 'live', 1, db=retirement)
+    assert uid_sequencer._claim_next('a')['job_id'] == 'live'
+    assert retirement.docs[(sync_redrive.COLLECTION, 'expired')]['status'] == 'redrive_required'

@@ -1484,6 +1484,12 @@ def _load_sync_router_for_fast_path():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.sync_redrive = types.SimpleNamespace(
+        enabled=lambda: os.getenv('SYNC_DURABLE_REDRIVE_GUARD') == 'true',
+        legacy_convergence_enabled=lambda: os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE') == 'true',
+        preserve_missing_job=MagicMock(return_value='redrive_required'),
+        converge_legacy_completion=MagicMock(return_value=None),
+    )
     module.uid_sequencer.enabled = MagicMock(return_value=False)
     module.uid_sequencer.production_fence_mode = MagicMock(
         side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None
@@ -3795,6 +3801,62 @@ async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(m
         module.accept_batch_upload.assert_awaited_once()
         module.claim_sync_content.assert_called_once()
         module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_legacy_completion_convergence_before_provider_under_lock(monkeypatch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('provider must not run'),
+        latest_job={'job_id': 'job-1', 'status': 'processing'},
+    )
+    try:
+        monkeypatch.setenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', 'true')
+        module.sync_job_uses_ledger_fence = MagicMock(return_value=False)
+        module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.LEGACY)
+        module.sync_redrive.converge_legacy_completion = MagicMock(return_value={'status': 'completed'})
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert json.loads(response.body)['reconciled'] is True
+        module.sync_redrive.converge_legacy_completion.assert_called_once_with(
+            job_id='job-1', uid='test-uid', content_id='content-1', run_lock_token='legacy-lock-token'
+        )
+        module._download_staged_files.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_awaited()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_missing_job_guard_retains_payload_before_ack_and_keeps_staged_bytes(monkeypatch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(module, pipeline_error=RuntimeError('unused'), latest_job={})
+    try:
+        monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+        module.get_sync_job = MagicMock(return_value=None)
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'redrive_required'}
+        module.sync_redrive.preserve_missing_job.assert_called_once()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module.release_sync_content_claim.assert_not_called()
+        module.release_sync_content_claim_after_job_retired.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
