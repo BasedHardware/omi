@@ -200,6 +200,12 @@ authentication/validation, mutation errors, and unchanged keyword search. It doe
 not test live Linear ranking, OAuth, HTTP transport, or FastAPI/Pydantic behavior.
 The suite runs in both local and CI preflight manifest lanes.
 
+Run `python3 -B plugins/omi-linear-app/test_team_disambiguation.py` for the
+companion team, identifier, and null-field suite, also registered in both lanes.
+Issue creation validates a saved default against currently available team IDs.
+An invalid or unavailable default requires an explicit team or an updated
+default setting; it never silently falls back to another team.
+
 ### Local Testing with ngrok
 
 ```bash
