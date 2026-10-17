@@ -342,7 +342,7 @@ def main() -> int:
         summary["static_listing_tools_list"] = {
             "status": 200,
             "tool_count": len(static_tool_names),
-            "has_conversation_tools": True,
+            "has_conversation_tools": any("conversation" in name for name in static_tool_names),
         }
 
         dynamic_verifier = _pkce_verifier()
