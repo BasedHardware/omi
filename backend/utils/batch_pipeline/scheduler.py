@@ -9,6 +9,7 @@ import uuid
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
@@ -303,12 +304,12 @@ class Scheduler:
             self.metrics.record('completed')
         return accepted
 
-    def fail(self, segment_id: str, token: str, now: float) -> bool:
+    def fail(self, segment_id: str, token: str, now: float, *, quarantine: bool = False) -> bool:
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if job['attempt'] >= self.max_attempts:
+            if quarantine or job['attempt'] >= self.max_attempts:
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.
                 owner = tx.get('owners', job['owner_key'])
@@ -328,11 +329,13 @@ class Scheduler:
             else:
                 _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)
-            return job['state'], job['attempt']
+            return job['state'], job['attempt'], job['duration_seconds']
 
         outcome = self.store.run(commit)
         if outcome:
-            state, attempt = outcome
+            state, attempt, seconds = outcome
+            if state == 'quarantined':
+                record_correctness('failed', seconds=seconds)
             # Best effort AFTER the transaction/exception scope: telemetry may
             # neither fail a sibling nor reveal a worker exception via handleError.
             if self.metrics:
@@ -345,7 +348,7 @@ class Scheduler:
             if state == 'quarantined':
                 try:
                     logger.error('event=batch_quarantined reason=worker_failed attempt=%d recovery=held', attempt)
-                    logger.warning('event=batch_recovery outcome=held reason=handoff_not_implemented')
+                    logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
                 except Exception:
                     pass
         return bool(outcome)

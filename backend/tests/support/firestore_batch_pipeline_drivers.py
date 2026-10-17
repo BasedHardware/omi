@@ -32,11 +32,12 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_quarantine_recovery.recovery_candidates',
-            domains={'namespace': namespaces},
-            neutrals={
-                'owner_id': ('synthetic-owner', 'owner equality operand only'),
-                'limit': (10, 'bounded page size'),
+            domains={
+                'namespace': namespaces,
+                'owner_id': ['synthetic-owner', None],
+                'after_id': [None, 'held-09'],
             },
+            neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.projection_pending',
