@@ -191,6 +191,34 @@ export function beginProviderAuthWithoutBlocking(deps: ProviderAuthKickoffDeps):
   });
 }
 
+/** Seams for {@link requestProviderAuthFromHost}. */
+export type HostProviderAuthRequestDeps = {
+  /** The sign-in URL of the OAuth flow still waiting for its callback, if any. */
+  activeAuthUrl: () => string | undefined;
+  /** Send that URL to Swift again as `auth_required`. */
+  announceAuthUrl: (authUrl: string) => void;
+  startAuthFlow: () => Promise<void>;
+  logErr: (message: string) => void;
+};
+
+/**
+ * The host's Connect Claude control. A token that expires mid-turn only signals
+ * `auth_required` with no URL, so without this the user has no way to sign in again.
+ * A flow still waiting for its callback is announced again rather than replaced,
+ * because its local callback server is the one listening. Otherwise a fresh flow
+ * starts and announces its own URL.
+ */
+export function requestProviderAuthFromHost(deps: HostProviderAuthRequestDeps): void {
+  const authUrl = deps.activeAuthUrl();
+  if (authUrl) {
+    deps.announceAuthUrl(authUrl);
+    return;
+  }
+  void deps.startAuthFlow().catch((error) => {
+    deps.logErr(`Host-requested auth flow failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
 const MAX_RECENT_STDERR_CHARS = 2_000;
 
 const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i;

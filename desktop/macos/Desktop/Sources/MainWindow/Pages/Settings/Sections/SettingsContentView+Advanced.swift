@@ -239,28 +239,9 @@ extension SettingsContentView {
             }
           }
 
-          if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+          if chatBridgeMode == "claudeCode" {
             GlassSeparator()
-
-            HStack {
-              Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Ink.listeningGreen)
-                .scaledFont(size: OmiType.caption)
-              Text("Connected to Claude")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Spacer()
-
-              Button("Disconnect") {
-                Task {
-                  await chatProvider?.disconnectClaude()
-                }
-              }
-              .buttonStyle(.plain)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.errorRed)
-            }
+            claudeConnectionRow
           }
         }
       }

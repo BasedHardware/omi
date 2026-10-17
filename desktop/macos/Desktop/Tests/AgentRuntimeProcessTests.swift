@@ -842,6 +842,26 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(snapshot.sentOwnerId, "stale refresh must not mutate runtime owner credentials")
   }
 
+  func testConnectClaudeAsksTheRuntimeForASignInURL() {
+    // The agent runtime's `case "start_provider_auth"` answers with `auth_required`
+    // carrying a URL; a turn whose token expired produces none.
+    XCTAssertEqual(
+      AgentRuntimeProcess.providerAuthRequestWireMessage()["type"] as? String, "start_provider_auth")
+    let url = "https://claude.ai/oauth/authorize?state=s"
+    let pressed = Date(timeIntervalSince1970: 1_000)
+    XCTAssertTrue(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed, now: pressed.addingTimeInterval(2), authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: nil, now: pressed, authUrl: url))
+    XCTAssertFalse(ChatProvider.opensClaudeSignIn(connectRequestedAt: pressed, now: pressed, authUrl: nil))
+    // A Connect the runtime never answered must not open a later, unrelated sign-in URL.
+    XCTAssertFalse(
+      ChatProvider.opensClaudeSignIn(
+        connectRequestedAt: pressed,
+        now: pressed.addingTimeInterval(ChatProvider.claudeConnectAnswerWindow + 1),
+        authUrl: url))
+  }
+
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
     let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",

@@ -1647,6 +1647,16 @@ actor AgentRuntimeProcess {
     }
   }
 
+  /// Settings' Connect Claude control. The runtime answers with `auth_required`
+  /// carrying a sign-in URL; a token that expires mid-turn produces none.
+  func requestProviderAuth() {
+    _ = sendJson(Self.providerAuthRequestWireMessage())
+  }
+
+  nonisolated static func providerAuthRequestWireMessage() -> [String: Any] {
+    ["type": "start_provider_auth"]
+  }
+
   func invalidateSurface(
     clientId: String,
     surface: AgentSurfaceReference,
