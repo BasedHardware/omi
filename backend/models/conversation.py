@@ -152,13 +152,14 @@ class SharedActionItem(BaseModel):
 
 
 class SharedSection(BaseModel):
-    """Public note content, without internal transcript evidence IDs."""
+    """Public note content linked to the transcript segments on the same share payload."""
 
     model_config = {'extra': 'ignore'}
 
     heading: str
     body_markdown: str
     kind: Literal['main', 'side_notes'] = 'main'
+    source_segment_ids: List[str] = Field(default_factory=list)
 
 
 class SharedEvent(BaseModel):
