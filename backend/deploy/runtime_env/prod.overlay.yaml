@@ -36,7 +36,7 @@ overlay:
           value: "true"
           category: rollout
         BATCH_PIPELINE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          value: ''
         BATCH_PIPELINE_API_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
@@ -485,7 +485,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -812,7 +812,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -1179,7 +1179,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           BATCH_PIPELINE_API_URL:
             value: 'https://backend-sync-hhibjajaja-uc.a.run.app'
             category: service_discovery
@@ -1515,7 +1515,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'true'
             category: rollout

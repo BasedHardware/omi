@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.batch_pipeline import enabled_for, recovery_owners
+from config.batch_pipeline import recovery_owners
 
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
@@ -45,15 +45,13 @@ def hosts(config):
     }
 
 
-def test_only_david_is_admitted_on_every_sync_host(manifest, monkeypatch):
+def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest):
     for stage, config in manifest.items():
         for env in hosts(config).values():
-            for key in ('BATCH_PIPELINE_ENABLED', 'BATCH_PIPELINE_PERCENT', 'BATCH_PIPELINE_UID_ALLOWLIST'):
-                monkeypatch.setenv(key, env[key]['value'])
-            assert enabled_for(UID) is (stage == 'prod')
-            for excluded in ('', 'another-owner', UID + '-suffix'):
-                assert not enabled_for(excluded)
+            assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
+            assert allowlist is None or allowlist.get('value', '') == ''
             assert env['BATCH_PIPELINE_WORKER_ENABLED']['value'] == 'false'
             assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED']['value'] == 'false'
             if stage == 'dev':
