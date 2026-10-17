@@ -191,3 +191,74 @@
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
 * [`quickstart.bn.md`](quickstart.bn.md) — omi-cli দিয়ে শুরু করা (Bengali Quickstart).
+* [`quickstart.av.md`](quickstart.av.md) — omi-cli-гъе гьоркьоб бакьи (Avar Quickstart).
+* [`quickstart.ckb.md`](quickstart.ckb.md) — دەستپێکی خێرا لەگەڵ omi-cli (Sorani Quickstart).
+* [`quickstart.dv.md`](quickstart.dv.md) — omi-cli އާއެކު އަވަސް ފަށައިގަތުން (Dhivehi Quickstart).
+* [`quickstart.gu.md`](quickstart.gu.md) — omi-cli સાથે ઝડપી શરૂઆત (Gujarati Quickstart).
+* [`quickstart.hak.md`](quickstart.hak.md) — omi-cli 快速入門 (Hakka Quickstart).
+* [`quickstart.ht.md`](quickstart.ht.md) — kòmanse rapidman ak omi-cli (Haitian Creole Quickstart).
+* [`quickstart.kab.md`](quickstart.kab.md) — bdu zzerḥ s omi-cli (Kabyle Quickstart).
+* [`quickstart.kn.md`](quickstart.kn.md) — omi-cli ಜತೆ ತ್ವರಿತ ಪ್ರಾರಂಭ (Kannada Quickstart).
+* [`quickstart.ko.md`](quickstart.ko.md) — omi-cli로 빠른 시작 (Korean Quickstart).
+* [`quickstart.lu.md`](quickstart.lu.md) — kutangila kabipi ne omi-cli (Luba-Katanga Quickstart).
+* [`quickstart.ml.md`](quickstart.ml.md) — omi-cli ഉപയോഗിച്ച് വേഗത്തിലുള്ള തുടക്കം (Malayalam Quickstart).
+* [`quickstart.mr.md`](quickstart.mr.md) — omi-cli सह झटपट सुरुवात (Marathi Quickstart).
+* [`quickstart.ms.md`](quickstart.ms.md) — bermula pantas dengan omi-cli (Malay Quickstart).
+* [`quickstart.nan.md`](quickstart.nan.md) — omi-cli 緊開始 (Min Nan Quickstart).
+* [`quickstart.nl.md`](quickstart.nl.md) — aan de slag met omi-cli (Dutch Quickstart).
+* [`quickstart.or.md`](quickstart.or.md) — omi-cli ସହିତ ଶୀଘ୍ର ଆରମ୍ଭ (Odia Quickstart).
+* [`quickstart.os.md`](quickstart.os.md) — omi-cli-имæ ænхъом райдай (Ossetian Quickstart).
+* [`quickstart.pa.md`](quickstart.pa.md) — omi-cli ਨਾਲ ਤੁਰੰਤ ਸ਼ੁਰੂਆਤ (Punjabi Quickstart).
+* [`quickstart.pcm.md`](quickstart.pcm.md) — quick start wit omi-cli (Nigerian Pidgin Quickstart).
+* [`quickstart.pl.md`](quickstart.pl.md) — szybki start z omi-cli (Polish Quickstart).
+* [`quickstart.ro.md`](quickstart.ro.md) — pornire rapidă cu omi-cli (Romanian Quickstart).
+* [`quickstart.sr.md`](quickstart.sr.md) — брзи почетак са omi-cli (Serbian Quickstart).
+* [`quickstart.sv.md`](quickstart.sv.md) — kom igång med omi-cli (Swedish Quickstart).
+* [`quickstart.sw.md`](quickstart.sw.md) — kuanza haraka na omi-cli (Swahili Quickstart).
+* [`quickstart.ta.md`](quickstart.ta.md) — omi-cli மூலம் விரைவுத் தொடக்கம் (Tamil Quickstart).
+* [`quickstart.uk.md`](quickstart.uk.md) — швидкий старт із omi-cli (Ukrainian Quickstart).
+* [`quickstart.ur.md`](quickstart.ur.md) — omi-cli کے ساتھ فوری آغاز (Urdu Quickstart).
+* [`quickstart.wa.md`](quickstart.wa.md) — cminceu roehté avou omi-cli (Walloon Quickstart).
+* [`quickstart.wuu.md`](quickstart.wuu.md) — omi-cli 快速上手 (Wu Chinese Quickstart).
+* [`quickstart.za.md`](quickstart.za.md) — omi-cli 快薜起手 (Zhuang Quickstart).
+* [`agent_quickstart.aa.md`](agent_quickstart.aa.md) — Afar agent guide.
+* [`agent_quickstart.ar.md`](agent_quickstart.ar.md) — Arabic agent guide.
+* [`agent_quickstart.av.md`](agent_quickstart.av.md) — Avar agent guide.
+* [`agent_quickstart.ckb.md`](agent_quickstart.ckb.md) — Sorani agent guide.
+* [`agent_quickstart.cs.md`](agent_quickstart.cs.md) — Czech agent guide.
+* [`agent_quickstart.csb.md`](agent_quickstart.csb.md) — Kashubian agent guide.
+* [`agent_quickstart.de.md`](agent_quickstart.de.md) — German agent guide.
+* [`agent_quickstart.dv.md`](agent_quickstart.dv.md) — Dhivehi agent guide.
+* [`agent_quickstart.eu.md`](agent_quickstart.eu.md) — Basque agent guide.
+* [`agent_quickstart.gl.md`](agent_quickstart.gl.md) — Galician agent guide.
+* [`agent_quickstart.hak.md`](agent_quickstart.hak.md) — Hakka agent guide.
+* [`agent_quickstart.hi.md`](agent_quickstart.hi.md) — Hindi agent guide.
+* [`agent_quickstart.id.md`](agent_quickstart.id.md) — Indonesian agent guide.
+* [`agent_quickstart.it.md`](agent_quickstart.it.md) — Italian agent guide.
+* [`agent_quickstart.kab.md`](agent_quickstart.kab.md) — Kabyle agent guide.
+* [`agent_quickstart.ko.md`](agent_quickstart.ko.md) — Korean agent guide.
+* [`agent_quickstart.lb.md`](agent_quickstart.lb.md) — Luxembourgish agent guide.
+* [`agent_quickstart.lu.md`](agent_quickstart.lu.md) — Luba-Katanga agent guide.
+* [`agent_quickstart.nan.md`](agent_quickstart.nan.md) — Min Nan agent guide.
+* [`agent_quickstart.nap.md`](agent_quickstart.nap.md) — Neapolitan agent guide.
+* [`agent_quickstart.nl.md`](agent_quickstart.nl.md) — Dutch agent guide.
+* [`agent_quickstart.os.md`](agent_quickstart.os.md) — Ossetian agent guide.
+* [`agent_quickstart.pcm.md`](agent_quickstart.pcm.md) — Nigerian Pidgin agent guide.
+* [`agent_quickstart.pl.md`](agent_quickstart.pl.md) — Polish agent guide.
+* [`agent_quickstart.ro.md`](agent_quickstart.ro.md) — Romanian agent guide.
+* [`agent_quickstart.ru.md`](agent_quickstart.ru.md) — Russian agent guide.
+* [`agent_quickstart.rue.md`](agent_quickstart.rue.md) — Rusyn agent guide.
+* [`agent_quickstart.sc.md`](agent_quickstart.sc.md) — Sardinian agent guide.
+* [`agent_quickstart.scn.md`](agent_quickstart.scn.md) — Sicilian agent guide.
+* [`agent_quickstart.sr.md`](agent_quickstart.sr.md) — Serbian agent guide.
+* [`agent_quickstart.sv.md`](agent_quickstart.sv.md) — Swedish agent guide.
+* [`agent_quickstart.sw.md`](agent_quickstart.sw.md) — Swahili agent guide.
+* [`agent_quickstart.szl.md`](agent_quickstart.szl.md) — Silesian agent guide.
+* [`agent_quickstart.tr.md`](agent_quickstart.tr.md) — Turkish agent guide.
+* [`agent_quickstart.uk.md`](agent_quickstart.uk.md) — Ukrainian agent guide.
+* [`agent_quickstart.vec.md`](agent_quickstart.vec.md) — Venetian agent guide.
+* [`agent_quickstart.vi.md`](agent_quickstart.vi.md) — Vietnamese agent guide.
+* [`agent_quickstart.wa.md`](agent_quickstart.wa.md) — Walloon agent guide.
+* [`agent_quickstart.wuu.md`](agent_quickstart.wuu.md) — Wu Chinese agent guide.
+* [`agent_quickstart.yo.md`](agent_quickstart.yo.md) — Yoruba agent guide.
+* [`agent_quickstart.za.md`](agent_quickstart.za.md) — Zhuang agent guide.
