@@ -142,6 +142,59 @@ describe("on-device tool surface policy", () => {
     expect(result.decision).toBe("dispatch_required");
   });
 
+  it("allows a compose proposal without dispatch because the person sends it", () => {
+    // Apple's compose window is the approval, as on iOS. An Omi card in front
+    // of it would ask the person twice for the same effect.
+    for (const toolName of ["propose_message", "propose_email"]) {
+      const result = evaluateDesktopToolPolicy({
+        toolName,
+        selectedBundles: ["desktop.compose.propose"],
+      });
+
+      expect(result.decision, toolName).toBe("allow");
+      expect(result.requiredBundles).toEqual(["desktop.compose.propose"]);
+      expect(result.descriptor).toMatchObject({
+        riskTier: "medium",
+        privacyTier: "local_private",
+        approvalPolicy: "allow",
+        readOnly: false,
+        destructive: false,
+      });
+      expect(result.reason).toContain("Omi never sends");
+    }
+  });
+
+  it("denies a compose proposal when the compose bundle was never selected", () => {
+    // Selecting the send bundle does not imply the compose bundle, or the reverse.
+    const result = evaluateDesktopToolPolicy({
+      toolName: "propose_message",
+      selectedBundles: ["desktop.messaging.send"],
+    });
+
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("desktop.compose.propose");
+  });
+
+  it("keeps approval for any other write requested beside the compose bundle", () => {
+    const result = evaluateDesktopToolPolicy({
+      requestedBundles: ["desktop.compose.propose", "desktop.tasks.readwrite"],
+      selectedBundles: ["desktop.compose.propose", "desktop.tasks.readwrite"],
+    });
+
+    expect(result.decision).toBe("dispatch_required");
+    expect(result.descriptor.approvalPolicy).toBe("user_approval");
+  });
+
+  it("still requires dispatch when a compose proposal is flagged as an external send", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "propose_email",
+      selectedBundles: ["desktop.compose.propose"],
+      externalSend: true,
+    });
+
+    expect(result.decision).toBe("dispatch_required");
+  });
+
   it("requires dispatch for AppleScript actuation in a production bundle", () => {
     const result = evaluateDesktopToolPolicy({
       toolName: "run_applescript",
@@ -175,6 +228,8 @@ describe("on-device tool manifest", () => {
       "read_message_history",
       "list_mail_messages",
       "send_message",
+      "propose_message",
+      "propose_email",
       "run_applescript",
     ]) {
       const entry = toolManifestEntry(name);
@@ -189,6 +244,100 @@ describe("on-device tool manifest", () => {
     expect(toolManifestEntry("search_contacts")?.annotations.readOnlyHint).toBe(true);
     expect(toolManifestEntry("send_message")?.annotations.openWorldHint).toBe(true);
     expect(toolManifestEntry("run_applescript")?.annotations.openWorldHint).toBe(true);
+  });
+
+  it("describes the compose proposals as never sending, in the model-facing text", () => {
+    for (const name of ["propose_message", "propose_email"]) {
+      const entry = toolManifestEntry(name);
+      expect(entry?.description, name).toContain("does NOT send");
+      expect(entry?.description, name).toContain("never sent");
+      expect(entry?.promptGuidelines?.join(" "), name).toContain("search_contacts");
+      expect(entry?.promptGuidelines?.join(" "), name).toMatch(/Never say the (message|email) was sent/);
+      // send_message's grounding rule carries over: no card stands in front of these.
+      expect(entry?.promptGuidelines?.join(" "), name).toMatch(/did not name or confirm/);
+      expect(entry?.promptGuidelines?.join(" "), name).toContain("recipient_needs_confirmation");
+      expect(entry?.runtimePreconditions.join(" "), name).toContain("search_contacts result in the same run");
+      expect(entry?.annotations).toMatchObject({ readOnlyHint: false, openWorldHint: false, idempotentHint: false });
+      expect(entry?.inputSchema.required).toEqual(["to", "text"]);
+      expect(entry?.inputSchema.properties.to).toMatchObject({ type: "array", items: { type: "string" } });
+      // Only the coordinator the person is talking to may open a draft.
+      expect(entry?.adapters["pi-mono"]?.condition, name).toBe("coordinatorOnly");
+      expect(entry?.adapters["omi-tools-stdio"]?.condition, name).toBe("coordinatorOnly");
+    }
+    expect(toolManifestEntry("propose_email")?.inputSchema.properties).toHaveProperty("subject");
+    expect(toolManifestEntry("propose_message")?.inputSchema.properties).not.toHaveProperty("subject");
+  });
+
+  it("steers the model to a draft unless the person asked Omi to send", () => {
+    expect(toolManifestEntry("propose_message")?.promptGuidelines?.join(" ")).toContain(
+      "Use send_message only when the person explicitly asked Omi to send it for them without reviewing it",
+    );
+    expect(toolManifestEntry("send_message")?.promptGuidelines?.join(" ")).toContain("propose_message");
+    expect(toolManifestEntry("run_applescript")?.promptGuidelines?.join(" ")).toContain("propose_email");
+    expect(toolManifestEntry("search_contacts")?.description).toContain("propose_email");
+  });
+
+  it("routes a request to text someone to propose_message, never through a pre-filed dispatch", () => {
+    // A live build answered "text me at <number> '<msg>'" by filing a
+    // create_desktop_dispatch approval for send_message, which dead-ended.
+    const propose = toolManifestEntry("propose_message");
+    const send = toolManifestEntry("send_message");
+    const dispatch = toolManifestEntry("create_desktop_dispatch");
+
+    expect(propose?.description).toContain("Use this for any request to text, message or iMessage someone");
+    expect(propose?.promptGuidelines?.join(" ")).toContain(
+      "This is the default for any request to text, message or iMessage someone",
+    );
+    expect(propose?.promptGuidelines?.join(" ")).toContain("text me at 555 010 0100 'on my way'");
+    expect(propose?.promptGuidelines?.join(" ")).toContain("Never route a message through create_desktop_dispatch");
+
+    // send_message no longer reads as "file an approval dispatch first".
+    const sendText = [send?.description, ...(send?.promptGuidelines ?? []), ...(send?.runtimePreconditions ?? [])].join(" ");
+    expect(sendText).not.toContain("always requires an approval dispatch");
+    expect(sendText).not.toContain("Requires an approval dispatch");
+    expect(send?.description).toContain("never file that approval yourself with create_desktop_dispatch");
+    expect(send?.description).toContain("for any other request to text or message someone, use propose_message");
+    expect(send?.capabilityDoc.bullets.join(" ")).not.toContain("approval dispatch");
+
+    expect(dispatch?.promptGuidelines?.join(" ")).toContain(
+      "Never use this to send or approve a text, message or email",
+    );
+  });
+
+  it("tells the model the person sends an open draft, so \"send it\" never re-opens or sends it", () => {
+    // A live build answered "send" after a draft by calling propose_message again.
+    for (const name of ["propose_message", "propose_email"]) {
+      const guidance = toolManifestEntry(name)?.promptGuidelines?.join(" ") ?? "";
+      expect(guidance, name).toContain('If they then say "send" or "send it", tell them to press Send');
+      expect(guidance, name).toContain("Never open the same draft again");
+      expect(guidance, name).toContain("never call send_message or create_desktop_dispatch for it");
+      expect(guidance, name).toContain("draft_already_open");
+    }
+    expect(toolManifestEntry("send_message")?.promptGuidelines?.join(" ")).toContain(
+      "Never use this to send a draft already opened with propose_message",
+    );
+    expect(toolManifestEntry("send_message")?.promptGuidelines?.join(" ")).toContain("draft_in_messages");
+    const propose = toolManifestEntry("propose_message");
+    const proposeText = [propose?.description, ...(propose?.promptGuidelines ?? []), ...(propose?.runtimePreconditions ?? [])]
+      .join(" ");
+    expect(proposeText).not.toContain("sheet");
+  });
+
+  it("never assumes Mail is the email app", () => {
+    const entry = toolManifestEntry("propose_email");
+    const text = [
+      entry?.description,
+      entry?.promptSnippet,
+      ...(entry?.promptGuidelines ?? []),
+      ...(entry?.runtimePreconditions ?? []),
+      entry?.capabilityDoc.summary,
+      ...(entry?.capabilityDoc.bullets ?? []),
+    ].join(" ");
+
+    expect(text).toContain("default email app");
+    expect(text).toContain("handed_to_email_app");
+    expect(text).not.toContain("handed_to_mail");
+    expect(text).not.toMatch(/\bMail compose window\b|\bopen in Mail\b|presses Send in Mail\b/);
   });
 
   it("states the permission each device tool depends on", () => {

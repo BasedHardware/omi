@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-propose-email-draft-filled.png",
+      "platform": "desktop-macos",
+      "description": "propose_email: the draft opened filled in (To test@example.com, subject, body) in the default mailto handler, Google Chrome, as Outlook on the web; nothing sent. Omi's reply named Google Chrome. packaged named build of feat/mac-propose-compose at e1894d91ed (production servers, macOS 27); placeholder recipients only",
+      "captured_by": "human",
+      "source": "manual"
+    },
+    {
+      "file": "002-desktop-macos-propose-message-draft-in-messages.png",
+      "platform": "desktop-macos",
+      "description": "propose_message: the draft \"propose test one\" to 555-0100 placed in the Messages app's own composer; macOS 27 shows no share sheet, the person presses Send. packaged named build of feat/mac-propose-compose at e1894d91ed (production servers, macOS 27); placeholder recipients only",
+      "captured_by": "human",
+      "source": "manual"
+    },
+    {
+      "file": "003-desktop-macos-propose-typing-not-opened.png",
+      "platform": "desktop-macos",
+      "description": "Typing guard: the person kept typing after asking for a text, so no draft was handed to Messages (not_opened / person_typing) and Omi said so. packaged named build of feat/mac-propose-compose at e1894d91ed (production servers, macOS 27); placeholder recipients only",
+      "captured_by": "human",
+      "source": "manual"
+    }
+  ]
+}
