@@ -1037,7 +1037,12 @@ def retrieve_vad_segments(
                     if segment_path in segment_source_maps:
                         segment_source_maps[segment_path] = None
                     elif source_frame_map is not None:
-                        segment_source_maps[segment_path] = (source_frame_map, int(segment['start'] * aseg.frame_rate))
+                        first = (
+                            int(aseg.frame_count(ms=segment['start'] * 1000))
+                            if source_frame_map.get('live_source_slice')
+                            else int(segment['start'] * aseg.frame_rate)
+                        )
+                        segment_source_maps[segment_path] = (source_frame_map, first)
                     else:
                         segment_source_maps[segment_path] = None
             # Explicitly delete segment to free memory immediately

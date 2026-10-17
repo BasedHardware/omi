@@ -79,3 +79,25 @@ async def test_live_short_tail_runs_vad_without_wal_coverage(monkeypatch):
     )
     assert paths == {'/local/1792152000.125000.wav'}
     coverage.assert_not_called()
+
+
+async def test_live_source_offset_matches_pydub_slice_at_twenty_four_khz(tmp_path, monkeypatch):
+    import struct
+    import wave
+    from utils.sync import pipeline
+
+    path = str(tmp_path / '1792152000.wav')
+    with wave.open(path, 'wb') as source:
+        source.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
+        source.writeframes(b''.join(struct.pack('<h', frame) for frame in range(18000)))
+
+    async def leaf(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(audio, 'run_blocking', leaf)
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *args, **kwargs: [{'start': 0.001125, 'end': 0.5}])
+    paths, maps, _, _ = await audio.prepare('synthetic', path, {'origin': 'live', 'live_custody_version': 4})
+    piece = next(iter(paths))
+    assert maps[piece][1] == 27  # int(start * 24000) rounds down to26; Pydub starts at27.
+    with wave.open(piece) as derivative:
+        assert derivative.readframes(1) == struct.pack('<h', 27)
