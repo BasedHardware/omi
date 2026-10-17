@@ -100,6 +100,10 @@ def inspect_unit(store, artifacts, sid, uid, key, attestation):
     if not spans:
         return 'silence'
     if spent_canary(job):
+        require(
+            attestation or job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1},
+            'missing_padded_retry_evidence',
+        )
         return 'canary_recovery'
     require(
         attestation or job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1},
