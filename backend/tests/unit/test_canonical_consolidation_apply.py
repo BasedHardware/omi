@@ -78,7 +78,7 @@ class _FakeDocumentRef:
         self.path = path
         self._db = db
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_kwargs):
         if self.path not in self._db.docs:
             return _FakeSnapshot(None, exists=False)
         return _FakeSnapshot(self._db.docs[self.path], exists=True)
