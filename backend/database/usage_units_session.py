@@ -5,6 +5,7 @@ from datetime import timezone
 import hashlib
 import time
 
+from config.rate_card_versions import RATE_CARD_SHA256
 from database.usage_units import read_usage_month, summarize_usage
 
 
@@ -67,7 +68,7 @@ class UsageUnitsSession:
                 for snap in client.get_all(
                     refs,
                     field_paths=[
-                        'shadow_v1',
+                        *[f'shadow_{version}' for version in RATE_CARD_SHA256],
                         'transcription_seconds',
                         'speech_seconds',
                         'attempts',

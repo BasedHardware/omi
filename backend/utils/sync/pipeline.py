@@ -30,6 +30,7 @@ import httpx
 import numpy as np
 from google.api_core import exceptions as google_exceptions
 from database._client import (
+    get_firestore_client,
     FIRESTORE_DOCUMENT_KINDS,
     firestore_document_kind,
     is_document_size_limit_error,
@@ -39,6 +40,14 @@ from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
 from database import conversations as conversations_db
+from database.summary_processing import claim_from_snapshot
+from utils.conversations.summary_delivery import (
+    repair_fenced,
+    refusal as summary_repair_refusal,
+    REPAIR_CONTEXT,
+    PROCESS_CONTEXT,
+    SummaryRepairSuperseded,
+)
 from database import users as users_db
 from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
@@ -1052,6 +1061,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
+    if repair_fenced(conversation_data):
+        raise SummaryRepairSuperseded(
+            'summary repair ownership changed',
+            retry_revision=(
+                conversation_data.get('sync_content_revision')
+                if summary_repair_refusal(conversation_data) is None
+                else None
+            ),
+        )
     if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
@@ -1080,6 +1098,11 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
             return
 
+    if PROCESS_CONTEXT.get() is not None and not claim_from_snapshot(
+        get_firestore_client(), uid, conversation_id, conversation_data
+    ):
+        raise SyncConversationPersistenceFenced('summary processing snapshot changed')
+
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
     if language == _LINEAGE_RETRY_LANGUAGE:
@@ -1102,7 +1125,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
-        user_kept=is_user_curated(conversation_data),
+        user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
         persistence_observer=_require_current_conversation_persistence,
         # Deserialize drops relevance_decision. The raw row still has it:
         # sync_update means a previous enrichment, sync_intake or absence does not.
@@ -1129,6 +1152,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
+    return processed_conversation
 
 
 def _speaker_identity_dependencies() -> SpeakerIdentityDependencies:

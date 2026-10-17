@@ -848,7 +848,12 @@ def _request(
                     except ValueError:
                         input_value = {}
                     content.append({'type': 'tool_use', 'id': call_id, 'name': name, 'input': input_value})
-            translated.append({'role': 'assistant', 'content': content or [{'type': 'text', 'text': ''}]})
+            if not content:
+                # Anthropic rejects empty text blocks (400 invalid_request_error); an
+                # assistant turn with no text and no tool calls carries nothing, and
+                # the provider merges the adjacent user turns it leaves behind.
+                continue
+            translated.append({'role': 'assistant', 'content': content})
         elif role == 'tool':
             tool_call_id = message.get('tool_call_id')
             if not isinstance(tool_call_id, str):
@@ -863,6 +868,8 @@ def _request(
             )
         else:
             raise _RequestValidationError(f'unsupported message role: {role}')
+    if not translated:
+        raise _RequestValidationError('messages must contain at least one user or assistant message')
     maximum = body.get('max_completion_tokens', body.get('max_tokens', 8192))
     if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 1:
         raise _RequestValidationError('max_tokens must be a positive integer')

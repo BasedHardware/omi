@@ -108,7 +108,8 @@ def test_selected_manifest_is_canonical_and_contains_every_registry_composite():
 
 def test_field_targets_are_the_registry_field_requirements():
     assert operator.TARGET_FIELD_REQUIREMENTS is registry.FIELD_INDEX_REQUIREMENTS
-    assert _FIELD_COUNT == 16
+    assert _FIELD_COUNT == 17
+    assert _FIELD_REQUIREMENTS[('conversations', 'summary_due_at')].collection_group_modes == ('ASCENDING',)
 
 
 def test_plan_reads_only_fixed_named_database_and_reports_all_required_indexes(monkeypatch):

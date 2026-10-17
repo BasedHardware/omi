@@ -1,9 +1,9 @@
 'use client';
 
 import { Quote } from 'lucide-react';
-import { resolvableNoteSources } from '../../../../shared/note-sources.mjs';
+import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
 import ReactMarkdown from 'react-markdown';
-import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 import { cn } from '@/lib/utils';
 import { splitNoteSections, type NoteSectionInput } from '@/lib/meetingNotes';
 

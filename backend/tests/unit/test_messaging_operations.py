@@ -157,6 +157,15 @@ def test_duplicate_policy_fails_before_any_write():
     assert all(c[0] == 'GET' for c in session.calls)
 
 
+def test_context_rate_counts_summary_loss_but_not_digest_only_loss():
+    policy = next(p for p in ops.desired_alerts(CHANNELS) if p['displayName'] == ops.CONTEXT_RATE_POLICY)
+    query = policy['conditions'][0]['conditionPrometheusQueryLanguage']['query']
+    assert 'outcome=~"degraded|summary_pending"' in query
+    assert 'outcome!="unscoped"' in query
+    assert '>= 20' in query and '> 0.05' in query
+    assert 'digest_degraded' not in query
+
+
 @pytest.mark.parametrize('mode', ['validate', 'apply'])
 def test_existing_job_update_uses_v2_job_body_without_mask_or_execution(mode):
     old = ops.desired_job(IMAGE.replace('a' * 64, 'b' * 64))
@@ -292,3 +301,25 @@ def test_maintenance_failure_is_redacted_and_nonzero(monkeypatch, caplog):
     assert error.value.code == 1
     assert 'outcome=failed reason=permission error_type=PermissionError' in caplog.text
     assert 'private account' not in caplog.text
+
+
+def test_zero_threshold_omitted_by_proto_json_still_matches_and_verifies():
+    class OmittingSession(Session):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if method != 'GET' or 'alertPolicies' not in url or not response.ok:
+                return response
+            # Copy before trimming so the stored policy keeps its declared zero.
+            body = copy.deepcopy(response.json())
+            for policy in body.get('alertPolicies', [body]):
+                for condition in policy.get('conditions', []):
+                    threshold = condition.get('conditionThreshold', {})
+                    if threshold.get('thresholdValue') == 0:
+                        del threshold['thresholdValue']
+            return SimpleNamespace(ok=True, status_code=200, json=lambda: body)
+
+    session = OmittingSession()
+    ops.reconcile_log_metrics(session, 'apply')
+    ops.reconcile_alerts(session, CHANNELS, 'apply')
+    assert len(session.policies) == 10
+    assert not ops.reconcile_alerts(session, CHANNELS, 'check')

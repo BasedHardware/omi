@@ -4369,12 +4369,27 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Teie $plan pakett lõpeb $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Teie plaan on seatud tühistuma $date.\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Teie $plan pakett uueneb $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4407,6 +4422,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get continueText => 'Jätka';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Paketi muutmiseks tellige esmalt uuesti.';
 
   @override
   String get resubscribe => 'Telli uuesti';
@@ -5020,9 +5038,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get content => 'Sisu';
-
-  @override
-  String get noContentToDisplay => 'Sisu pole kuvamiseks';
 
   @override
   String get noSummary => 'Kokkuvõte puudub';
@@ -5824,6 +5839,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get usingNativeIosSpeech => 'Kasutatakse iOS-i natiivset kõnetuvastust';
 
   @override
+  String get noModelDownloadRequired =>
+      'Kasutatakse teie seadme algset kõnemootorit. Mudeli allalaadimine pole vajalik.';
+
+  @override
   String get modelReady => 'Mudel on valmis';
 
   @override
@@ -5894,6 +5913,10 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'See mudel on suur ja võib põhjustada rakenduse krahhi või väga aeglase töö mobiilseadmetes.\n\nSoovitatav on small või base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
 
   @override
   String modelReadyWithName(String model) {
@@ -9792,9 +9815,6 @@ class AppLocalizationsEt extends AppLocalizations {
       'Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.';
 
   @override
-  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
 
@@ -13325,6 +13345,436 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncDetailsCopy => 'Kopeeri üksikasjad klienditoele';
 
   @override
+  String get chatAppsChannelPlanRequired => 'Saadaval paketiga Operator ja Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app on täis';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Liitu ootenimekirjaga';
+
+  @override
+  String get chatAppsOnWaitlist => 'Oled ootenimekirjas';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Oled ootenimekirjas. Anname teada, kui koht vabaneb.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Kõik on valmis, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Lõuna Samiga, kes kolib juunis Lissaboni. Tahad reedeks esitluse meeskonnale saata ja koduteel piima osta.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Saata esitlus reedeks tiimile';
+
+  @override
+  String get onboardingActDemoTask2 => 'Osta koduteel piima';
+
+  @override
+  String get onboardingActDemoTitle => 'Lõuna Samiga';
+
+  @override
+  String get onboardingActDictateBody => 'Ütle omal moel. Ülejäänu teeb Omi.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Lihtsalt räägi. Sinu Omi kuulab.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Sõin just Samiga lõunat, ta kolib juunis Lissaboni! Tuleta mulle meelde saata esitlus reedeks tiimile ja osta koduteel piima.';
+
+  @override
+  String get onboardingActDictateHint => 'Kui oled valmis, puuduta linnukest';
+
+  @override
+  String get onboardingActDictateTitle => 'Räägi Omile oma päevast';
+
+  @override
+  String get onboardingActIntro => 'Proovime Omit.';
+
+  @override
+  String get onboardingActJustNow => 'Just praegu';
+
+  @override
+  String get onboardingActMicAllow => 'Luba mikrofon';
+
+  @override
+  String get onboardingActMicBody => 'Et Omi kuuleks sind, kui sa temaga räägid.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ei saada veel heli. Kasuta praegu oma telefoni.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi vajab su mikrofoni';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omit pole kuulda. Veendu, et see on sees ja lähedal.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Me ei kuule sind veel. Proovi natuke valjemini rääkida.';
+
+  @override
+  String get onboardingActNotesLabel => 'Sinu päev lühidalt';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefoni mikrofon';
+
+  @override
+  String get onboardingActRateTitle => 'Kas Omi meeldib sulle seni?';
+
+  @override
+  String get onboardingActRemembers => 'Omi mäletab, et sina ei peaks';
+
+  @override
+  String get onboardingActSavedToTasks => 'Salvestatud sinu ülesannetesse';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi märkas sinu ülesandeid';
+
+  @override
+  String get onboardingActWriting => 'Teeme kokkuvõtet…';
+
+  @override
+  String get onboardingActYourWords => 'Seda sa ütlesid';
+
+  @override
+  String get onboardingConnectOmi => 'Ühenda Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Ühendamiseks puuduta oma Omit.';
+
+  @override
+  String get onboardingNoOmiYet => 'Sul pole veel Omit?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Pole veel tellinud';
+
+  @override
+  String get onboardingOmiOrdered => 'Olen selle tellinud';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
+
+  @override
+  String get homePendingTitle => 'Vestlused teel';
+
+  @override
+  String get homePendingCatchingUp => 'Varasema heli töötlemine';
+
+  @override
+  String get onTheWayTitle => 'Teel';
+
+  @override
+  String get onTheWayAlmostReady => 'Peaaegu valmis';
+
+  @override
+  String get activityEmpty => 'Tegevusi veel pole';
+
+  @override
+  String get activityNewSemantics => 'Tegevus, uued üksused';
+
+  @override
+  String get activityLoadFailed => 'Kogu tegevust ei õnnestunud laadida';
+
+  @override
+  String get activityNewItem => 'Uus';
+
+  @override
+  String get activityNeedsAttention => 'Vajab tähelepanu';
+
+  @override
+  String get activityRetryAll => 'Proovi kõiki uuesti';
+
+  @override
+  String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
+
+  @override
+  String get connectAgentHeadline => 'Kasuta oma Omi mälu ChatGPT-s ja oma tehisintellekti agentides';
+
+  @override
+  String get connectAgentIntro => 'Ühenda üks kord. Seejärel küsi neilt oma vestluste, mälestuste ja ülesannete kohta.';
+
+  @override
+  String get connectAgentOneTap => 'Ühe puudutusega';
+
+  @override
+  String get connectAgentComputerAgents => 'Oma arvutiga agendid';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopeeri üks viip. Omi loob võtme ainult sellele agendile ja saadab selle turvaliselt.';
+
+  @override
+  String get connectAgentOtherAgent => 'Muu agent';
+
+  @override
+  String get connectAgentKeyActive => 'Võti on aktiivne';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Viimati kasutatud $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP ja API võtmed arendajatele';
+
+  @override
+  String get connectAgentLoadFailed => 'Sinu ühendusi ei õnnestunud laadida.';
+
+  @override
+  String get connectAgentActionFailed => 'Midagi läks valesti. Proovi uuesti.';
+
+  @override
+  String get connectChatGptTitle => 'Ühenda ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Võtab umbes 30 sekundit. Kinnitad selle ChatGPT-s ja see töötab nii telefonis kui ka arvutis.';
+
+  @override
+  String get connectChatGptStepOpen => 'Avame Omi ChatGPT-s';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT avaneb otse Omi rakenduse lehel.';
+
+  @override
+  String get connectChatGptStepApprove => 'Puuduta „Ühenda“ ja logi seejärel Omisse sisse';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Kasuta sama kontot, mida kasutad siin.';
+
+  @override
+  String get connectChatGptStepReturn => 'Tule tagasi Omisse';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Kontrollime ühendust automaatselt.';
+
+  @override
+  String get openChatGpt => 'Ava ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Ühendatud telefonis ja arvutis';
+
+  @override
+  String get tryAskingChatGpt => 'Proovi küsida ChatGPT-lt';
+
+  @override
+  String get tryAskingChatGptFooter => 'Puuduta üht, et avada ChatGPT juba sisestatud küsimusega.';
+
+  @override
+  String get chatGptExampleMeetings => 'Millega ma eilsetel koosolekutel nõustusin?';
+
+  @override
+  String get chatGptExampleTasks => 'Tee minu avatud Omi ülesannetest selle nädala plaan.';
+
+  @override
+  String get chatGptExampleGoals => 'Mida Omi minu eesmärkidest teab?';
+
+  @override
+  String get disconnectChatGpt => 'Katkesta ChatGPT ühendus';
+
+  @override
+  String get disconnectChatGptQuestion => 'Kas katkestada ChatGPT ühendus?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT ei saa enam lugeda sinu Omi mälestusi, vestlusi ega ülesandeid.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Ühenda $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Kleebi üks viip. $name seadistab Omi oma arvutis.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Kleebi üks viip. Sinu agent seadistab Omi oma arvutis.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Võti „$name“ on loodud';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Viip sisaldab ühekordset linki, mitte võtit ennast. See avaneb üks kord ja aegub 1 tunni pärast. Võtme saad siin igal ajal tühistada.';
+
+  @override
+  String get connectAgentPreparing => 'Loome võtit ja turvalist linki…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Võtit ei õnnestunud luua. Kontrolli ühendust ja proovi uuesti.';
+
+  @override
+  String get copyPrompt => 'Kopeeri viip';
+
+  @override
+  String get connectAgentNewLink => 'Link aegus? Loo uus';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name on ühendatud';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name kasutab Omi võtit. Tühista see, et ligipääs katkestada. Saad igal ajal uuesti ühendada.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Kas tühistada $name võti?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name kaotab kohe ligipääsu sinu Omi mälule.';
+  }
+
+  @override
+  String get askAboutConversation => 'Küsi selle vestluse kohta';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Avab ChatGPT valmis küsimusega. See leiab vestluse Omi kaudu, nii et transkriptsiooni pole vaja kleepida.';
+
+  @override
+  String get askYourQuestion => 'Sinu küsimus';
+
+  @override
+  String get askSuggestFollowUp => 'Koosta selle vestluse põhjal järelkiri.';
+
+  @override
+  String get askSuggestCommitments => 'Mida ma selles vestluses lubasin?';
+
+  @override
+  String get askSuggestDoc => 'Tee sellest vestlusest lühike dokument.';
+
+  @override
+  String get askInChatGpt => 'Küsi ChatGPT-lt';
+
+  @override
+  String get copyForAnyApp => 'Kopeeri mis tahes rakenduse jaoks';
+
+  @override
+  String get askConnectChatGptFirst => 'Ühenda ChatGPT üks kord, et küsida temalt oma vestluste kohta.';
+
+  @override
+  String get reconnect => 'Ühenda uuesti';
+
+  @override
+  String get chatGptNeedsReconnect => 'Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega.';
+
+  @override
+  String get connectAgentWaiting => 'Ootame, kuni agent kasutab oma võtit';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name pole veel ühendatud';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Veel kokku võtmata';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi saab muuta selle vestluse ülevaateks, põhipunktideks ja ülesanneteks.';
+
+  @override
+  String get summaryWithOmi => 'Võta Omiga kokku';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Võta kokku: $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Kasuta teist malli';
+
+  @override
+  String get summaryFromTheTranscript => 'Transkriptsioonist';
+
+  @override
+  String get summaryReadFullTranscript => 'Loe kogu transkriptsiooni';
+
+  @override
+  String get summarySheetTitle => 'Kokkuvõtte tegija';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Ülevaade, põhipunktid ja ülesanded';
+
+  @override
+  String get summaryYourTemplates => 'Sinu mallid';
+
+  @override
+  String get summarySuggestedTemplates => 'Soovitatud selle vestluse jaoks';
+
+  @override
+  String get summaryBrowseTemplates => 'Sirvi malle';
+
+  @override
+  String get summaryCreateYourOwn => 'Loo oma';
+
+  @override
+  String get summaryUseForNewConversations => 'Määra minu vaikevalikuks';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Sinu malle ei õnnestunud laadida. Omi töötab endiselt.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Sa pole veel ühtegi malli lisanud. Sirvi mõnda või loo oma.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Kokkuvõtte tegemine: $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ei suutnud lõpetada';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Mall ei tagastanud selle vestluse kokkuvõtet.';
+
+  @override
+  String get summaryWithOmiInstead => 'Võta hoopis Omiga kokku';
+
+  @override
+  String get summaryBusyTitle => 'Töötlemine käib veel';
+
+  @override
+  String get summaryBusyBody => 'Omi juba töötab selle vestlusega. Kokkuvõte ilmub siia, kui see valmis saab.';
+
+  @override
+  String get summaryCheckAgain => 'Kontrolli uuesti';
+
+  @override
+  String get summaryLimitTitle => 'Kokkuvõtete limiit on täis';
+
+  @override
+  String get summaryLimitBody => 'Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.';
+
+  @override
+  String get summaryFailedTitle => 'Kokkuvõtet ei õnnestunud teha';
+
+  @override
+  String get summaryFailedBody => 'Selle vestluse kokkuvõtte tegemisel läks midagi valesti.';
+
+  @override
+  String get noContentToDisplay => 'Sisu pole kuvamiseks';
+
+  @override
+  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
+
+  @override
   String get onDeviceAtCapTitle => 'Oled jõudnud selle kuu limiidini';
 
   @override
@@ -13597,147 +14047,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceEntrySubtitle => 'Kui jõuad limiidini, transkribeeri selles telefonis';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Saadaval paketiga Operator ja Architect';
-
-  @override
-  String chatAppsAtCapacity(String app) {
-    return '$app on täis';
-  }
-
-  @override
-  String get chatAppsJoinWaitlist => 'Liitu ootenimekirjaga';
-
-  @override
-  String get chatAppsOnWaitlist => 'Oled ootenimekirjas';
-
-  @override
-  String get chatAppsWaitlistJoined => 'Oled ootenimekirjas. Anname teada, kui koht vabaneb.';
-
-  @override
-  String onboardingActCongratsTitle(String name) {
-    return 'Kõik on valmis, $name';
-  }
-
-  @override
-  String get onboardingActDemoSummary =>
-      'Lõuna Samiga, kes kolib juunis Lissaboni. Tahad reedeks esitluse meeskonnale saata ja koduteel piima osta.';
-
-  @override
-  String get onboardingActDemoTask1 => 'Saata esitlus reedeks tiimile';
-
-  @override
-  String get onboardingActDemoTask2 => 'Osta koduteel piima';
-
-  @override
-  String get onboardingActDemoTitle => 'Lõuna Samiga';
-
-  @override
-  String get onboardingActDictateBody => 'Ütle omal moel. Ülejäänu teeb Omi.';
-
-  @override
-  String get onboardingActDictateBodyOmi => 'Lihtsalt räägi. Sinu Omi kuulab.';
-
-  @override
-  String get onboardingActDictateExample =>
-      'Sõin just Samiga lõunat, ta kolib juunis Lissaboni! Tuleta mulle meelde saata esitlus reedeks tiimile ja osta koduteel piima.';
-
-  @override
-  String get onboardingActDictateHint => 'Kui oled valmis, puuduta linnukest';
-
-  @override
-  String get onboardingActDictateTitle => 'Räägi Omile oma päevast';
-
-  @override
-  String get onboardingActIntro => 'Proovime Omit.';
-
-  @override
-  String get onboardingActJustNow => 'Just praegu';
-
-  @override
-  String get onboardingActMicAllow => 'Luba mikrofon';
-
-  @override
-  String get onboardingActMicBody => 'Et Omi kuuleks sind, kui sa temaga räägid.';
-
-  @override
-  String get onboardingActMicFallbackBody => 'Omi ei saada veel heli. Kasuta praegu oma telefoni.';
-
-  @override
-  String get onboardingActMicTitle => 'Omi vajab su mikrofoni';
-
-  @override
-  String get onboardingActNoAudioOmi => 'Omit pole kuulda. Veendu, et see on sees ja lähedal.';
-
-  @override
-  String get onboardingActNoAudioPhone => 'Me ei kuule sind veel. Proovi natuke valjemini rääkida.';
-
-  @override
-  String get onboardingActNotesLabel => 'Sinu päev lühidalt';
-
-  @override
-  String get onboardingActPhoneMic => 'Telefoni mikrofon';
-
-  @override
-  String get onboardingActRateTitle => 'Kas Omi meeldib sulle seni?';
-
-  @override
-  String get onboardingActRemembers => 'Omi mäletab, et sina ei peaks';
-
-  @override
-  String get onboardingActSavedToTasks => 'Salvestatud sinu ülesannetesse';
-
-  @override
-  String get onboardingActTasksLabel => 'Omi märkas sinu ülesandeid';
-
-  @override
-  String get onboardingActWriting => 'Teeme kokkuvõtet…';
-
-  @override
-  String get onboardingActYourWords => 'Seda sa ütlesid';
-
-  @override
-  String get onboardingConnectOmi => 'Ühenda Omi';
-
-  @override
-  String get onboardingConnectTapToConnect => 'Ühendamiseks puuduta oma Omit.';
-
-  @override
-  String get onboardingNoOmiYet => 'Sul pole veel Omit?';
-
-  @override
-  String get onboardingOmiNotOrdered => 'Pole veel tellinud';
-
-  @override
-  String get onboardingOmiOrdered => 'Olen selle tellinud';
-
-  @override
-  String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
-
-  @override
-  String get homePendingTitle => 'Vestlused teel';
-
-  @override
-  String get homePendingCatchingUp => 'Varasema heli töötlemine';
-
-  @override
-  String get onTheWayTitle => 'Teel';
-
-  @override
-  String get onTheWayAlmostReady => 'Peaaegu valmis';
-
-  @override
-  String get activityEmpty => 'Tegevusi veel pole';
-
-  @override
-  String get activityNewSemantics => 'Tegevus, uued üksused';
-
-  @override
-  String get activityLoadFailed => 'Kogu tegevust ei õnnestunud laadida';
-
-  @override
-  String get activityNewItem => 'Uus';
-
-  @override
   String onDeviceMeterLineShort(int percent, String reset) {
     return '$percent% kasutatud · $reset';
   }
@@ -13753,228 +14062,6 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String onDeviceGettingSpeechReady(int percent) {
     return 'Kõne ettevalmistamine · $percent%';
-  }
-
-  @override
-  String yourPlanEndsOn(String plan, String date) {
-    return 'Teie $plan pakett lõpeb $date.';
-  }
-
-  @override
-  String resubscribeNowNoChargeUntil(String date) {
-    return 'Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
-  }
-
-  @override
-  String yourPlanWillRenewOn(String plan, String date) {
-    return 'Teie $plan pakett uueneb $date.';
-  }
-
-  @override
-  String get resubscribeFirstToChangePlans => 'Paketi muutmiseks tellige esmalt uuesti.';
-
-  @override
-  String get noModelDownloadRequired =>
-      'Kasutatakse teie seadme algset kõnemootorit. Mudeli allalaadimine pole vajalik.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
-
-  @override
-  String get activityNeedsAttention => 'Vajab tähelepanu';
-
-  @override
-  String get activityRetryAll => 'Proovi kõiki uuesti';
-
-  @override
-  String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
-
-  @override
-  String get connectAgentHeadline => 'Kasuta oma Omi mälu ChatGPT-s ja oma tehisintellekti agentides';
-
-  @override
-  String get connectAgentIntro => 'Ühenda üks kord. Seejärel küsi neilt oma vestluste, mälestuste ja ülesannete kohta.';
-
-  @override
-  String get connectAgentOneTap => 'Ühe puudutusega';
-
-  @override
-  String get connectAgentComputerAgents => 'Oma arvutiga agendid';
-
-  @override
-  String get connectAgentComputerAgentsSubtitle =>
-      'Kopeeri üks viip. Omi loob võtme ainult sellele agendile ja saadab selle turvaliselt.';
-
-  @override
-  String get connectAgentOtherAgent => 'Muu agent';
-
-  @override
-  String get connectAgentKeyActive => 'Võti on aktiivne';
-
-  @override
-  String connectAgentLastUsed(String time) {
-    return 'Viimati kasutatud $time';
-  }
-
-  @override
-  String get connectAgentDevelopers => 'MCP ja API võtmed arendajatele';
-
-  @override
-  String get connectAgentLoadFailed => 'Sinu ühendusi ei õnnestunud laadida.';
-
-  @override
-  String get connectAgentActionFailed => 'Midagi läks valesti. Proovi uuesti.';
-
-  @override
-  String get connectChatGptTitle => 'Ühenda ChatGPT';
-
-  @override
-  String get connectChatGptSubtitle =>
-      'Võtab umbes 30 sekundit. Kinnitad selle ChatGPT-s ja see töötab nii telefonis kui ka arvutis.';
-
-  @override
-  String get connectChatGptStepOpen => 'Avame Omi ChatGPT-s';
-
-  @override
-  String get connectChatGptStepOpenBody => 'ChatGPT avaneb otse Omi rakenduse lehel.';
-
-  @override
-  String get connectChatGptStepApprove => 'Puuduta „Ühenda“ ja logi seejärel Omisse sisse';
-
-  @override
-  String get connectChatGptStepApproveBody => 'Kasuta sama kontot, mida kasutad siin.';
-
-  @override
-  String get connectChatGptStepReturn => 'Tule tagasi Omisse';
-
-  @override
-  String get connectChatGptStepReturnBody => 'Kontrollime ühendust automaatselt.';
-
-  @override
-  String get openChatGpt => 'Ava ChatGPT';
-
-  @override
-  String get chatGptConnectedEverywhere => 'Ühendatud telefonis ja arvutis';
-
-  @override
-  String get tryAskingChatGpt => 'Proovi küsida ChatGPT-lt';
-
-  @override
-  String get tryAskingChatGptFooter => 'Puuduta üht, et avada ChatGPT juba sisestatud küsimusega.';
-
-  @override
-  String get chatGptExampleMeetings => 'Millega ma eilsetel koosolekutel nõustusin?';
-
-  @override
-  String get chatGptExampleTasks => 'Tee minu avatud Omi ülesannetest selle nädala plaan.';
-
-  @override
-  String get chatGptExampleGoals => 'Mida Omi minu eesmärkidest teab?';
-
-  @override
-  String get disconnectChatGpt => 'Katkesta ChatGPT ühendus';
-
-  @override
-  String get disconnectChatGptQuestion => 'Kas katkestada ChatGPT ühendus?';
-
-  @override
-  String get disconnectChatGptMessage => 'ChatGPT ei saa enam lugeda sinu Omi mälestusi, vestlusi ega ülesandeid.';
-
-  @override
-  String connectAgentNamed(String name) {
-    return 'Ühenda $name';
-  }
-
-  @override
-  String connectAgentPromptSubtitle(String name) {
-    return 'Kleebi üks viip. $name seadistab Omi oma arvutis.';
-  }
-
-  @override
-  String get connectAgentGenericPromptSubtitle => 'Kleebi üks viip. Sinu agent seadistab Omi oma arvutis.';
-
-  @override
-  String connectAgentKeyCreated(String name) {
-    return 'Võti „$name“ on loodud';
-  }
-
-  @override
-  String get connectAgentKeyCreatedBody =>
-      'Viip sisaldab ühekordset linki, mitte võtit ennast. See avaneb üks kord ja aegub 1 tunni pärast. Võtme saad siin igal ajal tühistada.';
-
-  @override
-  String get connectAgentPreparing => 'Loome võtit ja turvalist linki…';
-
-  @override
-  String get connectAgentPrepareFailed => 'Võtit ei õnnestunud luua. Kontrolli ühendust ja proovi uuesti.';
-
-  @override
-  String get copyPrompt => 'Kopeeri viip';
-
-  @override
-  String get connectAgentNewLink => 'Link aegus? Loo uus';
-
-  @override
-  String connectAgentActiveTitle(String name) {
-    return '$name on ühendatud';
-  }
-
-  @override
-  String connectAgentActiveBody(String name) {
-    return '$name kasutab Omi võtit. Tühista see, et ligipääs katkestada. Saad igal ajal uuesti ühendada.';
-  }
-
-  @override
-  String revokeAgentKeyQuestion(String name) {
-    return 'Kas tühistada $name võti?';
-  }
-
-  @override
-  String revokeAgentKeyMessage(String name) {
-    return '$name kaotab kohe ligipääsu sinu Omi mälule.';
-  }
-
-  @override
-  String get askAboutConversation => 'Küsi selle vestluse kohta';
-
-  @override
-  String get askAboutConversationSubtitle =>
-      'Avab ChatGPT valmis küsimusega. See leiab vestluse Omi kaudu, nii et transkriptsiooni pole vaja kleepida.';
-
-  @override
-  String get askYourQuestion => 'Sinu küsimus';
-
-  @override
-  String get askSuggestFollowUp => 'Koosta selle vestluse põhjal järelkiri.';
-
-  @override
-  String get askSuggestCommitments => 'Mida ma selles vestluses lubasin?';
-
-  @override
-  String get askSuggestDoc => 'Tee sellest vestlusest lühike dokument.';
-
-  @override
-  String get askInChatGpt => 'Küsi ChatGPT-lt';
-
-  @override
-  String get copyForAnyApp => 'Kopeeri mis tahes rakenduse jaoks';
-
-  @override
-  String get askConnectChatGptFirst => 'Ühenda ChatGPT üks kord, et küsida temalt oma vestluste kohta.';
-
-  @override
-  String get reconnect => 'Ühenda uuesti';
-
-  @override
-  String get chatGptNeedsReconnect => 'Vajab rohkem juurdepääsu. Paranda uuesti ühendamisega.';
-
-  @override
-  String get connectAgentWaiting => 'Ootame, kuni agent kasutab oma võtit';
-
-  @override
-  String connectAgentWaitingTitle(String name) {
-    return '$name pole veel ühendatud';
   }
 
   @override

@@ -117,7 +117,7 @@ class ProjectionStore:
                 snapshot = ref.get(transaction=transaction)
                 old = snapshot.to_dict() if snapshot.exists else None
                 if receipt.get('state') == 'ready':
-                    return old or {}, True
+                    return {**(old or {}), '_wake': False}, True
                 row, result = operation(old)
                 if old is None and session.job.get('priority') != 0:
                     from utils.cloud_tasks import is_sync_backfill_routing_enabled
@@ -213,6 +213,8 @@ class ProjectionStore:
             job = self.ref('jobs', sid).get().to_dict() or {}
             if job.get('priority') == 0:
                 source = 'sync_fresh'
+        if binding.native_record:
+            return {'seconds': seconds, 'source': 'realtime', 'updates': {}, 'hour': '', 'completed': True}
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}
@@ -245,6 +247,7 @@ class ProjectionStore:
             live_siblings = []
             erased_count = 0
             captured_seconds = 0.0
+            terminal_empty_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -254,6 +257,8 @@ class ProjectionStore:
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
+                    terminal_empty_count += 1
                 live_siblings.append(sibling)
                 captured_seconds += job.get('duration_seconds', 0.0)
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
@@ -300,8 +305,10 @@ class ProjectionStore:
                 'failed_segments': 0,
                 'total_segments': len(receipts),
                 'errors': [],
-                'outcome': 'success' if new or updated or erased_count else 'expected_silence',
+                'outcome': 'success' if new or updated or erased_count or terminal_empty_count else 'expected_silence',
             }
+            if terminal_empty_count:
+                result['no_recoverable_speech_segments'] = terminal_empty_count
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not is_valid_completed_sync_content_result(old):

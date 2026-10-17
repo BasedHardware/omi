@@ -27,6 +27,7 @@ import { fetchShopifyWeek } from "./wall-shopify";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
+  SAAS_AS_OF,
   SAAS_MONTHLY_USD,
   STT_MONTHLY_USD,
   STT_SOURCE,
@@ -630,7 +631,7 @@ export async function computeWall(
         const last = daily.find((d) => d.date === cutoff);
         if (!last)
           throw new WallSourceError(`Billing data has not reached ${cutoff}`);
-        const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate)${
+        const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF})${
           cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
         }`;
         const m = metrics["cost.net_day"];

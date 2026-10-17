@@ -105,11 +105,11 @@
     "gemini:gemini-2.5-flash": {
       "model": "gemini-2.5-flash",
       "provider": "gemini",
-      "input_micro_usd_per_million": 300000,
-      "cached_input_micro_usd_per_million": 30000,
-      "output_micro_usd_per_million": 2500000,
-      "source": "https://ai.google.dev/gemini-api/docs/pricing",
-      "observed": "2026-10-13",
+      "input_micro_usd_per_million": 540000,
+      "cached_input_micro_usd_per_million": 54000,
+      "output_micro_usd_per_million": 4500000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@vertex.gemini-2.5-flash.2026-10-15",
+      "observed": "2026-10-15",
       "status": "card"
     },
     "anthropic:claude-sonnet-5": {
@@ -157,6 +157,16 @@
       "source": "https://vercel.com/ai-gateway/models/sonar-pro/about",
       "status": "provisional",
       "limitation": "Legacy Sonar rate; request fees are separate and are not derivable from token counts."
+    },
+    "gemini:gemini-3.8-flash": {
+      "model": "gemini-3.8-flash",
+      "provider": "gemini",
+      "input_micro_usd_per_million": 1500000,
+      "cached_input_micro_usd_per_million": 150000,
+      "output_micro_usd_per_million": 7500000,
+      "source": "backend/llm_gateway/config/cost_rate_cards.yaml@vertex.gemini-3.8-flash.2027-01-01",
+      "observed": "2026-10-15",
+      "status": "card"
     }
   },
   "realtime_models": {

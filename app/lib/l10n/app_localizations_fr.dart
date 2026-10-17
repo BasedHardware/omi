@@ -4415,6 +4415,16 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Votre forfait $plan se termine le $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Réabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Votre forfait est programmé pour être annulé le $date.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
   }
@@ -4422,6 +4432,11 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Votre forfait annuel débutera automatiquement à la fin de votre forfait mensuel.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Votre forfait $plan sera renouvelé le $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4455,6 +4470,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get continueText => 'Continuer';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Réabonnez-vous d\'abord pour changer de forfait.';
 
   @override
   String get resubscribe => 'Se réabonner';
@@ -5073,9 +5091,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get content => 'Contenu';
-
-  @override
-  String get noContentToDisplay => 'Aucun contenu à afficher';
 
   @override
   String get noSummary => 'Pas de résumé';
@@ -5881,6 +5896,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get usingNativeIosSpeech => 'Utilisation de la reconnaissance vocale native iOS';
 
   @override
+  String get noModelDownloadRequired =>
+      'Le moteur de reconnaissance vocale natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.';
+
+  @override
   String get modelReady => 'Modèle prêt';
 
   @override
@@ -5952,6 +5971,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Ce modèle est volumineux et peut provoquer le plantage de lapplication ou un fonctionnement très lent sur les appareils mobiles.\n\nsmall ou base est recommandé.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Le moteur vocal natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.';
 
   @override
   String modelReadyWithName(String model) {
@@ -9886,9 +9909,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'La transcription vocale est indisponible pour le moment. Vérifiez votre connexion Internet et les réglages de reconnaissance vocale de votre appareil, puis réessayez.';
 
   @override
-  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Pour qu’Omi reconnaisse votre voix — parlez de ce que vous voulez pendant environ 5 secondes.';
 
@@ -13435,6 +13455,442 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncDetailsCopy => 'Copier les détails pour l\'assistance';
 
   @override
+  String get chatAppsChannelPlanRequired => 'Disponible avec Operator et Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app est complet';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Rejoindre la liste d\'attente';
+
+  @override
+  String get chatAppsOnWaitlist => 'Vous êtes sur la liste d\'attente';
+
+  @override
+  String get chatAppsWaitlistJoined =>
+      'Vous êtes sur la liste d\'attente. Nous vous préviendrons dès qu\'une place se libère.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Tout est prêt, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Déjeuner avec Sam, qui part vivre à Lisbonne en juin. Vous voulez envoyer la présentation à l\'équipe d\'ici vendredi et prendre du lait en rentrant.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Envoyer la présentation à l\'équipe d\'ici vendredi';
+
+  @override
+  String get onboardingActDemoTask2 => 'Prendre du lait en rentrant';
+
+  @override
+  String get onboardingActDemoTitle => 'Déjeuner avec Sam';
+
+  @override
+  String get onboardingActDictateBody => 'Dites-le à votre façon. Omi s\'occupe du reste.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Parlez simplement. Votre Omi vous écoute.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Je viens de déjeuner avec Sam, elle déménage à Lisbonne en juin ! Rappelle-moi d\'envoyer la présentation à l\'équipe d\'ici vendredi et de prendre du lait en rentrant.';
+
+  @override
+  String get onboardingActDictateHint => 'Touchez la coche quand vous avez fini';
+
+  @override
+  String get onboardingActDictateTitle => 'Racontez votre journée à Omi';
+
+  @override
+  String get onboardingActIntro => 'Essayons Omi.';
+
+  @override
+  String get onboardingActJustNow => 'À l\'instant';
+
+  @override
+  String get onboardingActMicAllow => 'Autoriser le micro';
+
+  @override
+  String get onboardingActMicBody => 'Pour qu\'Omi vous entende quand vous lui parlez.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'Votre Omi n\'envoie pas encore de son. Utilisez votre téléphone pour l\'instant.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi a besoin de votre micro';
+
+  @override
+  String get onboardingActNoAudioOmi => 'On n\'entend pas votre Omi. Vérifiez qu\'il est allumé et proche.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'On ne vous entend pas encore. Parlez un peu plus fort.';
+
+  @override
+  String get onboardingActNotesLabel => 'Votre journée, résumée';
+
+  @override
+  String get onboardingActPhoneMic => 'Micro du téléphone';
+
+  @override
+  String get onboardingActRateTitle => 'Omi vous plaît pour l\'instant ?';
+
+  @override
+  String get onboardingActRemembers => 'Omi s\'en souvient pour vous';
+
+  @override
+  String get onboardingActSavedToTasks => 'Enregistré dans vos tâches';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi a repéré vos tâches';
+
+  @override
+  String get onboardingActWriting => 'Résumé en cours…';
+
+  @override
+  String get onboardingActYourWords => 'Voici ce que vous avez dit';
+
+  @override
+  String get onboardingConnectOmi => 'Connecter Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Touchez votre Omi pour le connecter.';
+
+  @override
+  String get onboardingNoOmiYet => 'Vous n\'avez pas encore votre Omi ?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Pas encore commandé';
+
+  @override
+  String get onboardingOmiOrdered => 'Je l\'ai commandé';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Touchez pour corriger';
+
+  @override
+  String get homePendingTitle => 'Conversations en route';
+
+  @override
+  String get homePendingCatchingUp => 'Rattrapage de l\'audio précédent';
+
+  @override
+  String get onTheWayTitle => 'En route';
+
+  @override
+  String get onTheWayAlmostReady => 'Presque prêt';
+
+  @override
+  String get activityEmpty => 'Aucune activité pour l\'instant';
+
+  @override
+  String get activityNewSemantics => 'Activité, nouveaux éléments';
+
+  @override
+  String get activityLoadFailed => 'Impossible de charger toute votre activité';
+
+  @override
+  String get activityNewItem => 'Nouveau';
+
+  @override
+  String get activityNeedsAttention => 'Nécessite votre attention';
+
+  @override
+  String get activityRetryAll => 'Tout réessayer';
+
+  @override
+  String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
+
+  @override
+  String get connectAgentHeadline => 'Utilisez votre mémoire Omi dans ChatGPT et vos agents IA';
+
+  @override
+  String get connectAgentIntro =>
+      'Connectez-vous une fois. Ensuite, interrogez-les sur vos conversations, souvenirs et tâches.';
+
+  @override
+  String get connectAgentOneTap => 'En un geste';
+
+  @override
+  String get connectAgentComputerAgents => 'Agents avec leur propre ordinateur';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Copiez une seule instruction. Omi crée une clé réservée à cet agent et l\'envoie en toute sécurité.';
+
+  @override
+  String get connectAgentOtherAgent => 'Autre agent';
+
+  @override
+  String get connectAgentKeyActive => 'Clé active';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Dernière utilisation : $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Clés MCP et API pour les développeurs';
+
+  @override
+  String get connectAgentLoadFailed => 'Impossible de charger vos connexions.';
+
+  @override
+  String get connectAgentActionFailed => 'Un problème est survenu. Réessayez.';
+
+  @override
+  String get connectChatGptTitle => 'Connecter ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Cela prend environ 30 secondes. Vous validez dans ChatGPT, et cela fonctionne sur votre téléphone et votre ordinateur.';
+
+  @override
+  String get connectChatGptStepOpen => 'Nous ouvrons Omi dans ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT s\'ouvre directement sur la page de l\'application Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Touchez « Connecter », puis connectez-vous à Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Utilisez le même compte qu\'ici.';
+
+  @override
+  String get connectChatGptStepReturn => 'Revenez dans Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Nous vérifions la connexion automatiquement.';
+
+  @override
+  String get openChatGpt => 'Ouvrir ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Connecté sur téléphone et ordinateur';
+
+  @override
+  String get tryAskingChatGpt => 'Essayez de demander à ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Touchez-en une pour ouvrir ChatGPT avec la question déjà saisie.';
+
+  @override
+  String get chatGptExampleMeetings => 'Sur quoi me suis-je engagé lors des réunions d\'hier ?';
+
+  @override
+  String get chatGptExampleTasks => 'Transforme mes tâches Omi en cours en un plan pour cette semaine.';
+
+  @override
+  String get chatGptExampleGoals => 'Que sait Omi de mes objectifs ?';
+
+  @override
+  String get disconnectChatGpt => 'Déconnecter ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Déconnecter ChatGPT ?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT ne pourra plus lire vos souvenirs, conversations ou tâches Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Connecter $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Collez une seule instruction. $name configure Omi sur son propre ordinateur.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Collez une seule instruction. Votre agent configure Omi sur son propre ordinateur.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Clé « $name » créée';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'L\'instruction contient un lien à usage unique, pas la clé elle-même. Il s\'ouvre une seule fois et expire au bout d\'une heure. Vous pouvez révoquer la clé ici à tout moment.';
+
+  @override
+  String get connectAgentPreparing => 'Création d\'une clé et d\'un lien sécurisé…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Impossible de créer la clé. Vérifiez votre connexion et réessayez.';
+
+  @override
+  String get copyPrompt => 'Copier l\'instruction';
+
+  @override
+  String get connectAgentNewLink => 'Lien expiré ? En créer un nouveau';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name est connecté';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name dispose d\'une clé Omi. Révoquez-la pour couper l\'accès. Vous pouvez le reconnecter à tout moment.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Révoquer la clé de $name ?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name perd immédiatement l\'accès à votre mémoire Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Poser une question sur cette conversation';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Ouvre ChatGPT avec votre question prête. Il retrouve la conversation via Omi, inutile de coller la transcription.';
+
+  @override
+  String get askYourQuestion => 'Votre question';
+
+  @override
+  String get askSuggestFollowUp => 'Rédige un e-mail de suivi à partir de cette conversation.';
+
+  @override
+  String get askSuggestCommitments => 'À quoi me suis-je engagé dans cette conversation ?';
+
+  @override
+  String get askSuggestDoc => 'Transforme cette conversation en un court document.';
+
+  @override
+  String get askInChatGpt => 'Demander à ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Copier pour n\'importe quelle app';
+
+  @override
+  String get askConnectChatGptFirst => 'Connectez ChatGPT une fois pour l\'interroger sur vos conversations.';
+
+  @override
+  String get reconnect => 'Reconnecter';
+
+  @override
+  String get chatGptNeedsReconnect => 'Accès supplémentaire requis. Reconnectez pour corriger.';
+
+  @override
+  String get connectAgentWaiting => 'En attente que l\'agent utilise sa clé';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name n\'est pas encore connecté';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Pas encore résumée';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi peut transformer cette conversation en aperçu, points clés et tâches.';
+
+  @override
+  String get summaryWithOmi => 'Résumer avec Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Résumer avec $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Utiliser un autre modèle';
+
+  @override
+  String get summaryFromTheTranscript => 'Extrait de la transcription';
+
+  @override
+  String get summaryReadFullTranscript => 'Lire la transcription complète';
+
+  @override
+  String get summarySheetTitle => 'Résumer avec';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Aperçu, points clés et tâches';
+
+  @override
+  String get summaryYourTemplates => 'Vos modèles';
+
+  @override
+  String get summarySuggestedTemplates => 'Suggérés pour cette conversation';
+
+  @override
+  String get summaryBrowseTemplates => 'Parcourir les modèles';
+
+  @override
+  String get summaryCreateYourOwn => 'Créer le vôtre';
+
+  @override
+  String get summaryUseForNewConversations => 'Définir par défaut';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Impossible de charger vos modèles. Omi fonctionne toujours.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Vous n\'avez encore ajouté aucun modèle. Parcourez-en quelques-uns ou créez le vôtre.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Résumé en cours avec $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name n\'a pas pu terminer';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Le modèle n\'a renvoyé aucun résumé pour cette conversation.';
+
+  @override
+  String get summaryWithOmiInstead => 'Résumer plutôt avec Omi';
+
+  @override
+  String get summaryBusyTitle => 'Traitement en cours';
+
+  @override
+  String get summaryBusyBody => 'Omi travaille déjà sur cette conversation. Le résumé apparaîtra ici une fois terminé.';
+
+  @override
+  String get summaryCheckAgain => 'Vérifier à nouveau';
+
+  @override
+  String get summaryLimitTitle => 'Limite de résumés atteinte';
+
+  @override
+  String get summaryLimitBody =>
+      'Vous avez régénéré plusieurs résumés au cours de la dernière heure. Réessayez plus tard.';
+
+  @override
+  String get summaryFailedTitle => 'Impossible de résumer';
+
+  @override
+  String get summaryFailedBody => 'Un problème est survenu lors du résumé de cette conversation.';
+
+  @override
+  String get noContentToDisplay => 'Aucun contenu à afficher';
+
+  @override
+  String get processingTakingLonger => 'Toujours en cours — cela prend plus de temps que d’habitude.';
+
+  @override
   String get onDeviceAtCapTitle => 'Vous avez atteint la limite de ce mois-ci';
 
   @override
@@ -13711,149 +14167,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onDeviceEntrySubtitle => 'Lorsque vous atteignez votre limite, transcrire sur ce téléphone';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Disponible avec Operator et Architect';
-
-  @override
-  String chatAppsAtCapacity(String app) {
-    return '$app est complet';
-  }
-
-  @override
-  String get chatAppsJoinWaitlist => 'Rejoindre la liste d\'attente';
-
-  @override
-  String get chatAppsOnWaitlist => 'Vous êtes sur la liste d\'attente';
-
-  @override
-  String get chatAppsWaitlistJoined =>
-      'Vous êtes sur la liste d\'attente. Nous vous préviendrons dès qu\'une place se libère.';
-
-  @override
-  String onboardingActCongratsTitle(String name) {
-    return 'Tout est prêt, $name';
-  }
-
-  @override
-  String get onboardingActDemoSummary =>
-      'Déjeuner avec Sam, qui part vivre à Lisbonne en juin. Vous voulez envoyer la présentation à l\'équipe d\'ici vendredi et prendre du lait en rentrant.';
-
-  @override
-  String get onboardingActDemoTask1 => 'Envoyer la présentation à l\'équipe d\'ici vendredi';
-
-  @override
-  String get onboardingActDemoTask2 => 'Prendre du lait en rentrant';
-
-  @override
-  String get onboardingActDemoTitle => 'Déjeuner avec Sam';
-
-  @override
-  String get onboardingActDictateBody => 'Dites-le à votre façon. Omi s\'occupe du reste.';
-
-  @override
-  String get onboardingActDictateBodyOmi => 'Parlez simplement. Votre Omi vous écoute.';
-
-  @override
-  String get onboardingActDictateExample =>
-      'Je viens de déjeuner avec Sam, elle déménage à Lisbonne en juin ! Rappelle-moi d\'envoyer la présentation à l\'équipe d\'ici vendredi et de prendre du lait en rentrant.';
-
-  @override
-  String get onboardingActDictateHint => 'Touchez la coche quand vous avez fini';
-
-  @override
-  String get onboardingActDictateTitle => 'Racontez votre journée à Omi';
-
-  @override
-  String get onboardingActIntro => 'Essayons Omi.';
-
-  @override
-  String get onboardingActJustNow => 'À l\'instant';
-
-  @override
-  String get onboardingActMicAllow => 'Autoriser le micro';
-
-  @override
-  String get onboardingActMicBody => 'Pour qu\'Omi vous entende quand vous lui parlez.';
-
-  @override
-  String get onboardingActMicFallbackBody =>
-      'Votre Omi n\'envoie pas encore de son. Utilisez votre téléphone pour l\'instant.';
-
-  @override
-  String get onboardingActMicTitle => 'Omi a besoin de votre micro';
-
-  @override
-  String get onboardingActNoAudioOmi => 'On n\'entend pas votre Omi. Vérifiez qu\'il est allumé et proche.';
-
-  @override
-  String get onboardingActNoAudioPhone => 'On ne vous entend pas encore. Parlez un peu plus fort.';
-
-  @override
-  String get onboardingActNotesLabel => 'Votre journée, résumée';
-
-  @override
-  String get onboardingActPhoneMic => 'Micro du téléphone';
-
-  @override
-  String get onboardingActRateTitle => 'Omi vous plaît pour l\'instant ?';
-
-  @override
-  String get onboardingActRemembers => 'Omi s\'en souvient pour vous';
-
-  @override
-  String get onboardingActSavedToTasks => 'Enregistré dans vos tâches';
-
-  @override
-  String get onboardingActTasksLabel => 'Omi a repéré vos tâches';
-
-  @override
-  String get onboardingActWriting => 'Résumé en cours…';
-
-  @override
-  String get onboardingActYourWords => 'Voici ce que vous avez dit';
-
-  @override
-  String get onboardingConnectOmi => 'Connecter Omi';
-
-  @override
-  String get onboardingConnectTapToConnect => 'Touchez votre Omi pour le connecter.';
-
-  @override
-  String get onboardingNoOmiYet => 'Vous n\'avez pas encore votre Omi ?';
-
-  @override
-  String get onboardingOmiNotOrdered => 'Pas encore commandé';
-
-  @override
-  String get onboardingOmiOrdered => 'Je l\'ai commandé';
-
-  @override
-  String get onboardingPermissionTapToFix => 'Touchez pour corriger';
-
-  @override
-  String get homePendingTitle => 'Conversations en route';
-
-  @override
-  String get homePendingCatchingUp => 'Rattrapage de l\'audio précédent';
-
-  @override
-  String get onTheWayTitle => 'En route';
-
-  @override
-  String get onTheWayAlmostReady => 'Presque prêt';
-
-  @override
-  String get activityEmpty => 'Aucune activité pour l\'instant';
-
-  @override
-  String get activityNewSemantics => 'Activité, nouveaux éléments';
-
-  @override
-  String get activityLoadFailed => 'Impossible de charger toute votre activité';
-
-  @override
-  String get activityNewItem => 'Nouveau';
-
-  @override
   String onDeviceMeterLineShort(int percent, String reset) {
     return '$percent % utilisés · $reset';
   }
@@ -13869,230 +14182,6 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String onDeviceGettingSpeechReady(int percent) {
     return 'Préparation de la parole · $percent %';
-  }
-
-  @override
-  String yourPlanEndsOn(String plan, String date) {
-    return 'Votre forfait $plan se termine le $date.';
-  }
-
-  @override
-  String resubscribeNowNoChargeUntil(String date) {
-    return 'Réabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
-  }
-
-  @override
-  String yourPlanWillRenewOn(String plan, String date) {
-    return 'Votre forfait $plan sera renouvelé le $date.';
-  }
-
-  @override
-  String get resubscribeFirstToChangePlans => 'Réabonnez-vous d\'abord pour changer de forfait.';
-
-  @override
-  String get noModelDownloadRequired =>
-      'Le moteur de reconnaissance vocale natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Le moteur vocal natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.';
-
-  @override
-  String get activityNeedsAttention => 'Nécessite votre attention';
-
-  @override
-  String get activityRetryAll => 'Tout réessayer';
-
-  @override
-  String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
-
-  @override
-  String get connectAgentHeadline => 'Utilisez votre mémoire Omi dans ChatGPT et vos agents IA';
-
-  @override
-  String get connectAgentIntro =>
-      'Connectez-vous une fois. Ensuite, interrogez-les sur vos conversations, souvenirs et tâches.';
-
-  @override
-  String get connectAgentOneTap => 'En un geste';
-
-  @override
-  String get connectAgentComputerAgents => 'Agents avec leur propre ordinateur';
-
-  @override
-  String get connectAgentComputerAgentsSubtitle =>
-      'Copiez une seule instruction. Omi crée une clé réservée à cet agent et l\'envoie en toute sécurité.';
-
-  @override
-  String get connectAgentOtherAgent => 'Autre agent';
-
-  @override
-  String get connectAgentKeyActive => 'Clé active';
-
-  @override
-  String connectAgentLastUsed(String time) {
-    return 'Dernière utilisation : $time';
-  }
-
-  @override
-  String get connectAgentDevelopers => 'Clés MCP et API pour les développeurs';
-
-  @override
-  String get connectAgentLoadFailed => 'Impossible de charger vos connexions.';
-
-  @override
-  String get connectAgentActionFailed => 'Un problème est survenu. Réessayez.';
-
-  @override
-  String get connectChatGptTitle => 'Connecter ChatGPT';
-
-  @override
-  String get connectChatGptSubtitle =>
-      'Cela prend environ 30 secondes. Vous validez dans ChatGPT, et cela fonctionne sur votre téléphone et votre ordinateur.';
-
-  @override
-  String get connectChatGptStepOpen => 'Nous ouvrons Omi dans ChatGPT';
-
-  @override
-  String get connectChatGptStepOpenBody => 'ChatGPT s\'ouvre directement sur la page de l\'application Omi.';
-
-  @override
-  String get connectChatGptStepApprove => 'Touchez « Connecter », puis connectez-vous à Omi';
-
-  @override
-  String get connectChatGptStepApproveBody => 'Utilisez le même compte qu\'ici.';
-
-  @override
-  String get connectChatGptStepReturn => 'Revenez dans Omi';
-
-  @override
-  String get connectChatGptStepReturnBody => 'Nous vérifions la connexion automatiquement.';
-
-  @override
-  String get openChatGpt => 'Ouvrir ChatGPT';
-
-  @override
-  String get chatGptConnectedEverywhere => 'Connecté sur téléphone et ordinateur';
-
-  @override
-  String get tryAskingChatGpt => 'Essayez de demander à ChatGPT';
-
-  @override
-  String get tryAskingChatGptFooter => 'Touchez-en une pour ouvrir ChatGPT avec la question déjà saisie.';
-
-  @override
-  String get chatGptExampleMeetings => 'Sur quoi me suis-je engagé lors des réunions d\'hier ?';
-
-  @override
-  String get chatGptExampleTasks => 'Transforme mes tâches Omi en cours en un plan pour cette semaine.';
-
-  @override
-  String get chatGptExampleGoals => 'Que sait Omi de mes objectifs ?';
-
-  @override
-  String get disconnectChatGpt => 'Déconnecter ChatGPT';
-
-  @override
-  String get disconnectChatGptQuestion => 'Déconnecter ChatGPT ?';
-
-  @override
-  String get disconnectChatGptMessage => 'ChatGPT ne pourra plus lire vos souvenirs, conversations ou tâches Omi.';
-
-  @override
-  String connectAgentNamed(String name) {
-    return 'Connecter $name';
-  }
-
-  @override
-  String connectAgentPromptSubtitle(String name) {
-    return 'Collez une seule instruction. $name configure Omi sur son propre ordinateur.';
-  }
-
-  @override
-  String get connectAgentGenericPromptSubtitle =>
-      'Collez une seule instruction. Votre agent configure Omi sur son propre ordinateur.';
-
-  @override
-  String connectAgentKeyCreated(String name) {
-    return 'Clé « $name » créée';
-  }
-
-  @override
-  String get connectAgentKeyCreatedBody =>
-      'L\'instruction contient un lien à usage unique, pas la clé elle-même. Il s\'ouvre une seule fois et expire au bout d\'une heure. Vous pouvez révoquer la clé ici à tout moment.';
-
-  @override
-  String get connectAgentPreparing => 'Création d\'une clé et d\'un lien sécurisé…';
-
-  @override
-  String get connectAgentPrepareFailed => 'Impossible de créer la clé. Vérifiez votre connexion et réessayez.';
-
-  @override
-  String get copyPrompt => 'Copier l\'instruction';
-
-  @override
-  String get connectAgentNewLink => 'Lien expiré ? En créer un nouveau';
-
-  @override
-  String connectAgentActiveTitle(String name) {
-    return '$name est connecté';
-  }
-
-  @override
-  String connectAgentActiveBody(String name) {
-    return '$name dispose d\'une clé Omi. Révoquez-la pour couper l\'accès. Vous pouvez le reconnecter à tout moment.';
-  }
-
-  @override
-  String revokeAgentKeyQuestion(String name) {
-    return 'Révoquer la clé de $name ?';
-  }
-
-  @override
-  String revokeAgentKeyMessage(String name) {
-    return '$name perd immédiatement l\'accès à votre mémoire Omi.';
-  }
-
-  @override
-  String get askAboutConversation => 'Poser une question sur cette conversation';
-
-  @override
-  String get askAboutConversationSubtitle =>
-      'Ouvre ChatGPT avec votre question prête. Il retrouve la conversation via Omi, inutile de coller la transcription.';
-
-  @override
-  String get askYourQuestion => 'Votre question';
-
-  @override
-  String get askSuggestFollowUp => 'Rédige un e-mail de suivi à partir de cette conversation.';
-
-  @override
-  String get askSuggestCommitments => 'À quoi me suis-je engagé dans cette conversation ?';
-
-  @override
-  String get askSuggestDoc => 'Transforme cette conversation en un court document.';
-
-  @override
-  String get askInChatGpt => 'Demander à ChatGPT';
-
-  @override
-  String get copyForAnyApp => 'Copier pour n\'importe quelle app';
-
-  @override
-  String get askConnectChatGptFirst => 'Connectez ChatGPT une fois pour l\'interroger sur vos conversations.';
-
-  @override
-  String get reconnect => 'Reconnecter';
-
-  @override
-  String get chatGptNeedsReconnect => 'Accès supplémentaire requis. Reconnectez pour corriger.';
-
-  @override
-  String get connectAgentWaiting => 'En attente que l\'agent utilise sa clé';
-
-  @override
-  String connectAgentWaitingTitle(String name) {
-    return '$name n\'est pas encore connecté';
   }
 
   @override

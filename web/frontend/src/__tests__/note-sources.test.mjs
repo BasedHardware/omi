@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolvableNoteSources } from '../../../shared/note-sources.mjs';
-import { repairNoteCitations } from '../../../shared/note-citations.mjs';
+import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 
 test('source chips resolve typed provenance in first-mention order without exposing unknown IDs', () => {
   assert.deepEqual(resolvableNoteSources(['absent', 's2', 's1', 's2'], ['s1', 's2']), ['s2', 's1']);

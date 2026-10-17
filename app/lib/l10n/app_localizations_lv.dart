@@ -4382,12 +4382,27 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsu $plan plāns beidzas $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Jūsu plāns ir iestatīts atcelšanai $date.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Jūsu gada plāns automātiski sāksies, kad beigsies jūsu mēneša plāns.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsu $plan plāns atjaunosies $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4420,6 +4435,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get continueText => 'Turpināt';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Lai mainītu plānu, vispirms abonējiet vēlreiz.';
 
   @override
   String get resubscribe => 'Atkārtoti abonēt';
@@ -5031,9 +5049,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get content => 'Saturs';
-
-  @override
-  String get noContentToDisplay => 'Nav satura, ko parādīt';
 
   @override
   String get noSummary => 'Nav kopsavilkuma';
@@ -5840,6 +5855,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get usingNativeIosSpeech => 'Tiek izmantota vietējā iOS runas atpazīšana';
 
   @override
+  String get noModelDownloadRequired =>
+      'Tiks izmantots jūsu ierīces sākotnējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
+
+  @override
   String get modelReady => 'Modelis gatavs';
 
   @override
@@ -5910,6 +5929,10 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Šis modelis ir liels un var izraisīt lietotnes avāriju vai ļoti lēnu darbību mobilajās ierīcēs.\n\nIeteicams small vai base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Tiks izmantots jūsu ierīces vietējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
 
   @override
   String modelReadyWithName(String model) {
@@ -9827,9 +9850,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
 
   @override
-  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 
@@ -13360,6 +13380,439 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
 
   @override
+  String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app ir pilns';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Pievienoties gaidīšanas sarakstam';
+
+  @override
+  String get chatAppsOnWaitlist => 'Jūs esat gaidīšanas sarakstā';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Jūs esat gaidīšanas sarakstā. Mēs paziņosim, kad būs vieta.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Viss gatavs, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Pusdienas ar Semu, kura jūnijā pārceļas uz Lisabonu. Līdz piektdienai jānosūta prezentācija komandai un mājupceļā jānopērk piens.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Līdz piektdienai nosūtīt prezentāciju komandai';
+
+  @override
+  String get onboardingActDemoTask2 => 'Pa ceļam mājās nopirkt pienu';
+
+  @override
+  String get onboardingActDemoTitle => 'Pusdienas ar Semu';
+
+  @override
+  String get onboardingActDictateBody => 'Sakiet savā veidā. Pārējo paveiks Omi.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Vienkārši runājiet. Jūsu Omi klausās.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Tikko paēdu pusdienas ar Semu, jūnijā viņa pārceļas uz Lisabonu! Atgādini man līdz piektdienai nosūtīt prezentāciju komandai un pa ceļam mājās nopirkt pienu.';
+
+  @override
+  String get onboardingActDictateHint => 'Kad esat pabeidzis, pieskarieties ķeksītim';
+
+  @override
+  String get onboardingActDictateTitle => 'Pastāstiet Omi par savu dienu';
+
+  @override
+  String get onboardingActIntro => 'Izmēģināsim Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Tikko';
+
+  @override
+  String get onboardingActMicAllow => 'Atļaut mikrofonu';
+
+  @override
+  String get onboardingActMicBody => 'Lai Omi jūs dzirdētu, kad ar to runājat.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi vēl nesūta skaņu. Pagaidām izmantojiet tālruni.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi vajag jūsu mikrofonu';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi nav dzirdams. Pārliecinieties, ka tas ir ieslēgts un tuvumā.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Vēl jūs nedzirdam. Mēģiniet runāt mazliet skaļāk.';
+
+  @override
+  String get onboardingActNotesLabel => 'Jūsu diena īsumā';
+
+  @override
+  String get onboardingActPhoneMic => 'Tālruņa mikrofons';
+
+  @override
+  String get onboardingActRateTitle => 'Vai Omi jums patīk?';
+
+  @override
+  String get onboardingActRemembers => 'Omi atceras, lai jums nebūtu jāatceras';
+
+  @override
+  String get onboardingActSavedToTasks => 'Saglabāts jūsu uzdevumos';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi pamanīja jūsu darāmo';
+
+  @override
+  String get onboardingActWriting => 'Apkopojam…';
+
+  @override
+  String get onboardingActYourWords => 'Lūk, ko jūs teicāt';
+
+  @override
+  String get onboardingConnectOmi => 'Savienot Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Pieskarieties savam Omi, lai savienotu.';
+
+  @override
+  String get onboardingNoOmiYet => 'Vēl nav Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Vēl neesmu pasūtījis';
+
+  @override
+  String get onboardingOmiOrdered => 'Esmu to pasūtījis';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
+
+  @override
+  String get homePendingTitle => 'Sarunas ceļā';
+
+  @override
+  String get homePendingCatchingUp => 'Apstrādājam iepriekšējo audio';
+
+  @override
+  String get onTheWayTitle => 'Ceļā';
+
+  @override
+  String get onTheWayAlmostReady => 'Gandrīz gatavs';
+
+  @override
+  String get activityEmpty => 'Vēl nav aktivitātes';
+
+  @override
+  String get activityNewSemantics => 'Aktivitāte, jauni vienumi';
+
+  @override
+  String get activityLoadFailed => 'Neizdevās ielādēt visu jūsu aktivitāti';
+
+  @override
+  String get activityNewItem => 'Jauns';
+
+  @override
+  String get activityNeedsAttention => 'Nepieciešama uzmanība';
+
+  @override
+  String get activityRetryAll => 'Mēģināt visu vēlreiz';
+
+  @override
+  String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
+
+  @override
+  String get connectAgentHeadline => 'Izmantojiet savu Omi atmiņu ChatGPT un savos MI aģentos';
+
+  @override
+  String get connectAgentIntro =>
+      'Savienojiet vienreiz. Pēc tam jautājiet tiem par savām sarunām, atmiņām un uzdevumiem.';
+
+  @override
+  String get connectAgentOneTap => 'Ar vienu pieskārienu';
+
+  @override
+  String get connectAgentComputerAgents => 'Aģenti ar savu datoru';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Nokopējiet vienu uzvedni. Omi izveido atslēgu tikai šim aģentam un droši to nosūta.';
+
+  @override
+  String get connectAgentOtherAgent => 'Cits aģents';
+
+  @override
+  String get connectAgentKeyActive => 'Atslēga aktīva';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Pēdējo reizi izmantota $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP un API atslēgas izstrādātājiem';
+
+  @override
+  String get connectAgentLoadFailed => 'Neizdevās ielādēt jūsu savienojumus.';
+
+  @override
+  String get connectAgentActionFailed => 'Radās kļūda. Mēģiniet vēlreiz.';
+
+  @override
+  String get connectChatGptTitle => 'Savienot ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Aizņem apmēram 30 sekundes. Jūs to apstiprināt ChatGPT, un tas darbojas gan tālrunī, gan datorā.';
+
+  @override
+  String get connectChatGptStepOpen => 'Mēs atveram Omi ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT atveras uzreiz Omi lietotnes lapā.';
+
+  @override
+  String get connectChatGptStepApprove => 'Pieskarieties “Savienot” un pēc tam pierakstieties Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Izmantojiet to pašu kontu, ko izmantojat šeit.';
+
+  @override
+  String get connectChatGptStepReturn => 'Atgriezieties Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Mēs savienojumu pārbaudām automātiski.';
+
+  @override
+  String get openChatGpt => 'Atvērt ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Savienots tālrunī un datorā';
+
+  @override
+  String get tryAskingChatGpt => 'Pamēģiniet pajautāt ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Pieskarieties kādam, lai atvērtu ChatGPT ar jau ievadītu jautājumu.';
+
+  @override
+  String get chatGptExampleMeetings => 'Par ko es vienojos vakardienas sanāksmēs?';
+
+  @override
+  String get chatGptExampleTasks => 'Pārvērt manus atvērtos Omi uzdevumus šīs nedēļas plānā.';
+
+  @override
+  String get chatGptExampleGoals => 'Ko Omi zina par maniem mērķiem?';
+
+  @override
+  String get disconnectChatGpt => 'Atvienot ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Atvienot ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT vairs nevarēs lasīt jūsu Omi atmiņas, sarunas vai uzdevumus.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Savienot $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Ielīmējiet vienu uzvedni. $name pats iestata Omi savā datorā.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Ielīmējiet vienu uzvedni. Jūsu aģents pats iestata Omi savā datorā.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Atslēga “$name” izveidota';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Uzvednē ir vienreizēja saite, nevis pati atslēga. Tā atveras vienu reizi un zaudē derīgumu pēc 1 stundas. Atslēgu šeit varat atsaukt jebkurā laikā.';
+
+  @override
+  String get connectAgentPreparing => 'Veido atslēgu un drošu saiti…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Neizdevās izveidot atslēgu. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
+
+  @override
+  String get copyPrompt => 'Kopēt uzvedni';
+
+  @override
+  String get connectAgentNewLink => 'Saite beigusies? Izveidojiet jaunu';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name ir savienots';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name ir Omi atslēga. Atsauciet to, lai pārtrauktu piekļuvi. Atkal savienot varat jebkurā laikā.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Atsaukt $name atslēgu?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name uzreiz zaudē piekļuvi jūsu Omi atmiņai.';
+  }
+
+  @override
+  String get askAboutConversation => 'Jautāt par šo sarunu';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Atver ChatGPT ar jau sagatavotu jautājumu. Tas atrod sarunu caur Omi, tāpēc atšifrējums nav jāielīmē.';
+
+  @override
+  String get askYourQuestion => 'Jūsu jautājums';
+
+  @override
+  String get askSuggestFollowUp => 'Sagatavo turpinājuma e-pasta melnrakstu, balstoties uz šo sarunu.';
+
+  @override
+  String get askSuggestCommitments => 'Ko es apsolīju šajā sarunā?';
+
+  @override
+  String get askSuggestDoc => 'Pārvērt šo sarunu īsā dokumentā.';
+
+  @override
+  String get askInChatGpt => 'Jautāt ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopēt jebkurai lietotnei';
+
+  @override
+  String get askConnectChatGptFirst => 'Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām.';
+
+  @override
+  String get reconnect => 'Savienot vēlreiz';
+
+  @override
+  String get chatGptNeedsReconnect => 'Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.';
+
+  @override
+  String get connectAgentWaiting => 'Gaida, kamēr aģents izmantos savu atslēgu';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name vēl nav savienots';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Vēl nav apkopots';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi var pārvērst šo sarunu pārskatā, galvenajos punktos un uzdevumos.';
+
+  @override
+  String get summaryWithOmi => 'Apkopot ar Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Apkopot ar $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Izmantot citu veidni';
+
+  @override
+  String get summaryFromTheTranscript => 'No transkripcijas';
+
+  @override
+  String get summaryReadFullTranscript => 'Lasīt visu transkripciju';
+
+  @override
+  String get summarySheetTitle => 'Apkopot ar';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Pārskats, galvenie punkti un uzdevumi';
+
+  @override
+  String get summaryYourTemplates => 'Jūsu veidnes';
+
+  @override
+  String get summarySuggestedTemplates => 'Ieteiktas šai sarunai';
+
+  @override
+  String get summaryBrowseTemplates => 'Pārlūkot veidnes';
+
+  @override
+  String get summaryCreateYourOwn => 'Izveidot savu';
+
+  @override
+  String get summaryUseForNewConversations => 'Iestatīt kā noklusējumu';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Neizdevās ielādēt jūsu veidnes. Omi joprojām darbojas.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Jūs vēl neesat pievienojis nevienu veidni. Apskatiet dažas vai izveidojiet savu.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Notiek apkopošana ar $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nevarēja pabeigt';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Veidne neatgrieza šīs sarunas kopsavilkumu.';
+
+  @override
+  String get summaryWithOmiInstead => 'Tā vietā apkopot ar Omi';
+
+  @override
+  String get summaryBusyTitle => 'Joprojām notiek apstrāde';
+
+  @override
+  String get summaryBusyBody => 'Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.';
+
+  @override
+  String get summaryCheckAgain => 'Pārbaudīt vēlreiz';
+
+  @override
+  String get summaryLimitTitle => 'Sasniegts kopsavilkumu limits';
+
+  @override
+  String get summaryLimitBody =>
+      'Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.';
+
+  @override
+  String get summaryFailedTitle => 'Neizdevās apkopot';
+
+  @override
+  String get summaryFailedBody => 'Apkopojot šo sarunu, radās kļūda.';
+
+  @override
+  String get noContentToDisplay => 'Nav satura, ko parādīt';
+
+  @override
+  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+
+  @override
   String get onDeviceAtCapTitle => 'Jūs esat sasniedzis šī mēneša limitu';
 
   @override
@@ -13631,147 +14084,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceEntrySubtitle => 'Kad sasniedzat limitu, transkribējiet šajā tālrunī';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';
-
-  @override
-  String chatAppsAtCapacity(String app) {
-    return '$app ir pilns';
-  }
-
-  @override
-  String get chatAppsJoinWaitlist => 'Pievienoties gaidīšanas sarakstam';
-
-  @override
-  String get chatAppsOnWaitlist => 'Jūs esat gaidīšanas sarakstā';
-
-  @override
-  String get chatAppsWaitlistJoined => 'Jūs esat gaidīšanas sarakstā. Mēs paziņosim, kad būs vieta.';
-
-  @override
-  String onboardingActCongratsTitle(String name) {
-    return 'Viss gatavs, $name';
-  }
-
-  @override
-  String get onboardingActDemoSummary =>
-      'Pusdienas ar Semu, kura jūnijā pārceļas uz Lisabonu. Līdz piektdienai jānosūta prezentācija komandai un mājupceļā jānopērk piens.';
-
-  @override
-  String get onboardingActDemoTask1 => 'Līdz piektdienai nosūtīt prezentāciju komandai';
-
-  @override
-  String get onboardingActDemoTask2 => 'Pa ceļam mājās nopirkt pienu';
-
-  @override
-  String get onboardingActDemoTitle => 'Pusdienas ar Semu';
-
-  @override
-  String get onboardingActDictateBody => 'Sakiet savā veidā. Pārējo paveiks Omi.';
-
-  @override
-  String get onboardingActDictateBodyOmi => 'Vienkārši runājiet. Jūsu Omi klausās.';
-
-  @override
-  String get onboardingActDictateExample =>
-      'Tikko paēdu pusdienas ar Semu, jūnijā viņa pārceļas uz Lisabonu! Atgādini man līdz piektdienai nosūtīt prezentāciju komandai un pa ceļam mājās nopirkt pienu.';
-
-  @override
-  String get onboardingActDictateHint => 'Kad esat pabeidzis, pieskarieties ķeksītim';
-
-  @override
-  String get onboardingActDictateTitle => 'Pastāstiet Omi par savu dienu';
-
-  @override
-  String get onboardingActIntro => 'Izmēģināsim Omi.';
-
-  @override
-  String get onboardingActJustNow => 'Tikko';
-
-  @override
-  String get onboardingActMicAllow => 'Atļaut mikrofonu';
-
-  @override
-  String get onboardingActMicBody => 'Lai Omi jūs dzirdētu, kad ar to runājat.';
-
-  @override
-  String get onboardingActMicFallbackBody => 'Omi vēl nesūta skaņu. Pagaidām izmantojiet tālruni.';
-
-  @override
-  String get onboardingActMicTitle => 'Omi vajag jūsu mikrofonu';
-
-  @override
-  String get onboardingActNoAudioOmi => 'Omi nav dzirdams. Pārliecinieties, ka tas ir ieslēgts un tuvumā.';
-
-  @override
-  String get onboardingActNoAudioPhone => 'Vēl jūs nedzirdam. Mēģiniet runāt mazliet skaļāk.';
-
-  @override
-  String get onboardingActNotesLabel => 'Jūsu diena īsumā';
-
-  @override
-  String get onboardingActPhoneMic => 'Tālruņa mikrofons';
-
-  @override
-  String get onboardingActRateTitle => 'Vai Omi jums patīk?';
-
-  @override
-  String get onboardingActRemembers => 'Omi atceras, lai jums nebūtu jāatceras';
-
-  @override
-  String get onboardingActSavedToTasks => 'Saglabāts jūsu uzdevumos';
-
-  @override
-  String get onboardingActTasksLabel => 'Omi pamanīja jūsu darāmo';
-
-  @override
-  String get onboardingActWriting => 'Apkopojam…';
-
-  @override
-  String get onboardingActYourWords => 'Lūk, ko jūs teicāt';
-
-  @override
-  String get onboardingConnectOmi => 'Savienot Omi';
-
-  @override
-  String get onboardingConnectTapToConnect => 'Pieskarieties savam Omi, lai savienotu.';
-
-  @override
-  String get onboardingNoOmiYet => 'Vēl nav Omi?';
-
-  @override
-  String get onboardingOmiNotOrdered => 'Vēl neesmu pasūtījis';
-
-  @override
-  String get onboardingOmiOrdered => 'Esmu to pasūtījis';
-
-  @override
-  String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
-
-  @override
-  String get homePendingTitle => 'Sarunas ceļā';
-
-  @override
-  String get homePendingCatchingUp => 'Apstrādājam iepriekšējo audio';
-
-  @override
-  String get onTheWayTitle => 'Ceļā';
-
-  @override
-  String get onTheWayAlmostReady => 'Gandrīz gatavs';
-
-  @override
-  String get activityEmpty => 'Vēl nav aktivitātes';
-
-  @override
-  String get activityNewSemantics => 'Aktivitāte, jauni vienumi';
-
-  @override
-  String get activityLoadFailed => 'Neizdevās ielādēt visu jūsu aktivitāti';
-
-  @override
-  String get activityNewItem => 'Jauns';
-
-  @override
   String onDeviceMeterLineShort(int percent, String reset) {
     return '$percent% izmantots · $reset';
   }
@@ -13787,229 +14099,6 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String onDeviceGettingSpeechReady(int percent) {
     return 'Runa tiek sagatavota · $percent%';
-  }
-
-  @override
-  String yourPlanEndsOn(String plan, String date) {
-    return 'Jūsu $plan plāns beidzas $date.';
-  }
-
-  @override
-  String resubscribeNowNoChargeUntil(String date) {
-    return 'Abonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
-  }
-
-  @override
-  String yourPlanWillRenewOn(String plan, String date) {
-    return 'Jūsu $plan plāns atjaunosies $date.';
-  }
-
-  @override
-  String get resubscribeFirstToChangePlans => 'Lai mainītu plānu, vispirms abonējiet vēlreiz.';
-
-  @override
-  String get noModelDownloadRequired =>
-      'Tiks izmantots jūsu ierīces sākotnējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Tiks izmantots jūsu ierīces vietējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
-
-  @override
-  String get activityNeedsAttention => 'Nepieciešama uzmanība';
-
-  @override
-  String get activityRetryAll => 'Mēģināt visu vēlreiz';
-
-  @override
-  String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
-
-  @override
-  String get connectAgentHeadline => 'Izmantojiet savu Omi atmiņu ChatGPT un savos MI aģentos';
-
-  @override
-  String get connectAgentIntro =>
-      'Savienojiet vienreiz. Pēc tam jautājiet tiem par savām sarunām, atmiņām un uzdevumiem.';
-
-  @override
-  String get connectAgentOneTap => 'Ar vienu pieskārienu';
-
-  @override
-  String get connectAgentComputerAgents => 'Aģenti ar savu datoru';
-
-  @override
-  String get connectAgentComputerAgentsSubtitle =>
-      'Nokopējiet vienu uzvedni. Omi izveido atslēgu tikai šim aģentam un droši to nosūta.';
-
-  @override
-  String get connectAgentOtherAgent => 'Cits aģents';
-
-  @override
-  String get connectAgentKeyActive => 'Atslēga aktīva';
-
-  @override
-  String connectAgentLastUsed(String time) {
-    return 'Pēdējo reizi izmantota $time';
-  }
-
-  @override
-  String get connectAgentDevelopers => 'MCP un API atslēgas izstrādātājiem';
-
-  @override
-  String get connectAgentLoadFailed => 'Neizdevās ielādēt jūsu savienojumus.';
-
-  @override
-  String get connectAgentActionFailed => 'Radās kļūda. Mēģiniet vēlreiz.';
-
-  @override
-  String get connectChatGptTitle => 'Savienot ChatGPT';
-
-  @override
-  String get connectChatGptSubtitle =>
-      'Aizņem apmēram 30 sekundes. Jūs to apstiprināt ChatGPT, un tas darbojas gan tālrunī, gan datorā.';
-
-  @override
-  String get connectChatGptStepOpen => 'Mēs atveram Omi ChatGPT';
-
-  @override
-  String get connectChatGptStepOpenBody => 'ChatGPT atveras uzreiz Omi lietotnes lapā.';
-
-  @override
-  String get connectChatGptStepApprove => 'Pieskarieties “Savienot” un pēc tam pierakstieties Omi';
-
-  @override
-  String get connectChatGptStepApproveBody => 'Izmantojiet to pašu kontu, ko izmantojat šeit.';
-
-  @override
-  String get connectChatGptStepReturn => 'Atgriezieties Omi';
-
-  @override
-  String get connectChatGptStepReturnBody => 'Mēs savienojumu pārbaudām automātiski.';
-
-  @override
-  String get openChatGpt => 'Atvērt ChatGPT';
-
-  @override
-  String get chatGptConnectedEverywhere => 'Savienots tālrunī un datorā';
-
-  @override
-  String get tryAskingChatGpt => 'Pamēģiniet pajautāt ChatGPT';
-
-  @override
-  String get tryAskingChatGptFooter => 'Pieskarieties kādam, lai atvērtu ChatGPT ar jau ievadītu jautājumu.';
-
-  @override
-  String get chatGptExampleMeetings => 'Par ko es vienojos vakardienas sanāksmēs?';
-
-  @override
-  String get chatGptExampleTasks => 'Pārvērt manus atvērtos Omi uzdevumus šīs nedēļas plānā.';
-
-  @override
-  String get chatGptExampleGoals => 'Ko Omi zina par maniem mērķiem?';
-
-  @override
-  String get disconnectChatGpt => 'Atvienot ChatGPT';
-
-  @override
-  String get disconnectChatGptQuestion => 'Atvienot ChatGPT?';
-
-  @override
-  String get disconnectChatGptMessage => 'ChatGPT vairs nevarēs lasīt jūsu Omi atmiņas, sarunas vai uzdevumus.';
-
-  @override
-  String connectAgentNamed(String name) {
-    return 'Savienot $name';
-  }
-
-  @override
-  String connectAgentPromptSubtitle(String name) {
-    return 'Ielīmējiet vienu uzvedni. $name pats iestata Omi savā datorā.';
-  }
-
-  @override
-  String get connectAgentGenericPromptSubtitle => 'Ielīmējiet vienu uzvedni. Jūsu aģents pats iestata Omi savā datorā.';
-
-  @override
-  String connectAgentKeyCreated(String name) {
-    return 'Atslēga “$name” izveidota';
-  }
-
-  @override
-  String get connectAgentKeyCreatedBody =>
-      'Uzvednē ir vienreizēja saite, nevis pati atslēga. Tā atveras vienu reizi un zaudē derīgumu pēc 1 stundas. Atslēgu šeit varat atsaukt jebkurā laikā.';
-
-  @override
-  String get connectAgentPreparing => 'Veido atslēgu un drošu saiti…';
-
-  @override
-  String get connectAgentPrepareFailed => 'Neizdevās izveidot atslēgu. Pārbaudiet savienojumu un mēģiniet vēlreiz.';
-
-  @override
-  String get copyPrompt => 'Kopēt uzvedni';
-
-  @override
-  String get connectAgentNewLink => 'Saite beigusies? Izveidojiet jaunu';
-
-  @override
-  String connectAgentActiveTitle(String name) {
-    return '$name ir savienots';
-  }
-
-  @override
-  String connectAgentActiveBody(String name) {
-    return '$name ir Omi atslēga. Atsauciet to, lai pārtrauktu piekļuvi. Atkal savienot varat jebkurā laikā.';
-  }
-
-  @override
-  String revokeAgentKeyQuestion(String name) {
-    return 'Atsaukt $name atslēgu?';
-  }
-
-  @override
-  String revokeAgentKeyMessage(String name) {
-    return '$name uzreiz zaudē piekļuvi jūsu Omi atmiņai.';
-  }
-
-  @override
-  String get askAboutConversation => 'Jautāt par šo sarunu';
-
-  @override
-  String get askAboutConversationSubtitle =>
-      'Atver ChatGPT ar jau sagatavotu jautājumu. Tas atrod sarunu caur Omi, tāpēc atšifrējums nav jāielīmē.';
-
-  @override
-  String get askYourQuestion => 'Jūsu jautājums';
-
-  @override
-  String get askSuggestFollowUp => 'Sagatavo turpinājuma e-pasta melnrakstu, balstoties uz šo sarunu.';
-
-  @override
-  String get askSuggestCommitments => 'Ko es apsolīju šajā sarunā?';
-
-  @override
-  String get askSuggestDoc => 'Pārvērt šo sarunu īsā dokumentā.';
-
-  @override
-  String get askInChatGpt => 'Jautāt ChatGPT';
-
-  @override
-  String get copyForAnyApp => 'Kopēt jebkurai lietotnei';
-
-  @override
-  String get askConnectChatGptFirst => 'Vienreiz savienojiet ChatGPT, lai varētu jautāt par savām sarunām.';
-
-  @override
-  String get reconnect => 'Savienot vēlreiz';
-
-  @override
-  String get chatGptNeedsReconnect => 'Nepieciešama plašāka piekļuve. Savienojiet vēlreiz, lai labotu.';
-
-  @override
-  String get connectAgentWaiting => 'Gaida, kamēr aģents izmantos savu atslēgu';
-
-  @override
-  String connectAgentWaitingTitle(String name) {
-    return '$name vēl nav savienots';
   }
 
   @override

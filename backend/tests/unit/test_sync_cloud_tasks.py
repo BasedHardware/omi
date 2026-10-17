@@ -32,9 +32,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
 import pytest
+from starlette.datastructures import UploadFile
 
 # Keep additive batch imports real before legacy fixtures replace package roots.
 from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from utils.batch_pipeline import live_projection as _batch_live_projection  # noqa: F401
+from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
 from routers import batch_pipeline as _batch_router  # noqa: F401
 from models import sync_job_status as _sync_job_status  # noqa: F401
 
@@ -1187,6 +1190,8 @@ class TestSyncRouterStructure:
 
 def _load_sync_router_for_fast_path():
     """Load routers/sync.py with heavy deps stubbed for fast-path behavioral tests."""
+    from services import summary_debt_repair  # noqa: F401 - load before flat database stubs
+
     import contextvars
     import importlib.util
     from io import BytesIO
@@ -3677,6 +3682,46 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'test-uid')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    transaction, store = MagicMock(), MagicMock()
+    transaction.get.return_value = {}
+    store.run.side_effect = lambda body: body(transaction)
+    monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
+    module.has_byok_keys = MagicMock(return_value=True)
+    accepted = AsyncMock(wraps=_batch_intake.accept_upload)
+    module.accept_batch_upload = accepted
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))],
+            uid='test-uid',
+            conversation_id='unowned-record',
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
+        assert response.headers['Retry-After'] == '30'
+        accepted.assert_awaited_once()
+        assert accepted.call_args.kwargs['byok_enabled'] is True
+        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        transaction.put.assert_not_called()
+        module.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 @pytest.mark.asyncio

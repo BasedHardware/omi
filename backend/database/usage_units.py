@@ -15,6 +15,8 @@ from config.plan_catalog import resolve_subscription_entitlements
 from config.ladder_v1 import enabled, budget_enforcement_enabled
 from config.rate_card import (
     budget_units,
+    get_rate_card,
+    get_rate_card_version,
     normalize_transcription_provider,
     price_llm_attempt,
     price_request,
@@ -22,6 +24,7 @@ from config.rate_card import (
     standard_chat_units,
     EXCLUDED_FUNDING,
 )
+from config.rate_card_versions import RATE_CARD_SHA256
 from database._client import get_customer_firestore_client
 from utils.observability.fallback import record_fallback
 
@@ -78,8 +81,12 @@ def _safe_price(fn: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return {'micro_units': 0, 'status': 'missing', 'reasons': ['shadow_pricing_failed']}
 
 
-def _price_hourly_transcription(seconds: Any, *, provider: str, funding: str, accepted: bool) -> dict[str, Any]:
-    priced = price_transcription(seconds, provider=provider, funding=funding, accepted=accepted)
+def _price_hourly_transcription(
+    seconds: Any, *, provider: str, funding: str, accepted: bool, rate_card_version: str
+) -> dict[str, Any]:
+    priced = price_transcription(
+        seconds, provider=provider, funding=funding, accepted=accepted, rate_card_version=rate_card_version
+    )
     if accepted and funding == 'omi' and priced['status'] != 'missing':
         value = float(seconds)
         if not math.isfinite(value) or value < 0:
@@ -88,7 +95,9 @@ def _price_hourly_transcription(seconds: Any, *, provider: str, funding: str, ac
     return priced
 
 
-def _leaf(priced: Mapping[str, Any], *, provider: str = 'unknown', source: str = 'unknown') -> dict[str, Any]:
+def _leaf(
+    priced: Mapping[str, Any], *, provider: str = 'unknown', source: str = 'unknown', rate_card_version: str
+) -> dict[str, Any]:
     status = str(priced['status'])
     leaf = {
         'micro_units': firestore.Increment(int(priced['micro_units'])),
@@ -96,6 +105,7 @@ def _leaf(priced: Mapping[str, Any], *, provider: str = 'unknown', source: str =
         'quantity_attributed_missing_events': firestore.Increment(1 if status == 'missing' else 0),
         'events': firestore.Increment(1),
         'status_counts': {status: firestore.Increment(1)},
+        'rate_card_version': rate_card_version,
         'providers': firestore.ArrayUnion([provider]),
         'sources': firestore.ArrayUnion([source]),
     }
@@ -110,6 +120,11 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
     elapsed = updates.get('transcription_seconds', 0)
     if accepted is None and not elapsed and not updates.get('speech_seconds', 0):
         return {}
+    try:
+        rate_card_version = get_rate_card_version()
+    except ValueError:
+        # Invalid shadow configuration must not block the existing hourly write.
+        rate_card_version = 'unknown'
     funding = str(metadata.get('funding', 'unknown'))
     if funding not in {'omi', 'byok', 'custom', 'on_device'}:
         funding = 'unknown'
@@ -126,6 +141,7 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
         provider=provider,
         funding=funding,
         accepted=accepted is not None,
+        rate_card_version=rate_card_version,
     )
     if provider == 'deepgram_self_hosted':
         priced['reasons'] = ['provider_rate_unavailable' if r == 'provider_unknown' else r for r in priced['reasons']]
@@ -133,7 +149,7 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
         priced['reasons'].append('accepted_speech_unavailable')
         if source in {'sync_v1', 'sync_v2'}:
             priced['reasons'].append('initial_vad_counter_ratio_estimate')
-    leaf = _leaf(priced, provider=provider, source=source)
+    leaf = _leaf(priced, provider=provider, source=source, rate_card_version=rate_card_version)
     leaf['legacy_counter_seconds'] = firestore.Increment(elapsed or 0)
     leaf['quantity_attributed_seconds'] = firestore.Increment(elapsed or 0)
     # Status alone is not coverage: a missing annotation can still carry priced
@@ -152,7 +168,11 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
             else 'batch' if source in {'sync_v1', 'sync_v2', 'parakeet_proxy'} else 'unknown'
         )
     )
-    shadow: dict[str, Any] = {'rate_card': 'v1', 'features': {'transcription': {'funding': {funding: leaf}}}}
+    shadow: dict[str, Any] = {
+        'rate_card': rate_card_version,
+        'rate_card_version': rate_card_version,
+        'features': {'transcription': {'funding': {funding: leaf}}},
+    }
     if enabled('LADDER_V1_LANE_METERING_ENABLED'):
         shadow['lanes'] = {
             lane: {
@@ -161,11 +181,16 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
                 'accepted_events': firestore.Increment(1 if 'accepted_speech_seconds' in priced else 0),
             }
         }
-    return {'shadow_v1': shadow}
+    return {f'shadow_{rate_card_version}': shadow}
 
 
 def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    priced = _safe_price(price_llm_attempt, data)
+    try:
+        rate_card_version = get_rate_card_version()
+    except ValueError:
+        # Preserve the attempt and rollup writes while marking shadow pricing incomplete.
+        rate_card_version = 'unknown'
+    priced = _safe_price(price_llm_attempt, data, rate_card_version=rate_card_version)
     funding = str(data.get('payer', 'unknown'))
     if funding not in {'omi', 'byok', 'custom', 'on_device'}:
         funding = 'unknown'
@@ -182,7 +207,7 @@ def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, A
     provider = str(data.get('provider', 'unknown'))
     if provider not in {'openai', 'gemini', 'anthropic', 'perplexity', 'openrouter'}:
         provider = 'unknown'
-    leaf = _leaf(priced, provider=provider, source='gateway_attempt')
+    leaf = _leaf(priced, provider=provider, source='gateway_attempt', rate_card_version=rate_card_version)
     leaf['quantity_attributed_events'] = firestore.Increment(1)
     leaf['unpriced_events'] = firestore.Increment(
         1 if priced['status'] == 'missing' and not priced['micro_units'] else 0
@@ -191,12 +216,27 @@ def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, A
     if feature == 'web_search':
         # Each vendor synthesis attempt is a web request; retries remain separate infra attempts.
         # Provider BYOK excludes model/vendor cost, not Omi-hosted request infrastructure.
-        request = _safe_price(price_request, 'web_search_tool', funding='omi')
+        request = _safe_price(price_request, 'web_search_tool', funding='omi', rate_card_version=rate_card_version)
         if funding == 'omi':
             request['reasons'].append('search_vendor_request_fee_unmeasured')
-        features['web_search_tool'] = {'funding': {'omi': _leaf(request, source='gateway_attempt')}}
-    annotation = {**priced, 'rate_card': 'v1', 'funding': funding, 'feature': feature, 'hour': hour}
-    return annotation, {'shadow_v1': {'rate_card': 'v1', 'hours': {hour: {'features': features}}}}
+        features['web_search_tool'] = {
+            'funding': {'omi': _leaf(request, source='gateway_attempt', rate_card_version=rate_card_version)}
+        }
+    annotation = {
+        **priced,
+        'rate_card': rate_card_version,
+        'rate_card_version': rate_card_version,
+        'funding': funding,
+        'feature': feature,
+        'hour': hour,
+    }
+    return annotation, {
+        f'shadow_{rate_card_version}': {
+            'rate_card': rate_card_version,
+            'rate_card_version': rate_card_version,
+            'hours': {hour: {'features': features}},
+        }
+    }
 
 
 def normalize_plan_usage(data: Mapping[str, Any]) -> dict[str, Any]:
@@ -257,7 +297,17 @@ def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
     return int(covered) if quantity == 'events' else covered
 
 
-def summarize_usage(hourly, days, entitlements, enforcing):
+def _shadow_maps(data, versions):
+    found = []
+    for version in versions:
+        shadow = data.get(f'shadow_{version}')
+        if isinstance(shadow, Mapping):
+            found.append((version, shadow))
+    return found
+
+
+def summarize_usage(hourly, days, entitlements, enforcing, read_versions=None):
+    versions = tuple(RATE_CARD_SHA256) if read_versions is None else tuple(read_versions)
     totals: dict[str, int] = {}
     statuses: dict[str, dict[str, int]] = {}
     funding_totals: dict[str, int] = {}
@@ -270,6 +320,7 @@ def summarize_usage(hourly, days, entitlements, enforcing):
     lane_totals: dict[str, int] = {}
     lane_seconds: dict[str, float] = {}
     lane_accepted: dict[str, int] = {}
+    versions_seen: dict[str, int] = {}
 
     def consume(features: Mapping[str, Any]) -> None:
         for feature, feature_data in features.items():
@@ -295,23 +346,26 @@ def summarize_usage(hourly, days, entitlements, enforcing):
                     counts[status] = counts.get(status, 0) + int(count)
 
     for data in hourly:
-        shadow = data.get('shadow_v1')
-        if isinstance(shadow, Mapping):
-            features = shadow.get('features', {})
-            consume(features)
-            for lane, values in shadow.get('lanes', {}).items():
-                lane_totals[lane] = lane_totals.get(lane, 0) + int(values.get('micro_units', 0))
-                lane_seconds[lane] = lane_seconds.get(lane, 0) + float(values.get('speech_seconds', 0))
-                lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events', 0))
-            covered = sum(
-                _covered_quantity(leaf, funding, 'legacy_counter_seconds', 'unpriced_counter_seconds', enforcing)
-                for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
-            )
-            ambiguous_seconds += sum(
-                _ambiguous_quantity(leaf, 'legacy_counter_seconds')
-                for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
-                if funding not in EXCLUDED_FUNDING
-            )
+        shadows = _shadow_maps(data, versions)
+        if shadows:
+            covered = 0
+            for version, shadow in shadows:
+                versions_seen[version] = versions_seen.get(version, 0) + 1
+                features = shadow.get('features', {})
+                consume(features)
+                for lane, values in shadow.get('lanes', {}).items():
+                    lane_totals[lane] = lane_totals.get(lane, 0) + int(values.get('micro_units', 0))
+                    lane_seconds[lane] = lane_seconds.get(lane, 0) + float(values.get('speech_seconds', 0))
+                    lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events', 0))
+                covered += sum(
+                    _covered_quantity(leaf, funding, 'legacy_counter_seconds', 'unpriced_counter_seconds', enforcing)
+                    for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
+                )
+                ambiguous_seconds += sum(
+                    _ambiguous_quantity(leaf, 'legacy_counter_seconds')
+                    for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
+                    if funding not in EXCLUDED_FUNDING
+                )
             residual = max(float(data.get('transcription_seconds', 0)) - covered, 0)
             missing_seconds += residual
             if residual:
@@ -320,9 +374,10 @@ def summarize_usage(hourly, days, entitlements, enforcing):
             missing_hourly += 1
             missing_seconds += float(data.get('transcription_seconds', 0))
     for data, api in days:
-        shadow = data.get('shadow_v1')
+        shadows = _shadow_maps(data, versions)
         projected = 0
-        if isinstance(shadow, Mapping):
+        for version, shadow in shadows:
+            versions_seen[version] = versions_seen.get(version, 0) + 1
             for hour in shadow.get('hours', {}).values():
                 features = hour.get('features', {})
                 consume(features)
@@ -371,10 +426,11 @@ def summarize_usage(hourly, days, entitlements, enforcing):
         'lane_totals': lane_totals,
         'lane_seconds': lane_seconds,
         'lane_accepted': lane_accepted,
+        'versions_seen': versions_seen,
     }
 
 
-def _render_usage(summary, entitlements, enforcing):
+def _render_usage(summary, entitlements, enforcing, *, rate_card_version: str = 'v1'):
     summary = deepcopy(summary)
     totals = summary['totals']
     statuses = summary['statuses']
@@ -401,7 +457,7 @@ def _render_usage(summary, entitlements, enforcing):
             statuses.setdefault(feature, {})
     return {
         'used_units': float(Decimal(sum(totals.values())) / 1_000_000),
-        'budget_units': budget_units(entitlements),
+        'budget_units': budget_units(entitlements, rate_card_version=rate_card_version),
         'by_feature': {k: float(Decimal(v) / 1_000_000) for k, v in totals.items()},
         'by_lane': {
             k: {
@@ -430,7 +486,8 @@ def _render_usage(summary, entitlements, enforcing):
             'coverage_gaps': list(COVERAGE_GAPS),
         },
         'entitlement_version': entitlements['entitlement_version'],
-        'rate_card_version': 'v1',
+        'rate_card_version': rate_card_version,
+        'rate_card_versions': sorted(version for version, count in summary.get('versions_seen', {}).items() if count),
     }
 
 
@@ -443,9 +500,10 @@ def read_usage_month(uid, period, client, entitlements):
         .where(filter=FieldFilter('year', '==', start.year))
         .where(filter=FieldFilter('month', '==', start.month))
     )
+    shadow_fields = [f'shadow_{version}' for version in RATE_CARD_SHA256]
     hourly = [
         (snap.id, snap.to_dict() or {})
-        for snap in query.select(['shadow_v1', 'transcription_seconds', 'speech_seconds']).stream()
+        for snap in query.select([*shadow_fields, 'transcription_seconds', 'speech_seconds']).stream()
     ]
     hashed = hashlib.sha256(uid.encode()).hexdigest()[:16]
     # Batch explicit day refs in one RPC. Missing docs still cost a read, so
@@ -464,7 +522,15 @@ def read_usage_month(uid, period, client, entitlements):
     documents = (
         {
             snap.id: snap.to_dict() or {}
-            for snap in client.get_all(refs, field_paths=['shadow_v1', 'attempts', 'micro_units', 'requests'])
+            for snap in client.get_all(
+                refs,
+                field_paths=[
+                    *[f'shadow_{version}' for version in RATE_CARD_SHA256],
+                    'attempts',
+                    'micro_units',
+                    'requests',
+                ],
+            )
         }
         if refs
         else {}
@@ -479,6 +545,7 @@ def get_usage_units(
     firestore_client: Any | None = None,
     entitlements: Mapping[str, Any] | None = None,
     session_cache: Any | None = None,
+    rate_card_version: str | None = None,
 ) -> dict[str, Any]:
     """Read one UTC calendar month; annual plans still use monthly budgets.
 
@@ -490,6 +557,9 @@ def get_usage_units(
     """
     if period.tzinfo is None:
         raise ValueError('timezone-aware period required')
+    version = get_rate_card_version() if rate_card_version is None else rate_card_version
+    get_rate_card(version)
+    read_versions = tuple(RATE_CARD_SHA256) if rate_card_version is None else (version,)
     period = period.astimezone(timezone.utc)
     client = firestore_client or get_customer_firestore_client()
     user = client.collection('users').document(uid)
@@ -498,11 +568,15 @@ def get_usage_units(
         data = snap.to_dict() or {}
         entitlements = resolve_subscription_entitlements(data.get('subscription') or {})
     enforcing = budget_enforcement_enabled() and entitlements['entitlement_version'] == 'ladder_v1'
-    if session_cache is not None and enforcing:
+    if session_cache is not None and enforcing and rate_card_version is None:
         summary = session_cache.read(uid, period, client, entitlements)
     else:
         hourly, days = read_usage_month(uid, period, client, entitlements)
         summary = summarize_usage(
-            [data for _, data in hourly], [(data, api) for _, data, api in days], entitlements, enforcing
+            [data for _, data in hourly],
+            [(data, api) for _, data, api in days],
+            entitlements,
+            enforcing,
+            read_versions,
         )
-    return _render_usage(summary, entitlements, enforcing)
+    return _render_usage(summary, entitlements, enforcing, rate_card_version=version)

@@ -8,6 +8,7 @@ import {
   GOOD_MARK,
   headlineDelta,
   GROWTH_WEEKS,
+  MARGIN_PLANS,
   resetSeriesCache,
   Row,
   SeriesName,
@@ -118,6 +119,7 @@ function sources(): SeriesSources & WallSources {
     finops: vi.fn(async () => ({
       mrr: finopsMrr,
     })),
+    planCost: vi.fn(async () => ({ plans: {}, sttMeasured: {} })),
   };
 }
 const value = (wall: WallPayload, id: string) =>
@@ -449,6 +451,128 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect(frames.mrr.at(-1)?.value).toBe(latest.unlimited + latest.plus);
     const weekAgo = finopsMrr[isoDay(shiftDay(end, -8))];
     expect(frames.mrr[0].value).toBe(weekAgo.unlimited + weekAgo.plus);
+  });
+});
+
+describe("margin by plan (allocated estimate)", () => {
+  const day = (k: number) => isoDay(shiftDay(end, -k));
+  const plans = (scale: number) => ({
+    unlimited: { usd: 40 * scale, users: 4 },
+    unlimited_v2: { usd: 30 * scale, users: 3 },
+    operator: { usd: 10 * scale, users: 1 },
+    plus: { usd: 5 * scale, users: 1 },
+    architect: { usd: 2 * scale, users: 1 },
+    basic: { usd: 60 * scale, users: 8 },
+    unattributed: { usd: 0.5, users: 1 },
+    none: { usd: 0.25, users: 1 },
+  });
+  const book = {
+    unlimited: 3_000,
+    unlimited_v2: 2_000,
+    operator: 900,
+    plus: 300,
+    architect: 200,
+  };
+  const legs = async (sttMeasured: Record<string, number> = {}) => ({
+    billing: await billing(),
+    // FinOps cost settles ~D−3: days 6..3, with day 5 missing.
+    planCost: {
+      plans: { [day(6)]: plans(1), [day(4)]: plans(1.1), [day(3)]: plans(1) },
+      sttMeasured,
+    },
+    // The book is missing day 4 (like 2026-09-29) and has today's snapshot.
+    finops: {
+      mrr: Object.fromEntries([7, 6, 5, 3, 2, 1, 0].map((k) => [day(k), book])),
+    },
+  });
+
+  it("draws only days with both cost and revenue and reconciles to the all-in total", async () => {
+    const f = assembleSeries("health", await legs(), null, now);
+    const rows = f.marginByPlan;
+    // Day 5 has no cost, day 4 no revenue: gaps, never zero; ends at day 3.
+    expect(rows.map((r) => String(r.date).slice(0, 10))).toEqual([
+      day(6),
+      day(3),
+    ]);
+    const allIn = new Map(f.cost.map((r) => [String(r.date).slice(0, 10), r]));
+    for (const r of rows) {
+      const date = String(r.date).slice(0, 10);
+      expect(r.allInTotal).toBeCloseTo(allIn.get(date)!.total as number, 1);
+      const parts =
+        MARGIN_PLANS.reduce((s, p) => s + (r[`${p}Cost`] as number), 0) +
+        (r.unattributedCost as number);
+      expect(parts).toBeCloseTo(r.allInTotal as number, 1);
+      expect(r.shared).toBeCloseTo(
+        (r.allInTotal as number) - (r.finopsTotal as number),
+        1
+      );
+    }
+    const r = rows.at(-1)!;
+    // The shared remainder is spread by cost-active user-days (Neo: 4 of 20).
+    expect(r.unlimitedCost).toBeCloseTo(
+      40 + ((r.shared as number) * 4) / 20,
+      1
+    );
+    const revenue = 3_000 / (365.25 / 12);
+    expect(r.unlimitedRevenue).toBeCloseTo(revenue, 2);
+    expect(r.unlimitedPct).toBeCloseTo(
+      (100 * (revenue - (r.unlimitedCost as number))) / revenue,
+      0
+    );
+    // Free: no revenue, so no margin %; its margin is −cost in $/day.
+    expect(r.basicPct).toBeNull();
+    expect(r.basicMargin).toBeCloseTo(-(r.basicCost as number), 2);
+    expect(r.basicMargin as number).toBeLessThan(0);
+    // `unattributed` and other FinOps segments stay their own row.
+    expect(r.unattributedCost).toBeCloseTo(
+      0.75 + ((r.shared as number) * 2) / 20,
+      1
+    );
+    expect(f.marginStatus[0].text).toBe(
+      `Margin through ${new Date(`${day(3)}T00:00:00Z`).toLocaleDateString(
+        "en-US",
+        { month: "short", day: "numeric", timeZone: "UTC" }
+      )} · STT & SaaS est. as of Oct 16`
+    );
+  });
+
+  it("prefers a measured FinOps STT line and labels it measured", async () => {
+    const estimate = assembleSeries("health", await legs(), null, now);
+    const f = assembleSeries("health", await legs({ [day(3)]: 99 }), null, now);
+    const at = (rows: Row[]) =>
+      rows.find((r) => String(r.date).startsWith(day(3)))!;
+    expect(at(f.cost)).toMatchObject({ stt: 99, sttSource: "measured" });
+    expect(at(estimate.cost).sttSource).toBe("estimate");
+    expect(
+      (at(f.cost).total as number) - (at(estimate.cost).total as number)
+    ).toBeCloseTo(99 - (at(estimate.cost).stt as number), 6);
+    expect(at(f.marginByPlan).allInTotal).toBeCloseTo(
+      at(f.cost).total as number,
+      1
+    );
+    expect(f.marginStatus[0].text).toMatch(
+      /· STT measured · SaaS est\. as of Oct 16$/
+    );
+  });
+
+  it("flags the cost frames once a manual estimate is older than 35 days", async () => {
+    const fresh = assembleSeries("health", await legs(), null, now);
+    expect(fresh.cost.every((r) => r.estimateStale === 0)).toBe(true);
+    const later = new Date("2026-11-21T12:00Z");
+    const f = assembleSeries("health", {}, null, later);
+    expect(f.estimates).toEqual([
+      expect.objectContaining({ line: "STT", asOf: "2026-10-16", stale: 1 }),
+      expect.objectContaining({ line: "SaaS", asOf: "2026-10-16", stale: 1 }),
+    ]);
+    expect(f.marginStatus[0].text).toBe(
+      "Margin through — · STT & SaaS est. as of Oct 16 (stale)"
+    );
+  });
+
+  it("reads plan cost as a health leg", async () => {
+    const s = sources();
+    await seriesPayload("health", Promise.resolve(null), now, s);
+    expect(s.planCost).toHaveBeenCalledWith(isoDay(now));
   });
 });
 

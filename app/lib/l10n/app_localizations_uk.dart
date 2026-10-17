@@ -4377,6 +4377,16 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan закінчується $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Підпишіться знову, щоб зберегти переваги - без оплати до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план налаштовано на скасування $date.\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
   }
@@ -4384,6 +4394,11 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ваш річний план розпочнеться автоматично, коли закінчиться ваш місячний план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan поновиться $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4416,6 +4431,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get continueText => 'Продовжити';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Спочатку підпишіться знову, щоб змінити план.';
 
   @override
   String get resubscribe => 'Підписатися знову';
@@ -5030,9 +5048,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get content => 'Вміст';
-
-  @override
-  String get noContentToDisplay => 'Немає вмісту для відображення';
 
   @override
   String get noSummary => 'Немає підсумку';
@@ -5836,6 +5851,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get usingNativeIosSpeech => 'Використання вбудованого розпізнавання мовлення iOS';
 
   @override
+  String get noModelDownloadRequired =>
+      'Буде використано вбудований мовний движок вашого пристрою. Завантаження моделі не потрібне.';
+
+  @override
   String get modelReady => 'Модель готова';
 
   @override
@@ -5906,6 +5925,10 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get modelTooLargeWarning =>
       'Ця модель велика і може спричинити збій програми або дуже повільну роботу на мобільних пристроях.\n\nРекомендується small або base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Буде використано вбудований мовленнєвий рушій вашого пристрою. Завантаження моделі не потрібне.';
 
   @override
   String modelReadyWithName(String model) {
@@ -9824,9 +9847,6 @@ class AppLocalizationsUk extends AppLocalizations {
       'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
 
   @override
-  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.';
 
   @override
@@ -13361,6 +13381,437 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncDetailsCopy => 'Скопіювати дані для підтримки';
 
   @override
+  String get chatAppsChannelPlanRequired => 'Доступно в Operator і Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app заповнено';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Приєднатися до списку очікування';
+
+  @override
+  String get chatAppsOnWaitlist => 'Ви в списку очікування';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Ви в списку очікування. Ми повідомимо, коли з\'явиться місце.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Усе готово, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Обід із Сем, яка в червні переїжджає до Лісабона. Треба надіслати презентацію команді до пʼятниці й купити молоко дорогою додому.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Надіслати презентацію команді до п\'ятниці';
+
+  @override
+  String get onboardingActDemoTask2 => 'Купити молоко дорогою додому';
+
+  @override
+  String get onboardingActDemoTitle => 'Обід із Сем';
+
+  @override
+  String get onboardingActDictateBody => 'Кажіть по-своєму. Решту зробить Omi.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Просто говоріть. Omi слухає.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Щойно пообідав із Сем, у червні вона переїжджає до Лісабона! Нагадай надіслати презентацію команді до п\'ятниці й купити молоко дорогою додому.';
+
+  @override
+  String get onboardingActDictateHint => 'Торкніться галочки, коли закінчите';
+
+  @override
+  String get onboardingActDictateTitle => 'Розкажіть Omi про свій день';
+
+  @override
+  String get onboardingActIntro => 'Спробуймо Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Щойно';
+
+  @override
+  String get onboardingActMicAllow => 'Дозволити мікрофон';
+
+  @override
+  String get onboardingActMicBody => 'Щоб Omi чув вас, коли ви з ним говорите.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ще не передає звук. Поки що скористайтеся телефоном.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi потрібен мікрофон';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi не чути. Перевірте, що він увімкнений і поруч.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Поки вас не чути. Спробуйте говорити трохи голосніше.';
+
+  @override
+  String get onboardingActNotesLabel => 'Ваш день коротко';
+
+  @override
+  String get onboardingActPhoneMic => 'Мікрофон телефона';
+
+  @override
+  String get onboardingActRateTitle => 'Подобається Omi?';
+
+  @override
+  String get onboardingActRemembers => 'Omi пам\'ятає, щоб вам не доводилося';
+
+  @override
+  String get onboardingActSavedToTasks => 'Збережено у ваші завдання';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi помітив ваші справи';
+
+  @override
+  String get onboardingActWriting => 'Підсумовуємо…';
+
+  @override
+  String get onboardingActYourWords => 'Ось що ви сказали';
+
+  @override
+  String get onboardingConnectOmi => 'Підключіть Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Торкніться Omi, щоб підключити.';
+
+  @override
+  String get onboardingNoOmiYet => 'Ще немає Omi?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Ще не замовив';
+
+  @override
+  String get onboardingOmiOrdered => 'Я вже замовив';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
+
+  @override
+  String get homePendingTitle => 'Розмови в дорозі';
+
+  @override
+  String get homePendingCatchingUp => 'Обробляємо попереднє аудіо';
+
+  @override
+  String get onTheWayTitle => 'У дорозі';
+
+  @override
+  String get onTheWayAlmostReady => 'Майже готово';
+
+  @override
+  String get activityEmpty => 'Поки немає активності';
+
+  @override
+  String get activityNewSemantics => 'Активність, нові елементи';
+
+  @override
+  String get activityLoadFailed => 'Не вдалося завантажити всю активність';
+
+  @override
+  String get activityNewItem => 'Нове';
+
+  @override
+  String get activityNeedsAttention => 'Потребує уваги';
+
+  @override
+  String get activityRetryAll => 'Повторити все';
+
+  @override
+  String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
+
+  @override
+  String get connectAgentHeadline => 'Використовуйте пам\'ять Omi у ChatGPT і своїх ШІ-агентах';
+
+  @override
+  String get connectAgentIntro => 'Підключіться один раз. Потім питайте їх про свої бесіди, спогади й завдання.';
+
+  @override
+  String get connectAgentOneTap => 'Одним дотиком';
+
+  @override
+  String get connectAgentComputerAgents => 'Агенти з власним комп\'ютером';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Скопіюйте один запит. Omi створює ключ лише для цього агента й надійно його надсилає.';
+
+  @override
+  String get connectAgentOtherAgent => 'Інший агент';
+
+  @override
+  String get connectAgentKeyActive => 'Ключ активний';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Востаннє використано: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Ключі MCP і API для розробників';
+
+  @override
+  String get connectAgentLoadFailed => 'Не вдалося завантажити ваші підключення.';
+
+  @override
+  String get connectAgentActionFailed => 'Щось пішло не так. Спробуйте ще раз.';
+
+  @override
+  String get connectChatGptTitle => 'Підключити ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Займає близько 30 секунд. Ви підтверджуєте доступ у ChatGPT, і все працює на телефоні та комп\'ютері.';
+
+  @override
+  String get connectChatGptStepOpen => 'Ми відкриваємо Omi у ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT відкриється одразу на сторінці застосунку Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Натисніть «Підключити», потім увійдіть в Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Використовуйте той самий обліковий запис, що й тут.';
+
+  @override
+  String get connectChatGptStepReturn => 'Поверніться в Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Ми перевіримо підключення автоматично.';
+
+  @override
+  String get openChatGpt => 'Відкрити ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Підключено на телефоні та комп\'ютері';
+
+  @override
+  String get tryAskingChatGpt => 'Спробуйте запитати ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Торкніться питання, щоб відкрити ChatGPT із уже введеним текстом.';
+
+  @override
+  String get chatGptExampleMeetings => 'Про що я домовився на вчорашніх зустрічах?';
+
+  @override
+  String get chatGptExampleTasks => 'Перетвори мої відкриті завдання в Omi на план на цей тиждень.';
+
+  @override
+  String get chatGptExampleGoals => 'Що Omi знає про мої цілі?';
+
+  @override
+  String get disconnectChatGpt => 'Відключити ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Відключити ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT більше не зможе читати ваші спогади, бесіди й завдання в Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Підключити $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Вставте один запит. $name сам налаштує Omi на своєму комп\'ютері.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Вставте один запит. Ваш агент сам налаштує Omi на своєму комп\'ютері.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Ключ «$name» створено';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'У запиті одноразове посилання, а не сам ключ. Воно відкривається один раз і спливає через 1 годину. Відкликати ключ можна тут будь-коли.';
+
+  @override
+  String get connectAgentPreparing => 'Створюємо ключ і захищене посилання…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Не вдалося створити ключ. Перевірте підключення й спробуйте ще раз.';
+
+  @override
+  String get copyPrompt => 'Скопіювати запит';
+
+  @override
+  String get connectAgentNewLink => 'Посилання сплило? Створити нове';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name підключено';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name має ключ Omi. Відкличте його, щоб закрити доступ. Підключитися знову можна будь-коли.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Відкликати ключ $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name одразу втратить доступ до вашої пам\'яті Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Запитати про цю бесіду';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Відкриває ChatGPT із готовим запитанням. Він знайде бесіду через Omi, тож вставляти розшифровку не потрібно.';
+
+  @override
+  String get askYourQuestion => 'Ваше запитання';
+
+  @override
+  String get askSuggestFollowUp => 'Склади чернетку листа за підсумками цієї бесіди.';
+
+  @override
+  String get askSuggestCommitments => 'Що я пообіцяв у цій бесіді?';
+
+  @override
+  String get askSuggestDoc => 'Перетвори цю бесіду на короткий документ.';
+
+  @override
+  String get askInChatGpt => 'Запитати ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Скопіювати для будь-якого застосунку';
+
+  @override
+  String get askConnectChatGptFirst => 'Підключіть ChatGPT один раз, щоб питати його про свої бесіди.';
+
+  @override
+  String get reconnect => 'Підключити знову';
+
+  @override
+  String get chatGptNeedsReconnect => 'Потрібен додатковий доступ. Підключіть знову, щоб виправити.';
+
+  @override
+  String get connectAgentWaiting => 'Очікуємо, поки агент використає свій ключ';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ще не підключено';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Ще не підсумовано';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi може перетворити цю розмову на огляд, ключові моменти та завдання.';
+
+  @override
+  String get summaryWithOmi => 'Підсумувати з Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Підсумувати з $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Вибрати інший шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'З транскрипції';
+
+  @override
+  String get summaryReadFullTranscript => 'Читати повну транскрипцію';
+
+  @override
+  String get summarySheetTitle => 'Підсумувати за допомогою';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Огляд, ключові моменти та завдання';
+
+  @override
+  String get summaryYourTemplates => 'Ваші шаблони';
+
+  @override
+  String get summarySuggestedTemplates => 'Рекомендовані для цієї розмови';
+
+  @override
+  String get summaryBrowseTemplates => 'Переглянути шаблони';
+
+  @override
+  String get summaryCreateYourOwn => 'Створити власний';
+
+  @override
+  String get summaryUseForNewConversations => 'Зробити типовим';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Не вдалося завантажити ваші шаблони. Omi і далі працює.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Ви ще не додали жодного шаблону. Перегляньте кілька або створіть власний.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Підсумовування з $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name не вдалося завершити';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблон не повернув підсумок для цієї розмови.';
+
+  @override
+  String get summaryWithOmiInstead => 'Натомість підсумувати з Omi';
+
+  @override
+  String get summaryBusyTitle => 'Ще обробляється';
+
+  @override
+  String get summaryBusyBody => 'Omi вже працює над цією розмовою. Підсумок з\'явиться тут, щойно буде готовий.';
+
+  @override
+  String get summaryCheckAgain => 'Перевірити знову';
+
+  @override
+  String get summaryLimitTitle => 'Досягнуто ліміту підсумків';
+
+  @override
+  String get summaryLimitBody => 'За останню годину ви кілька разів повторно створили підсумки. Спробуйте пізніше.';
+
+  @override
+  String get summaryFailedTitle => 'Не вдалося підсумувати';
+
+  @override
+  String get summaryFailedBody => 'Під час підсумовування цієї розмови сталася помилка.';
+
+  @override
+  String get noContentToDisplay => 'Немає вмісту для відображення';
+
+  @override
+  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
+
+  @override
   String get onDeviceAtCapTitle => 'Ви досягли ліміту цього місяця';
 
   @override
@@ -13632,147 +14083,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onDeviceEntrySubtitle => 'Коли досягнете ліміту, транскрибуйте на цьому телефоні';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Доступно в Operator і Architect';
-
-  @override
-  String chatAppsAtCapacity(String app) {
-    return '$app заповнено';
-  }
-
-  @override
-  String get chatAppsJoinWaitlist => 'Приєднатися до списку очікування';
-
-  @override
-  String get chatAppsOnWaitlist => 'Ви в списку очікування';
-
-  @override
-  String get chatAppsWaitlistJoined => 'Ви в списку очікування. Ми повідомимо, коли з\'явиться місце.';
-
-  @override
-  String onboardingActCongratsTitle(String name) {
-    return 'Усе готово, $name';
-  }
-
-  @override
-  String get onboardingActDemoSummary =>
-      'Обід із Сем, яка в червні переїжджає до Лісабона. Треба надіслати презентацію команді до пʼятниці й купити молоко дорогою додому.';
-
-  @override
-  String get onboardingActDemoTask1 => 'Надіслати презентацію команді до п\'ятниці';
-
-  @override
-  String get onboardingActDemoTask2 => 'Купити молоко дорогою додому';
-
-  @override
-  String get onboardingActDemoTitle => 'Обід із Сем';
-
-  @override
-  String get onboardingActDictateBody => 'Кажіть по-своєму. Решту зробить Omi.';
-
-  @override
-  String get onboardingActDictateBodyOmi => 'Просто говоріть. Omi слухає.';
-
-  @override
-  String get onboardingActDictateExample =>
-      'Щойно пообідав із Сем, у червні вона переїжджає до Лісабона! Нагадай надіслати презентацію команді до п\'ятниці й купити молоко дорогою додому.';
-
-  @override
-  String get onboardingActDictateHint => 'Торкніться галочки, коли закінчите';
-
-  @override
-  String get onboardingActDictateTitle => 'Розкажіть Omi про свій день';
-
-  @override
-  String get onboardingActIntro => 'Спробуймо Omi.';
-
-  @override
-  String get onboardingActJustNow => 'Щойно';
-
-  @override
-  String get onboardingActMicAllow => 'Дозволити мікрофон';
-
-  @override
-  String get onboardingActMicBody => 'Щоб Omi чув вас, коли ви з ним говорите.';
-
-  @override
-  String get onboardingActMicFallbackBody => 'Omi ще не передає звук. Поки що скористайтеся телефоном.';
-
-  @override
-  String get onboardingActMicTitle => 'Omi потрібен мікрофон';
-
-  @override
-  String get onboardingActNoAudioOmi => 'Omi не чути. Перевірте, що він увімкнений і поруч.';
-
-  @override
-  String get onboardingActNoAudioPhone => 'Поки вас не чути. Спробуйте говорити трохи голосніше.';
-
-  @override
-  String get onboardingActNotesLabel => 'Ваш день коротко';
-
-  @override
-  String get onboardingActPhoneMic => 'Мікрофон телефона';
-
-  @override
-  String get onboardingActRateTitle => 'Подобається Omi?';
-
-  @override
-  String get onboardingActRemembers => 'Omi пам\'ятає, щоб вам не доводилося';
-
-  @override
-  String get onboardingActSavedToTasks => 'Збережено у ваші завдання';
-
-  @override
-  String get onboardingActTasksLabel => 'Omi помітив ваші справи';
-
-  @override
-  String get onboardingActWriting => 'Підсумовуємо…';
-
-  @override
-  String get onboardingActYourWords => 'Ось що ви сказали';
-
-  @override
-  String get onboardingConnectOmi => 'Підключіть Omi';
-
-  @override
-  String get onboardingConnectTapToConnect => 'Торкніться Omi, щоб підключити.';
-
-  @override
-  String get onboardingNoOmiYet => 'Ще немає Omi?';
-
-  @override
-  String get onboardingOmiNotOrdered => 'Ще не замовив';
-
-  @override
-  String get onboardingOmiOrdered => 'Я вже замовив';
-
-  @override
-  String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
-
-  @override
-  String get homePendingTitle => 'Розмови в дорозі';
-
-  @override
-  String get homePendingCatchingUp => 'Обробляємо попереднє аудіо';
-
-  @override
-  String get onTheWayTitle => 'У дорозі';
-
-  @override
-  String get onTheWayAlmostReady => 'Майже готово';
-
-  @override
-  String get activityEmpty => 'Поки немає активності';
-
-  @override
-  String get activityNewSemantics => 'Активність, нові елементи';
-
-  @override
-  String get activityLoadFailed => 'Не вдалося завантажити всю активність';
-
-  @override
-  String get activityNewItem => 'Нове';
-
-  @override
   String onDeviceMeterLineShort(int percent, String reset) {
     return '$percent% використано · $reset';
   }
@@ -13788,229 +14098,6 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String onDeviceGettingSpeechReady(int percent) {
     return 'Підготовка мовлення · $percent%';
-  }
-
-  @override
-  String yourPlanEndsOn(String plan, String date) {
-    return 'Ваш план $plan закінчується $date.';
-  }
-
-  @override
-  String resubscribeNowNoChargeUntil(String date) {
-    return 'Підпишіться знову, щоб зберегти переваги - без оплати до $date.';
-  }
-
-  @override
-  String yourPlanWillRenewOn(String plan, String date) {
-    return 'Ваш план $plan поновиться $date.';
-  }
-
-  @override
-  String get resubscribeFirstToChangePlans => 'Спочатку підпишіться знову, щоб змінити план.';
-
-  @override
-  String get noModelDownloadRequired =>
-      'Буде використано вбудований мовний движок вашого пристрою. Завантаження моделі не потрібне.';
-
-  @override
-  String get nativeEngineNoDownload =>
-      'Буде використано вбудований мовленнєвий рушій вашого пристрою. Завантаження моделі не потрібне.';
-
-  @override
-  String get activityNeedsAttention => 'Потребує уваги';
-
-  @override
-  String get activityRetryAll => 'Повторити все';
-
-  @override
-  String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
-
-  @override
-  String get connectAgentHeadline => 'Використовуйте пам\'ять Omi у ChatGPT і своїх ШІ-агентах';
-
-  @override
-  String get connectAgentIntro => 'Підключіться один раз. Потім питайте їх про свої бесіди, спогади й завдання.';
-
-  @override
-  String get connectAgentOneTap => 'Одним дотиком';
-
-  @override
-  String get connectAgentComputerAgents => 'Агенти з власним комп\'ютером';
-
-  @override
-  String get connectAgentComputerAgentsSubtitle =>
-      'Скопіюйте один запит. Omi створює ключ лише для цього агента й надійно його надсилає.';
-
-  @override
-  String get connectAgentOtherAgent => 'Інший агент';
-
-  @override
-  String get connectAgentKeyActive => 'Ключ активний';
-
-  @override
-  String connectAgentLastUsed(String time) {
-    return 'Востаннє використано: $time';
-  }
-
-  @override
-  String get connectAgentDevelopers => 'Ключі MCP і API для розробників';
-
-  @override
-  String get connectAgentLoadFailed => 'Не вдалося завантажити ваші підключення.';
-
-  @override
-  String get connectAgentActionFailed => 'Щось пішло не так. Спробуйте ще раз.';
-
-  @override
-  String get connectChatGptTitle => 'Підключити ChatGPT';
-
-  @override
-  String get connectChatGptSubtitle =>
-      'Займає близько 30 секунд. Ви підтверджуєте доступ у ChatGPT, і все працює на телефоні та комп\'ютері.';
-
-  @override
-  String get connectChatGptStepOpen => 'Ми відкриваємо Omi у ChatGPT';
-
-  @override
-  String get connectChatGptStepOpenBody => 'ChatGPT відкриється одразу на сторінці застосунку Omi.';
-
-  @override
-  String get connectChatGptStepApprove => 'Натисніть «Підключити», потім увійдіть в Omi';
-
-  @override
-  String get connectChatGptStepApproveBody => 'Використовуйте той самий обліковий запис, що й тут.';
-
-  @override
-  String get connectChatGptStepReturn => 'Поверніться в Omi';
-
-  @override
-  String get connectChatGptStepReturnBody => 'Ми перевіримо підключення автоматично.';
-
-  @override
-  String get openChatGpt => 'Відкрити ChatGPT';
-
-  @override
-  String get chatGptConnectedEverywhere => 'Підключено на телефоні та комп\'ютері';
-
-  @override
-  String get tryAskingChatGpt => 'Спробуйте запитати ChatGPT';
-
-  @override
-  String get tryAskingChatGptFooter => 'Торкніться питання, щоб відкрити ChatGPT із уже введеним текстом.';
-
-  @override
-  String get chatGptExampleMeetings => 'Про що я домовився на вчорашніх зустрічах?';
-
-  @override
-  String get chatGptExampleTasks => 'Перетвори мої відкриті завдання в Omi на план на цей тиждень.';
-
-  @override
-  String get chatGptExampleGoals => 'Що Omi знає про мої цілі?';
-
-  @override
-  String get disconnectChatGpt => 'Відключити ChatGPT';
-
-  @override
-  String get disconnectChatGptQuestion => 'Відключити ChatGPT?';
-
-  @override
-  String get disconnectChatGptMessage => 'ChatGPT більше не зможе читати ваші спогади, бесіди й завдання в Omi.';
-
-  @override
-  String connectAgentNamed(String name) {
-    return 'Підключити $name';
-  }
-
-  @override
-  String connectAgentPromptSubtitle(String name) {
-    return 'Вставте один запит. $name сам налаштує Omi на своєму комп\'ютері.';
-  }
-
-  @override
-  String get connectAgentGenericPromptSubtitle =>
-      'Вставте один запит. Ваш агент сам налаштує Omi на своєму комп\'ютері.';
-
-  @override
-  String connectAgentKeyCreated(String name) {
-    return 'Ключ «$name» створено';
-  }
-
-  @override
-  String get connectAgentKeyCreatedBody =>
-      'У запиті одноразове посилання, а не сам ключ. Воно відкривається один раз і спливає через 1 годину. Відкликати ключ можна тут будь-коли.';
-
-  @override
-  String get connectAgentPreparing => 'Створюємо ключ і захищене посилання…';
-
-  @override
-  String get connectAgentPrepareFailed => 'Не вдалося створити ключ. Перевірте підключення й спробуйте ще раз.';
-
-  @override
-  String get copyPrompt => 'Скопіювати запит';
-
-  @override
-  String get connectAgentNewLink => 'Посилання сплило? Створити нове';
-
-  @override
-  String connectAgentActiveTitle(String name) {
-    return '$name підключено';
-  }
-
-  @override
-  String connectAgentActiveBody(String name) {
-    return '$name має ключ Omi. Відкличте його, щоб закрити доступ. Підключитися знову можна будь-коли.';
-  }
-
-  @override
-  String revokeAgentKeyQuestion(String name) {
-    return 'Відкликати ключ $name?';
-  }
-
-  @override
-  String revokeAgentKeyMessage(String name) {
-    return '$name одразу втратить доступ до вашої пам\'яті Omi.';
-  }
-
-  @override
-  String get askAboutConversation => 'Запитати про цю бесіду';
-
-  @override
-  String get askAboutConversationSubtitle =>
-      'Відкриває ChatGPT із готовим запитанням. Він знайде бесіду через Omi, тож вставляти розшифровку не потрібно.';
-
-  @override
-  String get askYourQuestion => 'Ваше запитання';
-
-  @override
-  String get askSuggestFollowUp => 'Склади чернетку листа за підсумками цієї бесіди.';
-
-  @override
-  String get askSuggestCommitments => 'Що я пообіцяв у цій бесіді?';
-
-  @override
-  String get askSuggestDoc => 'Перетвори цю бесіду на короткий документ.';
-
-  @override
-  String get askInChatGpt => 'Запитати ChatGPT';
-
-  @override
-  String get copyForAnyApp => 'Скопіювати для будь-якого застосунку';
-
-  @override
-  String get askConnectChatGptFirst => 'Підключіть ChatGPT один раз, щоб питати його про свої бесіди.';
-
-  @override
-  String get reconnect => 'Підключити знову';
-
-  @override
-  String get chatGptNeedsReconnect => 'Потрібен додатковий доступ. Підключіть знову, щоб виправити.';
-
-  @override
-  String get connectAgentWaiting => 'Очікуємо, поки агент використає свій ключ';
-
-  @override
-  String connectAgentWaitingTitle(String name) {
-    return '$name ще не підключено';
   }
 
   @override

@@ -302,7 +302,7 @@ class PipelineWorker:
                     and stage == 'assemble_words'
                     and self.recover_words is not None
                 ):
-                    results.append(RecoveryWork(item.segment_id))
+                    results.append(RecoveryWork(item.segment_id, padded_retry_empty=True))
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(

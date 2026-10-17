@@ -22,6 +22,7 @@ T = TypeVar('T')
 class Transaction(Protocol):
     def get(self, table: str, key: str) -> dict: ...
     def put(self, table: str, key: str, value: dict) -> None: ...
+    def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -43,8 +44,12 @@ class FirestoreTransaction:
         self.transaction = transaction
         self.cache: dict[tuple[str, str], dict] = {}
         self.writes: dict[tuple[str, str], dict] = {}
+        self.patches: dict[tuple[str, str], dict] = {}
 
     def _ref(self, table: str, key: str):
+        if table == 'conversations':
+            uid, conversation_id = key.split('/', 1)
+            return self.client.collection('users').document(uid).collection('conversations').document(conversation_id)
         if table == 'content':
             uid, content_id = key.split('/', 1)
             return (
@@ -60,10 +65,17 @@ class FirestoreTransaction:
         if address not in self.cache:
             snapshot = self._ref(table, key).get(transaction=self.transaction)
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
-        return deepcopy(self.writes.get(address, self.cache[address]))
+        return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
 
     def put(self, table: str, key: str, value: dict) -> None:
+        if table == 'conversations':
+            raise ValueError('conversation admission requires a field patch, never a document set')
         self.writes[(table, key)] = deepcopy(value)
+
+    def patch(self, table: str, key: str, fields: dict) -> None:
+        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
+            raise ValueError('only the conversation route owner may be patched by admission')
+        self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
@@ -81,7 +93,7 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) > 450:
+        if len(self.writes) + len(self.patches) > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
@@ -103,6 +115,8 @@ class FirestoreTransaction:
                 value['privacy_generation'] = generation
         for (table, key), value in self.writes.items():
             self.transaction.set(self._ref(table, key), value)
+        for (table, key), fields in self.patches.items():
+            self.transaction.update(self._ref(table, key), fields)
 
 
 class FirestoreStore:
@@ -187,9 +201,14 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
 
 
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
-    if state not in {'leased', 'retry', 'result_ready'}:
+    if state not in {'leased', 'retry', 'result_ready', 'record_pending'}:
         raise ValueError('only recoverable states may be scanned')
-    field = {'leased': 'lease_until', 'retry': 'available_at', 'result_ready': 'enqueued_at'}[state]
+    field = {
+        'leased': 'lease_until',
+        'retry': 'available_at',
+        'result_ready': 'enqueued_at',
+        'record_pending': 'available_at',
+    }[state]
     docs = (
         client.collection(f'{namespace}_jobs')
         .where('state', '==', state)

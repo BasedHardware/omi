@@ -102,6 +102,49 @@ def result_outcome(payload):
             or payload.get('words_provider') != 'strict_local_vad'
         ):
             raise RecoveryFailure('payload_validation', 'invalid_payload')
+    elif outcome == 'no_recoverable_speech':
+        from utils.batch_pipeline.contracts import projection_speech_spans
+
+        if (
+            payload.get('words') != []
+            or payload.get('words_provider') != 'exhausted_recognizers'
+            or payload.get('recognition_evidence') != EMPTY_EVIDENCE
+        ):
+            raise RecoveryFailure('payload_validation', 'invalid_payload')
+        at_stage(
+            'payload_validation', 'invalid_payload', lambda: projection_speech_spans(payload, payload['audio_seconds'])
+        )
     elif outcome != 'success':
         raise RecoveryFailure('payload_validation', 'invalid_payload')
     return outcome
+
+
+EMPTY_EVIDENCE = {'gpu_padded_retry': 'empty', 'multilingual_recovery': 'empty'}
+
+
+class MultilingualEmpty(RecoveryFailure):
+    """Affirmative positive VAD and a validated empty multilingual response, no content."""
+
+    def __init__(self, duration, spans):
+        super().__init__('response_validation', 'empty_asr')
+        self.duration, self.spans = duration, spans
+
+
+def padded_empty(job):
+    return job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
+
+
+def terminal_empty_payload(duration, spans):
+    payload = {
+        'audio_seconds': duration,
+        'speech_seconds': sum(s['end'] - s['start'] for s in spans),
+        'speech_spans': spans,
+        'words': [],
+        'diarization': {'turns': [], 'outcome': 'no_recoverable_speech'},
+        'words_provider': 'exhausted_recognizers',
+        'recovery_version': 1,
+        'outcome': 'no_recoverable_speech',
+        'recognition_evidence': dict(EMPTY_EVIDENCE),
+    }
+    result_outcome(payload)
+    return payload

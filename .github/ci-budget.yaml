@@ -1412,7 +1412,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_frontend.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1421,7 +1421,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Plan 6-minute p50 (previously 5) for the local package install and consumer rebuild. Package-only note-shared edits now trigger the existing main/development or manual frontend deployment; expected PR runs/day stays zero, with no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2770,7 +2770,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 1-minute p50 and 13 PR runs/day: note-shared changes select the existing app build after the source move; package edits previously lived under consumer paths, so no additional job or steady-state run volume is expected.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2806,7 +2806,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 2-minute p50 and 4 PR runs/day: note-shared changes select the existing frontend consumer after the source move; no new job or steady-state run volume is expected.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4265,7 +4265,7 @@
     "gcp_frontend.yml": {
       "name": "Deploy Frontend to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "The frontend depends on @omi/note-shared; package-only edits must trigger its existing main/development deployment. No new PR event or runner. Allow one extra p50 minute for the local package install and consumer rebuild.",
       "triggers": {
         "push": {
           "branches": [
@@ -4274,6 +4274,7 @@
           ],
           "paths": [
             "web/frontend/**",
+            "web/packages/note-shared/**",
             "config/public-build-*.json",
             ".github/actions/deploy-public-build/**",
             ".github/actions/prepare-public-build/**",

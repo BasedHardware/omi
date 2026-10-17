@@ -841,6 +841,8 @@ def upload_audio_chunks_batch(
         try:
             with owner_storage_write_gate(uid, bucket):
                 blob = bucket.blob(path)
+                if sample_rate is not None:
+                    blob.metadata = {'record_sample_rate': str(sample_rate)}
                 if span is not None:
                     payload = b''.join(chunk['data'] for chunk in sorted_chunks)
                     payload_digest = hashlib.sha256(payload)
@@ -873,7 +875,7 @@ def upload_audio_chunks_batch(
                             # Exit the playback gate before the optional archive.
                             break
                         raise ValueError(f'v2 audio blob content conflict at {path}')
-                    blob.metadata = span_blob_metadata(span)
+                    blob.metadata = {**(blob.metadata or {}), **span_blob_metadata(span)}
                 create_only = {'if_generation_match': 0} if span is not None else {}
                 if protection_level == 'enhanced':
                     # Encrypt each chunk individually (length-prefixed), stream to GCS

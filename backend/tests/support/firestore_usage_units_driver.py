@@ -11,5 +11,6 @@ DRIVER = DriverEntry(
             None,
             'session cache changes query frequency only; every full refresh uses the same month builder; warm refreshes use document get_all',
         ),
+        'rate_card_version': (None, 'selects which shadow_v* map to total; projection only, same query shape'),
     },
 )

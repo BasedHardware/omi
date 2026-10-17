@@ -4300,12 +4300,27 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 结束。';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '立即重新订阅以保留您的权益 - $date之前不收费。';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '您的计划将于$date取消。\n立即重新订阅以保留您的权益 - $date之前不收费。';
   }
 
   @override
   String get annualPlanStartsAutomatically => '您的年度计划将在月度计划结束时自动开始。';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 续订。';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4338,6 +4353,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get continueText => '继续';
+
+  @override
+  String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
 
   @override
   String get resubscribe => '重新订阅';
@@ -4936,9 +4954,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get content => '内容';
-
-  @override
-  String get noContentToDisplay => '没有可显示的内容';
 
   @override
   String get noSummary => '无摘要';
@@ -5732,6 +5747,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get usingNativeIosSpeech => '使用原生 iOS 语音识别';
 
   @override
+  String get noModelDownloadRequired => '将使用您设备的原生语音引擎。无需下载模型。';
+
+  @override
   String get modelReady => '模型就绪';
 
   @override
@@ -5799,6 +5817,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get modelTooLargeWarning => '此模型较大，可能导致应用在移动设备上崩溃或运行非常缓慢。\n\n建议使用 small 或 base。';
+
+  @override
+  String get nativeEngineNoDownload => '将使用您设备的原生语音引擎。无需下载模型。';
 
   @override
   String modelReadyWithName(String model) {
@@ -9634,9 +9655,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
 
   @override
-  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
-
-  @override
   String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 
   @override
@@ -13128,6 +13146,430 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsCopy => '复制详情以供支持团队使用';
 
   @override
+  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app 名额已满';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => '加入候补名单';
+
+  @override
+  String get chatAppsOnWaitlist => '你已在候补名单中';
+
+  @override
+  String get chatAppsWaitlistJoined => '你已在候补名单中。有名额时我们会通知你。';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return '一切就绪，$name';
+  }
+
+  @override
+  String get onboardingActDemoSummary => '和 Sam 吃了午饭，她六月要搬去里斯本。你打算周五前把演示稿发给团队，回家路上买牛奶。';
+
+  @override
+  String get onboardingActDemoTask1 => '周五前把演示文稿发给团队';
+
+  @override
+  String get onboardingActDemoTask2 => '回家路上买牛奶';
+
+  @override
+  String get onboardingActDemoTitle => '和 Sam 吃午饭';
+
+  @override
+  String get onboardingActDictateBody => '随便说，剩下的交给 Omi。';
+
+  @override
+  String get onboardingActDictateBodyOmi => '直接说就好，你的 Omi 正在听。';
+
+  @override
+  String get onboardingActDictateExample => '刚和 Sam 吃完午饭，她六月要搬去里斯本！提醒我周五前把演示文稿发给团队，回家路上顺便买牛奶。';
+
+  @override
+  String get onboardingActDictateHint => '说完后点对勾';
+
+  @override
+  String get onboardingActDictateTitle => '跟 Omi 说说你的一天';
+
+  @override
+  String get onboardingActIntro => '来试试 Omi 吧。';
+
+  @override
+  String get onboardingActJustNow => '刚刚';
+
+  @override
+  String get onboardingActMicAllow => '允许使用麦克风';
+
+  @override
+  String get onboardingActMicBody => '这样你说话时 Omi 才能听到。';
+
+  @override
+  String get onboardingActMicFallbackBody => '你的 Omi 还没有传来声音，先用手机吧。';
+
+  @override
+  String get onboardingActMicTitle => 'Omi 需要使用麦克风';
+
+  @override
+  String get onboardingActNoAudioOmi => '听不到你的 Omi。请确认它已开启并在附近。';
+
+  @override
+  String get onboardingActNoAudioPhone => '还听不到你的声音，试着大声一点。';
+
+  @override
+  String get onboardingActNotesLabel => '你的一天，总结好了';
+
+  @override
+  String get onboardingActPhoneMic => '手机麦克风';
+
+  @override
+  String get onboardingActRateTitle => '目前喜欢 Omi 吗？';
+
+  @override
+  String get onboardingActRemembers => 'Omi 帮你记住，你无需费心';
+
+  @override
+  String get onboardingActSavedToTasks => '已保存到你的任务';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi 记下了你的待办';
+
+  @override
+  String get onboardingActWriting => '正在总结…';
+
+  @override
+  String get onboardingActYourWords => '你说的内容';
+
+  @override
+  String get onboardingConnectOmi => '连接 Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => '轻点你的 Omi 进行连接。';
+
+  @override
+  String get onboardingNoOmiYet => '还没有 Omi？';
+
+  @override
+  String get onboardingOmiNotOrdered => '还没下单';
+
+  @override
+  String get onboardingOmiOrdered => '我已下单';
+
+  @override
+  String get onboardingPermissionTapToFix => '点按以修复';
+
+  @override
+  String get homePendingTitle => '对话正在生成';
+
+  @override
+  String get homePendingCatchingUp => '正在处理之前的音频';
+
+  @override
+  String get onTheWayTitle => '处理中';
+
+  @override
+  String get onTheWayAlmostReady => '即将完成';
+
+  @override
+  String get activityEmpty => '暂无活动';
+
+  @override
+  String get activityNewSemantics => '活动，有新内容';
+
+  @override
+  String get activityLoadFailed => '无法加载全部活动';
+
+  @override
+  String get activityNewItem => '新';
+
+  @override
+  String get activityNeedsAttention => '需要处理';
+
+  @override
+  String get activityRetryAll => '全部重试';
+
+  @override
+  String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';
+
+  @override
+  String get connectAgentIntro => '只需连接一次，之后就能向它们询问你的对话、回忆和任务。';
+
+  @override
+  String get connectAgentOneTap => '一键连接';
+
+  @override
+  String get connectAgentComputerAgents => '拥有自己电脑的智能体';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle => '复制一条提示词。Omi 会为该智能体单独生成密钥并安全发送。';
+
+  @override
+  String get connectAgentOtherAgent => '其他智能体';
+
+  @override
+  String get connectAgentKeyActive => '密钥有效';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return '上次使用：$time';
+  }
+
+  @override
+  String get connectAgentDevelopers => '面向开发者的 MCP 和 API 密钥';
+
+  @override
+  String get connectAgentLoadFailed => '无法加载你的连接。';
+
+  @override
+  String get connectAgentActionFailed => '出了点问题，请重试。';
+
+  @override
+  String get connectChatGptTitle => '连接 ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle => '大约需要 30 秒。你在 ChatGPT 中批准后，手机和电脑上都能使用。';
+
+  @override
+  String get connectChatGptStepOpen => '我们会在 ChatGPT 中打开 Omi';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT 会直接打开 Omi 应用页面。';
+
+  @override
+  String get connectChatGptStepApprove => '点按“连接”，然后登录 Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => '请使用与此处相同的账号。';
+
+  @override
+  String get connectChatGptStepReturn => '返回 Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => '我们会自动检查连接。';
+
+  @override
+  String get openChatGpt => '打开 ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => '已在手机和电脑上连接';
+
+  @override
+  String get tryAskingChatGpt => '试着问问 ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => '点按其中一个，即可打开已填好问题的 ChatGPT。';
+
+  @override
+  String get chatGptExampleMeetings => '我在昨天的会议上答应了什么？';
+
+  @override
+  String get chatGptExampleTasks => '把我在 Omi 里未完成的任务整理成本周计划。';
+
+  @override
+  String get chatGptExampleGoals => 'Omi 对我的目标了解多少？';
+
+  @override
+  String get disconnectChatGpt => '断开 ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => '要断开 ChatGPT 吗？';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT 将无法再读取你在 Omi 中的回忆、对话和任务。';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '连接 $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return '粘贴一条提示词，$name 会在自己的电脑上设置好 Omi。';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => '粘贴一条提示词，你的智能体会在自己的电脑上设置好 Omi。';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '已创建密钥“$name”';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody => '提示词里是一次性链接，而不是密钥本身。链接只能打开一次，1 小时后失效。你可以随时在这里撤销密钥。';
+
+  @override
+  String get connectAgentPreparing => '正在生成密钥和安全链接…';
+
+  @override
+  String get connectAgentPrepareFailed => '无法生成密钥。请检查网络连接后重试。';
+
+  @override
+  String get copyPrompt => '复制提示词';
+
+  @override
+  String get connectAgentNewLink => '链接已过期？重新生成';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name 已连接';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name 持有一个 Omi 密钥。撤销它即可切断访问，之后随时可以重新连接。';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '要撤销 $name 的密钥吗？';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name 将立即失去对你 Omi 记忆的访问权限。';
+  }
+
+  @override
+  String get askAboutConversation => '询问这段对话';
+
+  @override
+  String get askAboutConversationSubtitle => '打开 ChatGPT 并填好你的问题。它会通过 Omi 查找这段对话，无需粘贴转录内容。';
+
+  @override
+  String get askYourQuestion => '你的问题';
+
+  @override
+  String get askSuggestFollowUp => '根据这段对话起草一封跟进邮件。';
+
+  @override
+  String get askSuggestCommitments => '我在这段对话中承诺了什么？';
+
+  @override
+  String get askSuggestDoc => '把这段对话整理成一份简短文档。';
+
+  @override
+  String get askInChatGpt => '问 ChatGPT';
+
+  @override
+  String get copyForAnyApp => '复制到任意应用';
+
+  @override
+  String get askConnectChatGptFirst => '只需连接一次 ChatGPT，即可询问你的对话。';
+
+  @override
+  String get reconnect => '重新连接';
+
+  @override
+  String get chatGptNeedsReconnect => '需要更多权限。重新连接以修复。';
+
+  @override
+  String get connectAgentWaiting => '正在等待 Agent 使用其密钥';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name 尚未连接';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => '尚未生成摘要';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi 可以将这段对话整理为概览、要点和待办事项。';
+
+  @override
+  String get summaryWithOmi => '用 Omi 总结';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '用 $name 总结';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => '使用其他模板';
+
+  @override
+  String get summaryFromTheTranscript => '摘自转录';
+
+  @override
+  String get summaryReadFullTranscript => '阅读完整转录';
+
+  @override
+  String get summarySheetTitle => '总结方式';
+
+  @override
+  String get summaryOmiTemplateSubtitle => '概览、要点和待办事项';
+
+  @override
+  String get summaryYourTemplates => '你的模板';
+
+  @override
+  String get summarySuggestedTemplates => '为此对话推荐';
+
+  @override
+  String get summaryBrowseTemplates => '浏览模板';
+
+  @override
+  String get summaryCreateYourOwn => '自己创建';
+
+  @override
+  String get summaryUseForNewConversations => '设为我的默认';
+
+  @override
+  String get summaryTemplatesLoadFailed => '无法加载你的模板。Omi 仍可正常使用。';
+
+  @override
+  String get summaryNoTemplatesYet => '你还没有添加任何模板。浏览一些模板，或自己创建一个。';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '正在用 $name 总结…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name 未能完成';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => '该模板未为此对话返回摘要。';
+
+  @override
+  String get summaryWithOmiInstead => '改用 Omi 总结';
+
+  @override
+  String get summaryBusyTitle => '仍在处理中';
+
+  @override
+  String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
+
+  @override
+  String get summaryCheckAgain => '再次检查';
+
+  @override
+  String get summaryLimitTitle => '已达到摘要次数上限';
+
+  @override
+  String get summaryLimitBody => '你在过去一小时内多次重新生成了摘要。请稍后再试。';
+
+  @override
+  String get summaryFailedTitle => '无法生成摘要';
+
+  @override
+  String get summaryFailedBody => '总结此对话时出了点问题。';
+
+  @override
+  String get noContentToDisplay => '没有可显示的内容';
+
+  @override
+  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
   String get onDeviceAtCapTitle => '你已达到本月的用量上限';
 
   @override
@@ -13391,145 +13833,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceEntrySubtitle => '达到用量上限后，在本机转录';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
-
-  @override
-  String chatAppsAtCapacity(String app) {
-    return '$app 名额已满';
-  }
-
-  @override
-  String get chatAppsJoinWaitlist => '加入候补名单';
-
-  @override
-  String get chatAppsOnWaitlist => '你已在候补名单中';
-
-  @override
-  String get chatAppsWaitlistJoined => '你已在候补名单中。有名额时我们会通知你。';
-
-  @override
-  String onboardingActCongratsTitle(String name) {
-    return '一切就绪，$name';
-  }
-
-  @override
-  String get onboardingActDemoSummary => '和 Sam 吃了午饭，她六月要搬去里斯本。你打算周五前把演示稿发给团队，回家路上买牛奶。';
-
-  @override
-  String get onboardingActDemoTask1 => '周五前把演示文稿发给团队';
-
-  @override
-  String get onboardingActDemoTask2 => '回家路上买牛奶';
-
-  @override
-  String get onboardingActDemoTitle => '和 Sam 吃午饭';
-
-  @override
-  String get onboardingActDictateBody => '随便说，剩下的交给 Omi。';
-
-  @override
-  String get onboardingActDictateBodyOmi => '直接说就好，你的 Omi 正在听。';
-
-  @override
-  String get onboardingActDictateExample => '刚和 Sam 吃完午饭，她六月要搬去里斯本！提醒我周五前把演示文稿发给团队，回家路上顺便买牛奶。';
-
-  @override
-  String get onboardingActDictateHint => '说完后点对勾';
-
-  @override
-  String get onboardingActDictateTitle => '跟 Omi 说说你的一天';
-
-  @override
-  String get onboardingActIntro => '来试试 Omi 吧。';
-
-  @override
-  String get onboardingActJustNow => '刚刚';
-
-  @override
-  String get onboardingActMicAllow => '允许使用麦克风';
-
-  @override
-  String get onboardingActMicBody => '这样你说话时 Omi 才能听到。';
-
-  @override
-  String get onboardingActMicFallbackBody => '你的 Omi 还没有传来声音，先用手机吧。';
-
-  @override
-  String get onboardingActMicTitle => 'Omi 需要使用麦克风';
-
-  @override
-  String get onboardingActNoAudioOmi => '听不到你的 Omi。请确认它已开启并在附近。';
-
-  @override
-  String get onboardingActNoAudioPhone => '还听不到你的声音，试着大声一点。';
-
-  @override
-  String get onboardingActNotesLabel => '你的一天，总结好了';
-
-  @override
-  String get onboardingActPhoneMic => '手机麦克风';
-
-  @override
-  String get onboardingActRateTitle => '目前喜欢 Omi 吗？';
-
-  @override
-  String get onboardingActRemembers => 'Omi 帮你记住，你无需费心';
-
-  @override
-  String get onboardingActSavedToTasks => '已保存到你的任务';
-
-  @override
-  String get onboardingActTasksLabel => 'Omi 记下了你的待办';
-
-  @override
-  String get onboardingActWriting => '正在总结…';
-
-  @override
-  String get onboardingActYourWords => '你说的内容';
-
-  @override
-  String get onboardingConnectOmi => '连接 Omi';
-
-  @override
-  String get onboardingConnectTapToConnect => '轻点你的 Omi 进行连接。';
-
-  @override
-  String get onboardingNoOmiYet => '还没有 Omi？';
-
-  @override
-  String get onboardingOmiNotOrdered => '还没下单';
-
-  @override
-  String get onboardingOmiOrdered => '我已下单';
-
-  @override
-  String get onboardingPermissionTapToFix => '点按以修复';
-
-  @override
-  String get homePendingTitle => '对话正在生成';
-
-  @override
-  String get homePendingCatchingUp => '正在处理之前的音频';
-
-  @override
-  String get onTheWayTitle => '处理中';
-
-  @override
-  String get onTheWayAlmostReady => '即将完成';
-
-  @override
-  String get activityEmpty => '暂无活动';
-
-  @override
-  String get activityNewSemantics => '活动，有新内容';
-
-  @override
-  String get activityLoadFailed => '无法加载全部活动';
-
-  @override
-  String get activityNewItem => '新';
-
-  @override
   String onDeviceMeterLineShort(int percent, String reset) {
     return '已用 $percent% · $reset';
   }
@@ -13545,222 +13848,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String onDeviceGettingSpeechReady(int percent) {
     return '正在准备语音 · $percent%';
-  }
-
-  @override
-  String yourPlanEndsOn(String plan, String date) {
-    return '您的 $plan 套餐将于 $date 结束。';
-  }
-
-  @override
-  String resubscribeNowNoChargeUntil(String date) {
-    return '立即重新订阅以保留您的权益 - $date之前不收费。';
-  }
-
-  @override
-  String yourPlanWillRenewOn(String plan, String date) {
-    return '您的 $plan 套餐将于 $date 续订。';
-  }
-
-  @override
-  String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
-
-  @override
-  String get noModelDownloadRequired => '将使用您设备的原生语音引擎。无需下载模型。';
-
-  @override
-  String get nativeEngineNoDownload => '将使用您设备的原生语音引擎。无需下载模型。';
-
-  @override
-  String get activityNeedsAttention => '需要处理';
-
-  @override
-  String get activityRetryAll => '全部重试';
-
-  @override
-  String get attentionSummaryFailed => '无法总结这段对话';
-
-  @override
-  String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';
-
-  @override
-  String get connectAgentIntro => '只需连接一次，之后就能向它们询问你的对话、回忆和任务。';
-
-  @override
-  String get connectAgentOneTap => '一键连接';
-
-  @override
-  String get connectAgentComputerAgents => '拥有自己电脑的智能体';
-
-  @override
-  String get connectAgentComputerAgentsSubtitle => '复制一条提示词。Omi 会为该智能体单独生成密钥并安全发送。';
-
-  @override
-  String get connectAgentOtherAgent => '其他智能体';
-
-  @override
-  String get connectAgentKeyActive => '密钥有效';
-
-  @override
-  String connectAgentLastUsed(String time) {
-    return '上次使用：$time';
-  }
-
-  @override
-  String get connectAgentDevelopers => '面向开发者的 MCP 和 API 密钥';
-
-  @override
-  String get connectAgentLoadFailed => '无法加载你的连接。';
-
-  @override
-  String get connectAgentActionFailed => '出了点问题，请重试。';
-
-  @override
-  String get connectChatGptTitle => '连接 ChatGPT';
-
-  @override
-  String get connectChatGptSubtitle => '大约需要 30 秒。你在 ChatGPT 中批准后，手机和电脑上都能使用。';
-
-  @override
-  String get connectChatGptStepOpen => '我们会在 ChatGPT 中打开 Omi';
-
-  @override
-  String get connectChatGptStepOpenBody => 'ChatGPT 会直接打开 Omi 应用页面。';
-
-  @override
-  String get connectChatGptStepApprove => '点按“连接”，然后登录 Omi';
-
-  @override
-  String get connectChatGptStepApproveBody => '请使用与此处相同的账号。';
-
-  @override
-  String get connectChatGptStepReturn => '返回 Omi';
-
-  @override
-  String get connectChatGptStepReturnBody => '我们会自动检查连接。';
-
-  @override
-  String get openChatGpt => '打开 ChatGPT';
-
-  @override
-  String get chatGptConnectedEverywhere => '已在手机和电脑上连接';
-
-  @override
-  String get tryAskingChatGpt => '试着问问 ChatGPT';
-
-  @override
-  String get tryAskingChatGptFooter => '点按其中一个，即可打开已填好问题的 ChatGPT。';
-
-  @override
-  String get chatGptExampleMeetings => '我在昨天的会议上答应了什么？';
-
-  @override
-  String get chatGptExampleTasks => '把我在 Omi 里未完成的任务整理成本周计划。';
-
-  @override
-  String get chatGptExampleGoals => 'Omi 对我的目标了解多少？';
-
-  @override
-  String get disconnectChatGpt => '断开 ChatGPT';
-
-  @override
-  String get disconnectChatGptQuestion => '要断开 ChatGPT 吗？';
-
-  @override
-  String get disconnectChatGptMessage => 'ChatGPT 将无法再读取你在 Omi 中的回忆、对话和任务。';
-
-  @override
-  String connectAgentNamed(String name) {
-    return '连接 $name';
-  }
-
-  @override
-  String connectAgentPromptSubtitle(String name) {
-    return '粘贴一条提示词，$name 会在自己的电脑上设置好 Omi。';
-  }
-
-  @override
-  String get connectAgentGenericPromptSubtitle => '粘贴一条提示词，你的智能体会在自己的电脑上设置好 Omi。';
-
-  @override
-  String connectAgentKeyCreated(String name) {
-    return '已创建密钥“$name”';
-  }
-
-  @override
-  String get connectAgentKeyCreatedBody => '提示词里是一次性链接，而不是密钥本身。链接只能打开一次，1 小时后失效。你可以随时在这里撤销密钥。';
-
-  @override
-  String get connectAgentPreparing => '正在生成密钥和安全链接…';
-
-  @override
-  String get connectAgentPrepareFailed => '无法生成密钥。请检查网络连接后重试。';
-
-  @override
-  String get copyPrompt => '复制提示词';
-
-  @override
-  String get connectAgentNewLink => '链接已过期？重新生成';
-
-  @override
-  String connectAgentActiveTitle(String name) {
-    return '$name 已连接';
-  }
-
-  @override
-  String connectAgentActiveBody(String name) {
-    return '$name 持有一个 Omi 密钥。撤销它即可切断访问，之后随时可以重新连接。';
-  }
-
-  @override
-  String revokeAgentKeyQuestion(String name) {
-    return '要撤销 $name 的密钥吗？';
-  }
-
-  @override
-  String revokeAgentKeyMessage(String name) {
-    return '$name 将立即失去对你 Omi 记忆的访问权限。';
-  }
-
-  @override
-  String get askAboutConversation => '询问这段对话';
-
-  @override
-  String get askAboutConversationSubtitle => '打开 ChatGPT 并填好你的问题。它会通过 Omi 查找这段对话，无需粘贴转录内容。';
-
-  @override
-  String get askYourQuestion => '你的问题';
-
-  @override
-  String get askSuggestFollowUp => '根据这段对话起草一封跟进邮件。';
-
-  @override
-  String get askSuggestCommitments => '我在这段对话中承诺了什么？';
-
-  @override
-  String get askSuggestDoc => '把这段对话整理成一份简短文档。';
-
-  @override
-  String get askInChatGpt => '问 ChatGPT';
-
-  @override
-  String get copyForAnyApp => '复制到任意应用';
-
-  @override
-  String get askConnectChatGptFirst => '只需连接一次 ChatGPT，即可询问你的对话。';
-
-  @override
-  String get reconnect => '重新连接';
-
-  @override
-  String get chatGptNeedsReconnect => '需要更多权限。重新连接以修复。';
-
-  @override
-  String get connectAgentWaiting => '正在等待 Agent 使用其密钥';
-
-  @override
-  String connectAgentWaitingTitle(String name) {
-    return '$name 尚未连接';
   }
 
   @override
