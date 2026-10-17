@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class DevApiKey(BaseModel):
@@ -19,8 +19,16 @@ class DevApiKeyDB(DevApiKey):
 
 
 class DevApiKeyCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     scopes: Optional[List[str]] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Key name cannot be empty')
+        return v
 
 
 class DevApiKeyCreated(DevApiKey):
