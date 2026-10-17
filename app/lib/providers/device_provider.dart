@@ -930,8 +930,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void setIsConnected(bool value) {
     isConnected = value;
-    // Every path that drops the mirror must allow the live link to be re-admitted.
-    if (!value) _admittedLink = null;
+    // Every path that drops the mirror must allow the live link to be re-admitted:
+    // forget the admitted link and the active audio device so the next role
+    // reconcile runs the full connect path again instead of treating the still
+    // connected device as already admitted.
+    if (!value) {
+      _admittedLink = null;
+      _activeAudioDeviceId = null;
+    }
     if (isConnected && !_discoveryWhilePaired) {
       _discoveryTimer?.cancel();
     }
