@@ -105,6 +105,7 @@ entries are exempt: they are queued for removal, not running.
 | `exp-002-desktop-identity-v1` | unowned | [backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md](../../backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md) | 2026-10-26 |
 | `onboarding-variant` | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
+| `settings-plan-card` | yinka | [product/experiments/settings-plan-card.md](../../product/experiments/settings-plan-card.md) | 2026-11-15 |
 
 ## Overdue for a decision
 
@@ -143,6 +144,7 @@ and an explicit empty literal renders as `''`.
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
 | `onboarding-variant` | Mobile first-run onboarding A/B/C after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-13 | nik |
 | `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-12 | nik |
+| `settings-plan-card` | Mobile Settings plan section A/B for Free and Plus readers: control (Plan & Usage row with the minutes meter and a full-width Upgrade under it) / card (plan card: plan name large, minutes meter, full-width Upgrade; tapping it opens Plan & Usage). Client-evaluated multivariate flag; no identity, an unread flag or an unknown variant is control and is not counted | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-15 | yinka |
 
 ### rollout
 
