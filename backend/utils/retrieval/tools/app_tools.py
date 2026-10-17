@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, create_model
 from langchain_core.tools import StructuredTool, BaseTool
 from langchain_core.runnables import RunnableConfig
 
-from database.apps import get_app_by_id_db
+from database.apps import get_app_by_id_db, update_app_in_db
 from database.redis_db import (
     get_cached_user_geolocation,
     delete_app_cache_by_id,
@@ -225,8 +225,20 @@ def create_app_tool(
     if app_tool.is_mcp and mcp_server_url:
         _mcp_url: str = mcp_server_url
         _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens
-        _access_token: Optional[str] = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
         _transport: str = app_tool.transport
+
+        async def _persist_refreshed_mcp_tokens(previous_tokens: Optional[Dict[str, Any]]) -> None:
+            if _mcp_tokens is None or previous_tokens is None or _mcp_tokens == previous_tokens:
+                return
+            try:
+                await run_blocking(
+                    db_executor,
+                    update_app_in_db,
+                    {'id': app_id, 'external_integration.mcp_oauth_tokens': dict(_mcp_tokens)},
+                )
+                await run_blocking(db_executor, delete_app_cache_by_id, app_id)
+            except Exception as persist_err:
+                logger.warning(f"Failed to persist refreshed MCP OAuth tokens for {app_id}: {persist_err}")
 
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
@@ -237,8 +249,11 @@ def create_app_tool(
             cb = get_webhook_circuit_breaker(_mcp_url)
             if not cb.allow_request():
                 return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
+            previous_tokens = dict(_mcp_tokens) if _mcp_tokens else None
+            access_token = _mcp_tokens.get('access_token') if _mcp_tokens else None
             try:
-                result = await call_mcp_tool(_mcp_url, app_tool.name, arguments, _access_token, _mcp_tokens, _transport)
+                result = await call_mcp_tool(_mcp_url, app_tool.name, arguments, access_token, _mcp_tokens, _transport)
+                await _persist_refreshed_mcp_tokens(previous_tokens)
                 if result.startswith('Error') or result.startswith('MCP error'):
                     cb.record_failure()
                     action = await run_blocking(
@@ -251,6 +266,7 @@ def create_app_tool(
                     return _format_external_tool_result(f"{app_name} {app_tool.name} MCP result", result)
                 return _format_external_tool_result(f"{app_name} {app_tool.name} MCP error", result)
             except httpx.HTTPStatusError as e:
+                await _persist_refreshed_mcp_tokens(previous_tokens)
                 status_code = e.response.status_code
                 action = await run_blocking(
                     db_executor,
@@ -263,6 +279,7 @@ def create_app_tool(
                 await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, f'HTTP {status_code}')
                 return f'Error calling MCP tool {app_tool.name}: HTTP {status_code}'
             except Exception as e:
+                await _persist_refreshed_mcp_tokens(previous_tokens)
                 cb.record_failure()
                 action = await run_blocking(
                     db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_MCP_TOOL
