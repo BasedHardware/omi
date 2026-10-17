@@ -5279,6 +5279,8 @@ they use today's sync/BYOK dispatcher. Owners returned by existing provenance or
 privacy snapshots route to their persisted dispatcher without another lookup.
 No flag-off ownership discovery is added. A BYOK WAL targeting a known native
 owner returns terminal HTTP 409 `record_capture_byok_conflict`, without Retry-After.
+An unowned BYOK upload in the batch cohort retains the existing intake hold:
+HTTP 503 `sync_batch_byok_unavailable`, with no sync-job creation or ledger claim.
 Eligible server-STT WALs return the native public job only after exact
 PCM interval/byte coverage is proven against its pinned references. A successful
 proof aliases the existing upload-content ledger to that public job, so retries

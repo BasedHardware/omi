@@ -1182,9 +1182,8 @@ async def sync_local_files_v2(
         if isinstance(record_response, JSONResponse):
             return record_response
 
-        if not byok_enabled and (
-            record_response is RecordUploadRoute.BATCH
-            or (record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid))
+        if record_response is RecordUploadRoute.BATCH or (
+            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
