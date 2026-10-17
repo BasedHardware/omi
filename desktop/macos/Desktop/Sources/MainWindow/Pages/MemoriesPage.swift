@@ -1432,9 +1432,10 @@ class MemoriesViewModel: ObservableObject {
     let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
 
     guard !Self.reconciledUserIDsThisLaunch.contains(userId) else { return }
-    // Single-flight admission: false while another attempt is in flight or a
-    // bounded retry is pending (see beginReconcileAttempt).
-    guard beginReconcileAttempt(userId: userId) else { return }
+    // Single-flight admission: nil while another attempt is in flight or a
+    // bounded retry is pending (see beginReconcileAttempt). The returned token
+    // fences every terminal report of this attempt to the run that started it.
+    guard let run = beginReconcileAttempt(userId: userId) else { return }
 
     log("MemoriesViewModel: Starting cache reconcile for user \(userId)")
 
@@ -1469,7 +1470,7 @@ class MemoriesViewModel: ObservableObject {
         // new owner's reopened store.
         guard ownerStillAuthorized() else {
           log("MemoriesViewModel: Cache reconcile aborted because the signed-in owner changed mid-pull")
-          reconcileRunAbortedByOwnerChange()
+          reconcileRunAbortedByOwnerChange(run: run)
           return
         }
         try await MemoryStorage.shared.syncServerMemories(batch)
@@ -1484,7 +1485,7 @@ class MemoriesViewModel: ObservableObject {
       // re-runs the reconcile, and only an exhausted run waits for next launch.
       guard !truncated else {
         log("MemoriesViewModel: Cache reconcile skipped pruning because the list was truncated")
-        reconcileAttemptTruncated(userId: userId)
+        reconcileAttemptTruncated(run: run)
         return
       }
 
@@ -1494,7 +1495,7 @@ class MemoriesViewModel: ObservableObject {
       // account still has.
       guard ownerStillAuthorized() else {
         log("MemoriesViewModel: Cache reconcile aborted before pruning because the signed-in owner changed")
-        reconcileRunAbortedByOwnerChange()
+        reconcileRunAbortedByOwnerChange(run: run)
         return
       }
       let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
@@ -1507,13 +1508,13 @@ class MemoriesViewModel: ObservableObject {
       } else if pruned > 0 {
         log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
       }
-      reconcileRunCompleted(pruned: pruned)
+      reconcileRunCompleted(run: run, pruned: pruned)
 
       await loadTagCountsFromDatabase()
       await loadMemories()
     } catch {
       logError("MemoriesViewModel: Cache reconcile failed (will retry next launch)", error: error)
-      reconcileRunFailed()
+      reconcileRunFailed(run: run)
     }
   }
 

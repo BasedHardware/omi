@@ -16,6 +16,37 @@ final class MemoriesReconcileRetryTests: XCTestCase {
   private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
   private var testUserId: String?
 
+  /// One-shot latch a test opens from the main actor while an injected
+  /// `@Sendable` sleeper parks on it — the sleeper cannot touch main-actor
+  /// test state, so the gate guards its waiters with a lock.
+  private final class AsyncGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+      _ = await withCheckedContinuation { continuation in
+        lock.lock()
+        if opened {
+          lock.unlock()
+          continuation.resume()
+          return
+        }
+        waiters.append(continuation)
+        lock.unlock()
+      }
+    }
+
+    func open() {
+      lock.lock()
+      opened = true
+      let toResume = waiters
+      waiters = []
+      lock.unlock()
+      toResume.forEach { $0.resume() }
+    }
+  }
+
   override func setUp() async throws {
     authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
     let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memories-reconcile-retry")
@@ -85,6 +116,40 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     )
   }
 
+  /// The truncated-reconcile path is a fail-open path, so beside the
+  /// structured PostHog event it must leave the standard resilience signal:
+  /// `recordFallback`'s `fallback_triggered` snapshots in the diagnostics ring
+  /// buffer. Filtered by area so only this feature's events are seen; the
+  /// buffer is process-global, so tests compare against a baseline captured
+  /// before their first reconcile.
+  private func memoriesCacheFallbackSnapshots() throws -> [[String: Any]] {
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    return snapshots.filter {
+      ($0["event"] as? String) == "fallback_triggered" && ($0["area"] as? String) == "memories-cache"
+    }
+  }
+
+  private func assertMemoriesCacheFallback(
+    _ snapshot: [String: Any],
+    to: String,
+    outcome: String,
+    attempt: Int,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered", file: file, line: line)
+    XCTAssertEqual(snapshot["area"] as? String, "memories-cache", file: file, line: line)
+    XCTAssertEqual(snapshot["from"] as? String, "server-page", file: file, line: line)
+    XCTAssertEqual(snapshot["to"] as? String, to, file: file, line: line)
+    XCTAssertEqual(snapshot["reason"] as? String, "list_truncated", file: file, line: line)
+    XCTAssertEqual(snapshot["outcome"] as? String, outcome, file: file, line: line)
+    XCTAssertEqual(snapshot["attempt"] as? Int, attempt, file: file, line: line)
+  }
+
   /// Truncated first page, complete retry page: the retry must re-run the
   /// reconcile from a fresh cursor, prune the orphan, latch the launch guard,
   /// and report the terminal outcome with the attempt number.
@@ -108,6 +173,7 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       events.append(properties)
       finished.fulfill()
     }
+    let fallbackBaseline = try memoriesCacheFallbackSnapshots().count
 
     await viewModel.reconcileCacheIfNeeded()
     await fulfillment(of: [finished], timeout: 5)
@@ -126,6 +192,14 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     // Latched: a third reconcile must not pull again.
     await viewModel.reconcileCacheIfNeeded()
     XCTAssertEqual(fetches, 2, "a successful reconcile latches for the rest of the launch")
+
+    // The truncated first pull degraded the reconcile onto its in-launch
+    // retry, and the standard resilience telemetry must show that fail-open
+    // step beside the structured event.
+    let fallbacks = Array(try memoriesCacheFallbackSnapshots().dropFirst(fallbackBaseline))
+    XCTAssertEqual(fallbacks.count, 1)
+    assertMemoriesCacheFallback(
+      fallbacks[0], to: "in-launch-retry", outcome: "degraded", attempt: 2)
   }
 
   /// Truncated on every attempt (initial pull + 3 retries at 30/60/120s): no
@@ -148,6 +222,7 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       events.append(properties)
       exhausted.fulfill()
     }
+    let fallbackBaseline = try memoriesCacheFallbackSnapshots().count
 
     await viewModel.reconcileCacheIfNeeded()
     await fulfillment(of: [exhausted], timeout: 5)
@@ -176,6 +251,19 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     await viewModel.reconcileCacheIfNeeded()
     await fulfillment(of: [completed], timeout: 5)
     XCTAssertEqual(fetches, 5, "an exhausted run must not latch its user")
+
+    // Each truncated attempt that scheduled a retry degraded the reconcile
+    // (attempts 1–3); the fourth exhausted it to next launch.
+    let fallbacks = Array(try memoriesCacheFallbackSnapshots().dropFirst(fallbackBaseline))
+    XCTAssertEqual(fallbacks.count, 4)
+    assertMemoriesCacheFallback(
+      fallbacks[0], to: "in-launch-retry", outcome: "degraded", attempt: 2)
+    assertMemoriesCacheFallback(
+      fallbacks[1], to: "in-launch-retry", outcome: "degraded", attempt: 3)
+    assertMemoriesCacheFallback(
+      fallbacks[2], to: "in-launch-retry", outcome: "degraded", attempt: 4)
+    assertMemoriesCacheFallback(
+      fallbacks[3], to: "next-launch", outcome: "exhausted", attempt: 4)
   }
 
   /// A complete pull that returned nothing is an authoritative empty account
@@ -196,6 +284,7 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       events.append(properties)
       finished.fulfill()
     }
+    let fallbackBaseline = try memoriesCacheFallbackSnapshots().count
 
     await viewModel.reconcileCacheIfNeeded()
     await fulfillment(of: [finished], timeout: 5)
@@ -209,6 +298,12 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     XCTAssertEqual(events[0]["pruned"] as? Int, 2)
     XCTAssertEqual(events[0]["attempts"] as? Int, 1)
     XCTAssertEqual(events[0]["truncated"] as? Bool, false)
+
+    // A complete pull never degraded anything: no fallback telemetry.
+    let fallbacksAfterComplete = try memoriesCacheFallbackSnapshots()
+    XCTAssertEqual(
+      fallbacksAfterComplete.count - fallbackBaseline, 0,
+      "fallback telemetry belongs to the truncated path only")
   }
 
   /// An owner switch between attempts must abort the run without pruning: the
@@ -234,6 +329,7 @@ final class MemoriesReconcileRetryTests: XCTestCase {
       events.append(properties)
       aborted.fulfill()
     }
+    let fallbackBaseline = try memoriesCacheFallbackSnapshots().count
 
     await viewModel.reconcileCacheIfNeeded()
     await fulfillment(of: [aborted], timeout: 5)
@@ -263,5 +359,127 @@ final class MemoriesReconcileRetryTests: XCTestCase {
     await viewModel.reconcileCacheIfNeeded()
     await fulfillment(of: [completed], timeout: 5)
     XCTAssertEqual(fetches, 2, "the aborted run must not latch its user")
+
+    // The aborted run scheduled one retry before the switch (degraded), and
+    // the owner abort itself is not a further fallback step.
+    let fallbacks = Array(try memoriesCacheFallbackSnapshots().dropFirst(fallbackBaseline))
+    XCTAssertEqual(fallbacks.count, 1)
+    assertMemoriesCacheFallback(
+      fallbacks[0], to: "in-launch-retry", outcome: "degraded", attempt: 2)
+  }
+
+  /// The race the run token fences: owner A's retry pull is still awaiting
+  /// when an account switch resets the scheduler (the owner-change path's
+  /// `end()`) and owner B is admitted. B's run truncates and schedules its own
+  /// pending retry; A's pull then resumes and reports the owner-fence abort
+  /// for its superseded run. That late report must be ignored — B's pending
+  /// retry is not cancelled, B's attempt counter is not reset, and A's dead
+  /// run emits no terminal telemetry — and B's run must still exercise its
+  /// full retry budget instead of being treated as exhausted.
+  func testSupersededRunLateAbortDoesNotCancelLiveRunRetryOrCounter() async throws {
+    guard let ownerA = testUserId else {
+      XCTFail("setUp did not produce a signed-in user")
+      return
+    }
+    let ownerB = "memories-reconcile-race-owner-b-\(UUID().uuidString)"
+
+    // Holds A's retry pull mid-fetch until the test resumes it, reproducing
+    // "owner A's page fetch is still awaiting" across the switch.
+    var aFetchGate: CheckedContinuation<APIClient.MemoryListPage, Never>?
+    // Holds B's first backoff open until the mid-race assertions are done, so
+    // B's pending retry is still pending when A's late abort lands.
+    let bSleepGate = AsyncGate()
+    let aMemory = makeMemory(id: "race-a-row", tier: .longTerm)
+    let bMemory = makeMemory(id: "race-b-row", tier: .longTerm)
+
+    let viewModel = MemoriesViewModel(reconcileRetrySleeper: { _ in
+      // A's backoff passes — A's retry must fire to reach the suspended pull —
+      // while B's backoff parks on the gate.
+      let user = UserDefaults.standard.string(forKey: .authUserId)
+      if user == ownerB { await bSleepGate.wait() }
+    })
+    var aFetches = 0
+    var bFetches = 0
+    let aRetryPullEntered = expectation(description: "owner A's retry pull is mid-fetch")
+    viewModel.reconcilePageFetch = { [self] _, _, _ in
+      let user = UserDefaults.standard.string(forKey: .authUserId) ?? "unknown"
+      if user == ownerB {
+        bFetches += 1
+        return page([bMemory], truncated: true)
+      }
+      aFetches += 1
+      if aFetches == 1 { return page([aMemory], truncated: true) }
+      aRetryPullEntered.fulfill()
+      _ = await withCheckedContinuation { continuation in aFetchGate = continuation }
+      return page([aMemory])
+    }
+    var events: [[String: Any]] = []
+    let terminal = expectation(description: "a reconcile run reached a terminal outcome")
+    MemoryCacheReconcileTelemetry.captureForTests = { _, properties in
+      events.append(properties)
+      terminal.fulfill()
+    }
+    let fallbackBaseline = try memoriesCacheFallbackSnapshots().count
+
+    // A's first pull truncates and schedules its 30s retry.
+    await viewModel.reconcileCacheIfNeeded()
+    XCTAssertEqual(viewModel.reconcileRetry.runKey, ownerA)
+    XCTAssertEqual(viewModel.reconcileRetry.attempt, 1)
+    XCTAssertTrue(viewModel.reconcileRetry.hasPendingRetry)
+
+    // A's retry fires and suspends mid-pull — the fetch that will still be
+    // awaiting when the account switches.
+    await fulfillment(of: [aRetryPullEntered], timeout: 5)
+    XCTAssertEqual(viewModel.reconcileRetry.attempt, 2)
+    XCTAssertFalse(viewModel.reconcileRetry.hasPendingRetry)
+
+    // The account switch: the owner-change path resets the scheduler, B signs
+    // in, and B's own reconcile is admitted, truncates, and schedules its
+    // pending retry (parked on the gate above).
+    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: ownerB)
+    RewindStorageTestIsolation.signInForTests(userId: ownerB)
+    viewModel.resetSessionState()
+    await viewModel.reconcileCacheIfNeeded()
+    XCTAssertEqual(viewModel.reconcileRetry.runKey, ownerB)
+    XCTAssertEqual(viewModel.reconcileRetry.attempt, 1)
+    XCTAssertTrue(viewModel.reconcileRetry.hasPendingRetry, "B's run owns the next retry slot")
+
+    // A's suspended pull resumes under owner B: its mid-pull owner fence trips
+    // and reports the abort for A's superseded run. Let the late report land.
+    aFetchGate?.resume(returning: page([aMemory]))
+    for _ in 0..<20 { await Task.yield() }
+
+    XCTAssertTrue(
+      viewModel.reconcileRetry.hasPendingRetry,
+      "a superseded run's late abort must not cancel the live run's pending retry")
+    XCTAssertEqual(
+      viewModel.reconcileRetry.attempt, 1,
+      "a superseded run's late abort must not reset the live run's attempt counter")
+    XCTAssertEqual(viewModel.reconcileRetry.runKey, ownerB)
+    XCTAssertTrue(events.isEmpty, "a superseded run must not emit terminal run telemetry")
+
+    // Released, B's run spends its full retry budget and exhausts unlatched.
+    bSleepGate.open()
+    await fulfillment(of: [terminal], timeout: 5)
+
+    XCTAssertEqual(aFetches, 2, "A's truncated pull plus its suspended retry pull")
+    XCTAssertEqual(bFetches, 4, "B's initial pull plus three bounded retries")
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events[0]["outcome"] as? String, "truncated_exhausted")
+    XCTAssertEqual(events[0]["attempts"] as? Int, 4)
+
+    let fallbacks = Array(try memoriesCacheFallbackSnapshots().dropFirst(fallbackBaseline))
+    XCTAssertEqual(fallbacks.count, 5, "A degraded once; B degraded three times then exhausted")
+    assertMemoriesCacheFallback(
+      fallbacks[0], to: "in-launch-retry", outcome: "degraded", attempt: 2)
+    assertMemoriesCacheFallback(
+      fallbacks[1], to: "in-launch-retry", outcome: "degraded", attempt: 2)
+    assertMemoriesCacheFallback(
+      fallbacks[2], to: "in-launch-retry", outcome: "degraded", attempt: 3)
+    assertMemoriesCacheFallback(
+      fallbacks[3], to: "in-launch-retry", outcome: "degraded", attempt: 4)
+    assertMemoriesCacheFallback(
+      fallbacks[4], to: "next-launch", outcome: "exhausted", attempt: 4)
   }
 }

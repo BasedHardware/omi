@@ -44,6 +44,17 @@ enum MemoryCacheReconcileTelemetry {
   }
 }
 
+/// Identity of one reconcile run: the owner key plus a generation that
+/// advances every time the scheduler is reset or a different owner starts a
+/// run. An attempt captures the token at admission and every terminal report
+/// carries it back, so a report from a superseded run — an owner switch reset
+/// the scheduler mid-fetch and a new run was admitted — is ignored instead of
+/// ending or replacing the live run.
+struct MemoryReconcileRunToken: Equatable, Sendable {
+  let key: String
+  let generation: Int
+}
+
 /// Runs the bounded in-launch retry for a truncated cache reconcile, one run
 /// at a time. Shaped like `MemoryDeleteRetryScheduler`: a small keyed
 /// scheduler with an injected sleeper so tests drive the backoff
@@ -76,6 +87,9 @@ final class MemoryReconcileRetryScheduler {
   /// it before re-entering, so a run can never pull or prune for an owner it
   /// was not started by — even when the switch happens during the backoff.
   private(set) var runAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  /// Advances on every `end()`, so a token captured under an earlier
+  /// generation never matches the live run even when the same user starts it.
+  private(set) var generation = 0
 
   init(sleeper: Sleeper? = nil) {
     self.sleeper = sleeper ?? MemoryReconcileRetryScheduler.taskSleeper
@@ -84,21 +98,29 @@ final class MemoryReconcileRetryScheduler {
   /// Whether a delayed retry is currently waiting out its backoff.
   var hasPendingRetry: Bool { pendingTask != nil }
 
-  /// Admit one reconcile attempt for `key`. False while another attempt is in
+  /// Admit one reconcile attempt for `key`; the returned token names the run
+  /// every terminal report must carry back. Nil while another attempt is in
   /// flight or a delayed retry is pending: the reconcile is single-flighted so
   /// concurrent loads cannot double-pull, and a pending retry owns the next
   /// slot instead of being bypassed by an immediate re-pull.
   func beginAttempt(
     key: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
-  ) -> Bool {
-    guard !inFlight, pendingTask == nil else { return false }
+  ) -> MemoryReconcileRunToken? {
+    guard !inFlight, pendingTask == nil else { return nil }
     if runKey != key { end() }
     runKey = key
     runAuthorizationSnapshot = authorizationSnapshot
     attempt += 1
     inFlight = true
-    return true
+    return MemoryReconcileRunToken(key: key, generation: generation)
+  }
+
+  /// True while `token` still names the live run — same owner key, and no
+  /// `end()` since the token was issued. Terminal reports from any other run
+  /// are dropped on this check.
+  func isCurrentRun(_ token: MemoryReconcileRunToken) -> Bool {
+    runKey == token.key && generation == token.generation
   }
 
   /// A truncated pull ended the current attempt. Schedules the next bounded
@@ -110,27 +132,32 @@ final class MemoryReconcileRetryScheduler {
     key: String,
     retry: @escaping @MainActor () async -> Void
   ) -> Bool {
-    inFlight = false
     guard runKey == key, attempt <= Self.retryDelays.count else { return false }
+    inFlight = false
     let delay = Self.retryDelays[attempt - 1]
     log(
       "MemoriesViewModel: Cache reconcile truncated; retrying in \(Int(delay))s (attempt \(attempt + 1) of \(Self.retryDelays.count + 1))"
     )
+    let run = MemoryReconcileRunToken(key: key, generation: generation)
     pendingTask?.cancel()
     pendingTask = Task { [weak self] in
       guard let self else { return }
       do {
         try await self.sleeper(delay)
       } catch {
-        self.end()
+        if self.isCurrentRun(run) { self.end() }
         return
       }
       // A cancellation that landed during the sleep (run ended, owner switch)
       // must never reach the retry.
       guard !Task.isCancelled else {
-        self.end()
+        if self.isCurrentRun(run) { self.end() }
         return
       }
+      // The run this task was scheduled for may have been superseded while the
+      // sleep was in flight (owner switch → end() → a new owner admitted); a
+      // stale task must not clear the live run's pending retry.
+      guard self.isCurrentRun(run) else { return }
       self.pendingTask = nil
       await retry()
     }
@@ -146,6 +173,7 @@ final class MemoryReconcileRetryScheduler {
     attempt = 0
     runKey = nil
     runAuthorizationSnapshot = nil
+    generation += 1
   }
 
   static let taskSleeper: Sleeper = { delay in
@@ -158,9 +186,11 @@ final class MemoryReconcileRetryScheduler {
 extension MemoriesViewModel {
 
   /// Admission for one reconcile attempt; call at the top of
-  /// `reconcileCacheIfNeeded()` after the launch-latch guard. False while
-  /// another attempt is in flight or a bounded retry is pending.
-  func beginReconcileAttempt(userId: String) -> Bool {
+  /// `reconcileCacheIfNeeded()` after the launch-latch guard. Nil while
+  /// another attempt is in flight or a bounded retry is pending. The returned
+  /// token names the run and must ride with every terminal report of this
+  /// attempt, so a superseded run cannot end or replace the live one.
+  func beginReconcileAttempt(userId: String) -> MemoryReconcileRunToken? {
     reconcileRetry.beginAttempt(
       key: userId,
       authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot())
@@ -170,48 +200,74 @@ extension MemoriesViewModel {
   /// schedule the next bounded in-launch retry, or — when the run's attempts
   /// are exhausted — finish the run unlatched so the next launch retries,
   /// exactly as a truncated reconcile used to.
-  func reconcileAttemptTruncated(userId: String) {
-    let scheduled = reconcileRetry.scheduleTruncatedRetry(key: userId) { [weak self] in
+  func reconcileAttemptTruncated(run: MemoryReconcileRunToken) {
+    // A superseded run's truncated report must neither schedule into the live
+    // run's scheduler nor finish the live run.
+    guard reconcileRetry.isCurrentRun(run) else { return }
+    let scheduled = reconcileRetry.scheduleTruncatedRetry(key: run.key) { [weak self] in
       guard let self else { return }
       // Fencing before every re-entry: the run belongs to the owner that
       // started it, so a switch during the backoff aborts without pulling or
       // pruning. The new owner's own reconcile runs clean.
+      guard self.reconcileRetry.isCurrentRun(run) else { return }
       if let snapshot = self.reconcileRetry.runAuthorizationSnapshot,
         RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
       {
         await self.reconcileCacheIfNeeded()
       } else {
         log("MemoriesViewModel: Cache reconcile retry aborted because the signed-in owner changed")
-        self.finishReconcileRun(truncated: false, pruned: 0, outcome: .abortedOwnerChanged)
+        self.finishReconcileRun(run: run, truncated: false, pruned: 0, outcome: .abortedOwnerChanged)
       }
     }
-    if !scheduled {
-      finishReconcileRun(truncated: true, pruned: 0, outcome: .truncatedExhausted)
+    if scheduled {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "memories-cache",
+        from: "server-page",
+        to: "in-launch-retry",
+        reason: "list_truncated",
+        outcome: .degraded,
+        extra: ["attempt": reconcileRetry.attempt + 1])
+    } else {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "memories-cache",
+        from: "server-page",
+        to: "next-launch",
+        reason: "list_truncated",
+        outcome: .exhausted,
+        extra: ["attempt": max(reconcileRetry.attempt, 1)])
+      finishReconcileRun(run: run, truncated: true, pruned: 0, outcome: .truncatedExhausted)
     }
   }
 
   /// An owner fence tripped mid-run: end it without pruning and without
-  /// latching; the new owner's own reconcile must run clean.
-  func reconcileRunAbortedByOwnerChange() {
-    finishReconcileRun(truncated: false, pruned: 0, outcome: .abortedOwnerChanged)
+  /// latching; the new owner's own reconcile must run clean. Ignored when the
+  /// report comes from a run an owner switch already superseded.
+  func reconcileRunAbortedByOwnerChange(run: MemoryReconcileRunToken) {
+    finishReconcileRun(run: run, truncated: false, pruned: 0, outcome: .abortedOwnerChanged)
   }
 
   /// The reconcile threw: no in-launch retry (the policy covers truncation,
   /// not transport errors); unlatched, retried on the next launch as before.
-  func reconcileRunFailed() {
-    finishReconcileRun(truncated: false, pruned: 0, outcome: .failed)
+  func reconcileRunFailed(run: MemoryReconcileRunToken) {
+    finishReconcileRun(run: run, truncated: false, pruned: 0, outcome: .failed)
   }
 
   /// Complete pull, prune done, latch set: the terminal success.
-  func reconcileRunCompleted(pruned: Int) {
-    finishReconcileRun(truncated: false, pruned: pruned, outcome: .complete)
+  func reconcileRunCompleted(run: MemoryReconcileRunToken, pruned: Int) {
+    finishReconcileRun(run: run, truncated: false, pruned: pruned, outcome: .complete)
   }
 
   private func finishReconcileRun(
+    run: MemoryReconcileRunToken,
     truncated: Bool,
     pruned: Int,
     outcome: MemoryReconcileRunOutcome
   ) {
+    // Terminal-report fence: an account switch can reset the scheduler while a
+    // superseded run's page fetch is still awaiting, and the live run admitted
+    // after the switch must survive that late report — no end(), no telemetry,
+    // no reset of its attempt counter.
+    guard reconcileRetry.isCurrentRun(run) else { return }
     let attempts = max(reconcileRetry.attempt, 1)
     reconcileRetry.end()
     MemoryCacheReconcileTelemetry.runFinished(
