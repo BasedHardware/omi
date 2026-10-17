@@ -3277,7 +3277,7 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '6', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
@@ -3652,7 +3652,7 @@ environments:
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '6', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}

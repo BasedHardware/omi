@@ -592,7 +592,7 @@ overlay:
           DREAM_AGENT_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '48'
+            value: '6'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -920,7 +920,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '48'
+            value: '6'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
