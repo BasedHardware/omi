@@ -342,3 +342,33 @@ async def test_ladder_live_estimate_debits_locally_and_bounds_rescans(monkeypatc
     assert state.reason == 'usage_budget_exhausted'
     await state.refresh(force=True)  # Subscription invalidation bypasses cadence.
     assert resolver.call_count == 3
+
+
+async def test_ladder_only_legacy_profile_keeps_long_read_cadence_and_invalidates(monkeypatch):
+    from utils.transcription_allowance import TranscriptionAllowance
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    now = [0]
+    monkeypatch.setattr(cap.time, 'monotonic', lambda: now[0])
+    resolver = Mock(return_value=TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled'))
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+
+    async def run(executor, fn, *args):
+        return fn(*args)
+
+    monkeypatch.setattr(cap, 'run_blocking', run)
+    state = cap.LiveAdmission('synthetic')
+    await state.refresh()
+    for second in (60, 120, 899):
+        now[0] = second
+        await state.refresh(force=False)
+    assert resolver.call_count == 1
+    now[0] = 900
+    await state.refresh(force=False)
+    assert resolver.call_count == 2
+    resolver.return_value = TranscriptionAllowance(
+        'managed', None, 'usage_budget_available', remaining_units=10000, budget_units=10000
+    )
+    await state.refresh(force=True)
+    assert resolver.call_count == 3
+    assert state.remaining_units == 10000

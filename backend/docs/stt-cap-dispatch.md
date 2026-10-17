@@ -28,6 +28,10 @@ including self-hosted Deepgram and an Omi-funded fallback from BYOK, uses the
 ordinary allowance with both BYOK quota and desktop-paywall exemptions disabled.
 No key or identity is a metric label.
 
+Known non-ladder accounts keep their monthly credit state and 900-second
+membership refresh when only ladder enforcement is enabled; subscription
+invalidation still refreshes immediately.
+
 Sync v1 intake and v2 execution hold decoded WAVs before VAD when denied. V2
 applies ordinary source-frame and safety-WAL coverage first, so already committed
 audio is not enrolled as new recoverable work. Source maps, recording identity
@@ -184,7 +188,7 @@ activation decision for David; default-off deployment preserves today's policy.
 
 `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` independently installs the live provider
 suppression and sync hold/recovery paths. Ladder allowance comes from units;
-legacy accounts bypass dispatch when only the ladder switch is enabled. Both
+legacy accounts bypass provider dispatch when only the ladder switch is enabled. Both
 switches default off. Upload intake never raises the ladder budget 402: v1 holds
 the decoded capture before VAD; v2 archives/queues it and holds in the coordinator.
 Reset or upgrade recovery rechecks the current ladder budget before dispatch.

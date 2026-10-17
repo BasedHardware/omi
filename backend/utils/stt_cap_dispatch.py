@@ -89,8 +89,13 @@ class LiveAdmission:
         self.refreshed_at = None
 
     def refresh_due(self):
-        if self.refreshed_at is None or self.remaining_units is None:
-            return True  # Preserve main's per-flush legacy admission refresh.
+        if self.refreshed_at is None:
+            return True
+        if self.remaining_units is None:
+            # A known non-ladder account needs only a long membership refresh
+            # when legacy dispatch is off. Invalidation still forces a read.
+            # Enabled legacy dispatch retains main's per-flush refresh.
+            return self.reason != 'legacy_dispatch_disabled' or time.monotonic() - self.refreshed_at >= 900
         near = self.remaining_units <= 120 * _units_per_second() or (
             self.budget_units is not None and self.remaining_units <= self.budget_units * 0.1
         )

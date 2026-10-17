@@ -236,3 +236,41 @@ async def test_ladder_refresh_reuses_funded_admission_snapshot(monkeypatch, plan
         assert type(event.remaining_seconds) is int
     else:
         runtime.asend_event.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('remaining', [0, 100, None])
+async def test_ladder_only_admission_preserves_legacy_monthly_credit_state(monkeypatch, remaining):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setattr(listen_runtime.ladder_policy, 'entitlements', lambda _: None)
+    monkeypatch.setattr(listen_runtime.time, 'time', lambda: 101)
+    monkeypatch.setattr(listen_runtime, 'send_credit_limit_notification', AsyncMock())
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='legacy', source='desktop')
+    runtime.limits = ListenLimits(credits_refresh_seconds=900)
+    runtime.state = ListenSessionState(
+        remaining_seconds_cache=remaining, remaining_seconds_cache_ts=100, remaining_seconds_cache_initialized=True
+    )
+    runtime.stt_service = 'modulate'
+    runtime.asend_event = AsyncMock()
+    admission = SimpleNamespace(
+        refresh=AsyncMock(), reason='legacy_dispatch_disabled', remaining=None, managed=True, omi_selected=True
+    )
+    runtime.receiver = SimpleNamespace(cap_admission=admission, cap_paused=False)
+
+    async def call(function, *args, **kwargs):
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.plus)
+        raise AssertionError('unexpected legacy or ladder read')
+
+    runtime.persistence = SimpleNamespace(call=call)
+    await runtime._refresh_credits()
+    assert runtime.state.remaining_seconds_cache == remaining
+    assert runtime.user_has_credits is (remaining is None or remaining > 0)
+    assert admission.remaining is None  # Legacy dispatch remains disabled, without bypassing its credit meter.
