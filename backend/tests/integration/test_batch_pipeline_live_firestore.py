@@ -213,7 +213,9 @@ async def test_enabled_wal_routing_fences_existing_dispatcher_against_native_twi
 ):
     from utils.batch_pipeline import live_upload, live as admission
 
-    native(lane, status='processing')
+    # Enabled in-progress captures deliberately hold WALs for native reservation.
+    # A finalized unowned row can instead freeze its existing upload dispatcher.
+    native(lane)
     reference = lane.user.collection('conversations').document('live-record')
     reference.update({'record_lane_owner': None, 'language': 'en'})
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', str(batch_enabled).lower())
