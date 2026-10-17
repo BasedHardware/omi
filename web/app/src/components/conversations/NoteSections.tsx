@@ -31,11 +31,12 @@ function NoteMarkdown({ body, quiet }: { body: string; quiet?: boolean }) {
 
 interface NoteSectionsProps {
   sections: NoteSectionInput[];
+  transcriptIDs?: string[];
 }
 
-export function NoteSections({ sections }: NoteSectionsProps) {
+export function NoteSections({ sections, transcriptIDs = [] }: NoteSectionsProps) {
   const presentable = sections.map((section) => {
-    const valid = section.source_segment_ids ?? [];
+    const valid = [...transcriptIDs, ...(section.source_segment_ids ?? [])];
     return {
       ...section,
       heading: repairNoteCitations(section.heading ?? '', valid).text,

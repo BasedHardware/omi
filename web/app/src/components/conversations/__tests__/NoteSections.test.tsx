@@ -83,4 +83,14 @@ describe('NoteSections', () => {
     );
     expect(section.heading).toBe('Decision [] [s01234]');
   });
+  it('uses transcript identities to repair legacy headers even without typed section provenance', () => {
+    render(
+      <NoteSections
+        sections={[{ heading: 'Decision', body_markdown: 'Approved. [s01234 0]' }]}
+        transcriptIDs={['s01234']}
+      />,
+    );
+    expect(screen.getByText('Approved.')).toBeInTheDocument();
+    expect(screen.queryByText(/s01234/)).toBeNull();
+  });
 });

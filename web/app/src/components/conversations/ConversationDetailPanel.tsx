@@ -140,6 +140,7 @@ function OverviewMarkdown({ overview }: { overview: string }) {
  */
 interface SummaryTabProps {
   overview: string;
+  transcriptSegments?: TranscriptSegment[];
   sections?: SummarySection[] | null;
   insights?: NoteInsight[] | null;
   actionItems?: StructuredActionItem[];
@@ -153,6 +154,7 @@ interface SummaryTabProps {
 
 export function SummaryTab({
   overview,
+  transcriptSegments = [],
   sections,
   insights,
   actionItems,
@@ -230,7 +232,12 @@ export function SummaryTab({
                 )}
                 {isStructuredNote && <NoteInsights insights={insights} />}
                 {isStructuredNote && sections ? (
-                  <NoteSections sections={sections} />
+                  <NoteSections
+                    sections={sections}
+                    transcriptIDs={transcriptSegments.flatMap((segment) =>
+                      segment.id ? [segment.id] : [],
+                    )}
+                  />
                 ) : (
                   <OverviewMarkdown overview={summary.content} />
                 )}
@@ -293,7 +300,12 @@ export function SummaryTab({
           )}
           {isStructuredNote && <NoteInsights insights={insights} />}
           {isStructuredNote && sections ? (
-            <NoteSections sections={sections} />
+            <NoteSections
+              sections={sections}
+              transcriptIDs={transcriptSegments.flatMap((segment) =>
+                segment.id ? [segment.id] : [],
+              )}
+            />
           ) : (
             <OverviewMarkdown overview={summary.content} />
           )}
@@ -973,6 +985,7 @@ export function ConversationDetailPanel({
               <>
                 <SummaryTab
                   overview={structured.overview || ''}
+                  transcriptSegments={conversation.transcript_segments ?? []}
                   sections={structured.sections}
                   insights={structured.insights}
                   actionItems={actionItems}
