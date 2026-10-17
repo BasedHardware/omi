@@ -606,3 +606,83 @@ def test_demand_and_revision_reuse_keep_their_existing_ceilings(
     assert rows[key]['due_at'] == expected_due
     assert rows[key]['effects_only'] is False
     assert len(tasks) == 1
+
+
+def test_first_summary_continuous_appends_cannot_extend_dispatch(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    for now in range(0, 120, 5):
+        reprocess.mark('u', 'c', 'en', now=now)
+    row = rows[reprocess.key('u', 'c')]
+    assert row['first_pending_at'] == 0 and row['due_at'] == 120
+    output = SimpleNamespace(discarded=False, structured={'overview': 'A real summary'})
+    assert reprocess.run(reprocess.key('u', 'c'), tasks[0]['task_token'], lambda *_: output, now=120) == 'processed'
+    assert rows[reprocess.key('u', 'c')]['summary_seen']
+    reprocess.mark('u', 'c', 'en', now=121)
+    assert rows[reprocess.key('u', 'c')]['due_at'] == 721
+    assert rows[reprocess.key('u', 'c')]['first_pending_at'] == 121
+
+
+def test_enabling_deadline_wakes_preexisting_later_task(state, monkeypatch):
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    original = tasks[0]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    reprocess.mark('u', 'c', 'en', now=100)
+    assert len(tasks) == 2 and tasks[-1]['due_at'] == 120
+    assert reprocess.run(reprocess.key('u', 'c'), original, Mock(), now=600) == 'stale'
+
+
+def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryOutputUnavailable
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    with pytest.raises(SummaryOutputUnavailable):
+        reprocess.run(key, token, lambda *_: SimpleNamespace(discarded=False, structured={}), now=120)
+    assert reprocess.run(key, token, Mock(), now=121) == 'busy'
+    reprocess.mark('u', 'c', 'en', now=150)
+    assert rows[key]['due_at'] == 120 and rows[key]['first_pending_at'] == 0
+    output = SimpleNamespace(discarded=False, structured={'overview': 'Recovered'})
+    assert reprocess.run(key, token, lambda *_: output, now=120 + reprocess.LEASE_SECONDS) == 'processed'
+    assert reprocess.run(key, token, Mock(), now=2000) == 'stale'
+
+
+def test_first_summary_bypasses_demand_tier_wait_without_extra_reads(state, monkeypatch):
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    schedule = Mock(side_effect=AssertionError('first summary cannot wait behind demand tiers'))
+    monkeypatch.setattr(demand, 'schedule', schedule)
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(tasks[0])
+    schedule.assert_not_called()
+    assert enqueue.call_args.kwargs['schedule_at'] == 120
+
+
+def test_short_first_summary_lease_and_rolled_back_later_revision(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+
+    def death(*_):
+        assert rows[key]['lease_until'] == 240
+        raise RuntimeError('worker terminated')
+
+    with pytest.raises(RuntimeError):
+        reprocess.run(key, tasks[0]['task_token'], death, now=120)
+    assert reprocess.run(key, tasks[0]['task_token'], Mock(), now=239) == 'busy'
+    result = SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+    reprocess.run(key, tasks[0]['task_token'], lambda *_: result, now=240)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    reprocess.mark('u', 'c', 'en', now=241)
+    assert tasks[-1]['due_at'] == 841
+    assert reprocess.run(key, tasks[-1]['task_token'], Mock(), now=841) == 'processed'
+    assert not rows

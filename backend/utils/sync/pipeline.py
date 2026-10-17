@@ -1051,6 +1051,10 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
+    from utils.conversations.summary_delivery import repair_fenced, REPAIR_CONTEXT
+
+    if repair_fenced(conversation_data):
+        raise SyncConversationPersistenceFenced('summary repair ownership changed')
     if conversation_data.get('sync_live_target') and conversation_data.get('status') == 'in_progress':
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
@@ -1079,6 +1083,11 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
             return
 
+    from database.summary_processing import claim_from_snapshot
+
+    if not claim_from_snapshot(conversations_db.db, uid, conversation_id, conversation_data):
+        raise SyncConversationPersistenceFenced('summary processing snapshot changed')
+
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
     if language == _LINEAGE_RETRY_LANGUAGE:
@@ -1101,7 +1110,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
-        user_kept=is_user_curated(conversation_data),
+        user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
         persistence_observer=_require_current_conversation_persistence,
         # Deserialize drops relevance_decision. The raw row still has it:
         # sync_update means a previous enrichment, sync_intake or absence does not.
@@ -1128,6 +1137,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
+    return processed_conversation
 
 
 def _speaker_identity_dependencies() -> SpeakerIdentityDependencies:

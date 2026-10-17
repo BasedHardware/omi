@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 COLLECTION = 'sync_reprocess_outbox'
 LEASE_SECONDS = 1800  # Greater than the Cloud Tasks dispatch deadline.
+FIRST_SUMMARY_LEASE_SECONDS = 120
 REPAIR_SECONDS = 1800
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
@@ -162,7 +163,10 @@ def _enqueue(row: dict[str, Any]) -> None:
     document_id = row.get('document_id') or key(row['uid'], row['conversation_id'])
     payload = {'kind': 'sync_reprocess', 'key': document_id, 'task_token': row['task_token']}
     name = f"sr-{document_id}-{row['task_token']}"
-    if schedule(
+    from config.summary_guarantee import enabled as summary_enabled
+
+    first_summary = summary_enabled(row['uid']) and not row.get('effects_only') and not row.get('summary_seen')
+    if not first_summary and schedule(
         row['uid'],
         document_id,
         payload,
@@ -214,8 +218,20 @@ def mark(
             conversation_id=conversation_id,
             language=language,
             version=row.get('version', 0) + 1,
-            due_at=max(row.get('due_at', 0), current + settle_seconds()),
+            due_at=max(row.get('due_at') or 0, current + settle_seconds()),
         )
+        # Timestamp every durable obligation, even before rollout. Neither an
+        # append nor a retry owns the original acceptance time.
+        row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
+        row['dormant'] = False
+        row['summary_repair'] = False
+        from config.summary_guarantee import enabled as summary_enabled, deadline_seconds
+
+        if summary_enabled(uid) and not effects_only and not row.get('summary_seen'):
+            row['summary_deadline_at'] = min(
+                row.get('summary_deadline_at', float('inf')), row['first_pending_at'] + deadline_seconds()
+            )
+            row['due_at'] = min(row['due_at'], row['summary_deadline_at'])
         from config.demand_processing import enabled
 
         demand_enabled = enabled(uid)
@@ -226,21 +242,31 @@ def mark(
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
         row.update(effects_only=effects_only)
+        from utils.conversations.summary_delivery import lane
+
+        row.setdefault('summary_lane', 'batch' if mutate is not None else lane({}))
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex, task_due_at=row['due_at'], lease_until=0, dispatch=_dispatch_binding()
             )
+        elif old.get('dormant'):
+            row['dispatch'] = _dispatch_binding()
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
+        wake = old is None
+        if old is not None and (old.get('dormant') or (row.get('task_due_at') or 0) > row['due_at']):
+            row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
+            wake = True
+        row['_wake'] = wake
         return row, (row, old is not None)
 
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
     if coalesced:
         COALESCED.inc()
-    elif valid_dispatch_binding(row.get('dispatch')):
+    if row.get('_wake', not coalesced) and valid_dispatch_binding(row.get('dispatch')):
         _enqueue(row)  # Failure leaves the obligation durable for the sweep.
-    else:
+    elif not valid_dispatch_binding(row.get('dispatch')):
         UNBOUND.labels(action='mark').inc()
 
 
@@ -254,7 +280,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     owner = uuid.uuid4().hex
 
     def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
-        if old is None or old['task_token'] != task_token:
+        if old is None or old.get('dormant') or old['task_token'] != task_token:
             return old, ('stale', None)
         if old.get('lease_until', 0) > current:
             return old, ('busy', None)
@@ -262,7 +288,11 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
-        row.update(lease_until=current + LEASE_SECONDS, owner=owner)
+        from config.summary_guarantee import enabled as summary_enabled
+
+        first_summary = summary_enabled(row['uid']) and not row.get('summary_seen') and not row.get('effects_only')
+        lease_seconds = FIRST_SUMMARY_LEASE_SECONDS if first_summary else LEASE_SECONDS
+        row.update(lease_until=current + lease_seconds, owner=owner)
         return row, ('claimed', row)
 
     status, row = _mutate(document_id, claim)
@@ -274,19 +304,80 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return status
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
+    summary_seen = False
     if row.get('effects_only'):
         from utils.conversations.lazy_enrichment import enrich_settled
 
         enrich_settled(row['uid'], row['conversation_id'], row['language'])
     else:
-        process(row['uid'], row['conversation_id'], row['language'])
+        from config.summary_guarantee import enabled as summary_enabled
+        from utils.conversations.summary_delivery import (
+            REPAIR_CONTEXT,
+            LANE_CONTEXT,
+            ACCEPT_CONTEXT,
+            PROCESS_CONTEXT,
+            lane,
+        )
+
+        lane_token = LANE_CONTEXT.set(
+            row.get('summary_lane')
+            or ('backfill' if (row.get('dispatch') or {}).get('queue') == 'sync-backfill' else lane({}))
+        )
+        process_context = (
+            {'owner': owner, 'lease_until': row['lease_until']}
+            if summary_enabled(row['uid']) and not row.get('summary_seen')
+            else None
+        )
+        process_token = PROCESS_CONTEXT.set(process_context)
+        accept_token = ACCEPT_CONTEXT.set(row.get('first_pending_at'))
+        context_token = REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
+        try:
+            output = process(row['uid'], row['conversation_id'], row['language'])
+        finally:
+            REPAIR_CONTEXT.reset(context_token)
+            LANE_CONTEXT.reset(lane_token)
+            ACCEPT_CONTEXT.reset(accept_token)
+            PROCESS_CONTEXT.reset(process_token)
+        from config.summary_guarantee import enabled as summary_enabled
+        from utils.conversations.summary_delivery import field, present, SummaryOutputUnavailable
+
+        summary_seen = output is not None and (
+            field(output, 'discarded', False) or present(field(output, 'structured'))
+        )
+        blocked = bool(process_context and process_context.get('blocked_reason'))
+        if summary_enabled(row['uid']) and output is not None and not summary_seen and not blocked:
+            raise SummaryOutputUnavailable('first-summary output is empty')
 
     def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
             return old, None
+        from config.summary_guarantee import enabled as summary_enabled
+
         if old['version'] == row['version']:
+            if summary_enabled(row['uid']) and summary_seen:
+                # Retain only scheduling metadata as the first-summary receipt.
+                # Future revisions keep their trailing-edge coalescing policy.
+                settled = dict(old)
+                settled.update(
+                    summary_seen=True,
+                    dormant=True,
+                    due_at=None,
+                    lease_until=0,
+                    uid=None,
+                    conversation_id=None,
+                    language=None,
+                    dispatch=None,
+                    summary_repair=False,
+                    summary_expected_revision=None,
+                )
+                return settled, None
             return None, None
         pending = dict(old)
+        if summary_seen and summary_enabled(row['uid']):
+            pending['summary_seen'] = True
+            pending['summary_repair'] = False
+            pending['summary_expected_revision'] = None
+            pending['due_at'] = max(current, pending['first_pending_at']) + settle_seconds()
         pending.update(
             lease_until=0,
             task_token=uuid.uuid4().hex,
@@ -305,6 +396,12 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
     counts = {'repaired': 0, 'error': 0}
     if not owns_runtime():
         return counts
+    from config.summary_guarantee import repair_enabled
+
+    if repair_enabled():
+        from services.summary_debt_repair import tick
+
+        tick(now=current)
     binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     client = get_firestore_client()
@@ -313,7 +410,7 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
     for snapshot in snapshots:
 
         def repair(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
-            if old is None or old.get('lease_until', 0) > current:
+            if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
             if not valid_effects_binding(row):
@@ -322,7 +419,14 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
                 # Claim and fence the repaired binding in the same CAS. Any old
                 # task delivery becomes stale; valid backfill bindings stay put.
                 row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
-            if row['task_due_at'] + REPAIR_SECONDS <= current:
+            from config.summary_guarantee import enabled as summary_enabled
+
+            repair_seconds = (
+                FIRST_SUMMARY_LEASE_SECONDS
+                if summary_enabled(row['uid']) and not row.get('summary_seen') and not row.get('effects_only')
+                else REPAIR_SECONDS
+            )
+            if row['task_due_at'] + repair_seconds <= current:
                 row.update(task_token=uuid.uuid4().hex, task_due_at=current)
             return row, ('ready', row)
 

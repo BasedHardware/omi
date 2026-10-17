@@ -4517,6 +4517,16 @@
       "fieldPath": "owner_recognition_diagnostics",
       "ttl": false,
       "indexes": []
+    },
+    {
+      "collectionGroup": "conversations",
+      "fieldPath": "summary_due_at",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
     }
   ]
 }

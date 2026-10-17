@@ -330,6 +330,9 @@ def _prepare_conversation_for_write(
     data: Dict[str, Any], uid: str, level: str, *, preserve_transcript_identity: bool = False
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    from utils.conversations.summary_delivery import prepare as prepare_summary
+
+    prepare_summary(data, uid)
     if owner_diagnostics.FIELD in data:
         try:
             value = owner_diagnostics.normalize(data[owner_diagnostics.FIELD])
@@ -940,9 +943,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    summary_receipt = None
 
     @firestore.transactional
     def _write_processing_result(transaction):
+        nonlocal summary_receipt
+        summary_receipt = None
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
@@ -988,13 +994,22 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
             _reapply_current_manual_assignments(uid, write_data, existing)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
+            from utils.conversations.summary_delivery import merge_result
+
+            summary_receipt = merge_result(existing, write_data, uid)
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
         write_data.setdefault('has_photos', False)
+        from utils.conversations.summary_delivery import creation_result
+
+        summary_receipt = creation_result(write_data, uid)
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
+    from utils.conversations.summary_delivery import emit
+
+    emit(summary_receipt)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -1034,10 +1049,12 @@ def persist_processing_result_with_lifecycle(
 
     stale_sync_revision = False
     first_completed = False
+    summary_receipt = None
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed
+        nonlocal stale_sync_revision, first_completed, summary_receipt
+        summary_receipt = None
         stale_sync_revision = False
         first_completed = False
         write_data = copy.deepcopy(conversation_data)
@@ -1052,7 +1069,9 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
-        if existing.get('deleted'):
+        from utils.conversations.summary_delivery import repair_fenced, processing_fenced
+
+        if existing.get('deleted') or repair_fenced(existing) or processing_fenced(existing):
             return False
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
@@ -1159,6 +1178,9 @@ def persist_processing_result_with_lifecycle(
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
+        from utils.conversations.summary_delivery import merge_result
+
+        summary_receipt = merge_result(existing, write_data, uid)
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1169,6 +1191,10 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
+    if persisted:
+        from utils.conversations.summary_delivery import emit
+
+        emit(summary_receipt)
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1203,6 +1229,9 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    from utils.conversations.summary_delivery import creation_result, emit
+
+    summary_receipt = creation_result(conversation_data, uid)
     try:
         conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):
@@ -1210,6 +1239,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
         # lag, backfill gap); the read-back sync converges it either way.
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False
+    emit(summary_receipt)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
     return True

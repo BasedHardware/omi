@@ -1,0 +1,85 @@
+"""The actual lifecycle writer emits only after its transaction commits."""
+
+from unittest.mock import Mock
+
+import pytest
+from google.api_core.exceptions import InvalidArgument
+from database import conversations as db
+from utils.conversations import summary_delivery as delivery
+from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFirestoreClient, EXPIRED_MESSAGE
+
+
+@pytest.fixture
+def writer(monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    old = {
+        'id': 'c',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+        'summary_first_pending_at': 100,
+        'summary_due_at': 220,
+        'summary_title_provenance': 'server_minimum',
+        'sync_content_revision': 3,
+    }
+    client = _FakeFirestoreClient(old)
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda _: None)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *_: None)
+    monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *_: None)
+    return client
+
+
+def payload(overview='Synthetic real summary'):
+    return {
+        'id': 'c',
+        'status': 'completed',
+        'sync_content_revision': 3,
+        'data_protection_level': 'standard',
+        'structured': {'title': 'Title', 'overview': overview},
+    }
+
+
+def test_terminal_receipt_after_fenced_commit_and_expired_transaction_retry(writer, monkeypatch):
+    client = writer
+    client.commit_errors = [InvalidArgument(EXPIRED_MESSAGE)]
+    receipts = []
+
+    def emit(receipt):
+        assert len(client.commits) == 1
+        assert client.commits[0]['summary_completed_at']
+        receipts.append(receipt)
+
+    monkeypatch.setattr(delivery, 'emit', emit)
+    assert db.persist_processing_result_with_lifecycle('u', payload())
+    assert len(client.transactions) == 2 and len(receipts) == 1
+    assert receipts[0]['reason'] == 'summary' and receipts[0]['present']
+
+
+def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    with pytest.raises(delivery.SummaryOutputUnavailable):
+        db.persist_processing_result_with_lifecycle('u', payload(''))
+    assert not writer.commits
+    emit.assert_not_called()
+
+
+def test_stale_generation_and_failed_commit_emit_nothing(writer, monkeypatch):
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    assert not db.persist_processing_result_with_lifecycle('u', {**payload(), 'sync_content_revision': 2})
+    emit.assert_not_called()
+    writer.commit_errors = [RuntimeError('synthetic commit failure')]
+    with pytest.raises(RuntimeError):
+        db.persist_processing_result_with_lifecycle('u', payload())
+    emit.assert_not_called()
+
+
+def test_manual_edit_after_repair_admission_fences_write(writer, monkeypatch):
+    writer.document['user_title'] = 'Manually authored title'
+    token = delivery.REPAIR_CONTEXT.set({'summary_expected_revision': 3})
+    try:
+        assert not db.persist_processing_result_with_lifecycle('u', payload())
+        assert all(value is None for value in writer.commits)
+    finally:
+        delivery.REPAIR_CONTEXT.reset(token)
