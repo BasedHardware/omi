@@ -354,6 +354,8 @@ intent prevents backlog recreation. No automatic tombstone expiry is currently c
     | `finished_at` | datetime | No | When conversation finished (calculated from last segment if not provided) |
     | `language` | string | No | Language code (default: 'en') |
     | `geolocation` | object | No | Geolocation data |
+    | `folder_id` | string | No | ID of one of your folders (from `GET /v1/dev/user/folders`). The conversation is filed there and AI folder assignment is skipped; an unknown ID returns 422 |
+    | `calendar_meeting_context` | object | No | Calendar meeting this conversation belongs to: `calendar_event_id`, `title`, `start_time`, `duration_minutes` (required) and optional `participants` (`name`/`email`), `platform`, `meeting_link`, `notes`. Used as context for the summary and to identify participants |
   </Accordion>
   <Accordion title="Transcript Segment Fields" icon="list">
     | Field | Type | Required | Description |
