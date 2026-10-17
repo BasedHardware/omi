@@ -77,7 +77,9 @@ class ApiKeyCacheReadResult:
 
 def _coerce_utc_datetime(value: object) -> Optional[datetime]:
     try:
-        parsed: Optional[datetime]
+        if hasattr(value, "to_datetime"):
+            value = value.to_datetime()
+
         if isinstance(value, datetime):
             parsed = value
         elif isinstance(value, str):
@@ -91,11 +93,7 @@ def _coerce_utc_datetime(value: object) -> Optional[datetime]:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
-    except (OverflowError, ValueError, OSError, TypeError):
-        return None
-    except AttributeError:
-        if hasattr(value, "to_datetime"):
-            return _coerce_utc_datetime(value.to_datetime())
+    except (OverflowError, ValueError, OSError, TypeError, AttributeError):
         return None
 
 
@@ -125,6 +123,8 @@ def project_api_key_metadata(
         raise ValueError(f"Unsupported API key kind: {key_kind}")
     if not isinstance(document_id, str) or not document_id.strip():
         raise ValueError("Firestore API key document must have an ID")
+    
+    clean_document_id = document_id.strip()
 
     data = raw if isinstance(raw, dict) else {}
     repairs: set[ApiKeyMetadataRepair] = set()
@@ -154,7 +154,7 @@ def project_api_key_metadata(
 
     return ApiKeyMetadataProjection(
         metadata={
-            "id": document_id,
+            "id": clean_document_id,
             "name": name,
             "key_prefix": prefix or _LEGACY_PREFIXES[key_kind],
             "created_at": created_at,
