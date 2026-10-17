@@ -357,7 +357,7 @@ def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_documen
 
 def remove_invalid_token(token: str) -> None:
     """Remove invalid token using collection group query (rare operation)"""
-    if not token or not isinstance(token, str) or not token.strip():
+    if not token or not token.strip():
         return
     query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token.strip())).limit(1)
 
@@ -378,7 +378,7 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
         return
 
     # Deduplicate and sanitize tokens
-    valid_tokens = list(dict.fromkeys(t.strip() for t in tokens if isinstance(t, str) and t.strip()))
+    valid_tokens = list(dict.fromkeys(t.strip() for t in tokens if t and t.strip()))
     if not valid_tokens:
         return
 
