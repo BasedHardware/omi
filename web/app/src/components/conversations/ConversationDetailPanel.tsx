@@ -141,6 +141,7 @@ function OverviewMarkdown({ overview }: { overview: string }) {
 interface SummaryTabProps {
   overview: string;
   transcriptSegments?: TranscriptSegment[];
+  onOpenSource?: (id: string) => void;
   sections?: SummarySection[] | null;
   insights?: NoteInsight[] | null;
   actionItems?: StructuredActionItem[];
@@ -155,6 +156,7 @@ interface SummaryTabProps {
 export function SummaryTab({
   overview,
   transcriptSegments = [],
+  onOpenSource,
   sections,
   insights,
   actionItems,
@@ -234,6 +236,7 @@ export function SummaryTab({
                 {isStructuredNote && sections ? (
                   <NoteSections
                     sections={sections}
+                    onOpenSource={onOpenSource}
                     transcriptIDs={transcriptSegments.flatMap((segment) =>
                       segment.id ? [segment.id] : [],
                     )}
@@ -302,6 +305,7 @@ export function SummaryTab({
           {isStructuredNote && sections ? (
             <NoteSections
               sections={sections}
+              onOpenSource={onOpenSource}
               transcriptIDs={transcriptSegments.flatMap((segment) =>
                 segment.id ? [segment.id] : [],
               )}
@@ -400,6 +404,10 @@ export function ConversationDetailPanel({
   onConversationUpdate,
   onDelete,
 }: ConversationDetailPanelProps) {
+  const [sourceRequest, setSourceRequest] = useState<{
+    id: string;
+    request: number;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('summary');
   const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
   const [showTagSheet, setShowTagSheet] = useState(false);
@@ -984,6 +992,13 @@ export function ConversationDetailPanel({
             {activeTab === 'summary' && summarySelection.kind !== 'empty' && (
               <>
                 <SummaryTab
+                  onOpenSource={(id) => {
+                    setActiveTab('transcript');
+                    setSourceRequest((previous) => ({
+                      id,
+                      request: (previous?.request ?? 0) + 1,
+                    }));
+                  }}
                   overview={structured.overview || ''}
                   transcriptSegments={conversation.transcript_segments ?? []}
                   sections={structured.sections}
@@ -1100,6 +1115,7 @@ export function ConversationDetailPanel({
                     </div>
                   )}
                 <TranscriptView
+                  sourceRequest={sourceRequest}
                   segments={transcript_segments}
                   userName={userName}
                   conversationId={conversationId}

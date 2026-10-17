@@ -1,5 +1,7 @@
 'use client';
 
+import { Quote } from 'lucide-react';
+import { resolvableNoteSources } from '../../../../shared/note-sources.mjs';
 import ReactMarkdown from 'react-markdown';
 import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
 import { cn } from '@/lib/utils';
@@ -32,9 +34,14 @@ function NoteMarkdown({ body, quiet }: { body: string; quiet?: boolean }) {
 interface NoteSectionsProps {
   sections: NoteSectionInput[];
   transcriptIDs?: string[];
+  onOpenSource?: (id: string) => void;
 }
 
-export function NoteSections({ sections, transcriptIDs = [] }: NoteSectionsProps) {
+export function NoteSections({
+  sections,
+  transcriptIDs = [],
+  onOpenSource,
+}: NoteSectionsProps) {
   const presentable = sections.map((section) => {
     const valid = [...transcriptIDs, ...(section.source_segment_ids ?? [])];
     return {
@@ -44,6 +51,27 @@ export function NoteSections({ sections, transcriptIDs = [] }: NoteSectionsProps
     };
   });
   const { mains, sideNotes } = splitNoteSections(presentable);
+
+  const sourceChip = (sourceIDs?: string[] | null) => {
+    const ids = resolvableNoteSources(sourceIDs ?? [], transcriptIDs);
+    if (!ids.length || !onOpenSource) return null;
+    return (
+      <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Transcript sources">
+        {ids.map((id, index) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onOpenSource(id)}
+            aria-label={`View transcript source ${index + 1} of ${ids.length}`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-stroke px-2.5 py-1 text-xs text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary focus-visible:ring-2 focus-visible:ring-white/25"
+          >
+            <Quote aria-hidden="true" className="h-3 w-3" />{' '}
+            {index === 0 ? `Sources (${ids.length})` : index + 1}
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -56,6 +84,7 @@ export function NoteSections({ sections, transcriptIDs = [] }: NoteSectionsProps
               <h2 className="mb-2 text-lg font-semibold text-text-primary">{heading}</h2>
             ) : null}
             {body ? <NoteMarkdown body={body} /> : null}
+            {sourceChip(section.source_segment_ids)}
           </section>
         );
       })}
@@ -70,6 +99,7 @@ export function NoteSections({ sections, transcriptIDs = [] }: NoteSectionsProps
                   {heading}
                 </h2>
                 {body ? <NoteMarkdown body={body} quiet /> : null}
+                {sourceChip(section.source_segment_ids)}
               </div>
             );
           })}

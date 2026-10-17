@@ -116,6 +116,8 @@ test(
       assert.match(html.headers.get('vary'), /accept/i);
       assert.match(html.headers.get('link'), /synthetic-share.md.*rel="alternate"/);
       const document = await html.text();
+      assert.match(document, /View transcript source 1 of 2/);
+      assert.match(document, /View transcript source 2 of 2/);
       for (const fact of [
         'Synthetic planning meeting',
         '1:30 PM UTC',

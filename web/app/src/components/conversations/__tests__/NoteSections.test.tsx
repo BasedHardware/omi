@@ -1,8 +1,44 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { NoteSections } from '../NoteSections';
 
 describe('NoteSections', () => {
+  it('opens only deduplicated typed sources resolving in this transcript', () => {
+    const onOpenSource = vi.fn();
+    const { rerender } = render(
+      <NoteSections
+        transcriptIDs={['s1', 's2']}
+        onOpenSource={onOpenSource}
+        sections={[
+          {
+            heading: 'Decision',
+            body_markdown: 'Approved. [s2]',
+            source_segment_ids: ['missing', 's1', 's1'],
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View transcript source 1 of 1' }),
+    );
+    expect(onOpenSource).toHaveBeenCalledWith('s1');
+    rerender(
+      <NoteSections
+        transcriptIDs={['s1', 's2']}
+        onOpenSource={onOpenSource}
+        sections={[
+          {
+            heading: 'Legacy',
+            body_markdown: 'Approved. [s2] []',
+            source_segment_ids: [],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Approved.')).toBeInTheDocument();
+  });
+
   it('renders real markdown elements for section bodies', () => {
     render(
       <NoteSections
