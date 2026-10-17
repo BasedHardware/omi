@@ -21,6 +21,7 @@ import database.import_quotas as import_quotas_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.imports.upload_names import safe_upload_basename
 from utils.imports.transcript_files import (
     TRANSCRIPT_ORIGINS,
     UPLOAD_EXTENSIONS,
@@ -83,12 +84,20 @@ async def import_limitless_data(
     if not file.filename or not file.filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
 
+    # Reduce the user-supplied name to a safe basename so it can never escape the
+    # temp directory via '..' or an absolute path ('../../tmp/x.zip', '/etc/x.zip',
+    # 'C:\..\x.zip'). The job id is still the unique prefix, so the name only adds
+    # a human-readable hint.
+    safe_name = safe_upload_basename(file.filename)
+    if safe_name is None or not safe_name.lower().endswith('.zip'):
+        raise HTTPException(status_code=400, detail="File must be a ZIP archive")
+
     # Create import job
     job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
     # Save uploaded file to temp directory
     os.makedirs(TEMP_DIR, exist_ok=True)
-    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{safe_name}")
 
     try:
         # Stream the file to disk to avoid loading it all into memory
@@ -99,14 +108,16 @@ async def import_limitless_data(
         finally:
             f.close()
     except Exception as e:
-        # Clean up on error
+        # Shield internal paths/OS details from the client and the persisted job
+        # record; the operator sees them in the logs.
+        logger.error('limitless import upload not staged job_id=%s error_class=%s', job.id, type(e).__name__)
         await run_blocking(
             db_executor,
             import_jobs_db.update_import_job,
             job.id,
-            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
+            {'status': ImportJobStatus.failed.value, 'error': "Failed to save uploaded file"},
         )
-        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
     # Start background processing
     storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
@@ -146,8 +157,8 @@ async def import_transcript_files(
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,16}', language):
         language = 'en'
     # A file or origin we will not import must not spend a monthly upload slot.
-    filename = os.path.basename((file.filename or '').replace('\\', '/'))
-    if not filename.lower().endswith(UPLOAD_EXTENSIONS):
+    filename = safe_upload_basename(file.filename)
+    if filename is None or not filename.lower().endswith(UPLOAD_EXTENSIONS):
         raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
     if origin not in TRANSCRIPT_ORIGINS:
         raise HTTPException(status_code=400, detail=f"origin must be one of: {', '.join(sorted(TRANSCRIPT_ORIGINS))}")
@@ -280,7 +291,7 @@ def get_import_jobs(
         List of import jobs ordered by creation date (newest first)
     """
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
-    # oversized limit cannot stream the whole collection.
+    # oversized limit cannot stream the whole collection; the db layer applies its own tighter cap.
     limit = max(1, min(limit, 1000))
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
@@ -308,13 +319,23 @@ def get_import_jobs(
     return result
 
 
+def _validated_job_id(job_id: str) -> str:
+    """Path-param guard shared by the job endpoints: a malformed id is a client
+    error (400) here, rather than a 500 from the db-layer validator — and it
+    never reaches ``document()``."""
+    try:
+        return import_jobs_db.validate_job_id(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='invalid job_id')
+
+
 @router.get(
     '/v1/import/jobs/{job_id}',
     response_model=ImportJobResponse,
     tags=['import'],
 )
 def get_import_job_status(
-    job_id: str,
+    job_id: str = Depends(_validated_job_id),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -355,7 +376,7 @@ def get_import_job_status(
 
 
 @router.post('/v1/import/jobs/{job_id}/cancel', response_model=ImportJobResponse, tags=['import'])
-def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def cancel_import_job(job_id: str = Depends(_validated_job_id), uid: str = Depends(auth.get_current_user_uid)):
     """Cancel a pending or processing import job."""
     job = import_jobs_db.get_import_job(job_id)
     if not job:
@@ -385,7 +406,7 @@ class DeleteImportJobResponse(BaseModel):
 
 
 @router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
-def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_import_job(job_id: str = Depends(_validated_job_id), uid: str = Depends(auth.get_current_user_uid)):
     """Delete a finished (completed, failed, or cancelled) import job."""
     job = import_jobs_db.get_import_job(job_id)
     if not job:
