@@ -172,6 +172,17 @@ def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    # Session files live outside Firestore (OpenAI + users/{uid}/files) — they
+    # must be cleaned before the session doc disappears or they orphan.
+    try:
+        # Imported lazily: the tool pulls the LLM gateway client chain, which
+        # must not load at module scope (it breaks module-graph-isolated tests).
+        from utils.other.chat_file import FileChatTool
+
+        FileChatTool(uid, session_id).cleanup()
+    except ValueError:
+        # No session doc means no tracked files — delete stays idempotent.
+        pass
     chat_db.delete_chat_session(uid, session_id, cascade_messages=True)
     return {'status': 'ok'}
 
