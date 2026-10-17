@@ -23,7 +23,6 @@ FROM base AS builder
 WORKDIR /app/web/frontend
 COPY --from=deps /app/web/frontend/node_modules ./node_modules
 COPY web/frontend .
-COPY web/shared /app/web/shared
 
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
 ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
