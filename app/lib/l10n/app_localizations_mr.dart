@@ -13695,4 +13695,144 @@ class AppLocalizationsMr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name अजून कनेक्ट झालेला नाही';
   }
+
+  @override
+  String get affiliateHeadline => 'तुम्ही शेअर केलेल्या प्रत्येक Omi वर कमवा';
+
+  @override
+  String get affiliateSubtitle => 'तुमची लिंक शेअर करा. कोणी त्याद्वारे Omi खरेदी केल्यास तुम्हाला कमिशन मिळेल.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'प्रत्येक ऑर्डरवर तुम्ही $rate कमावता';
+  }
+
+  @override
+  String get affiliateYourLink => 'तुमची लिंक';
+
+  @override
+  String get affiliateYourCoupon => 'तुमचा सवलत कोड';
+
+  @override
+  String get affiliateShareLink => 'लिंक शेअर करा';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'माझ्या लिंकने Omi मिळवा: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'कोड बदला';
+
+  @override
+  String get affiliateEarned => 'कमाई';
+
+  @override
+  String get affiliatePaidOut => 'दिलेले पैसे';
+
+  @override
+  String get affiliateOrders => 'ऑर्डर';
+
+  @override
+  String get affiliateClicks => 'क्लिक';
+
+  @override
+  String get affiliateRecentOrders => 'अलीकडील ऑर्डर';
+
+  @override
+  String get affiliateNoOrders => 'अजून कोणतीही ऑर्डर नाही. कमाई सुरू करण्यासाठी तुमची लिंक शेअर करा.';
+
+  @override
+  String get affiliatePayouts => 'पेमेंट';
+
+  @override
+  String get affiliateSetUpPayouts => 'पेमेंट सेट अप करा';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'पैसे मिळवण्यासाठी Stripe खाते कनेक्ट करा.';
+
+  @override
+  String get affiliatePayoutsActive => 'पेमेंट सक्रिय आहेत';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'तुम्हाला पैसे देण्यापूर्वी Stripe ला अधिक माहिती हवी आहे.';
+
+  @override
+  String get affiliateFinishSetup => 'सेटअप पूर्ण करा';
+
+  @override
+  String get affiliateOpenStripe => 'Stripe डॅशबोर्ड उघडा';
+
+  @override
+  String get affiliateHowItWorks => 'हे कसे काम करते';
+
+  @override
+  String get affiliateStep1 => 'तुमची लिंक किंवा सवलत कोड मित्र आणि फॉलोअर्ससोबत शेअर करा.';
+
+  @override
+  String get affiliateStep2 => 'ते तुमच्या लिंक किंवा कोडने omi.me वर Omi खरेदी करतात.';
+
+  @override
+  String get affiliateStep3 => 'प्रत्येक ऑर्डरवर तुम्हाला कमिशन मिळते, जे Stripe द्वारे दिले जाते.';
+
+  @override
+  String get affiliateFullDashboard => 'संपूर्ण डॅशबोर्ड उघडा';
+
+  @override
+  String get affiliateJoinTitle => 'अ‍ॅफिलिएट प्रोग्राममध्ये सामील व्हा';
+
+  @override
+  String get affiliateJoin => 'सामील व्हा';
+
+  @override
+  String get affiliateConnectAccount => 'अ‍ॅफिलिएट खाते कनेक्ट करा';
+
+  @override
+  String get affiliateEmailMatchMessage => 'तुमच्या ईमेलशी जुळणारे अ‍ॅफिलिएट खाते आम्हाला सापडले.';
+
+  @override
+  String get affiliateHaveAccount => 'माझ्याकडे अ‍ॅफिलिएट खाते आहे';
+
+  @override
+  String get affiliateSignInMessage => 'तुमच्या अ‍ॅफिलिएट ईमेल आणि पासवर्डने साइन इन करा. हे फक्त एकदाच करावे लागेल.';
+
+  @override
+  String get affiliateWrongPassword => 'हा ईमेल आणि पासवर्ड कोणत्याही अ‍ॅफिलिएट खात्याशी जुळत नाही.';
+
+  @override
+  String get affiliateAlreadyLinked => 'हे अ‍ॅफिलिएट खाते आधीच दुसऱ्या Omi खात्याशी जोडलेले आहे.';
+
+  @override
+  String get affiliateBlocked => 'तुमचे अ‍ॅफिलिएट खाते ब्लॉक केले आहे. मदतीसाठी सपोर्टशी संपर्क साधा.';
+
+  @override
+  String get affiliateEmailNotVerified => 'प्रोग्राममध्ये सामील होण्यासाठी Omi मध्ये तुमचा ईमेल सत्यापित करा.';
+
+  @override
+  String get affiliateLoadFailed => 'तुमचे अ‍ॅफिलिएट खाते लोड करता आले नाही.';
+
+  @override
+  String get affiliateCountryTitle => 'तुमचा देश निवडा';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe याचा वापर तुमचे पेमेंट खाते सेट अप करण्यासाठी करते. हे नंतर बदलता येणार नाही.';
+
+  @override
+  String get affiliateSearchCountries => 'देश शोधा';
+
+  @override
+  String get affiliateCodeUnavailable => 'हा कोड उपलब्ध नाही. दुसरा वापरून पहा.';
+
+  @override
+  String get affiliateCodeHint => '3 ते 32 अक्षरे, अंक, हायफन किंवा अंडरस्कोर, अक्षराने सुरू होणारे.';
+
+  @override
+  String get affiliateCodeUpdated => 'कोड अपडेट झाला';
+
+  @override
+  String get affiliateTooManyAttempts => 'खूप जास्त प्रयत्न. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get affiliateActionFailed => 'ते झाले नाही. पुन्हा प्रयत्न करा.';
 }

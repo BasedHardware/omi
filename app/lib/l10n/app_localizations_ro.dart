@@ -13744,4 +13744,146 @@ class AppLocalizationsRo extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name nu s-a conectat încă';
   }
+
+  @override
+  String get affiliateHeadline => 'Câștigă cu fiecare Omi pe care îl recomanzi';
+
+  @override
+  String get affiliateSubtitle => 'Distribuie linkul tău. Când cineva cumpără Omi prin el, primești un comision.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Câștigi $rate pentru fiecare comandă';
+  }
+
+  @override
+  String get affiliateYourLink => 'Linkul tău';
+
+  @override
+  String get affiliateYourCoupon => 'Codul tău de reducere';
+
+  @override
+  String get affiliateShareLink => 'Distribuie linkul';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Ia-ți Omi cu linkul meu: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Schimbă codul';
+
+  @override
+  String get affiliateEarned => 'Câștigat';
+
+  @override
+  String get affiliatePaidOut => 'Plătit';
+
+  @override
+  String get affiliateOrders => 'Comenzi';
+
+  @override
+  String get affiliateClicks => 'Clicuri';
+
+  @override
+  String get affiliateRecentOrders => 'Comenzi recente';
+
+  @override
+  String get affiliateNoOrders => 'Nicio comandă încă. Distribuie linkul ca să începi să câștigi.';
+
+  @override
+  String get affiliatePayouts => 'Plăți';
+
+  @override
+  String get affiliateSetUpPayouts => 'Configurează plățile';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Conectează un cont Stripe ca să fii plătit.';
+
+  @override
+  String get affiliatePayoutsActive => 'Plățile sunt active';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe are nevoie de mai multe informații înainte de a te putea plăti.';
+
+  @override
+  String get affiliateFinishSetup => 'Finalizează configurarea';
+
+  @override
+  String get affiliateOpenStripe => 'Deschide panoul Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Cum funcționează';
+
+  @override
+  String get affiliateStep1 => 'Distribuie linkul sau codul de reducere prietenilor și urmăritorilor.';
+
+  @override
+  String get affiliateStep2 => 'Ei cumpără Omi de pe omi.me cu linkul sau codul tău.';
+
+  @override
+  String get affiliateStep3 => 'Primești un comision pentru fiecare comandă, plătit prin Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Deschide panoul complet';
+
+  @override
+  String get affiliateJoinTitle => 'Alătură-te programului de afiliere';
+
+  @override
+  String get affiliateJoin => 'Alătură-te';
+
+  @override
+  String get affiliateConnectAccount => 'Conectează contul de afiliat';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Am găsit un cont de afiliat cu adresa ta de e-mail.';
+
+  @override
+  String get affiliateHaveAccount => 'Am un cont de afiliat';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Conectează-te cu e-mailul și parola de afiliat. Trebuie să faci asta o singură dată.';
+
+  @override
+  String get affiliateWrongPassword => 'Acest e-mail și această parolă nu corespund unui cont de afiliat.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Acest cont de afiliat este deja conectat la alt cont Omi.';
+
+  @override
+  String get affiliateBlocked => 'Contul tău de afiliat este blocat. Contactează asistența pentru ajutor.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verifică-ți e-mailul în Omi ca să te alături programului.';
+
+  @override
+  String get affiliateLoadFailed => 'Contul de afiliat nu a putut fi încărcat.';
+
+  @override
+  String get affiliateCountryTitle => 'Selectează-ți țara';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe o folosește pentru a-ți configura contul de plăți. Nu poate fi schimbată ulterior.';
+
+  @override
+  String get affiliateSearchCountries => 'Caută țări';
+
+  @override
+  String get affiliateCodeUnavailable => 'Acest cod nu este disponibil. Încearcă altul.';
+
+  @override
+  String get affiliateCodeHint =>
+      'Între 3 și 32 de litere, cifre, cratime sau liniuțe de subliniere, începând cu o literă.';
+
+  @override
+  String get affiliateCodeUpdated => 'Cod actualizat';
+
+  @override
+  String get affiliateTooManyAttempts => 'Prea multe încercări. Încearcă din nou mai târziu.';
+
+  @override
+  String get affiliateActionFailed => 'N-a funcționat. Încearcă din nou.';
 }

@@ -13774,4 +13774,147 @@ class AppLocalizationsEl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return 'Το $name δεν έχει συνδεθεί ακόμη';
   }
+
+  @override
+  String get affiliateHeadline => 'Κερδίστε με κάθε Omi που μοιράζεστε';
+
+  @override
+  String get affiliateSubtitle =>
+      'Μοιραστείτε τον σύνδεσμό σας. Όταν κάποιος αγοράσει Omi μέσω αυτού, κερδίζετε προμήθεια.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Κερδίζετε $rate σε κάθε παραγγελία';
+  }
+
+  @override
+  String get affiliateYourLink => 'Ο σύνδεσμός σας';
+
+  @override
+  String get affiliateYourCoupon => 'Ο κωδικός έκπτωσής σας';
+
+  @override
+  String get affiliateShareLink => 'Κοινοποίηση συνδέσμου';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Αποκτήστε το Omi με τον σύνδεσμό μου: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Αλλαγή κωδικού';
+
+  @override
+  String get affiliateEarned => 'Κέρδη';
+
+  @override
+  String get affiliatePaidOut => 'Πληρωμένα';
+
+  @override
+  String get affiliateOrders => 'Παραγγελίες';
+
+  @override
+  String get affiliateClicks => 'Κλικ';
+
+  @override
+  String get affiliateRecentOrders => 'Πρόσφατες παραγγελίες';
+
+  @override
+  String get affiliateNoOrders =>
+      'Δεν υπάρχουν ακόμη παραγγελίες. Μοιραστείτε τον σύνδεσμό σας για να αρχίσετε να κερδίζετε.';
+
+  @override
+  String get affiliatePayouts => 'Πληρωμές';
+
+  @override
+  String get affiliateSetUpPayouts => 'Ρύθμιση πληρωμών';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Συνδέστε έναν λογαριασμό Stripe για να πληρώνεστε.';
+
+  @override
+  String get affiliatePayoutsActive => 'Οι πληρωμές είναι ενεργές';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Το Stripe χρειάζεται περισσότερες πληροφορίες για να σας πληρώσει.';
+
+  @override
+  String get affiliateFinishSetup => 'Ολοκλήρωση ρύθμισης';
+
+  @override
+  String get affiliateOpenStripe => 'Άνοιγμα πίνακα Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Πώς λειτουργεί';
+
+  @override
+  String get affiliateStep1 => 'Μοιραστείτε τον σύνδεσμο ή τον κωδικό έκπτωσης με φίλους και ακολούθους.';
+
+  @override
+  String get affiliateStep2 => 'Αγοράζουν το Omi στο omi.me με τον σύνδεσμο ή τον κωδικό σας.';
+
+  @override
+  String get affiliateStep3 => 'Κερδίζετε προμήθεια σε κάθε παραγγελία, που καταβάλλεται μέσω Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Άνοιγμα πλήρους πίνακα';
+
+  @override
+  String get affiliateJoinTitle => 'Γίνετε συνεργάτης';
+
+  @override
+  String get affiliateJoin => 'Συμμετοχή';
+
+  @override
+  String get affiliateConnectAccount => 'Σύνδεση λογαριασμού συνεργάτη';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Βρήκαμε λογαριασμό συνεργάτη με το email σας.';
+
+  @override
+  String get affiliateHaveAccount => 'Έχω λογαριασμό συνεργάτη';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Συνδεθείτε με το email και τον κωδικό πρόσβασης συνεργάτη. Χρειάζεται μόνο μία φορά.';
+
+  @override
+  String get affiliateWrongPassword => 'Αυτό το email και ο κωδικός δεν αντιστοιχούν σε λογαριασμό συνεργάτη.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Αυτός ο λογαριασμός συνεργάτη είναι ήδη συνδεδεμένος με άλλο λογαριασμό Omi.';
+
+  @override
+  String get affiliateBlocked => 'Ο λογαριασμός συνεργάτη σας έχει αποκλειστεί. Επικοινωνήστε με την υποστήριξη.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Επαληθεύστε το email σας στο Omi για να συμμετάσχετε στο πρόγραμμα.';
+
+  @override
+  String get affiliateLoadFailed => 'Δεν ήταν δυνατή η φόρτωση του λογαριασμού συνεργάτη.';
+
+  @override
+  String get affiliateCountryTitle => 'Επιλέξτε τη χώρα σας';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Το Stripe τη χρησιμοποιεί για τη ρύθμιση του λογαριασμού πληρωμών. Δεν μπορεί να αλλάξει αργότερα.';
+
+  @override
+  String get affiliateSearchCountries => 'Αναζήτηση χωρών';
+
+  @override
+  String get affiliateCodeUnavailable => 'Αυτός ο κωδικός δεν είναι διαθέσιμος. Δοκιμάστε άλλον.';
+
+  @override
+  String get affiliateCodeHint => '3 έως 32 γράμματα, αριθμοί, παύλες ή κάτω παύλες, με πρώτο χαρακτήρα γράμμα.';
+
+  @override
+  String get affiliateCodeUpdated => 'Ο κωδικός ενημερώθηκε';
+
+  @override
+  String get affiliateTooManyAttempts => 'Πάρα πολλές προσπάθειες. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get affiliateActionFailed => 'Δεν λειτούργησε. Δοκιμάστε ξανά.';
 }

@@ -13760,4 +13760,146 @@ class AppLocalizationsIt extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name non è ancora connesso';
   }
+
+  @override
+  String get affiliateHeadline => 'Guadagna con ogni Omi che condividi';
+
+  @override
+  String get affiliateSubtitle =>
+      'Condividi il tuo link. Quando qualcuno acquista Omi tramite il link, ricevi una commissione.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Guadagni $rate su ogni ordine';
+  }
+
+  @override
+  String get affiliateYourLink => 'Il tuo link';
+
+  @override
+  String get affiliateYourCoupon => 'Il tuo codice sconto';
+
+  @override
+  String get affiliateShareLink => 'Condividi link';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Prendi Omi con il mio link: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Cambia codice';
+
+  @override
+  String get affiliateEarned => 'Guadagnato';
+
+  @override
+  String get affiliatePaidOut => 'Pagato';
+
+  @override
+  String get affiliateOrders => 'Ordini';
+
+  @override
+  String get affiliateClicks => 'Clic';
+
+  @override
+  String get affiliateRecentOrders => 'Ordini recenti';
+
+  @override
+  String get affiliateNoOrders => 'Ancora nessun ordine. Condividi il tuo link per iniziare a guadagnare.';
+
+  @override
+  String get affiliatePayouts => 'Pagamenti';
+
+  @override
+  String get affiliateSetUpPayouts => 'Configura pagamenti';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Collega un account Stripe per ricevere i pagamenti.';
+
+  @override
+  String get affiliatePayoutsActive => 'I pagamenti sono attivi';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe ha bisogno di altre informazioni prima di poterti pagare.';
+
+  @override
+  String get affiliateFinishSetup => 'Completa configurazione';
+
+  @override
+  String get affiliateOpenStripe => 'Apri dashboard Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Come funziona';
+
+  @override
+  String get affiliateStep1 => 'Condividi il tuo link o codice sconto con amici e follower.';
+
+  @override
+  String get affiliateStep2 => 'Acquistano Omi su omi.me con il tuo link o codice.';
+
+  @override
+  String get affiliateStep3 => 'Ricevi una commissione su ogni ordine, pagata tramite Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Apri dashboard completa';
+
+  @override
+  String get affiliateJoinTitle => 'Unisciti al programma di affiliazione';
+
+  @override
+  String get affiliateJoin => 'Partecipa';
+
+  @override
+  String get affiliateConnectAccount => 'Collega account affiliato';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Abbiamo trovato un account affiliato con la tua email.';
+
+  @override
+  String get affiliateHaveAccount => 'Ho un account affiliato';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Accedi con email e password del tuo account affiliato. Devi farlo solo una volta.';
+
+  @override
+  String get affiliateWrongPassword => 'Email e password non corrispondono a nessun account affiliato.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Questo account affiliato è già collegato a un altro account Omi.';
+
+  @override
+  String get affiliateBlocked => 'Il tuo account affiliato è bloccato. Contatta l’assistenza per ricevere aiuto.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verifica la tua email in Omi per partecipare al programma.';
+
+  @override
+  String get affiliateLoadFailed => 'Impossibile caricare il tuo account affiliato.';
+
+  @override
+  String get affiliateCountryTitle => 'Seleziona il tuo Paese';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe lo usa per configurare il tuo account di pagamento. Non potrà essere modificato in seguito.';
+
+  @override
+  String get affiliateSearchCountries => 'Cerca Paesi';
+
+  @override
+  String get affiliateCodeUnavailable => 'Questo codice non è disponibile. Provane un altro.';
+
+  @override
+  String get affiliateCodeHint => 'Da 3 a 32 lettere, numeri, trattini o trattini bassi, iniziando con una lettera.';
+
+  @override
+  String get affiliateCodeUpdated => 'Codice aggiornato';
+
+  @override
+  String get affiliateTooManyAttempts => 'Troppi tentativi. Riprova più tardi.';
+
+  @override
+  String get affiliateActionFailed => 'Non ha funzionato. Riprova.';
 }

@@ -13794,4 +13794,146 @@ class AppLocalizationsFr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name n\'est pas encore connecté';
   }
+
+  @override
+  String get affiliateHeadline => 'Gagnez de l’argent avec chaque Omi partagé';
+
+  @override
+  String get affiliateSubtitle => 'Partagez votre lien. Quand quelqu’un achète Omi avec, vous touchez une commission.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Vous gagnez $rate sur chaque commande';
+  }
+
+  @override
+  String get affiliateYourLink => 'Votre lien';
+
+  @override
+  String get affiliateYourCoupon => 'Votre code de réduction';
+
+  @override
+  String get affiliateShareLink => 'Partager le lien';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Obtenez Omi avec mon lien : $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Changer le code';
+
+  @override
+  String get affiliateEarned => 'Gagné';
+
+  @override
+  String get affiliatePaidOut => 'Versé';
+
+  @override
+  String get affiliateOrders => 'Commandes';
+
+  @override
+  String get affiliateClicks => 'Clics';
+
+  @override
+  String get affiliateRecentOrders => 'Commandes récentes';
+
+  @override
+  String get affiliateNoOrders => 'Aucune commande pour l’instant. Partagez votre lien pour commencer à gagner.';
+
+  @override
+  String get affiliatePayouts => 'Paiements';
+
+  @override
+  String get affiliateSetUpPayouts => 'Configurer les paiements';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Connectez un compte Stripe pour être payé.';
+
+  @override
+  String get affiliatePayoutsActive => 'Les paiements sont actifs';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe a besoin de plus d’informations avant de pouvoir vous payer.';
+
+  @override
+  String get affiliateFinishSetup => 'Terminer la configuration';
+
+  @override
+  String get affiliateOpenStripe => 'Ouvrir le tableau de bord Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Comment ça marche';
+
+  @override
+  String get affiliateStep1 => 'Partagez votre lien ou code de réduction avec vos amis et abonnés.';
+
+  @override
+  String get affiliateStep2 => 'Ils achètent Omi sur omi.me avec votre lien ou code.';
+
+  @override
+  String get affiliateStep3 => 'Vous touchez une commission sur chaque commande, versée via Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Ouvrir le tableau de bord complet';
+
+  @override
+  String get affiliateJoinTitle => 'Rejoindre le programme d’affiliation';
+
+  @override
+  String get affiliateJoin => 'Rejoindre';
+
+  @override
+  String get affiliateConnectAccount => 'Connecter un compte affilié';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Nous avons trouvé un compte affilié associé à votre e-mail.';
+
+  @override
+  String get affiliateHaveAccount => 'J’ai un compte affilié';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Connectez-vous avec l’e-mail et le mot de passe de votre compte affilié. Vous n’aurez à le faire qu’une fois.';
+
+  @override
+  String get affiliateWrongPassword => 'Cet e-mail et ce mot de passe ne correspondent à aucun compte affilié.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Ce compte affilié est déjà associé à un autre compte Omi.';
+
+  @override
+  String get affiliateBlocked => 'Votre compte affilié est bloqué. Contactez le support pour obtenir de l’aide.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Vérifiez votre e-mail dans Omi pour rejoindre le programme.';
+
+  @override
+  String get affiliateLoadFailed => 'Impossible de charger votre compte affilié.';
+
+  @override
+  String get affiliateCountryTitle => 'Choisissez votre pays';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe l’utilise pour configurer votre compte de paiement. Il ne pourra pas être modifié.';
+
+  @override
+  String get affiliateSearchCountries => 'Rechercher un pays';
+
+  @override
+  String get affiliateCodeUnavailable => 'Ce code n’est pas disponible. Essayez-en un autre.';
+
+  @override
+  String get affiliateCodeHint =>
+      'De 3 à 32 lettres, chiffres, tirets ou traits de soulignement, en commençant par une lettre.';
+
+  @override
+  String get affiliateCodeUpdated => 'Code mis à jour';
+
+  @override
+  String get affiliateTooManyAttempts => 'Trop de tentatives. Réessayez plus tard.';
+
+  @override
+  String get affiliateActionFailed => 'Cela n’a pas fonctionné. Réessayez.';
 }

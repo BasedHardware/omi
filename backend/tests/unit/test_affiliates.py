@@ -331,7 +331,7 @@ def _loaded_router() -> Iterator[ModuleType]:
         (service.AffiliateUnavailable(), 404, 'affiliate_unavailable'),
         (service.AffiliateNotLinked(), 409, 'affiliate_not_linked'),
         (service.AffiliateBlocked(), 403, 'affiliate_blocked'),
-        (service.AffiliateLinkRejected('invalid_credentials'), 401, 'invalid_credentials'),
+        (service.AffiliateLinkRejected('invalid_credentials'), 400, 'invalid_credentials'),
         (service.AffiliateLinkRejected('affiliate_taken'), 409, 'affiliate_taken'),
         (goaffpro.GoAffProError(500, 'admin_get'), 502, 'affiliate_service_unavailable'),
     ],

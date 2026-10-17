@@ -13716,4 +13716,143 @@ class AppLocalizationsLv extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name vēl nav savienots';
   }
+
+  @override
+  String get affiliateHeadline => 'Pelni ar katru Omi, ko kopīgo';
+
+  @override
+  String get affiliateSubtitle => 'Kopīgo savu saiti. Kad kāds iegādājas Omi ar to, tu saņem komisiju.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Tu nopelni $rate par katru pasūtījumu';
+  }
+
+  @override
+  String get affiliateYourLink => 'Tava saite';
+
+  @override
+  String get affiliateYourCoupon => 'Tavs atlaides kods';
+
+  @override
+  String get affiliateShareLink => 'Kopīgot saiti';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Iegādājies Omi ar manu saiti: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Mainīt kodu';
+
+  @override
+  String get affiliateEarned => 'Nopelnīts';
+
+  @override
+  String get affiliatePaidOut => 'Izmaksāts';
+
+  @override
+  String get affiliateOrders => 'Pasūtījumi';
+
+  @override
+  String get affiliateClicks => 'Klikšķi';
+
+  @override
+  String get affiliateRecentOrders => 'Nesenie pasūtījumi';
+
+  @override
+  String get affiliateNoOrders => 'Pasūtījumu vēl nav. Kopīgo savu saiti, lai sāktu pelnīt.';
+
+  @override
+  String get affiliatePayouts => 'Izmaksas';
+
+  @override
+  String get affiliateSetUpPayouts => 'Iestatīt izmaksas';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Pievieno Stripe kontu, lai saņemtu maksājumus.';
+
+  @override
+  String get affiliatePayoutsActive => 'Izmaksas ir aktīvas';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe nepieciešama papildu informācija, lai varētu tev izmaksāt.';
+
+  @override
+  String get affiliateFinishSetup => 'Pabeigt iestatīšanu';
+
+  @override
+  String get affiliateOpenStripe => 'Atvērt Stripe paneli';
+
+  @override
+  String get affiliateHowItWorks => 'Kā tas darbojas';
+
+  @override
+  String get affiliateStep1 => 'Kopīgo savu saiti vai atlaides kodu ar draugiem un sekotājiem.';
+
+  @override
+  String get affiliateStep2 => 'Viņi iegādājas Omi vietnē omi.me ar tavu saiti vai kodu.';
+
+  @override
+  String get affiliateStep3 => 'Tu saņem komisiju par katru pasūtījumu, izmaksātu ar Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Atvērt pilno paneli';
+
+  @override
+  String get affiliateJoinTitle => 'Pievienojies partneru programmai';
+
+  @override
+  String get affiliateJoin => 'Pievienoties';
+
+  @override
+  String get affiliateConnectAccount => 'Pievienot partnera kontu';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Atradām partnera kontu ar tavu e-pastu.';
+
+  @override
+  String get affiliateHaveAccount => 'Man ir partnera konts';
+
+  @override
+  String get affiliateSignInMessage => 'Pieraksties ar partnera e-pastu un paroli. Tas jādara tikai vienreiz.';
+
+  @override
+  String get affiliateWrongPassword => 'Šis e-pasts un parole neatbilst nevienam partnera kontam.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Šis partnera konts jau ir saistīts ar citu Omi kontu.';
+
+  @override
+  String get affiliateBlocked => 'Tavs partnera konts ir bloķēts. Sazinies ar atbalsta dienestu.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Apstiprini savu e-pastu Omi, lai pievienotos programmai.';
+
+  @override
+  String get affiliateLoadFailed => 'Neizdevās ielādēt partnera kontu.';
+
+  @override
+  String get affiliateCountryTitle => 'Izvēlies savu valsti';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe to izmanto izmaksu konta iestatīšanai. Vēlāk to nevar mainīt.';
+
+  @override
+  String get affiliateSearchCountries => 'Meklēt valstis';
+
+  @override
+  String get affiliateCodeUnavailable => 'Šis kods nav pieejams. Izmēģini citu.';
+
+  @override
+  String get affiliateCodeHint => '3 līdz 32 burti, cipari, defises vai pasvītras, sākot ar burtu.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kods atjaunināts';
+
+  @override
+  String get affiliateTooManyAttempts => 'Pārāk daudz mēģinājumu. Mēģini vēlāk vēlreiz.';
+
+  @override
+  String get affiliateActionFailed => 'Neizdevās. Mēģini vēlreiz.';
 }

@@ -13712,4 +13712,143 @@ class AppLocalizationsLt extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name dar neprijungtas';
   }
+
+  @override
+  String get affiliateHeadline => 'Uždirbk su kiekvienu pasidalytu Omi';
+
+  @override
+  String get affiliateSubtitle => 'Pasidalyk savo nuoroda. Kai kas nors per ją įsigis Omi, gausi komisinį atlygį.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Už kiekvieną užsakymą uždirbi $rate';
+  }
+
+  @override
+  String get affiliateYourLink => 'Tavo nuoroda';
+
+  @override
+  String get affiliateYourCoupon => 'Tavo nuolaidos kodas';
+
+  @override
+  String get affiliateShareLink => 'Dalintis nuoroda';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Įsigyk Omi per mano nuorodą: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Keisti kodą';
+
+  @override
+  String get affiliateEarned => 'Uždirbta';
+
+  @override
+  String get affiliatePaidOut => 'Išmokėta';
+
+  @override
+  String get affiliateOrders => 'Užsakymai';
+
+  @override
+  String get affiliateClicks => 'Paspaudimai';
+
+  @override
+  String get affiliateRecentOrders => 'Naujausi užsakymai';
+
+  @override
+  String get affiliateNoOrders => 'Užsakymų dar nėra. Pasidalyk nuoroda ir pradėk uždirbti.';
+
+  @override
+  String get affiliatePayouts => 'Išmokos';
+
+  @override
+  String get affiliateSetUpPayouts => 'Nustatyti išmokas';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Susiek Stripe paskyrą, kad gautum išmokas.';
+
+  @override
+  String get affiliatePayoutsActive => 'Išmokos aktyvios';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe reikia daugiau informacijos, kad galėtų tau išmokėti.';
+
+  @override
+  String get affiliateFinishSetup => 'Užbaigti nustatymą';
+
+  @override
+  String get affiliateOpenStripe => 'Atidaryti Stripe skydelį';
+
+  @override
+  String get affiliateHowItWorks => 'Kaip tai veikia';
+
+  @override
+  String get affiliateStep1 => 'Pasidalyk nuoroda ar nuolaidos kodu su draugais ir sekėjais.';
+
+  @override
+  String get affiliateStep2 => 'Jie įsigyja Omi svetainėje omi.me su tavo nuoroda ar kodu.';
+
+  @override
+  String get affiliateStep3 => 'Už kiekvieną užsakymą gauni komisinį atlygį, išmokamą per Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Atidaryti visą skydelį';
+
+  @override
+  String get affiliateJoinTitle => 'Prisijunk prie partnerių programos';
+
+  @override
+  String get affiliateJoin => 'Prisijungti';
+
+  @override
+  String get affiliateConnectAccount => 'Susieti partnerio paskyrą';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Radome partnerio paskyrą su tavo el. paštu.';
+
+  @override
+  String get affiliateHaveAccount => 'Turiu partnerio paskyrą';
+
+  @override
+  String get affiliateSignInMessage => 'Prisijunk partnerio el. paštu ir slaptažodžiu. Tai reikia padaryti tik kartą.';
+
+  @override
+  String get affiliateWrongPassword => 'Šis el. paštas ir slaptažodis neatitinka jokios partnerio paskyros.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Ši partnerio paskyra jau susieta su kita Omi paskyra.';
+
+  @override
+  String get affiliateBlocked => 'Tavo partnerio paskyra užblokuota. Susisiek su palaikymo komanda.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Patvirtink el. paštą Omi programėlėje, kad prisijungtum prie programos.';
+
+  @override
+  String get affiliateLoadFailed => 'Nepavyko įkelti partnerio paskyros.';
+
+  @override
+  String get affiliateCountryTitle => 'Pasirink savo šalį';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe tai naudoja išmokų paskyrai sukurti. Vėliau to pakeisti negalima.';
+
+  @override
+  String get affiliateSearchCountries => 'Ieškoti šalių';
+
+  @override
+  String get affiliateCodeUnavailable => 'Šis kodas neprieinamas. Išbandyk kitą.';
+
+  @override
+  String get affiliateCodeHint => 'Nuo 3 iki 32 raidžių, skaitmenų, brūkšnelių ar apatinių brūkšnių, pradedant raide.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kodas atnaujintas';
+
+  @override
+  String get affiliateTooManyAttempts => 'Per daug bandymų. Bandyk vėliau.';
+
+  @override
+  String get affiliateActionFailed => 'Nepavyko. Bandyk dar kartą.';
 }

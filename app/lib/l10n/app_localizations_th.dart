@@ -13620,4 +13620,143 @@ class AppLocalizationsTh extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ยังไม่ได้เชื่อมต่อ';
   }
+
+  @override
+  String get affiliateHeadline => 'รับรายได้จากทุก Omi ที่คุณแชร์';
+
+  @override
+  String get affiliateSubtitle => 'แชร์ลิงก์ของคุณ เมื่อมีคนซื้อ Omi ผ่านลิงก์นี้ คุณจะได้รับค่าคอมมิชชัน';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'คุณได้รับ $rate จากทุกคำสั่งซื้อ';
+  }
+
+  @override
+  String get affiliateYourLink => 'ลิงก์ของคุณ';
+
+  @override
+  String get affiliateYourCoupon => 'โค้ดส่วนลดของคุณ';
+
+  @override
+  String get affiliateShareLink => 'แชร์ลิงก์';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'ซื้อ Omi ผ่านลิงก์ของฉัน: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'เปลี่ยนโค้ด';
+
+  @override
+  String get affiliateEarned => 'รายได้';
+
+  @override
+  String get affiliatePaidOut => 'จ่ายแล้ว';
+
+  @override
+  String get affiliateOrders => 'คำสั่งซื้อ';
+
+  @override
+  String get affiliateClicks => 'คลิก';
+
+  @override
+  String get affiliateRecentOrders => 'คำสั่งซื้อล่าสุด';
+
+  @override
+  String get affiliateNoOrders => 'ยังไม่มีคำสั่งซื้อ แชร์ลิงก์ของคุณเพื่อเริ่มสร้างรายได้';
+
+  @override
+  String get affiliatePayouts => 'การจ่ายเงิน';
+
+  @override
+  String get affiliateSetUpPayouts => 'ตั้งค่าการจ่ายเงิน';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'เชื่อมต่อบัญชี Stripe เพื่อรับเงิน';
+
+  @override
+  String get affiliatePayoutsActive => 'การจ่ายเงินเปิดใช้งานแล้ว';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe ต้องการข้อมูลเพิ่มเติมก่อนจึงจะจ่ายเงินให้คุณได้';
+
+  @override
+  String get affiliateFinishSetup => 'ตั้งค่าให้เสร็จ';
+
+  @override
+  String get affiliateOpenStripe => 'เปิดแดชบอร์ด Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'วิธีการทำงาน';
+
+  @override
+  String get affiliateStep1 => 'แชร์ลิงก์หรือโค้ดส่วนลดของคุณกับเพื่อนและผู้ติดตาม';
+
+  @override
+  String get affiliateStep2 => 'พวกเขาซื้อ Omi ที่ omi.me ด้วยลิงก์หรือโค้ดของคุณ';
+
+  @override
+  String get affiliateStep3 => 'คุณได้รับค่าคอมมิชชันจากทุกคำสั่งซื้อ โดยจ่ายผ่าน Stripe';
+
+  @override
+  String get affiliateFullDashboard => 'เปิดแดชบอร์ดแบบเต็ม';
+
+  @override
+  String get affiliateJoinTitle => 'เข้าร่วมโปรแกรมพันธมิตร';
+
+  @override
+  String get affiliateJoin => 'เข้าร่วม';
+
+  @override
+  String get affiliateConnectAccount => 'เชื่อมต่อบัญชีพันธมิตร';
+
+  @override
+  String get affiliateEmailMatchMessage => 'เราพบบัญชีพันธมิตรที่ใช้อีเมลของคุณ';
+
+  @override
+  String get affiliateHaveAccount => 'ฉันมีบัญชีพันธมิตรแล้ว';
+
+  @override
+  String get affiliateSignInMessage => 'ลงชื่อเข้าใช้ด้วยอีเมลและรหัสผ่านบัญชีพันธมิตร ทำเพียงครั้งเดียวเท่านั้น';
+
+  @override
+  String get affiliateWrongPassword => 'อีเมลและรหัสผ่านนี้ไม่ตรงกับบัญชีพันธมิตรใดเลย';
+
+  @override
+  String get affiliateAlreadyLinked => 'บัญชีพันธมิตรนี้เชื่อมต่อกับบัญชี Omi อื่นแล้ว';
+
+  @override
+  String get affiliateBlocked => 'บัญชีพันธมิตรของคุณถูกบล็อก โปรดติดต่อฝ่ายสนับสนุน';
+
+  @override
+  String get affiliateEmailNotVerified => 'ยืนยันอีเมลของคุณใน Omi เพื่อเข้าร่วมโปรแกรม';
+
+  @override
+  String get affiliateLoadFailed => 'โหลดบัญชีพันธมิตรของคุณไม่ได้';
+
+  @override
+  String get affiliateCountryTitle => 'เลือกประเทศของคุณ';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe ใช้ข้อมูลนี้เพื่อตั้งค่าบัญชีรับเงินของคุณ และจะเปลี่ยนภายหลังไม่ได้';
+
+  @override
+  String get affiliateSearchCountries => 'ค้นหาประเทศ';
+
+  @override
+  String get affiliateCodeUnavailable => 'โค้ดนี้ใช้ไม่ได้ ลองโค้ดอื่น';
+
+  @override
+  String get affiliateCodeHint => 'ตัวอักษร ตัวเลข ขีดกลาง หรือขีดล่าง 3 ถึง 32 ตัว โดยขึ้นต้นด้วยตัวอักษร';
+
+  @override
+  String get affiliateCodeUpdated => 'อัปเดตโค้ดแล้ว';
+
+  @override
+  String get affiliateTooManyAttempts => 'ลองหลายครั้งเกินไป โปรดลองใหม่ภายหลัง';
+
+  @override
+  String get affiliateActionFailed => 'ไม่สำเร็จ โปรดลองอีกครั้ง';
 }

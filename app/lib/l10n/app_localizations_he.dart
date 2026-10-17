@@ -13592,4 +13592,143 @@ class AppLocalizationsHe extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name עדיין לא מחובר';
   }
+
+  @override
+  String get affiliateHeadline => 'הרוויחו מכל Omi שאתם משתפים';
+
+  @override
+  String get affiliateSubtitle => 'שתפו את הקישור שלכם. כשמישהו קונה Omi דרכו, תקבלו עמלה.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'אתם מרוויחים $rate על כל הזמנה';
+  }
+
+  @override
+  String get affiliateYourLink => 'הקישור שלך';
+
+  @override
+  String get affiliateYourCoupon => 'קוד ההנחה שלך';
+
+  @override
+  String get affiliateShareLink => 'שתף קישור';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'קבלו Omi דרך הקישור שלי: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'שנה קוד';
+
+  @override
+  String get affiliateEarned => 'הרווחת';
+
+  @override
+  String get affiliatePaidOut => 'שולם';
+
+  @override
+  String get affiliateOrders => 'הזמנות';
+
+  @override
+  String get affiliateClicks => 'קליקים';
+
+  @override
+  String get affiliateRecentOrders => 'הזמנות אחרונות';
+
+  @override
+  String get affiliateNoOrders => 'אין הזמנות עדיין. שתפו את הקישור כדי להתחיל להרוויח.';
+
+  @override
+  String get affiliatePayouts => 'תשלומים';
+
+  @override
+  String get affiliateSetUpPayouts => 'הגדר תשלומים';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'חברו חשבון Stripe כדי לקבל תשלום.';
+
+  @override
+  String get affiliatePayoutsActive => 'התשלומים פעילים';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe צריכה מידע נוסף לפני שתוכל לשלם לכם.';
+
+  @override
+  String get affiliateFinishSetup => 'סיים הגדרה';
+
+  @override
+  String get affiliateOpenStripe => 'פתח את לוח הבקרה של Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'איך זה עובד';
+
+  @override
+  String get affiliateStep1 => 'שתפו את הקישור או קוד ההנחה עם חברים ועוקבים.';
+
+  @override
+  String get affiliateStep2 => 'הם קונים Omi ב-omi.me עם הקישור או הקוד שלכם.';
+
+  @override
+  String get affiliateStep3 => 'אתם מקבלים עמלה על כל הזמנה, שמשולמת דרך Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'פתח את לוח הבקרה המלא';
+
+  @override
+  String get affiliateJoinTitle => 'הצטרפו לתוכנית השותפים';
+
+  @override
+  String get affiliateJoin => 'הצטרף';
+
+  @override
+  String get affiliateConnectAccount => 'חבר חשבון שותף';
+
+  @override
+  String get affiliateEmailMatchMessage => 'מצאנו חשבון שותף עם כתובת האימייל שלך.';
+
+  @override
+  String get affiliateHaveAccount => 'יש לי חשבון שותף';
+
+  @override
+  String get affiliateSignInMessage => 'התחברו עם האימייל והסיסמה של חשבון השותף. צריך לעשות זאת רק פעם אחת.';
+
+  @override
+  String get affiliateWrongPassword => 'האימייל והסיסמה האלה לא תואמים לאף חשבון שותף.';
+
+  @override
+  String get affiliateAlreadyLinked => 'חשבון השותף הזה כבר מחובר לחשבון Omi אחר.';
+
+  @override
+  String get affiliateBlocked => 'חשבון השותף שלך חסום. פנו לתמיכה לקבלת עזרה.';
+
+  @override
+  String get affiliateEmailNotVerified => 'אמתו את האימייל שלכם ב-Omi כדי להצטרף לתוכנית.';
+
+  @override
+  String get affiliateLoadFailed => 'לא ניתן לטעון את חשבון השותף שלך.';
+
+  @override
+  String get affiliateCountryTitle => 'בחר את המדינה שלך';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe משתמשת בזה כדי להגדיר את חשבון התשלומים שלך. לא ניתן לשנות זאת בהמשך.';
+
+  @override
+  String get affiliateSearchCountries => 'חפש מדינות';
+
+  @override
+  String get affiliateCodeUnavailable => 'הקוד הזה לא זמין. נסו קוד אחר.';
+
+  @override
+  String get affiliateCodeHint => '3 עד 32 אותיות, ספרות, מקפים או קווים תחתונים, ומתחיל באות.';
+
+  @override
+  String get affiliateCodeUpdated => 'הקוד עודכן';
+
+  @override
+  String get affiliateTooManyAttempts => 'יותר מדי ניסיונות. נסו שוב מאוחר יותר.';
+
+  @override
+  String get affiliateActionFailed => 'זה לא הצליח. נסו שוב.';
 }

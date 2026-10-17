@@ -16542,5 +16542,195 @@
                 "type": "String"
             }
         }
+    },
+    "affiliateHeadline": "Earn with every Omi you share",
+    "@affiliateHeadline": {
+        "description": "Referral page headline for affiliates"
+    },
+    "affiliateSubtitle": "Share your link. When someone buys Omi with it, you earn a commission.",
+    "@affiliateSubtitle": {
+        "description": "Referral page subtitle"
+    },
+    "affiliateCommissionRate": "You earn {rate} on every order",
+    "@affiliateCommissionRate": {
+        "description": "Commission rate line; rate is like '15%' or '$10.00'",
+        "placeholders": {
+            "rate": {
+                "type": "String"
+            }
+        }
+    },
+    "affiliateYourLink": "Your link",
+    "@affiliateYourLink": {
+        "description": "Label above the referral link"
+    },
+    "affiliateYourCoupon": "Your discount code",
+    "@affiliateYourCoupon": {
+        "description": "Label above the affiliate coupon code"
+    },
+    "affiliateShareLink": "Share Link",
+    "@affiliateShareLink": {
+        "description": "Button that opens the share sheet for the referral link"
+    },
+    "affiliateShareMessage": "Get Omi with my link: {url}",
+    "@affiliateShareMessage": {
+        "description": "Text shared with friends; url is the referral link",
+        "placeholders": {
+            "url": {
+                "type": "String"
+            }
+        }
+    },
+    "affiliateChangeCode": "Change Code",
+    "@affiliateChangeCode": {
+        "description": "Button to change the referral code"
+    },
+    "affiliateEarned": "Earned",
+    "@affiliateEarned": {
+        "description": "Stat label: total commission earned"
+    },
+    "affiliatePaidOut": "Paid out",
+    "@affiliatePaidOut": {
+        "description": "Stat label: commission already paid"
+    },
+    "affiliateOrders": "Orders",
+    "@affiliateOrders": {
+        "description": "Stat label: number of referred orders"
+    },
+    "affiliateClicks": "Clicks",
+    "@affiliateClicks": {
+        "description": "Stat label: number of referral link clicks"
+    },
+    "affiliateRecentOrders": "Recent Orders",
+    "@affiliateRecentOrders": {
+        "description": "Section header"
+    },
+    "affiliateNoOrders": "No orders yet. Share your link to start earning.",
+    "@affiliateNoOrders": {
+        "description": "Empty orders message"
+    },
+    "affiliatePayouts": "Payouts",
+    "@affiliatePayouts": {
+        "description": "Section header for payouts"
+    },
+    "affiliateSetUpPayouts": "Set Up Payouts",
+    "@affiliateSetUpPayouts": {
+        "description": "Button to connect a Stripe payout account"
+    },
+    "affiliatePayoutsSetupMessage": "Connect a Stripe account to get paid.",
+    "@affiliatePayoutsSetupMessage": {
+        "description": "Explains payout setup"
+    },
+    "affiliatePayoutsActive": "Payouts are active",
+    "@affiliatePayoutsActive": {
+        "description": "Payout account status"
+    },
+    "affiliatePayoutsNeedAttention": "Stripe needs more information before it can pay you.",
+    "@affiliatePayoutsNeedAttention": {
+        "description": "Payout account needs attention"
+    },
+    "affiliateFinishSetup": "Finish Setup",
+    "@affiliateFinishSetup": {
+        "description": "Button to continue Stripe onboarding"
+    },
+    "affiliateOpenStripe": "Open Stripe Dashboard",
+    "@affiliateOpenStripe": {
+        "description": "Button that opens the Stripe dashboard"
+    },
+    "affiliateHowItWorks": "How It Works",
+    "@affiliateHowItWorks": {
+        "description": "Section header"
+    },
+    "affiliateStep1": "Share your link or discount code with friends and followers.",
+    "@affiliateStep1": {
+        "description": "How it works, step 1"
+    },
+    "affiliateStep2": "They buy Omi on omi.me with your link or code.",
+    "@affiliateStep2": {
+        "description": "How it works, step 2"
+    },
+    "affiliateStep3": "You earn a commission on every order, paid out through Stripe.",
+    "@affiliateStep3": {
+        "description": "How it works, step 3"
+    },
+    "affiliateFullDashboard": "Open Full Dashboard",
+    "@affiliateFullDashboard": {
+        "description": "Button that opens the affiliate website"
+    },
+    "affiliateJoinTitle": "Join the Affiliate Program",
+    "@affiliateJoinTitle": {
+        "description": "Title for users not yet in the program"
+    },
+    "affiliateJoin": "Join Program",
+    "@affiliateJoin": {
+        "description": "Button to join the affiliate program"
+    },
+    "affiliateConnectAccount": "Connect Affiliate Account",
+    "@affiliateConnectAccount": {
+        "description": "Button to connect an existing affiliate account"
+    },
+    "affiliateEmailMatchMessage": "We found an affiliate account with your email.",
+    "@affiliateEmailMatchMessage": {
+        "description": "Shown when the user's email matches an affiliate account"
+    },
+    "affiliateHaveAccount": "I Have an Affiliate Account",
+    "@affiliateHaveAccount": {
+        "description": "Button to sign in with an existing affiliate account"
+    },
+    "affiliateSignInMessage": "Sign in with your affiliate email and password. You only need to do this once.",
+    "@affiliateSignInMessage": {
+        "description": "Explains the affiliate sign-in sheet"
+    },
+    "affiliateWrongPassword": "That email and password don't match an affiliate account.",
+    "@affiliateWrongPassword": {
+        "description": "Error for wrong affiliate credentials"
+    },
+    "affiliateAlreadyLinked": "This affiliate account is already connected to another Omi account.",
+    "@affiliateAlreadyLinked": {
+        "description": "Error when the affiliate account is linked elsewhere"
+    },
+    "affiliateBlocked": "Your affiliate account is blocked. Contact support for help.",
+    "@affiliateBlocked": {
+        "description": "Shown to blocked affiliates"
+    },
+    "affiliateEmailNotVerified": "Verify your email in Omi to join the program.",
+    "@affiliateEmailNotVerified": {
+        "description": "Error when joining without a verified email"
+    },
+    "affiliateLoadFailed": "Couldn't load your affiliate account.",
+    "@affiliateLoadFailed": {
+        "description": "Load error"
+    },
+    "affiliateCountryTitle": "Select Your Country",
+    "@affiliateCountryTitle": {
+        "description": "Title of the country picker for payouts"
+    },
+    "affiliateCountryMessage": "Stripe uses this to set up your payout account. It can't be changed later.",
+    "@affiliateCountryMessage": {
+        "description": "Explains the country picker"
+    },
+    "affiliateSearchCountries": "Search countries",
+    "@affiliateSearchCountries": {
+        "description": "Search placeholder in the country picker"
+    },
+    "affiliateCodeUnavailable": "That code isn't available. Try another.",
+    "@affiliateCodeUnavailable": {
+        "description": "Referral code is taken or not allowed"
+    },
+    "affiliateCodeHint": "3 to 32 letters, numbers, hyphens or underscores, starting with a letter.",
+    "@affiliateCodeHint": {
+        "description": "Rules for a referral code"
+    },
+    "affiliateCodeUpdated": "Code updated",
+    "@affiliateCodeUpdated": {
+        "description": "Toast after changing the referral code"
+    },
+    "affiliateTooManyAttempts": "Too many attempts. Try again later.",
+    "@affiliateTooManyAttempts": {
+        "description": "Rate limit error"
+    },
+    "affiliateActionFailed": "That didn't work. Try again.",
+    "@affiliateActionFailed": {
+        "description": "Generic action error"
     }
 }

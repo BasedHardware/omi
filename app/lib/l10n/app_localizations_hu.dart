@@ -13742,4 +13742,144 @@ class AppLocalizationsHu extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name még nincs csatlakoztatva';
   }
+
+  @override
+  String get affiliateHeadline => 'Keress minden megosztott Omival';
+
+  @override
+  String get affiliateSubtitle => 'Oszd meg a linkedet. Ha valaki ezen keresztül vásárol Omit, jutalékot kapsz.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Minden rendelés után $rate jár neked';
+  }
+
+  @override
+  String get affiliateYourLink => 'A linked';
+
+  @override
+  String get affiliateYourCoupon => 'A kedvezménykódod';
+
+  @override
+  String get affiliateShareLink => 'Link megosztása';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Szerezd be az Omit a linkemmel: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Kód módosítása';
+
+  @override
+  String get affiliateEarned => 'Megkeresett';
+
+  @override
+  String get affiliatePaidOut => 'Kifizetve';
+
+  @override
+  String get affiliateOrders => 'Rendelések';
+
+  @override
+  String get affiliateClicks => 'Kattintások';
+
+  @override
+  String get affiliateRecentOrders => 'Legutóbbi rendelések';
+
+  @override
+  String get affiliateNoOrders => 'Még nincs rendelés. Oszd meg a linkedet, és kezdj el keresni.';
+
+  @override
+  String get affiliatePayouts => 'Kifizetések';
+
+  @override
+  String get affiliateSetUpPayouts => 'Kifizetések beállítása';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Csatlakoztass egy Stripe-fiókot a kifizetésekhez.';
+
+  @override
+  String get affiliatePayoutsActive => 'A kifizetések aktívak';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'A Stripe-nak további adatokra van szüksége a kifizetéshez.';
+
+  @override
+  String get affiliateFinishSetup => 'Beállítás befejezése';
+
+  @override
+  String get affiliateOpenStripe => 'Stripe irányítópult megnyitása';
+
+  @override
+  String get affiliateHowItWorks => 'Hogyan működik';
+
+  @override
+  String get affiliateStep1 => 'Oszd meg a linkedet vagy kedvezménykódodat a barátaiddal és követőiddel.';
+
+  @override
+  String get affiliateStep2 => 'Az omi.me oldalon vásárolnak Omit a linkeddel vagy kódoddal.';
+
+  @override
+  String get affiliateStep3 => 'Minden rendelés után jutalékot kapsz, amelyet a Stripe fizet ki.';
+
+  @override
+  String get affiliateFullDashboard => 'Teljes irányítópult megnyitása';
+
+  @override
+  String get affiliateJoinTitle => 'Csatlakozz a partnerprogramhoz';
+
+  @override
+  String get affiliateJoin => 'Csatlakozás';
+
+  @override
+  String get affiliateConnectAccount => 'Partnerfiók csatlakoztatása';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Találtunk egy partnerfiókot az e-mail-címeddel.';
+
+  @override
+  String get affiliateHaveAccount => 'Van partnerfiókom';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Jelentkezz be a partner e-mail-címeddel és jelszavaddal. Ezt csak egyszer kell megtenned.';
+
+  @override
+  String get affiliateWrongPassword => 'Ez az e-mail-cím és jelszó nem tartozik egyetlen partnerfiókhoz sem.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Ez a partnerfiók már egy másik Omi-fiókhoz van kapcsolva.';
+
+  @override
+  String get affiliateBlocked => 'A partnerfiókod le van tiltva. Fordulj az ügyfélszolgálathoz.';
+
+  @override
+  String get affiliateEmailNotVerified => 'A csatlakozáshoz erősítsd meg az e-mail-címedet az Omiban.';
+
+  @override
+  String get affiliateLoadFailed => 'Nem sikerült betölteni a partnerfiókot.';
+
+  @override
+  String get affiliateCountryTitle => 'Válaszd ki az országodat';
+
+  @override
+  String get affiliateCountryMessage => 'A Stripe ezzel állítja be a kifizetési fiókodat. Később nem módosítható.';
+
+  @override
+  String get affiliateSearchCountries => 'Országok keresése';
+
+  @override
+  String get affiliateCodeUnavailable => 'Ez a kód nem érhető el. Próbálj másikat.';
+
+  @override
+  String get affiliateCodeHint => '3–32 betű, szám, kötőjel vagy aláhúzás, betűvel kezdve.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kód frissítve';
+
+  @override
+  String get affiliateTooManyAttempts => 'Túl sok próbálkozás. Próbáld újra később.';
+
+  @override
+  String get affiliateActionFailed => 'Ez nem sikerült. Próbáld újra.';
 }

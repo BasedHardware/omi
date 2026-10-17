@@ -13475,4 +13475,143 @@ class AppLocalizationsZh extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name 尚未连接';
   }
+
+  @override
+  String get affiliateHeadline => '每分享一台 Omi 都能赚钱';
+
+  @override
+  String get affiliateSubtitle => '分享你的链接。有人通过它购买 Omi 时，你就能获得佣金。';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return '每笔订单可赚取 $rate';
+  }
+
+  @override
+  String get affiliateYourLink => '你的链接';
+
+  @override
+  String get affiliateYourCoupon => '你的优惠码';
+
+  @override
+  String get affiliateShareLink => '分享链接';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return '用我的链接购买 Omi：$url';
+  }
+
+  @override
+  String get affiliateChangeCode => '更改代码';
+
+  @override
+  String get affiliateEarned => '已赚取';
+
+  @override
+  String get affiliatePaidOut => '已支付';
+
+  @override
+  String get affiliateOrders => '订单';
+
+  @override
+  String get affiliateClicks => '点击';
+
+  @override
+  String get affiliateRecentOrders => '最近订单';
+
+  @override
+  String get affiliateNoOrders => '还没有订单。分享你的链接，开始赚钱吧。';
+
+  @override
+  String get affiliatePayouts => '付款';
+
+  @override
+  String get affiliateSetUpPayouts => '设置付款';
+
+  @override
+  String get affiliatePayoutsSetupMessage => '连接 Stripe 账户以接收付款。';
+
+  @override
+  String get affiliatePayoutsActive => '付款已启用';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe 需要更多信息才能向你付款。';
+
+  @override
+  String get affiliateFinishSetup => '完成设置';
+
+  @override
+  String get affiliateOpenStripe => '打开 Stripe 控制台';
+
+  @override
+  String get affiliateHowItWorks => '运作方式';
+
+  @override
+  String get affiliateStep1 => '与朋友和关注者分享你的链接或优惠码。';
+
+  @override
+  String get affiliateStep2 => '他们使用你的链接或优惠码在 omi.me 购买 Omi。';
+
+  @override
+  String get affiliateStep3 => '每笔订单你都能获得佣金，通过 Stripe 支付。';
+
+  @override
+  String get affiliateFullDashboard => '打开完整控制台';
+
+  @override
+  String get affiliateJoinTitle => '加入联盟计划';
+
+  @override
+  String get affiliateJoin => '加入计划';
+
+  @override
+  String get affiliateConnectAccount => '关联联盟账户';
+
+  @override
+  String get affiliateEmailMatchMessage => '我们找到了与你邮箱匹配的联盟账户。';
+
+  @override
+  String get affiliateHaveAccount => '我已有联盟账户';
+
+  @override
+  String get affiliateSignInMessage => '使用你的联盟账户邮箱和密码登录。只需操作一次。';
+
+  @override
+  String get affiliateWrongPassword => '该邮箱和密码与任何联盟账户都不匹配。';
+
+  @override
+  String get affiliateAlreadyLinked => '此联盟账户已关联到另一个 Omi 账户。';
+
+  @override
+  String get affiliateBlocked => '你的联盟账户已被封禁。请联系客服获取帮助。';
+
+  @override
+  String get affiliateEmailNotVerified => '请在 Omi 中验证你的邮箱以加入计划。';
+
+  @override
+  String get affiliateLoadFailed => '无法加载你的联盟账户。';
+
+  @override
+  String get affiliateCountryTitle => '选择你的国家/地区';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe 将据此设置你的收款账户，之后无法更改。';
+
+  @override
+  String get affiliateSearchCountries => '搜索国家/地区';
+
+  @override
+  String get affiliateCodeUnavailable => '该代码不可用，请换一个。';
+
+  @override
+  String get affiliateCodeHint => '3 到 32 个字母、数字、连字符或下划线，须以字母开头。';
+
+  @override
+  String get affiliateCodeUpdated => '代码已更新';
+
+  @override
+  String get affiliateTooManyAttempts => '尝试次数过多，请稍后再试。';
+
+  @override
+  String get affiliateActionFailed => '操作未成功，请重试。';
 }

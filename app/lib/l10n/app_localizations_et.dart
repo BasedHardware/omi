@@ -13680,4 +13680,144 @@ class AppLocalizationsEt extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name pole veel ühendatud';
   }
+
+  @override
+  String get affiliateHeadline => 'Teeni iga jagatud Omiga';
+
+  @override
+  String get affiliateSubtitle => 'Jaga oma linki. Kui keegi ostab selle kaudu Omi, saad vahendustasu.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Teenid iga tellimuse pealt $rate';
+  }
+
+  @override
+  String get affiliateYourLink => 'Sinu link';
+
+  @override
+  String get affiliateYourCoupon => 'Sinu sooduskood';
+
+  @override
+  String get affiliateShareLink => 'Jaga linki';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Hangi Omi minu lingiga: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Muuda koodi';
+
+  @override
+  String get affiliateEarned => 'Teenitud';
+
+  @override
+  String get affiliatePaidOut => 'Välja makstud';
+
+  @override
+  String get affiliateOrders => 'Tellimused';
+
+  @override
+  String get affiliateClicks => 'Klikid';
+
+  @override
+  String get affiliateRecentOrders => 'Viimased tellimused';
+
+  @override
+  String get affiliateNoOrders => 'Tellimusi veel pole. Jaga oma linki, et teenima hakata.';
+
+  @override
+  String get affiliatePayouts => 'Väljamaksed';
+
+  @override
+  String get affiliateSetUpPayouts => 'Seadista väljamaksed';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Ühenda Stripe’i konto, et raha kätte saada.';
+
+  @override
+  String get affiliatePayoutsActive => 'Väljamaksed on aktiivsed';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe vajab enne väljamakset rohkem teavet.';
+
+  @override
+  String get affiliateFinishSetup => 'Lõpeta seadistamine';
+
+  @override
+  String get affiliateOpenStripe => 'Ava Stripe’i juhtpaneel';
+
+  @override
+  String get affiliateHowItWorks => 'Kuidas see toimib';
+
+  @override
+  String get affiliateStep1 => 'Jaga oma linki või sooduskoodi sõprade ja jälgijatega.';
+
+  @override
+  String get affiliateStep2 => 'Nad ostavad Omi saidilt omi.me sinu lingi või koodiga.';
+
+  @override
+  String get affiliateStep3 => 'Saad iga tellimuse pealt vahendustasu, mis makstakse välja Stripe’i kaudu.';
+
+  @override
+  String get affiliateFullDashboard => 'Ava täielik juhtpaneel';
+
+  @override
+  String get affiliateJoinTitle => 'Liitu partnerprogrammiga';
+
+  @override
+  String get affiliateJoin => 'Liitu';
+
+  @override
+  String get affiliateConnectAccount => 'Ühenda partnerikonto';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Leidsime sinu e-posti aadressiga partnerikonto.';
+
+  @override
+  String get affiliateHaveAccount => 'Mul on partnerikonto';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Logi sisse oma partneri e-posti ja parooliga. Seda on vaja teha ainult üks kord.';
+
+  @override
+  String get affiliateWrongPassword => 'See e-post ja parool ei vasta ühelegi partnerikontole.';
+
+  @override
+  String get affiliateAlreadyLinked => 'See partnerikonto on juba seotud teise Omi kontoga.';
+
+  @override
+  String get affiliateBlocked => 'Sinu partnerikonto on blokeeritud. Abi saamiseks võta ühendust toega.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Programmiga liitumiseks kinnita oma e-post Omis.';
+
+  @override
+  String get affiliateLoadFailed => 'Partnerikonto laadimine ebaõnnestus.';
+
+  @override
+  String get affiliateCountryTitle => 'Vali oma riik';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe kasutab seda väljamaksekonto seadistamiseks. Seda ei saa hiljem muuta.';
+
+  @override
+  String get affiliateSearchCountries => 'Otsi riike';
+
+  @override
+  String get affiliateCodeUnavailable => 'See kood pole saadaval. Proovi mõnda teist.';
+
+  @override
+  String get affiliateCodeHint => '3–32 tähte, numbrit, sidekriipsu või allkriipsu, algab tähega.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kood uuendatud';
+
+  @override
+  String get affiliateTooManyAttempts => 'Liiga palju katseid. Proovi hiljem uuesti.';
+
+  @override
+  String get affiliateActionFailed => 'See ei õnnestunud. Proovi uuesti.';
 }

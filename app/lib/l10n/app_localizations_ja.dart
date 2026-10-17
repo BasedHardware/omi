@@ -13495,4 +13495,143 @@ class AppLocalizationsJa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$nameはまだ接続していません';
   }
+
+  @override
+  String get affiliateHeadline => 'Omiをシェアするたびに報酬を獲得';
+
+  @override
+  String get affiliateSubtitle => 'リンクをシェアしましょう。誰かがそのリンクからOmiを購入すると、コミッションを獲得できます。';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return '注文ごとに$rateを獲得';
+  }
+
+  @override
+  String get affiliateYourLink => 'あなたのリンク';
+
+  @override
+  String get affiliateYourCoupon => 'あなたの割引コード';
+
+  @override
+  String get affiliateShareLink => 'リンクをシェア';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return '私のリンクからOmiを手に入れよう：$url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'コードを変更';
+
+  @override
+  String get affiliateEarned => '獲得額';
+
+  @override
+  String get affiliatePaidOut => '支払い済み';
+
+  @override
+  String get affiliateOrders => '注文数';
+
+  @override
+  String get affiliateClicks => 'クリック数';
+
+  @override
+  String get affiliateRecentOrders => '最近の注文';
+
+  @override
+  String get affiliateNoOrders => 'まだ注文はありません。リンクをシェアして報酬を獲得しましょう。';
+
+  @override
+  String get affiliatePayouts => '支払い';
+
+  @override
+  String get affiliateSetUpPayouts => '支払いを設定';
+
+  @override
+  String get affiliatePayoutsSetupMessage => '報酬を受け取るにはStripeアカウントを連携してください。';
+
+  @override
+  String get affiliatePayoutsActive => '支払いは有効です';
+
+  @override
+  String get affiliatePayoutsNeedAttention => '支払いを行うには、Stripeに追加情報が必要です。';
+
+  @override
+  String get affiliateFinishSetup => '設定を完了';
+
+  @override
+  String get affiliateOpenStripe => 'Stripeダッシュボードを開く';
+
+  @override
+  String get affiliateHowItWorks => '仕組み';
+
+  @override
+  String get affiliateStep1 => 'リンクや割引コードを友達やフォロワーにシェアします。';
+
+  @override
+  String get affiliateStep2 => '相手があなたのリンクやコードを使ってomi.meでOmiを購入します。';
+
+  @override
+  String get affiliateStep3 => '注文ごとにコミッションを獲得し、Stripe経由で支払われます。';
+
+  @override
+  String get affiliateFullDashboard => 'フルダッシュボードを開く';
+
+  @override
+  String get affiliateJoinTitle => 'アフィリエイトプログラムに参加';
+
+  @override
+  String get affiliateJoin => '参加する';
+
+  @override
+  String get affiliateConnectAccount => 'アフィリエイトアカウントを連携';
+
+  @override
+  String get affiliateEmailMatchMessage => 'あなたのメールアドレスに一致するアフィリエイトアカウントが見つかりました。';
+
+  @override
+  String get affiliateHaveAccount => 'アフィリエイトアカウントを持っています';
+
+  @override
+  String get affiliateSignInMessage => 'アフィリエイト用のメールアドレスとパスワードでサインインしてください。この操作は一度だけです。';
+
+  @override
+  String get affiliateWrongPassword => 'このメールアドレスとパスワードに一致するアフィリエイトアカウントはありません。';
+
+  @override
+  String get affiliateAlreadyLinked => 'このアフィリエイトアカウントはすでに別のOmiアカウントに連携されています。';
+
+  @override
+  String get affiliateBlocked => 'アフィリエイトアカウントはブロックされています。サポートにお問い合わせください。';
+
+  @override
+  String get affiliateEmailNotVerified => 'プログラムに参加するには、Omiでメールアドレスを確認してください。';
+
+  @override
+  String get affiliateLoadFailed => 'アフィリエイトアカウントを読み込めませんでした。';
+
+  @override
+  String get affiliateCountryTitle => '国を選択';
+
+  @override
+  String get affiliateCountryMessage => 'Stripeはこれを使って支払いアカウントを設定します。後から変更することはできません。';
+
+  @override
+  String get affiliateSearchCountries => '国を検索';
+
+  @override
+  String get affiliateCodeUnavailable => 'このコードは使用できません。別のコードをお試しください。';
+
+  @override
+  String get affiliateCodeHint => '3〜32文字の英字、数字、ハイフン、アンダースコア（先頭は英字）。';
+
+  @override
+  String get affiliateCodeUpdated => 'コードを更新しました';
+
+  @override
+  String get affiliateTooManyAttempts => '試行回数が多すぎます。しばらくしてからお試しください。';
+
+  @override
+  String get affiliateActionFailed => 'うまくいきませんでした。もう一度お試しください。';
 }

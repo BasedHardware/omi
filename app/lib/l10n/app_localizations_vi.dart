@@ -13687,4 +13687,145 @@ class AppLocalizationsVi extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name chưa kết nối';
   }
+
+  @override
+  String get affiliateHeadline => 'Kiếm tiền với mỗi chiếc Omi bạn chia sẻ';
+
+  @override
+  String get affiliateSubtitle => 'Chia sẻ liên kết của bạn. Khi ai đó mua Omi qua liên kết, bạn sẽ nhận hoa hồng.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Bạn nhận $rate cho mỗi đơn hàng';
+  }
+
+  @override
+  String get affiliateYourLink => 'Liên kết của bạn';
+
+  @override
+  String get affiliateYourCoupon => 'Mã giảm giá của bạn';
+
+  @override
+  String get affiliateShareLink => 'Chia sẻ liên kết';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Mua Omi qua liên kết của mình: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Đổi mã';
+
+  @override
+  String get affiliateEarned => 'Đã kiếm';
+
+  @override
+  String get affiliatePaidOut => 'Đã thanh toán';
+
+  @override
+  String get affiliateOrders => 'Đơn hàng';
+
+  @override
+  String get affiliateClicks => 'Lượt nhấp';
+
+  @override
+  String get affiliateRecentOrders => 'Đơn hàng gần đây';
+
+  @override
+  String get affiliateNoOrders => 'Chưa có đơn hàng nào. Hãy chia sẻ liên kết để bắt đầu kiếm tiền.';
+
+  @override
+  String get affiliatePayouts => 'Thanh toán';
+
+  @override
+  String get affiliateSetUpPayouts => 'Thiết lập thanh toán';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Kết nối tài khoản Stripe để nhận tiền.';
+
+  @override
+  String get affiliatePayoutsActive => 'Thanh toán đang hoạt động';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe cần thêm thông tin trước khi có thể thanh toán cho bạn.';
+
+  @override
+  String get affiliateFinishSetup => 'Hoàn tất thiết lập';
+
+  @override
+  String get affiliateOpenStripe => 'Mở bảng điều khiển Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Cách hoạt động';
+
+  @override
+  String get affiliateStep1 => 'Chia sẻ liên kết hoặc mã giảm giá với bạn bè và người theo dõi.';
+
+  @override
+  String get affiliateStep2 => 'Họ mua Omi trên omi.me bằng liên kết hoặc mã của bạn.';
+
+  @override
+  String get affiliateStep3 => 'Bạn nhận hoa hồng cho mỗi đơn hàng, được thanh toán qua Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Mở bảng điều khiển đầy đủ';
+
+  @override
+  String get affiliateJoinTitle => 'Tham gia chương trình tiếp thị liên kết';
+
+  @override
+  String get affiliateJoin => 'Tham gia';
+
+  @override
+  String get affiliateConnectAccount => 'Kết nối tài khoản tiếp thị liên kết';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Chúng tôi đã tìm thấy tài khoản tiếp thị liên kết với email của bạn.';
+
+  @override
+  String get affiliateHaveAccount => 'Tôi đã có tài khoản tiếp thị liên kết';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Đăng nhập bằng email và mật khẩu tiếp thị liên kết. Bạn chỉ cần làm việc này một lần.';
+
+  @override
+  String get affiliateWrongPassword => 'Email và mật khẩu không khớp với tài khoản tiếp thị liên kết nào.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Tài khoản tiếp thị liên kết này đã được kết nối với một tài khoản Omi khác.';
+
+  @override
+  String get affiliateBlocked => 'Tài khoản tiếp thị liên kết của bạn đã bị chặn. Hãy liên hệ bộ phận hỗ trợ.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Xác minh email của bạn trong Omi để tham gia chương trình.';
+
+  @override
+  String get affiliateLoadFailed => 'Không thể tải tài khoản tiếp thị liên kết của bạn.';
+
+  @override
+  String get affiliateCountryTitle => 'Chọn quốc gia của bạn';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe dùng thông tin này để thiết lập tài khoản thanh toán. Bạn không thể thay đổi sau này.';
+
+  @override
+  String get affiliateSearchCountries => 'Tìm quốc gia';
+
+  @override
+  String get affiliateCodeUnavailable => 'Mã đó không khả dụng. Hãy thử mã khác.';
+
+  @override
+  String get affiliateCodeHint => 'Từ 3 đến 32 chữ cái, chữ số, dấu gạch ngang hoặc gạch dưới, bắt đầu bằng chữ cái.';
+
+  @override
+  String get affiliateCodeUpdated => 'Đã cập nhật mã';
+
+  @override
+  String get affiliateTooManyAttempts => 'Quá nhiều lần thử. Hãy thử lại sau.';
+
+  @override
+  String get affiliateActionFailed => 'Không thành công. Hãy thử lại.';
 }

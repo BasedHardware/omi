@@ -13695,4 +13695,145 @@ class AppLocalizationsSr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name још није повезан';
   }
+
+  @override
+  String get affiliateHeadline => 'Зарађујте са сваким подељеним Omi уређајем';
+
+  @override
+  String get affiliateSubtitle => 'Поделите своју везу. Када неко преко ње купи Omi, добијате провизију.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Зарађујете $rate по поруџбини';
+  }
+
+  @override
+  String get affiliateYourLink => 'Ваша веза';
+
+  @override
+  String get affiliateYourCoupon => 'Ваш код за попуст';
+
+  @override
+  String get affiliateShareLink => 'Подели везу';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Набави Omi преко моје везе: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Промени код';
+
+  @override
+  String get affiliateEarned => 'Зарађено';
+
+  @override
+  String get affiliatePaidOut => 'Исплаћено';
+
+  @override
+  String get affiliateOrders => 'Поруџбине';
+
+  @override
+  String get affiliateClicks => 'Кликови';
+
+  @override
+  String get affiliateRecentOrders => 'Недавне поруџбине';
+
+  @override
+  String get affiliateNoOrders => 'Још нема поруџбина. Поделите везу и почните да зарађујете.';
+
+  @override
+  String get affiliatePayouts => 'Исплате';
+
+  @override
+  String get affiliateSetUpPayouts => 'Подеси исплате';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Повежите Stripe налог да бисте примали исплате.';
+
+  @override
+  String get affiliatePayoutsActive => 'Исплате су активне';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe-у је потребно више података пре него што вам може исплатити.';
+
+  @override
+  String get affiliateFinishSetup => 'Заврши подешавање';
+
+  @override
+  String get affiliateOpenStripe => 'Отвори Stripe контролну таблу';
+
+  @override
+  String get affiliateHowItWorks => 'Како функционише';
+
+  @override
+  String get affiliateStep1 => 'Поделите везу или код за попуст са пријатељима и пратиоцима.';
+
+  @override
+  String get affiliateStep2 => 'Они купују Omi на omi.me са вашом везом или кодом.';
+
+  @override
+  String get affiliateStep3 => 'За сваку поруџбину добијате провизију, исплаћену преко Stripe-а.';
+
+  @override
+  String get affiliateFullDashboard => 'Отвори целу контролну таблу';
+
+  @override
+  String get affiliateJoinTitle => 'Придружите се партнерском програму';
+
+  @override
+  String get affiliateJoin => 'Придружи се';
+
+  @override
+  String get affiliateConnectAccount => 'Повежи партнерски налог';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Пронашли смо партнерски налог са вашом е-адресом.';
+
+  @override
+  String get affiliateHaveAccount => 'Имам партнерски налог';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Пријавите се партнерском е-адресом и лозинком. То треба да урадите само једном.';
+
+  @override
+  String get affiliateWrongPassword => 'Та е-адреса и лозинка не одговарају ниједном партнерском налогу.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Овај партнерски налог је већ повезан са другим Omi налогом.';
+
+  @override
+  String get affiliateBlocked => 'Ваш партнерски налог је блокиран. За помоћ се обратите подршци.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Потврдите своју е-адресу у Omi апликацији да бисте се придружили програму.';
+
+  @override
+  String get affiliateLoadFailed => 'Учитавање партнерског налога није успело.';
+
+  @override
+  String get affiliateCountryTitle => 'Изаберите своју земљу';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe је користи за подешавање налога за исплате. Касније се не може променити.';
+
+  @override
+  String get affiliateSearchCountries => 'Претражи земље';
+
+  @override
+  String get affiliateCodeUnavailable => 'Тај код није доступан. Пробајте други.';
+
+  @override
+  String get affiliateCodeHint => 'Од 3 до 32 слова, цифре, цртице или доње црте, мора почети словом.';
+
+  @override
+  String get affiliateCodeUpdated => 'Код ажуриран';
+
+  @override
+  String get affiliateTooManyAttempts => 'Превише покушаја. Покушајте поново касније.';
+
+  @override
+  String get affiliateActionFailed => 'Није успело. Покушајте поново.';
 }

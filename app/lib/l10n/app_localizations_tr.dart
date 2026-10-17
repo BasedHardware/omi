@@ -13699,4 +13699,144 @@ class AppLocalizationsTr extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Henüz Bağlanmadı';
   }
+
+  @override
+  String get affiliateHeadline => 'Paylaştığın her Omi ile kazan';
+
+  @override
+  String get affiliateSubtitle => 'Bağlantını paylaş. Biri bu bağlantıyla Omi satın aldığında komisyon kazanırsın.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Her siparişte $rate kazanırsın';
+  }
+
+  @override
+  String get affiliateYourLink => 'Bağlantın';
+
+  @override
+  String get affiliateYourCoupon => 'İndirim kodun';
+
+  @override
+  String get affiliateShareLink => 'Bağlantıyı Paylaş';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Omi\'yi bağlantımla al: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Kodu Değiştir';
+
+  @override
+  String get affiliateEarned => 'Kazanılan';
+
+  @override
+  String get affiliatePaidOut => 'Ödenen';
+
+  @override
+  String get affiliateOrders => 'Siparişler';
+
+  @override
+  String get affiliateClicks => 'Tıklamalar';
+
+  @override
+  String get affiliateRecentOrders => 'Son Siparişler';
+
+  @override
+  String get affiliateNoOrders => 'Henüz sipariş yok. Kazanmaya başlamak için bağlantını paylaş.';
+
+  @override
+  String get affiliatePayouts => 'Ödemeler';
+
+  @override
+  String get affiliateSetUpPayouts => 'Ödemeleri Ayarla';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Ödeme almak için bir Stripe hesabı bağla.';
+
+  @override
+  String get affiliatePayoutsActive => 'Ödemeler etkin';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe\'ın sana ödeme yapabilmesi için daha fazla bilgiye ihtiyacı var.';
+
+  @override
+  String get affiliateFinishSetup => 'Kurulumu Tamamla';
+
+  @override
+  String get affiliateOpenStripe => 'Stripe Panelini Aç';
+
+  @override
+  String get affiliateHowItWorks => 'Nasıl Çalışır';
+
+  @override
+  String get affiliateStep1 => 'Bağlantını veya indirim kodunu arkadaşların ve takipçilerinle paylaş.';
+
+  @override
+  String get affiliateStep2 => 'Onlar omi.me\'den bağlantın veya kodunla Omi satın alır.';
+
+  @override
+  String get affiliateStep3 => 'Her siparişte Stripe üzerinden ödenen bir komisyon kazanırsın.';
+
+  @override
+  String get affiliateFullDashboard => 'Tam Paneli Aç';
+
+  @override
+  String get affiliateJoinTitle => 'Satış Ortaklığı Programına Katıl';
+
+  @override
+  String get affiliateJoin => 'Programa Katıl';
+
+  @override
+  String get affiliateConnectAccount => 'Satış Ortaklığı Hesabını Bağla';
+
+  @override
+  String get affiliateEmailMatchMessage => 'E-postanla eşleşen bir satış ortaklığı hesabı bulduk.';
+
+  @override
+  String get affiliateHaveAccount => 'Satış Ortaklığı Hesabım Var';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Satış ortaklığı e-postan ve şifrenle giriş yap. Bunu yalnızca bir kez yapman gerekir.';
+
+  @override
+  String get affiliateWrongPassword => 'Bu e-posta ve şifre hiçbir satış ortaklığı hesabıyla eşleşmiyor.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Bu satış ortaklığı hesabı zaten başka bir Omi hesabına bağlı.';
+
+  @override
+  String get affiliateBlocked => 'Satış ortaklığı hesabın engellendi. Yardım için destekle iletişime geç.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Programa katılmak için Omi\'de e-postanı doğrula.';
+
+  @override
+  String get affiliateLoadFailed => 'Satış ortaklığı hesabın yüklenemedi.';
+
+  @override
+  String get affiliateCountryTitle => 'Ülkeni Seç';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe bunu ödeme hesabını kurmak için kullanır. Daha sonra değiştirilemez.';
+
+  @override
+  String get affiliateSearchCountries => 'Ülke ara';
+
+  @override
+  String get affiliateCodeUnavailable => 'Bu kod kullanılamıyor. Başka bir kod dene.';
+
+  @override
+  String get affiliateCodeHint => 'Harfle başlayan, 3 ila 32 harf, rakam, kısa çizgi veya alt çizgi.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kod güncellendi';
+
+  @override
+  String get affiliateTooManyAttempts => 'Çok fazla deneme. Daha sonra tekrar dene.';
+
+  @override
+  String get affiliateActionFailed => 'Olmadı. Tekrar dene.';
 }

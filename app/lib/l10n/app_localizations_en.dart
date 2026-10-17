@@ -13672,4 +13672,143 @@ class AppLocalizationsEn extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Hasn\'t Connected Yet';
   }
+
+  @override
+  String get affiliateHeadline => 'Earn with every Omi you share';
+
+  @override
+  String get affiliateSubtitle => 'Share your link. When someone buys Omi with it, you earn a commission.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'You earn $rate on every order';
+  }
+
+  @override
+  String get affiliateYourLink => 'Your link';
+
+  @override
+  String get affiliateYourCoupon => 'Your discount code';
+
+  @override
+  String get affiliateShareLink => 'Share Link';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Get Omi with my link: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Change Code';
+
+  @override
+  String get affiliateEarned => 'Earned';
+
+  @override
+  String get affiliatePaidOut => 'Paid out';
+
+  @override
+  String get affiliateOrders => 'Orders';
+
+  @override
+  String get affiliateClicks => 'Clicks';
+
+  @override
+  String get affiliateRecentOrders => 'Recent Orders';
+
+  @override
+  String get affiliateNoOrders => 'No orders yet. Share your link to start earning.';
+
+  @override
+  String get affiliatePayouts => 'Payouts';
+
+  @override
+  String get affiliateSetUpPayouts => 'Set Up Payouts';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Connect a Stripe account to get paid.';
+
+  @override
+  String get affiliatePayoutsActive => 'Payouts are active';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe needs more information before it can pay you.';
+
+  @override
+  String get affiliateFinishSetup => 'Finish Setup';
+
+  @override
+  String get affiliateOpenStripe => 'Open Stripe Dashboard';
+
+  @override
+  String get affiliateHowItWorks => 'How It Works';
+
+  @override
+  String get affiliateStep1 => 'Share your link or discount code with friends and followers.';
+
+  @override
+  String get affiliateStep2 => 'They buy Omi on omi.me with your link or code.';
+
+  @override
+  String get affiliateStep3 => 'You earn a commission on every order, paid out through Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Open Full Dashboard';
+
+  @override
+  String get affiliateJoinTitle => 'Join the Affiliate Program';
+
+  @override
+  String get affiliateJoin => 'Join Program';
+
+  @override
+  String get affiliateConnectAccount => 'Connect Affiliate Account';
+
+  @override
+  String get affiliateEmailMatchMessage => 'We found an affiliate account with your email.';
+
+  @override
+  String get affiliateHaveAccount => 'I Have an Affiliate Account';
+
+  @override
+  String get affiliateSignInMessage => 'Sign in with your affiliate email and password. You only need to do this once.';
+
+  @override
+  String get affiliateWrongPassword => 'That email and password don\'t match an affiliate account.';
+
+  @override
+  String get affiliateAlreadyLinked => 'This affiliate account is already connected to another Omi account.';
+
+  @override
+  String get affiliateBlocked => 'Your affiliate account is blocked. Contact support for help.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verify your email in Omi to join the program.';
+
+  @override
+  String get affiliateLoadFailed => 'Couldn\'t load your affiliate account.';
+
+  @override
+  String get affiliateCountryTitle => 'Select Your Country';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe uses this to set up your payout account. It can\'t be changed later.';
+
+  @override
+  String get affiliateSearchCountries => 'Search countries';
+
+  @override
+  String get affiliateCodeUnavailable => 'That code isn\'t available. Try another.';
+
+  @override
+  String get affiliateCodeHint => '3 to 32 letters, numbers, hyphens or underscores, starting with a letter.';
+
+  @override
+  String get affiliateCodeUpdated => 'Code updated';
+
+  @override
+  String get affiliateTooManyAttempts => 'Too many attempts. Try again later.';
+
+  @override
+  String get affiliateActionFailed => 'That didn\'t work. Try again.';
 }

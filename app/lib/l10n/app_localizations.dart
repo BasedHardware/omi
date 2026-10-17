@@ -24356,6 +24356,276 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} Hasn\'t Connected Yet'**
   String connectAgentWaitingTitle(String name);
+
+  /// Referral page headline for affiliates
+  ///
+  /// In en, this message translates to:
+  /// **'Earn with every Omi you share'**
+  String get affiliateHeadline;
+
+  /// Referral page subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Share your link. When someone buys Omi with it, you earn a commission.'**
+  String get affiliateSubtitle;
+
+  /// Commission rate line; rate is like '15%' or '$10.00'
+  ///
+  /// In en, this message translates to:
+  /// **'You earn {rate} on every order'**
+  String affiliateCommissionRate(String rate);
+
+  /// Label above the referral link
+  ///
+  /// In en, this message translates to:
+  /// **'Your link'**
+  String get affiliateYourLink;
+
+  /// Label above the affiliate coupon code
+  ///
+  /// In en, this message translates to:
+  /// **'Your discount code'**
+  String get affiliateYourCoupon;
+
+  /// Button that opens the share sheet for the referral link
+  ///
+  /// In en, this message translates to:
+  /// **'Share Link'**
+  String get affiliateShareLink;
+
+  /// Text shared with friends; url is the referral link
+  ///
+  /// In en, this message translates to:
+  /// **'Get Omi with my link: {url}'**
+  String affiliateShareMessage(String url);
+
+  /// Button to change the referral code
+  ///
+  /// In en, this message translates to:
+  /// **'Change Code'**
+  String get affiliateChangeCode;
+
+  /// Stat label: total commission earned
+  ///
+  /// In en, this message translates to:
+  /// **'Earned'**
+  String get affiliateEarned;
+
+  /// Stat label: commission already paid
+  ///
+  /// In en, this message translates to:
+  /// **'Paid out'**
+  String get affiliatePaidOut;
+
+  /// Stat label: number of referred orders
+  ///
+  /// In en, this message translates to:
+  /// **'Orders'**
+  String get affiliateOrders;
+
+  /// Stat label: number of referral link clicks
+  ///
+  /// In en, this message translates to:
+  /// **'Clicks'**
+  String get affiliateClicks;
+
+  /// Section header
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Orders'**
+  String get affiliateRecentOrders;
+
+  /// Empty orders message
+  ///
+  /// In en, this message translates to:
+  /// **'No orders yet. Share your link to start earning.'**
+  String get affiliateNoOrders;
+
+  /// Section header for payouts
+  ///
+  /// In en, this message translates to:
+  /// **'Payouts'**
+  String get affiliatePayouts;
+
+  /// Button to connect a Stripe payout account
+  ///
+  /// In en, this message translates to:
+  /// **'Set Up Payouts'**
+  String get affiliateSetUpPayouts;
+
+  /// Explains payout setup
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a Stripe account to get paid.'**
+  String get affiliatePayoutsSetupMessage;
+
+  /// Payout account status
+  ///
+  /// In en, this message translates to:
+  /// **'Payouts are active'**
+  String get affiliatePayoutsActive;
+
+  /// Payout account needs attention
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe needs more information before it can pay you.'**
+  String get affiliatePayoutsNeedAttention;
+
+  /// Button to continue Stripe onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Finish Setup'**
+  String get affiliateFinishSetup;
+
+  /// Button that opens the Stripe dashboard
+  ///
+  /// In en, this message translates to:
+  /// **'Open Stripe Dashboard'**
+  String get affiliateOpenStripe;
+
+  /// Section header
+  ///
+  /// In en, this message translates to:
+  /// **'How It Works'**
+  String get affiliateHowItWorks;
+
+  /// How it works, step 1
+  ///
+  /// In en, this message translates to:
+  /// **'Share your link or discount code with friends and followers.'**
+  String get affiliateStep1;
+
+  /// How it works, step 2
+  ///
+  /// In en, this message translates to:
+  /// **'They buy Omi on omi.me with your link or code.'**
+  String get affiliateStep2;
+
+  /// How it works, step 3
+  ///
+  /// In en, this message translates to:
+  /// **'You earn a commission on every order, paid out through Stripe.'**
+  String get affiliateStep3;
+
+  /// Button that opens the affiliate website
+  ///
+  /// In en, this message translates to:
+  /// **'Open Full Dashboard'**
+  String get affiliateFullDashboard;
+
+  /// Title for users not yet in the program
+  ///
+  /// In en, this message translates to:
+  /// **'Join the Affiliate Program'**
+  String get affiliateJoinTitle;
+
+  /// Button to join the affiliate program
+  ///
+  /// In en, this message translates to:
+  /// **'Join Program'**
+  String get affiliateJoin;
+
+  /// Button to connect an existing affiliate account
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Affiliate Account'**
+  String get affiliateConnectAccount;
+
+  /// Shown when the user's email matches an affiliate account
+  ///
+  /// In en, this message translates to:
+  /// **'We found an affiliate account with your email.'**
+  String get affiliateEmailMatchMessage;
+
+  /// Button to sign in with an existing affiliate account
+  ///
+  /// In en, this message translates to:
+  /// **'I Have an Affiliate Account'**
+  String get affiliateHaveAccount;
+
+  /// Explains the affiliate sign-in sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with your affiliate email and password. You only need to do this once.'**
+  String get affiliateSignInMessage;
+
+  /// Error for wrong affiliate credentials
+  ///
+  /// In en, this message translates to:
+  /// **'That email and password don\'t match an affiliate account.'**
+  String get affiliateWrongPassword;
+
+  /// Error when the affiliate account is linked elsewhere
+  ///
+  /// In en, this message translates to:
+  /// **'This affiliate account is already connected to another Omi account.'**
+  String get affiliateAlreadyLinked;
+
+  /// Shown to blocked affiliates
+  ///
+  /// In en, this message translates to:
+  /// **'Your affiliate account is blocked. Contact support for help.'**
+  String get affiliateBlocked;
+
+  /// Error when joining without a verified email
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your email in Omi to join the program.'**
+  String get affiliateEmailNotVerified;
+
+  /// Load error
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your affiliate account.'**
+  String get affiliateLoadFailed;
+
+  /// Title of the country picker for payouts
+  ///
+  /// In en, this message translates to:
+  /// **'Select Your Country'**
+  String get affiliateCountryTitle;
+
+  /// Explains the country picker
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe uses this to set up your payout account. It can\'t be changed later.'**
+  String get affiliateCountryMessage;
+
+  /// Search placeholder in the country picker
+  ///
+  /// In en, this message translates to:
+  /// **'Search countries'**
+  String get affiliateSearchCountries;
+
+  /// Referral code is taken or not allowed
+  ///
+  /// In en, this message translates to:
+  /// **'That code isn\'t available. Try another.'**
+  String get affiliateCodeUnavailable;
+
+  /// Rules for a referral code
+  ///
+  /// In en, this message translates to:
+  /// **'3 to 32 letters, numbers, hyphens or underscores, starting with a letter.'**
+  String get affiliateCodeHint;
+
+  /// Toast after changing the referral code
+  ///
+  /// In en, this message translates to:
+  /// **'Code updated'**
+  String get affiliateCodeUpdated;
+
+  /// Rate limit error
+  ///
+  /// In en, this message translates to:
+  /// **'Too many attempts. Try again later.'**
+  String get affiliateTooManyAttempts;
+
+  /// Generic action error
+  ///
+  /// In en, this message translates to:
+  /// **'That didn\'t work. Try again.'**
+  String get affiliateActionFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

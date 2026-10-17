@@ -13692,4 +13692,146 @@ class AppLocalizationsSv extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name är inte ansluten än';
   }
+
+  @override
+  String get affiliateHeadline => 'Tjäna pengar på varje Omi du delar';
+
+  @override
+  String get affiliateSubtitle => 'Dela din länk. När någon köper Omi via den får du provision.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Du tjänar $rate på varje beställning';
+  }
+
+  @override
+  String get affiliateYourLink => 'Din länk';
+
+  @override
+  String get affiliateYourCoupon => 'Din rabattkod';
+
+  @override
+  String get affiliateShareLink => 'Dela länk';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Skaffa Omi via min länk: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Ändra kod';
+
+  @override
+  String get affiliateEarned => 'Intjänat';
+
+  @override
+  String get affiliatePaidOut => 'Utbetalt';
+
+  @override
+  String get affiliateOrders => 'Beställningar';
+
+  @override
+  String get affiliateClicks => 'Klick';
+
+  @override
+  String get affiliateRecentOrders => 'Senaste beställningar';
+
+  @override
+  String get affiliateNoOrders => 'Inga beställningar än. Dela din länk för att börja tjäna.';
+
+  @override
+  String get affiliatePayouts => 'Utbetalningar';
+
+  @override
+  String get affiliateSetUpPayouts => 'Konfigurera utbetalningar';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Anslut ett Stripe-konto för att få betalt.';
+
+  @override
+  String get affiliatePayoutsActive => 'Utbetalningar är aktiva';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe behöver mer information innan du kan få betalt.';
+
+  @override
+  String get affiliateFinishSetup => 'Slutför konfigurationen';
+
+  @override
+  String get affiliateOpenStripe => 'Öppna Stripe-instrumentpanelen';
+
+  @override
+  String get affiliateHowItWorks => 'Så fungerar det';
+
+  @override
+  String get affiliateStep1 => 'Dela din länk eller rabattkod med vänner och följare.';
+
+  @override
+  String get affiliateStep2 => 'De köper Omi på omi.me med din länk eller kod.';
+
+  @override
+  String get affiliateStep3 => 'Du får provision på varje beställning, utbetald via Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Öppna hela instrumentpanelen';
+
+  @override
+  String get affiliateJoinTitle => 'Gå med i affiliateprogrammet';
+
+  @override
+  String get affiliateJoin => 'Gå med';
+
+  @override
+  String get affiliateConnectAccount => 'Anslut affiliatekonto';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Vi hittade ett affiliatekonto med din e-postadress.';
+
+  @override
+  String get affiliateHaveAccount => 'Jag har ett affiliatekonto';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Logga in med din affiliate-e-post och ditt lösenord. Du behöver bara göra det en gång.';
+
+  @override
+  String get affiliateWrongPassword => 'E-postadressen och lösenordet matchar inget affiliatekonto.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Det här affiliatekontot är redan kopplat till ett annat Omi-konto.';
+
+  @override
+  String get affiliateBlocked => 'Ditt affiliatekonto är spärrat. Kontakta supporten för hjälp.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verifiera din e-postadress i Omi för att gå med i programmet.';
+
+  @override
+  String get affiliateLoadFailed => 'Det gick inte att läsa in ditt affiliatekonto.';
+
+  @override
+  String get affiliateCountryTitle => 'Välj ditt land';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe använder detta för att skapa ditt utbetalningskonto. Det kan inte ändras senare.';
+
+  @override
+  String get affiliateSearchCountries => 'Sök länder';
+
+  @override
+  String get affiliateCodeUnavailable => 'Den koden är inte tillgänglig. Prova en annan.';
+
+  @override
+  String get affiliateCodeHint =>
+      '3 till 32 bokstäver, siffror, bindestreck eller understreck, och den måste börja med en bokstav.';
+
+  @override
+  String get affiliateCodeUpdated => 'Koden har uppdaterats';
+
+  @override
+  String get affiliateTooManyAttempts => 'För många försök. Försök igen senare.';
+
+  @override
+  String get affiliateActionFailed => 'Det fungerade inte. Försök igen.';
 }

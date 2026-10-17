@@ -13688,4 +13688,143 @@ class AppLocalizationsCs extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name se zatím nepřipojil';
   }
+
+  @override
+  String get affiliateHeadline => 'Vydělávejte s každým sdíleným Omi';
+
+  @override
+  String get affiliateSubtitle => 'Sdílejte svůj odkaz. Když přes něj někdo koupí Omi, získáte provizi.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Za každou objednávku získáte $rate';
+  }
+
+  @override
+  String get affiliateYourLink => 'Váš odkaz';
+
+  @override
+  String get affiliateYourCoupon => 'Váš slevový kód';
+
+  @override
+  String get affiliateShareLink => 'Sdílet odkaz';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Pořiďte si Omi přes můj odkaz: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Změnit kód';
+
+  @override
+  String get affiliateEarned => 'Vyděláno';
+
+  @override
+  String get affiliatePaidOut => 'Vyplaceno';
+
+  @override
+  String get affiliateOrders => 'Objednávky';
+
+  @override
+  String get affiliateClicks => 'Kliknutí';
+
+  @override
+  String get affiliateRecentOrders => 'Nedávné objednávky';
+
+  @override
+  String get affiliateNoOrders => 'Zatím žádné objednávky. Sdílejte svůj odkaz a začněte vydělávat.';
+
+  @override
+  String get affiliatePayouts => 'Výplaty';
+
+  @override
+  String get affiliateSetUpPayouts => 'Nastavit výplaty';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Připojte účet Stripe, abyste mohli dostávat výplaty.';
+
+  @override
+  String get affiliatePayoutsActive => 'Výplaty jsou aktivní';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe potřebuje další údaje, než vám bude moci zaplatit.';
+
+  @override
+  String get affiliateFinishSetup => 'Dokončit nastavení';
+
+  @override
+  String get affiliateOpenStripe => 'Otevřít panel Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Jak to funguje';
+
+  @override
+  String get affiliateStep1 => 'Sdílejte svůj odkaz nebo slevový kód s přáteli a sledujícími.';
+
+  @override
+  String get affiliateStep2 => 'Koupí Omi na omi.me s vaším odkazem nebo kódem.';
+
+  @override
+  String get affiliateStep3 => 'Z každé objednávky získáte provizi, vyplácenou přes Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Otevřít celý panel';
+
+  @override
+  String get affiliateJoinTitle => 'Připojte se k affiliate programu';
+
+  @override
+  String get affiliateJoin => 'Připojit se';
+
+  @override
+  String get affiliateConnectAccount => 'Připojit affiliate účet';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Našli jsme affiliate účet s vaším e-mailem.';
+
+  @override
+  String get affiliateHaveAccount => 'Mám affiliate účet';
+
+  @override
+  String get affiliateSignInMessage => 'Přihlaste se e-mailem a heslem affiliate účtu. Stačí to udělat jen jednou.';
+
+  @override
+  String get affiliateWrongPassword => 'Tento e-mail a heslo neodpovídají žádnému affiliate účtu.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Tento affiliate účet je už propojen s jiným účtem Omi.';
+
+  @override
+  String get affiliateBlocked => 'Váš affiliate účet je zablokován. Obraťte se na podporu.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Pro připojení k programu ověřte svůj e-mail v Omi.';
+
+  @override
+  String get affiliateLoadFailed => 'Affiliate účet se nepodařilo načíst.';
+
+  @override
+  String get affiliateCountryTitle => 'Vyberte svou zemi';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe ji použije k nastavení výplatního účtu. Později ji nelze změnit.';
+
+  @override
+  String get affiliateSearchCountries => 'Hledat země';
+
+  @override
+  String get affiliateCodeUnavailable => 'Tento kód není k dispozici. Zkuste jiný.';
+
+  @override
+  String get affiliateCodeHint => '3 až 32 písmen, číslic, pomlček nebo podtržítek, začínající písmenem.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kód aktualizován';
+
+  @override
+  String get affiliateTooManyAttempts => 'Příliš mnoho pokusů. Zkuste to později.';
+
+  @override
+  String get affiliateActionFailed => 'Nepovedlo se. Zkuste to znovu.';
 }

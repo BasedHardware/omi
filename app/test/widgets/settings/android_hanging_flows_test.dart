@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/affiliate.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/referral/referral_page.dart';
@@ -51,6 +54,7 @@ void main() {
   });
 
   setUp(() async {
+    Env.overrideApiBaseUrl('https://affiliate.test.invalid/');
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     browser = TestBrowser();
@@ -94,7 +98,14 @@ void main() {
 
   testWidgets('referral opens outside WebView and exposes a retry if launch fails', (tester) async {
     browser.opened = false;
-    await pumpPage(tester, const ReferralPage());
+    await pumpPage(
+      tester,
+      ReferralPage(
+        api: AffiliateApi(
+          send: (_) async => http.Response('{"native_enabled": false, "state": "unavailable"}', 200),
+        ),
+      ),
+    );
     expect(browser.launches.single, ('https://affiliate.omi.me/', false, false));
     expect(find.text('Try Again'), findsOneWidget);
     expect(find.byType(OmiSpinner), findsNothing);

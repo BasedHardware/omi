@@ -13794,4 +13794,145 @@ class AppLocalizationsTl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return 'Hindi pa nakakonekta ang $name';
   }
+
+  @override
+  String get affiliateHeadline => 'Kumita sa bawat Omi na ibinabahagi mo';
+
+  @override
+  String get affiliateSubtitle => 'Ibahagi ang iyong link. Kapag may bumili ng Omi gamit ito, kikita ka ng komisyon.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Kikita ka ng $rate sa bawat order';
+  }
+
+  @override
+  String get affiliateYourLink => 'Ang iyong link';
+
+  @override
+  String get affiliateYourCoupon => 'Ang iyong discount code';
+
+  @override
+  String get affiliateShareLink => 'Ibahagi ang Link';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Kunin ang Omi gamit ang link ko: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Palitan ang Code';
+
+  @override
+  String get affiliateEarned => 'Kinita';
+
+  @override
+  String get affiliatePaidOut => 'Naibayad';
+
+  @override
+  String get affiliateOrders => 'Mga order';
+
+  @override
+  String get affiliateClicks => 'Mga click';
+
+  @override
+  String get affiliateRecentOrders => 'Mga Kamakailang Order';
+
+  @override
+  String get affiliateNoOrders => 'Wala pang order. Ibahagi ang iyong link para magsimulang kumita.';
+
+  @override
+  String get affiliatePayouts => 'Mga Payout';
+
+  @override
+  String get affiliateSetUpPayouts => 'I-set Up ang Payouts';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Magkonekta ng Stripe account para mabayaran.';
+
+  @override
+  String get affiliatePayoutsActive => 'Aktibo ang mga payout';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Kailangan ng Stripe ng karagdagang impormasyon bago ka mabayaran.';
+
+  @override
+  String get affiliateFinishSetup => 'Tapusin ang Setup';
+
+  @override
+  String get affiliateOpenStripe => 'Buksan ang Stripe Dashboard';
+
+  @override
+  String get affiliateHowItWorks => 'Paano Ito Gumagana';
+
+  @override
+  String get affiliateStep1 => 'Ibahagi ang iyong link o discount code sa mga kaibigan at follower.';
+
+  @override
+  String get affiliateStep2 => 'Bibili sila ng Omi sa omi.me gamit ang iyong link o code.';
+
+  @override
+  String get affiliateStep3 => 'Kikita ka ng komisyon sa bawat order, ibinabayad sa pamamagitan ng Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Buksan ang Buong Dashboard';
+
+  @override
+  String get affiliateJoinTitle => 'Sumali sa Affiliate Program';
+
+  @override
+  String get affiliateJoin => 'Sumali';
+
+  @override
+  String get affiliateConnectAccount => 'Ikonekta ang Affiliate Account';
+
+  @override
+  String get affiliateEmailMatchMessage => 'May nakita kaming affiliate account gamit ang iyong email.';
+
+  @override
+  String get affiliateHaveAccount => 'May Affiliate Account Ako';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Mag-sign in gamit ang iyong affiliate email at password. Isang beses mo lang itong gagawin.';
+
+  @override
+  String get affiliateWrongPassword => 'Hindi tugma ang email at password na iyon sa anumang affiliate account.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Nakakonekta na ang affiliate account na ito sa ibang Omi account.';
+
+  @override
+  String get affiliateBlocked => 'Naka-block ang iyong affiliate account. Makipag-ugnayan sa support para sa tulong.';
+
+  @override
+  String get affiliateEmailNotVerified => 'I-verify ang iyong email sa Omi para makasali sa program.';
+
+  @override
+  String get affiliateLoadFailed => 'Hindi ma-load ang iyong affiliate account.';
+
+  @override
+  String get affiliateCountryTitle => 'Piliin ang Iyong Bansa';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Ginagamit ito ng Stripe para i-set up ang iyong payout account. Hindi na ito mababago mamaya.';
+
+  @override
+  String get affiliateSearchCountries => 'Maghanap ng bansa';
+
+  @override
+  String get affiliateCodeUnavailable => 'Hindi available ang code na iyon. Sumubok ng iba.';
+
+  @override
+  String get affiliateCodeHint => '3 hanggang 32 titik, numero, gitling o underscore, nagsisimula sa titik.';
+
+  @override
+  String get affiliateCodeUpdated => 'Na-update ang code';
+
+  @override
+  String get affiliateTooManyAttempts => 'Masyadong maraming pagsubok. Subukang muli mamaya.';
+
+  @override
+  String get affiliateActionFailed => 'Hindi iyon gumana. Subukang muli.';
 }

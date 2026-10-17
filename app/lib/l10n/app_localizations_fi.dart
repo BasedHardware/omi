@@ -13692,4 +13692,144 @@ class AppLocalizationsFi extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ei ole vielä yhdistetty';
   }
+
+  @override
+  String get affiliateHeadline => 'Ansaitse jokaisesta jakamastasi Omista';
+
+  @override
+  String get affiliateSubtitle => 'Jaa linkkisi. Kun joku ostaa Omin sen kautta, saat palkkion.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Ansaitset $rate jokaisesta tilauksesta';
+  }
+
+  @override
+  String get affiliateYourLink => 'Linkkisi';
+
+  @override
+  String get affiliateYourCoupon => 'Alennuskoodisi';
+
+  @override
+  String get affiliateShareLink => 'Jaa linkki';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Hanki Omi linkilläni: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Vaihda koodi';
+
+  @override
+  String get affiliateEarned => 'Ansaittu';
+
+  @override
+  String get affiliatePaidOut => 'Maksettu';
+
+  @override
+  String get affiliateOrders => 'Tilaukset';
+
+  @override
+  String get affiliateClicks => 'Klikkaukset';
+
+  @override
+  String get affiliateRecentOrders => 'Viimeisimmät tilaukset';
+
+  @override
+  String get affiliateNoOrders => 'Ei vielä tilauksia. Jaa linkkisi ja ala ansaita.';
+
+  @override
+  String get affiliatePayouts => 'Maksut';
+
+  @override
+  String get affiliateSetUpPayouts => 'Määritä maksut';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Yhdistä Stripe-tili saadaksesi maksut.';
+
+  @override
+  String get affiliatePayoutsActive => 'Maksut ovat käytössä';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe tarvitsee lisätietoja ennen kuin se voi maksaa sinulle.';
+
+  @override
+  String get affiliateFinishSetup => 'Viimeistele määritys';
+
+  @override
+  String get affiliateOpenStripe => 'Avaa Stripe-hallintapaneeli';
+
+  @override
+  String get affiliateHowItWorks => 'Näin se toimii';
+
+  @override
+  String get affiliateStep1 => 'Jaa linkkisi tai alennuskoodisi ystäville ja seuraajille.';
+
+  @override
+  String get affiliateStep2 => 'He ostavat Omin osoitteesta omi.me linkilläsi tai koodillasi.';
+
+  @override
+  String get affiliateStep3 => 'Saat palkkion jokaisesta tilauksesta, maksettuna Stripen kautta.';
+
+  @override
+  String get affiliateFullDashboard => 'Avaa koko hallintapaneeli';
+
+  @override
+  String get affiliateJoinTitle => 'Liity kumppaniohjelmaan';
+
+  @override
+  String get affiliateJoin => 'Liity';
+
+  @override
+  String get affiliateConnectAccount => 'Yhdistä kumppanitili';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Löysimme sähköpostiosoitteellasi kumppanitilin.';
+
+  @override
+  String get affiliateHaveAccount => 'Minulla on kumppanitili';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Kirjaudu kumppanitilisi sähköpostilla ja salasanalla. Tämä tarvitsee tehdä vain kerran.';
+
+  @override
+  String get affiliateWrongPassword => 'Sähköposti ja salasana eivät vastaa mitään kumppanitiliä.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Tämä kumppanitili on jo yhdistetty toiseen Omi-tiliin.';
+
+  @override
+  String get affiliateBlocked => 'Kumppanitilisi on estetty. Ota yhteyttä tukeen.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Vahvista sähköpostiosoitteesi Omissa liittyäksesi ohjelmaan.';
+
+  @override
+  String get affiliateLoadFailed => 'Kumppanitilin lataaminen epäonnistui.';
+
+  @override
+  String get affiliateCountryTitle => 'Valitse maasi';
+
+  @override
+  String get affiliateCountryMessage => 'Stripe käyttää tätä maksutilisi luomiseen. Sitä ei voi muuttaa myöhemmin.';
+
+  @override
+  String get affiliateSearchCountries => 'Hae maita';
+
+  @override
+  String get affiliateCodeUnavailable => 'Koodi ei ole käytettävissä. Kokeile toista.';
+
+  @override
+  String get affiliateCodeHint => '3–32 kirjainta, numeroa, yhdysmerkkiä tai alaviivaa, alkaen kirjaimella.';
+
+  @override
+  String get affiliateCodeUpdated => 'Koodi päivitetty';
+
+  @override
+  String get affiliateTooManyAttempts => 'Liian monta yritystä. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get affiliateActionFailed => 'Se ei onnistunut. Yritä uudelleen.';
 }

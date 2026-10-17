@@ -13735,4 +13735,144 @@ class AppLocalizationsBg extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name все още не е свързан';
   }
+
+  @override
+  String get affiliateHeadline => 'Печелете с всяко споделено Omi';
+
+  @override
+  String get affiliateSubtitle => 'Споделете връзката си. Когато някой купи Omi чрез нея, получавате комисиона.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Печелите $rate от всяка поръчка';
+  }
+
+  @override
+  String get affiliateYourLink => 'Вашата връзка';
+
+  @override
+  String get affiliateYourCoupon => 'Вашият код за отстъпка';
+
+  @override
+  String get affiliateShareLink => 'Споделяне на връзка';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Вземи Omi с моята връзка: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Промяна на код';
+
+  @override
+  String get affiliateEarned => 'Спечелено';
+
+  @override
+  String get affiliatePaidOut => 'Изплатено';
+
+  @override
+  String get affiliateOrders => 'Поръчки';
+
+  @override
+  String get affiliateClicks => 'Кликвания';
+
+  @override
+  String get affiliateRecentOrders => 'Скорошни поръчки';
+
+  @override
+  String get affiliateNoOrders => 'Все още няма поръчки. Споделете връзката си, за да започнете да печелите.';
+
+  @override
+  String get affiliatePayouts => 'Изплащания';
+
+  @override
+  String get affiliateSetUpPayouts => 'Настройване на изплащания';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Свържете акаунт в Stripe, за да получавате плащания.';
+
+  @override
+  String get affiliatePayoutsActive => 'Изплащанията са активни';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe се нуждае от още информация, преди да може да ви плати.';
+
+  @override
+  String get affiliateFinishSetup => 'Завършване на настройката';
+
+  @override
+  String get affiliateOpenStripe => 'Отваряне на таблото на Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Как работи';
+
+  @override
+  String get affiliateStep1 => 'Споделете връзката или кода си за отстъпка с приятели и последователи.';
+
+  @override
+  String get affiliateStep2 => 'Те купуват Omi от omi.me с вашата връзка или код.';
+
+  @override
+  String get affiliateStep3 => 'Получавате комисиона за всяка поръчка, изплатена чрез Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Отваряне на пълното табло';
+
+  @override
+  String get affiliateJoinTitle => 'Присъединете се към партньорската програма';
+
+  @override
+  String get affiliateJoin => 'Присъединяване';
+
+  @override
+  String get affiliateConnectAccount => 'Свързване на партньорски акаунт';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Открихме партньорски акаунт с вашия имейл.';
+
+  @override
+  String get affiliateHaveAccount => 'Имам партньорски акаунт';
+
+  @override
+  String get affiliateSignInMessage => 'Влезте с партньорския си имейл и парола. Нужно е да го направите само веднъж.';
+
+  @override
+  String get affiliateWrongPassword => 'Този имейл и парола не съвпадат с партньорски акаунт.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Този партньорски акаунт вече е свързан с друг акаунт в Omi.';
+
+  @override
+  String get affiliateBlocked => 'Партньорският ви акаунт е блокиран. Свържете се с поддръжката.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Потвърдете имейла си в Omi, за да се присъедините към програмата.';
+
+  @override
+  String get affiliateLoadFailed => 'Партньорският акаунт не можа да се зареди.';
+
+  @override
+  String get affiliateCountryTitle => 'Изберете своята държава';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe я използва, за да настрои акаунта ви за изплащания. Тя не може да се промени по-късно.';
+
+  @override
+  String get affiliateSearchCountries => 'Търсене на държави';
+
+  @override
+  String get affiliateCodeUnavailable => 'Този код не е наличен. Опитайте с друг.';
+
+  @override
+  String get affiliateCodeHint => 'От 3 до 32 букви, цифри, тирета или долни черти, като започва с буква.';
+
+  @override
+  String get affiliateCodeUpdated => 'Кодът е актуализиран';
+
+  @override
+  String get affiliateTooManyAttempts => 'Твърде много опити. Опитайте отново по-късно.';
+
+  @override
+  String get affiliateActionFailed => 'Не се получи. Опитайте отново.';
 }

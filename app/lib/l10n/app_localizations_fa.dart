@@ -13682,4 +13682,144 @@ class AppLocalizationsFa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name هنوز وصل نشده است';
   }
+
+  @override
+  String get affiliateHeadline => 'با هر Omi که به اشتراک می‌گذارید درآمد کسب کنید';
+
+  @override
+  String get affiliateSubtitle => 'پیوند خود را به اشتراک بگذارید. وقتی کسی با آن Omi بخرد، پورسانت می‌گیرید.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'از هر سفارش $rate درآمد دارید';
+  }
+
+  @override
+  String get affiliateYourLink => 'پیوند شما';
+
+  @override
+  String get affiliateYourCoupon => 'کد تخفیف شما';
+
+  @override
+  String get affiliateShareLink => 'اشتراک‌گذاری پیوند';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Omi را با پیوند من بخرید: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'تغییر کد';
+
+  @override
+  String get affiliateEarned => 'درآمد';
+
+  @override
+  String get affiliatePaidOut => 'پرداخت‌شده';
+
+  @override
+  String get affiliateOrders => 'سفارش‌ها';
+
+  @override
+  String get affiliateClicks => 'کلیک‌ها';
+
+  @override
+  String get affiliateRecentOrders => 'سفارش‌های اخیر';
+
+  @override
+  String get affiliateNoOrders => 'هنوز سفارشی نیست. پیوند خود را به اشتراک بگذارید تا درآمد کسب کنید.';
+
+  @override
+  String get affiliatePayouts => 'پرداخت‌ها';
+
+  @override
+  String get affiliateSetUpPayouts => 'راه‌اندازی پرداخت‌ها';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'برای دریافت پول، یک حساب Stripe متصل کنید.';
+
+  @override
+  String get affiliatePayoutsActive => 'پرداخت‌ها فعال است';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe پیش از پرداخت به شما به اطلاعات بیشتری نیاز دارد.';
+
+  @override
+  String get affiliateFinishSetup => 'تکمیل راه‌اندازی';
+
+  @override
+  String get affiliateOpenStripe => 'باز کردن داشبورد Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'چگونه کار می‌کند';
+
+  @override
+  String get affiliateStep1 => 'پیوند یا کد تخفیف خود را با دوستان و دنبال‌کنندگان به اشتراک بگذارید.';
+
+  @override
+  String get affiliateStep2 => 'آن‌ها Omi را از omi.me با پیوند یا کد شما می‌خرند.';
+
+  @override
+  String get affiliateStep3 => 'از هر سفارش پورسانت می‌گیرید که از طریق Stripe پرداخت می‌شود.';
+
+  @override
+  String get affiliateFullDashboard => 'باز کردن داشبورد کامل';
+
+  @override
+  String get affiliateJoinTitle => 'به برنامه همکاری در فروش بپیوندید';
+
+  @override
+  String get affiliateJoin => 'پیوستن';
+
+  @override
+  String get affiliateConnectAccount => 'اتصال حساب همکار';
+
+  @override
+  String get affiliateEmailMatchMessage => 'یک حساب همکار با ایمیل شما پیدا کردیم.';
+
+  @override
+  String get affiliateHaveAccount => 'حساب همکار دارم';
+
+  @override
+  String get affiliateSignInMessage => 'با ایمیل و رمز عبور حساب همکار وارد شوید. فقط یک بار لازم است.';
+
+  @override
+  String get affiliateWrongPassword => 'این ایمیل و رمز عبور با هیچ حساب همکاری مطابقت ندارد.';
+
+  @override
+  String get affiliateAlreadyLinked => 'این حساب همکار قبلاً به حساب Omi دیگری متصل شده است.';
+
+  @override
+  String get affiliateBlocked => 'حساب همکار شما مسدود شده است. برای کمک با پشتیبانی تماس بگیرید.';
+
+  @override
+  String get affiliateEmailNotVerified => 'برای پیوستن به برنامه، ایمیل خود را در Omi تأیید کنید.';
+
+  @override
+  String get affiliateLoadFailed => 'بارگیری حساب همکار ممکن نشد.';
+
+  @override
+  String get affiliateCountryTitle => 'کشور خود را انتخاب کنید';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe از این برای راه‌اندازی حساب پرداخت شما استفاده می‌کند. بعداً قابل تغییر نیست.';
+
+  @override
+  String get affiliateSearchCountries => 'جستجوی کشورها';
+
+  @override
+  String get affiliateCodeUnavailable => 'این کد در دسترس نیست. کد دیگری را امتحان کنید.';
+
+  @override
+  String get affiliateCodeHint => '۳ تا ۳۲ حرف، عدد، خط تیره یا زیرخط، که با یک حرف شروع شود.';
+
+  @override
+  String get affiliateCodeUpdated => 'کد به‌روزرسانی شد';
+
+  @override
+  String get affiliateTooManyAttempts => 'تلاش‌های بیش از حد. بعداً دوباره امتحان کنید.';
+
+  @override
+  String get affiliateActionFailed => 'انجام نشد. دوباره امتحان کنید.';
 }

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-affiliate-dashboard.png",
+      "platform": "mobile-android",
+      "description": "Linked affiliate: link and discount code card, share, earnings tiles, recent orders",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-affiliate-dashboard-lower.png",
+      "platform": "mobile-android",
+      "description": "Linked affiliate scrolled: orders, payout setup and how it works",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-affiliate-email-match.png",
+      "platform": "mobile-android",
+      "description": "Not linked, verified email matches an affiliate: one-tap connect",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-affiliate-join.png",
+      "platform": "mobile-android",
+      "description": "Not linked, no match: join or sign in with an existing affiliate account",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-affiliate-sign-in-error.png",
+      "platform": "mobile-android",
+      "description": "Affiliate sign-in sheet after a wrong password",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

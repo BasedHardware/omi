@@ -13699,4 +13699,146 @@ class AppLocalizationsId extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name Belum Terhubung';
   }
+
+  @override
+  String get affiliateHeadline => 'Hasilkan dari setiap Omi yang kamu bagikan';
+
+  @override
+  String get affiliateSubtitle =>
+      'Bagikan tautanmu. Saat seseorang membeli Omi lewat tautan itu, kamu mendapat komisi.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Kamu mendapat $rate untuk setiap pesanan';
+  }
+
+  @override
+  String get affiliateYourLink => 'Tautanmu';
+
+  @override
+  String get affiliateYourCoupon => 'Kode diskonmu';
+
+  @override
+  String get affiliateShareLink => 'Bagikan Tautan';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Dapatkan Omi lewat tautanku: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Ubah Kode';
+
+  @override
+  String get affiliateEarned => 'Diperoleh';
+
+  @override
+  String get affiliatePaidOut => 'Dibayarkan';
+
+  @override
+  String get affiliateOrders => 'Pesanan';
+
+  @override
+  String get affiliateClicks => 'Klik';
+
+  @override
+  String get affiliateRecentOrders => 'Pesanan Terbaru';
+
+  @override
+  String get affiliateNoOrders => 'Belum ada pesanan. Bagikan tautanmu untuk mulai menghasilkan.';
+
+  @override
+  String get affiliatePayouts => 'Pembayaran';
+
+  @override
+  String get affiliateSetUpPayouts => 'Atur Pembayaran';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Hubungkan akun Stripe untuk menerima pembayaran.';
+
+  @override
+  String get affiliatePayoutsActive => 'Pembayaran aktif';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe memerlukan informasi tambahan sebelum dapat membayarmu.';
+
+  @override
+  String get affiliateFinishSetup => 'Selesaikan Pengaturan';
+
+  @override
+  String get affiliateOpenStripe => 'Buka Dasbor Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Cara Kerjanya';
+
+  @override
+  String get affiliateStep1 => 'Bagikan tautan atau kode diskonmu kepada teman dan pengikut.';
+
+  @override
+  String get affiliateStep2 => 'Mereka membeli Omi di omi.me dengan tautan atau kodemu.';
+
+  @override
+  String get affiliateStep3 => 'Kamu mendapat komisi untuk setiap pesanan, dibayarkan melalui Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Buka Dasbor Lengkap';
+
+  @override
+  String get affiliateJoinTitle => 'Gabung Program Afiliasi';
+
+  @override
+  String get affiliateJoin => 'Gabung';
+
+  @override
+  String get affiliateConnectAccount => 'Hubungkan Akun Afiliasi';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Kami menemukan akun afiliasi dengan emailmu.';
+
+  @override
+  String get affiliateHaveAccount => 'Saya Punya Akun Afiliasi';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Masuk dengan email dan kata sandi afiliasimu. Kamu hanya perlu melakukannya sekali.';
+
+  @override
+  String get affiliateWrongPassword => 'Email dan kata sandi itu tidak cocok dengan akun afiliasi mana pun.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Akun afiliasi ini sudah terhubung ke akun Omi lain.';
+
+  @override
+  String get affiliateBlocked => 'Akun afiliasimu diblokir. Hubungi dukungan untuk bantuan.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verifikasi emailmu di Omi untuk bergabung dengan program.';
+
+  @override
+  String get affiliateLoadFailed => 'Tidak dapat memuat akun afiliasimu.';
+
+  @override
+  String get affiliateCountryTitle => 'Pilih Negaramu';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe menggunakan ini untuk menyiapkan akun pembayaranmu. Ini tidak dapat diubah nanti.';
+
+  @override
+  String get affiliateSearchCountries => 'Cari negara';
+
+  @override
+  String get affiliateCodeUnavailable => 'Kode itu tidak tersedia. Coba yang lain.';
+
+  @override
+  String get affiliateCodeHint => '3 hingga 32 huruf, angka, tanda hubung, atau garis bawah, diawali huruf.';
+
+  @override
+  String get affiliateCodeUpdated => 'Kode diperbarui';
+
+  @override
+  String get affiliateTooManyAttempts => 'Terlalu banyak percobaan. Coba lagi nanti.';
+
+  @override
+  String get affiliateActionFailed => 'Gagal. Coba lagi.';
 }

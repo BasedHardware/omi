@@ -13684,4 +13684,145 @@ class AppLocalizationsBn extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name এখনও সংযুক্ত হয়নি';
   }
+
+  @override
+  String get affiliateHeadline => 'আপনার শেয়ার করা প্রতিটি Omi থেকে আয় করুন';
+
+  @override
+  String get affiliateSubtitle => 'আপনার লিংক শেয়ার করুন। কেউ এটি দিয়ে Omi কিনলে আপনি কমিশন পাবেন।';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'প্রতিটি অর্ডারে আপনি $rate আয় করেন';
+  }
+
+  @override
+  String get affiliateYourLink => 'আপনার লিংক';
+
+  @override
+  String get affiliateYourCoupon => 'আপনার ডিসকাউন্ট কোড';
+
+  @override
+  String get affiliateShareLink => 'লিংক শেয়ার করুন';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'আমার লিংক দিয়ে Omi নিন: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'কোড পরিবর্তন করুন';
+
+  @override
+  String get affiliateEarned => 'আয়';
+
+  @override
+  String get affiliatePaidOut => 'পরিশোধিত';
+
+  @override
+  String get affiliateOrders => 'অর্ডার';
+
+  @override
+  String get affiliateClicks => 'ক্লিক';
+
+  @override
+  String get affiliateRecentOrders => 'সাম্প্রতিক অর্ডার';
+
+  @override
+  String get affiliateNoOrders => 'এখনও কোনো অর্ডার নেই। আয় শুরু করতে আপনার লিংক শেয়ার করুন।';
+
+  @override
+  String get affiliatePayouts => 'পেআউট';
+
+  @override
+  String get affiliateSetUpPayouts => 'পেআউট সেট আপ করুন';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'অর্থ পেতে একটি Stripe অ্যাকাউন্ট সংযুক্ত করুন।';
+
+  @override
+  String get affiliatePayoutsActive => 'পেআউট সক্রিয় আছে';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'আপনাকে অর্থ দেওয়ার আগে Stripe-এর আরও তথ্য প্রয়োজন।';
+
+  @override
+  String get affiliateFinishSetup => 'সেটআপ সম্পূর্ণ করুন';
+
+  @override
+  String get affiliateOpenStripe => 'Stripe ড্যাশবোর্ড খুলুন';
+
+  @override
+  String get affiliateHowItWorks => 'কীভাবে কাজ করে';
+
+  @override
+  String get affiliateStep1 => 'আপনার লিংক বা ডিসকাউন্ট কোড বন্ধু ও ফলোয়ারদের সাথে শেয়ার করুন।';
+
+  @override
+  String get affiliateStep2 => 'তারা আপনার লিংক বা কোড দিয়ে omi.me থেকে Omi কেনে।';
+
+  @override
+  String get affiliateStep3 => 'প্রতিটি অর্ডারে আপনি কমিশন পান, যা Stripe-এর মাধ্যমে পরিশোধ করা হয়।';
+
+  @override
+  String get affiliateFullDashboard => 'সম্পূর্ণ ড্যাশবোর্ড খুলুন';
+
+  @override
+  String get affiliateJoinTitle => 'অ্যাফিলিয়েট প্রোগ্রামে যোগ দিন';
+
+  @override
+  String get affiliateJoin => 'যোগ দিন';
+
+  @override
+  String get affiliateConnectAccount => 'অ্যাফিলিয়েট অ্যাকাউন্ট সংযুক্ত করুন';
+
+  @override
+  String get affiliateEmailMatchMessage => 'আপনার ইমেলের সাথে মিলে যাওয়া একটি অ্যাফিলিয়েট অ্যাকাউন্ট পাওয়া গেছে।';
+
+  @override
+  String get affiliateHaveAccount => 'আমার অ্যাফিলিয়েট অ্যাকাউন্ট আছে';
+
+  @override
+  String get affiliateSignInMessage =>
+      'আপনার অ্যাফিলিয়েট ইমেল ও পাসওয়ার্ড দিয়ে সাইন ইন করুন। এটি শুধু একবারই করতে হবে।';
+
+  @override
+  String get affiliateWrongPassword => 'এই ইমেল ও পাসওয়ার্ড কোনো অ্যাফিলিয়েট অ্যাকাউন্টের সাথে মেলে না।';
+
+  @override
+  String get affiliateAlreadyLinked => 'এই অ্যাফিলিয়েট অ্যাকাউন্টটি ইতিমধ্যে অন্য একটি Omi অ্যাকাউন্টে সংযুক্ত।';
+
+  @override
+  String get affiliateBlocked => 'আপনার অ্যাফিলিয়েট অ্যাকাউন্ট ব্লক করা হয়েছে। সাহায্যের জন্য সাপোর্টে যোগাযোগ করুন।';
+
+  @override
+  String get affiliateEmailNotVerified => 'প্রোগ্রামে যোগ দিতে Omi-তে আপনার ইমেল যাচাই করুন।';
+
+  @override
+  String get affiliateLoadFailed => 'আপনার অ্যাফিলিয়েট অ্যাকাউন্ট লোড করা যায়নি।';
+
+  @override
+  String get affiliateCountryTitle => 'আপনার দেশ নির্বাচন করুন';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe এটি আপনার পেআউট অ্যাকাউন্ট সেট আপ করতে ব্যবহার করে। পরে এটি পরিবর্তন করা যাবে না।';
+
+  @override
+  String get affiliateSearchCountries => 'দেশ খুঁজুন';
+
+  @override
+  String get affiliateCodeUnavailable => 'এই কোডটি উপলব্ধ নয়। অন্য একটি চেষ্টা করুন।';
+
+  @override
+  String get affiliateCodeHint => '৩ থেকে ৩২টি অক্ষর, সংখ্যা, হাইফেন বা আন্ডারস্কোর, যা একটি অক্ষর দিয়ে শুরু হবে।';
+
+  @override
+  String get affiliateCodeUpdated => 'কোড আপডেট হয়েছে';
+
+  @override
+  String get affiliateTooManyAttempts => 'অনেকবার চেষ্টা করা হয়েছে। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get affiliateActionFailed => 'এটি কাজ করেনি। আবার চেষ্টা করুন।';
 }

@@ -13757,4 +13757,145 @@ class AppLocalizationsCa extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name encara no s\'ha connectat';
   }
+
+  @override
+  String get affiliateHeadline => 'Guanya amb cada Omi que comparteixis';
+
+  @override
+  String get affiliateSubtitle => 'Comparteix el teu enllaç. Quan algú compri Omi amb ell, guanyaràs una comissió.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Guanyes $rate per cada comanda';
+  }
+
+  @override
+  String get affiliateYourLink => 'El teu enllaç';
+
+  @override
+  String get affiliateYourCoupon => 'El teu codi de descompte';
+
+  @override
+  String get affiliateShareLink => 'Compartir enllaç';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Aconsegueix Omi amb el meu enllaç: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Canviar codi';
+
+  @override
+  String get affiliateEarned => 'Guanyat';
+
+  @override
+  String get affiliatePaidOut => 'Pagat';
+
+  @override
+  String get affiliateOrders => 'Comandes';
+
+  @override
+  String get affiliateClicks => 'Clics';
+
+  @override
+  String get affiliateRecentOrders => 'Comandes recents';
+
+  @override
+  String get affiliateNoOrders => 'Encara no hi ha comandes. Comparteix el teu enllaç per començar a guanyar.';
+
+  @override
+  String get affiliatePayouts => 'Pagaments';
+
+  @override
+  String get affiliateSetUpPayouts => 'Configurar pagaments';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Connecta un compte de Stripe per cobrar.';
+
+  @override
+  String get affiliatePayoutsActive => 'Els pagaments estan actius';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe necessita més informació abans de poder pagar-te.';
+
+  @override
+  String get affiliateFinishSetup => 'Completar configuració';
+
+  @override
+  String get affiliateOpenStripe => 'Obrir el tauler de Stripe';
+
+  @override
+  String get affiliateHowItWorks => 'Com funciona';
+
+  @override
+  String get affiliateStep1 => 'Comparteix el teu enllaç o codi de descompte amb amics i seguidors.';
+
+  @override
+  String get affiliateStep2 => 'Compren Omi a omi.me amb el teu enllaç o codi.';
+
+  @override
+  String get affiliateStep3 => 'Guanyes una comissió per cada comanda, pagada a través de Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Obrir el tauler complet';
+
+  @override
+  String get affiliateJoinTitle => 'Uneix-te al programa d’afiliats';
+
+  @override
+  String get affiliateJoin => 'Unir-me';
+
+  @override
+  String get affiliateConnectAccount => 'Connectar compte d’afiliat';
+
+  @override
+  String get affiliateEmailMatchMessage => 'Hem trobat un compte d’afiliat amb el teu correu.';
+
+  @override
+  String get affiliateHaveAccount => 'Tinc un compte d’afiliat';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Inicia la sessió amb el correu i la contrasenya d’afiliat. Només cal fer-ho una vegada.';
+
+  @override
+  String get affiliateWrongPassword => 'Aquest correu i contrasenya no coincideixen amb cap compte d’afiliat.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Aquest compte d’afiliat ja està vinculat a un altre compte d’Omi.';
+
+  @override
+  String get affiliateBlocked => 'El teu compte d’afiliat està bloquejat. Contacta amb el suport per obtenir ajuda.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verifica el teu correu a Omi per unir-te al programa.';
+
+  @override
+  String get affiliateLoadFailed => 'No s’ha pogut carregar el teu compte d’afiliat.';
+
+  @override
+  String get affiliateCountryTitle => 'Selecciona el teu país';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe ho fa servir per configurar el teu compte de pagaments. No es pot canviar més endavant.';
+
+  @override
+  String get affiliateSearchCountries => 'Cercar països';
+
+  @override
+  String get affiliateCodeUnavailable => 'Aquest codi no està disponible. Prova’n un altre.';
+
+  @override
+  String get affiliateCodeHint => 'De 3 a 32 lletres, números, guions o guions baixos, començant per una lletra.';
+
+  @override
+  String get affiliateCodeUpdated => 'Codi actualitzat';
+
+  @override
+  String get affiliateTooManyAttempts => 'Massa intents. Torna-ho a provar més tard.';
+
+  @override
+  String get affiliateActionFailed => 'No ha funcionat. Torna-ho a provar.';
 }

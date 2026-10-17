@@ -37,11 +37,12 @@ link_uid = auth.with_rate_limit(auth.get_current_user_uid, 'affiliate:link', fai
 
 T = TypeVar('T')
 
+# Never 401: clients read 401 as an expired Omi session.
 _LINK_REJECTION_STATUS = {
     'affiliate_taken': 409,
     'account_has_other': 409,
     'no_email_match': 404,
-    'invalid_credentials': 401,
+    'invalid_credentials': 400,
     'email_not_verified': 403,
 }
 

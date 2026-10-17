@@ -13722,4 +13722,145 @@ class AppLocalizationsNl extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name is nog niet verbonden';
   }
+
+  @override
+  String get affiliateHeadline => 'Verdien met elke Omi die je deelt';
+
+  @override
+  String get affiliateSubtitle => 'Deel je link. Koopt iemand Omi via jouw link, dan ontvang je commissie.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'Je verdient $rate per bestelling';
+  }
+
+  @override
+  String get affiliateYourLink => 'Je link';
+
+  @override
+  String get affiliateYourCoupon => 'Je kortingscode';
+
+  @override
+  String get affiliateShareLink => 'Link delen';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'Koop Omi via mijn link: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'Code wijzigen';
+
+  @override
+  String get affiliateEarned => 'Verdiend';
+
+  @override
+  String get affiliatePaidOut => 'Uitbetaald';
+
+  @override
+  String get affiliateOrders => 'Bestellingen';
+
+  @override
+  String get affiliateClicks => 'Klikken';
+
+  @override
+  String get affiliateRecentOrders => 'Recente bestellingen';
+
+  @override
+  String get affiliateNoOrders => 'Nog geen bestellingen. Deel je link om te beginnen met verdienen.';
+
+  @override
+  String get affiliatePayouts => 'Uitbetalingen';
+
+  @override
+  String get affiliateSetUpPayouts => 'Uitbetalingen instellen';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'Koppel een Stripe-account om betaald te worden.';
+
+  @override
+  String get affiliatePayoutsActive => 'Uitbetalingen zijn actief';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'Stripe heeft meer informatie nodig voordat je uitbetaald kunt worden.';
+
+  @override
+  String get affiliateFinishSetup => 'Instellen voltooien';
+
+  @override
+  String get affiliateOpenStripe => 'Stripe-dashboard openen';
+
+  @override
+  String get affiliateHowItWorks => 'Zo werkt het';
+
+  @override
+  String get affiliateStep1 => 'Deel je link of kortingscode met vrienden en volgers.';
+
+  @override
+  String get affiliateStep2 => 'Ze kopen Omi op omi.me met jouw link of code.';
+
+  @override
+  String get affiliateStep3 => 'Je ontvangt commissie op elke bestelling, uitbetaald via Stripe.';
+
+  @override
+  String get affiliateFullDashboard => 'Volledig dashboard openen';
+
+  @override
+  String get affiliateJoinTitle => 'Word affiliate';
+
+  @override
+  String get affiliateJoin => 'Deelnemen';
+
+  @override
+  String get affiliateConnectAccount => 'Affiliate-account koppelen';
+
+  @override
+  String get affiliateEmailMatchMessage => 'We hebben een affiliate-account met je e-mailadres gevonden.';
+
+  @override
+  String get affiliateHaveAccount => 'Ik heb een affiliate-account';
+
+  @override
+  String get affiliateSignInMessage =>
+      'Log in met je affiliate-e-mailadres en wachtwoord. Dit hoef je maar één keer te doen.';
+
+  @override
+  String get affiliateWrongPassword => 'Dat e-mailadres en wachtwoord horen niet bij een affiliate-account.';
+
+  @override
+  String get affiliateAlreadyLinked => 'Dit affiliate-account is al gekoppeld aan een ander Omi-account.';
+
+  @override
+  String get affiliateBlocked => 'Je affiliate-account is geblokkeerd. Neem contact op met support.';
+
+  @override
+  String get affiliateEmailNotVerified => 'Verifieer je e-mailadres in Omi om deel te nemen.';
+
+  @override
+  String get affiliateLoadFailed => 'Je affiliate-account kan niet worden geladen.';
+
+  @override
+  String get affiliateCountryTitle => 'Selecteer je land';
+
+  @override
+  String get affiliateCountryMessage =>
+      'Stripe gebruikt dit om je uitbetalingsaccount in te stellen. Dit kan later niet worden gewijzigd.';
+
+  @override
+  String get affiliateSearchCountries => 'Landen zoeken';
+
+  @override
+  String get affiliateCodeUnavailable => 'Die code is niet beschikbaar. Probeer een andere.';
+
+  @override
+  String get affiliateCodeHint => '3 tot 32 letters, cijfers, koppeltekens of underscores, beginnend met een letter.';
+
+  @override
+  String get affiliateCodeUpdated => 'Code bijgewerkt';
+
+  @override
+  String get affiliateTooManyAttempts => 'Te veel pogingen. Probeer het later opnieuw.';
+
+  @override
+  String get affiliateActionFailed => 'Dat lukte niet. Probeer het opnieuw.';
 }

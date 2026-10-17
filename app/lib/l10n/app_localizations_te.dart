@@ -13740,4 +13740,145 @@ class AppLocalizationsTe extends AppLocalizations {
   String connectAgentWaitingTitle(String name) {
     return '$name ఇంకా కనెక్ట్ కాలేదు';
   }
+
+  @override
+  String get affiliateHeadline => 'మీరు షేర్ చేసే ప్రతి Omiతో సంపాదించండి';
+
+  @override
+  String get affiliateSubtitle => 'మీ లింక్‌ను షేర్ చేయండి. దాని ద్వారా ఎవరైనా Omi కొంటే, మీకు కమీషన్ వస్తుంది.';
+
+  @override
+  String affiliateCommissionRate(String rate) {
+    return 'ప్రతి ఆర్డర్‌పై మీరు $rate సంపాదిస్తారు';
+  }
+
+  @override
+  String get affiliateYourLink => 'మీ లింక్';
+
+  @override
+  String get affiliateYourCoupon => 'మీ డిస్కౌంట్ కోడ్';
+
+  @override
+  String get affiliateShareLink => 'లింక్ షేర్ చేయండి';
+
+  @override
+  String affiliateShareMessage(String url) {
+    return 'నా లింక్‌తో Omi పొందండి: $url';
+  }
+
+  @override
+  String get affiliateChangeCode => 'కోడ్ మార్చండి';
+
+  @override
+  String get affiliateEarned => 'సంపాదించినది';
+
+  @override
+  String get affiliatePaidOut => 'చెల్లించినది';
+
+  @override
+  String get affiliateOrders => 'ఆర్డర్లు';
+
+  @override
+  String get affiliateClicks => 'క్లిక్‌లు';
+
+  @override
+  String get affiliateRecentOrders => 'ఇటీవలి ఆర్డర్లు';
+
+  @override
+  String get affiliateNoOrders => 'ఇంకా ఆర్డర్లు లేవు. సంపాదించడం ప్రారంభించడానికి మీ లింక్‌ను షేర్ చేయండి.';
+
+  @override
+  String get affiliatePayouts => 'చెల్లింపులు';
+
+  @override
+  String get affiliateSetUpPayouts => 'చెల్లింపులను సెటప్ చేయండి';
+
+  @override
+  String get affiliatePayoutsSetupMessage => 'చెల్లింపులు పొందడానికి Stripe ఖాతాను కనెక్ట్ చేయండి.';
+
+  @override
+  String get affiliatePayoutsActive => 'చెల్లింపులు సక్రియంగా ఉన్నాయి';
+
+  @override
+  String get affiliatePayoutsNeedAttention => 'మీకు చెల్లించే ముందు Stripeకు మరింత సమాచారం కావాలి.';
+
+  @override
+  String get affiliateFinishSetup => 'సెటప్ పూర్తి చేయండి';
+
+  @override
+  String get affiliateOpenStripe => 'Stripe డాష్‌బోర్డ్ తెరవండి';
+
+  @override
+  String get affiliateHowItWorks => 'ఇది ఎలా పనిచేస్తుంది';
+
+  @override
+  String get affiliateStep1 => 'మీ లింక్ లేదా డిస్కౌంట్ కోడ్‌ను స్నేహితులు, ఫాలోవర్లతో షేర్ చేయండి.';
+
+  @override
+  String get affiliateStep2 => 'వారు మీ లింక్ లేదా కోడ్‌తో omi.meలో Omi కొంటారు.';
+
+  @override
+  String get affiliateStep3 => 'ప్రతి ఆర్డర్‌పై మీకు కమీషన్ వస్తుంది, అది Stripe ద్వారా చెల్లించబడుతుంది.';
+
+  @override
+  String get affiliateFullDashboard => 'పూర్తి డాష్‌బోర్డ్ తెరవండి';
+
+  @override
+  String get affiliateJoinTitle => 'అఫిలియేట్ ప్రోగ్రామ్‌లో చేరండి';
+
+  @override
+  String get affiliateJoin => 'చేరండి';
+
+  @override
+  String get affiliateConnectAccount => 'అఫిలియేట్ ఖాతాను కనెక్ట్ చేయండి';
+
+  @override
+  String get affiliateEmailMatchMessage => 'మీ ఇమెయిల్‌తో ఒక అఫిలియేట్ ఖాతాను కనుగొన్నాం.';
+
+  @override
+  String get affiliateHaveAccount => 'నాకు అఫిలియేట్ ఖాతా ఉంది';
+
+  @override
+  String get affiliateSignInMessage =>
+      'మీ అఫిలియేట్ ఇమెయిల్, పాస్‌వర్డ్‌తో సైన్ ఇన్ చేయండి. ఇది ఒక్కసారి మాత్రమే చేయాలి.';
+
+  @override
+  String get affiliateWrongPassword => 'ఆ ఇమెయిల్, పాస్‌వర్డ్ ఏ అఫిలియేట్ ఖాతాతోనూ సరిపోలలేదు.';
+
+  @override
+  String get affiliateAlreadyLinked => 'ఈ అఫిలియేట్ ఖాతా ఇప్పటికే మరో Omi ఖాతాకు కనెక్ట్ అయి ఉంది.';
+
+  @override
+  String get affiliateBlocked => 'మీ అఫిలియేట్ ఖాతా బ్లాక్ చేయబడింది. సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.';
+
+  @override
+  String get affiliateEmailNotVerified => 'ప్రోగ్రామ్‌లో చేరడానికి Omiలో మీ ఇమెయిల్‌ను ధృవీకరించండి.';
+
+  @override
+  String get affiliateLoadFailed => 'మీ అఫిలియేట్ ఖాతాను లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get affiliateCountryTitle => 'మీ దేశాన్ని ఎంచుకోండి';
+
+  @override
+  String get affiliateCountryMessage =>
+      'మీ చెల్లింపు ఖాతాను సెటప్ చేయడానికి Stripe దీన్ని ఉపయోగిస్తుంది. దీన్ని తర్వాత మార్చలేరు.';
+
+  @override
+  String get affiliateSearchCountries => 'దేశాలను వెతకండి';
+
+  @override
+  String get affiliateCodeUnavailable => 'ఆ కోడ్ అందుబాటులో లేదు. మరొకటి ప్రయత్నించండి.';
+
+  @override
+  String get affiliateCodeHint => '3 నుండి 32 అక్షరాలు, సంఖ్యలు, హైఫన్‌లు లేదా అండర్‌స్కోర్‌లు, అక్షరంతో మొదలవ్వాలి.';
+
+  @override
+  String get affiliateCodeUpdated => 'కోడ్ అప్‌డేట్ అయింది';
+
+  @override
+  String get affiliateTooManyAttempts => 'చాలా ఎక్కువ ప్రయత్నాలు. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get affiliateActionFailed => 'అది పని చేయలేదు. మళ్లీ ప్రయత్నించండి.';
 }
