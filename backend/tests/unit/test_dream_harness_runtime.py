@@ -10,6 +10,7 @@ import pytest
 from config.dream_agent import Caps
 from config.dream_session import SessionLimits
 from database import dream_store, dream_turns, review_store, review_changes
+from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import VerificationBatch, Verification
 from tests.unit.test_dream_cleanup_edits import store, records, UID
 from tests.unit.test_dream_session import call, turn
@@ -178,6 +179,93 @@ def _verdict(messages, agree):
             ]
         ),
     )
+
+
+def test_transient_gate_contention_retries_committed_effect_idempotently(runtime, monkeypatch):
+    apply = dream_tools.apply_verified_edit
+    attempts = []
+    waits = []
+
+    def commit_then_contend_once(*args, **kwargs):
+        status = apply(*args, **kwargs)
+        attempts.append(status)
+        if len(attempts) == 1:
+            try:
+                raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+            except DestructiveOperationInProgress as cause:
+                raise review_store.ReviewConflict('Memory lifecycle authority changed or is unavailable') from cause
+        return status
+
+    async def no_wait(seconds):
+        waits.append(seconds)
+
+    monkeypatch.setattr(dream_tools, 'apply_verified_edit', commit_then_contend_once)
+    monkeypatch.setattr(dream_agent, '_sleep_gate_retry', no_wait)
+    before = deepcopy(runtime.rows[('users', UID, 'people', 'junk')])
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+
+    assert report['status'] == 'complete', report
+    assert report['outcomes'][0]['status'] == 'applied'
+    assert attempts == ['applied', 'applied']
+    assert waits == [5]
+    changes = [value for key, value in runtime.rows.items() if key[2:3] == ('review_changes',)]
+    assert len(changes) == 1
+    assert runtime.rows[('users', UID, 'people', 'junk')] != before
+
+
+def test_persistent_gate_contention_has_bounded_failure_code(runtime, monkeypatch, caplog):
+    attempts = []
+    waits = []
+    caplog.set_level('INFO', logger='utils.dream_metrics')
+
+    def keep_contending(*args, **kwargs):
+        attempts.append(None)
+        raise DestructiveOperationInProgress('canonical mutation blocked by destructive operation')
+
+    async def no_wait(seconds):
+        waits.append(seconds)
+
+    monkeypatch.setattr(dream_tools, 'apply_verified_edit', keep_contending)
+    monkeypatch.setattr(dream_agent, '_sleep_gate_retry', no_wait)
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+
+    assert report['status'] == 'failed'
+    assert report['error_type'] == 'ValueError'
+    assert report['error_code'] == 'dream_gate_contention'
+    assert report['stop_reason'] == 'dream_gate_contention'
+    assert len(attempts) == 5
+    assert waits == [5, 15, 30, 60]
+    assert 'error_code=dream_gate_contention stop_reason=dream_gate_contention' in caplog.text
+    assert not [value for key, value in runtime.rows.items() if key[2:3] == ('review_changes',)]
+
+
+@pytest.mark.parametrize(
+    'failure',
+    [
+        LegalHoldActive('destructive deletion is blocked by an active legal hold'),
+        DestructiveOperationInProgress('external data write blocked by account deletion'),
+    ],
+)
+def test_legal_hold_and_account_deletion_blocks_are_not_retried(runtime, monkeypatch, failure):
+    attempts = []
+
+    def blocked(*args, **kwargs):
+        attempts.append(None)
+        raise failure
+
+    monkeypatch.setattr(dream_tools, 'apply_verified_edit', blocked)
+    monkeypatch.setattr(
+        dream_agent,
+        '_sleep_gate_retry',
+        lambda *_: pytest.fail('legal hold and account deletion blocks must not be retried'),
+    )
+
+    report = asyncio.run(dream_agent.run_pass(UID, turn=scripted([True, True])))
+
+    assert report['status'] == 'failed'
+    assert len(attempts) == 1
 
 
 def test_live_kill_after_planning_cannot_apply_staged_work(runtime, monkeypatch):

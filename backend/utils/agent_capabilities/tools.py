@@ -148,6 +148,21 @@ def apply_verified_edit(uid, edit, records, *, expected_records, authority):
     if authority == 'dream' and target_authority_protected(edit, records):
         raise ValueError('agent_user_memory_requires_review')
     validate_edit(edit, records, authority=authority)
+    if authority == 'dream':
+        key = edit_key(edit, records)
+        if not review_changes.agent_change_allowed(uid, key):
+            return 'suppressed'
+        change_id = dream_change_view.change_id_for_key(uid, key)
+        prior = review_store.decode_doc(
+            uid,
+            review_store.user(uid)
+            .collection('review_changes')
+            .document(review_store.safe_id(change_id))
+            .get()
+            .to_dict(),
+        )
+        if prior and prior.get('edit_key') == key and prior.get('phase') in {None, 'applied'}:
+            return 'applied'
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
     revalidate_proposal(uid, {'records': sources})
