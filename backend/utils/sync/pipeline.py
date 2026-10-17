@@ -16,7 +16,6 @@ import hashlib
 import io
 import logging
 import os
-import re
 import shutil
 import threading
 import time
@@ -165,6 +164,7 @@ from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
+from utils.sync.recording_intent import user_selected_recording
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
@@ -2192,15 +2192,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     if stt_cap_dispatch_enabled():
         # A hold is pending processing, not a locked transcript partition.
         should_lock = False
-    # LocalRecordingsProvider uploads one explicitly selected native recording
-    # at a time. The writer's exact marker distinguishes Transcribe Later from
-    # automatic offline fallback (omibatchphoneauto) in already-released clients.
-    # Watch recovery files use the same manual Process Now workflow.
-    # Keep this narrow: a mixed/bulk sync job does not establish a keep choice.
-    selected_name = os.path.basename(raw_paths[0]).lower() if len(raw_paths) == 1 else ''
-    user_selected_recording = selected_name.startswith('audio_omibatchphone_') or (
-        re.fullmatch(r'audio_omibatchwatch[0-9a-f]{32}s\d+_pcm16_16000_1_fs160_\d+\.bin', selected_name) is not None
-    )
+    selected_recording = user_selected_recording(raw_paths)
     # Enrich raw sync geolocation (address / place id) once per job before any
     # conversation is created. This is the single enrichment point covering both
     # the inline and Cloud Tasks dispatch branches; it runs before the
@@ -3071,7 +3063,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 uid,
                 response,
                 on_fenced=_checkpoint_fenced_conversations,
-                **({'user_selected': True} if user_selected_recording else {}),
+                **({'user_selected': True} if selected_recording else {}),
             )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced
