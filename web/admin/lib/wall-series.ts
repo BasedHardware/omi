@@ -40,7 +40,7 @@ import { aggregatePeriod, Metric, MetricId, WallPayload } from "./wall-metrics";
 import { fetchShopifyWeek } from "./wall-shopify";
 import { fetchFinopsHistory, FinopsHistory } from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
-import { wallRefreshSettled } from "./wall-cache";
+import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
 import { allInCost } from "./wall-cost";
 import { createHash } from "crypto";
 import {
@@ -50,6 +50,7 @@ import {
   LegDoc,
   memorySeriesStore,
   mergeLegDoc,
+  readThroughStore,
   SeriesStore,
   StoredRead,
   WriteResult,
@@ -83,6 +84,11 @@ export const GROWTH_WEEKS = 26;
 export const COHORT_WEEKS = 12;
 export const CURVE_COHORTS = 9;
 export const MONEY_WEEKS = 8;
+/** Daily unit-economics points (the board shows 35 days; FinOps book
+ * snapshots are daily from 2026-09-18). */
+export const UNIT_DAYS = 36;
+const MAU_WEEKS = Math.ceil(UNIT_DAYS / 7);
+const WEEK_OFFSETS = [0, 1, 2, 3, 4, 5, 6];
 /** Invisible cohort-age tag on curve field names (the board's ramp matcher). */
 export const CURVE_MARK = "\u200b";
 /** Mobile allowlisted events (Memory Created, tab/list clicks, mic starts) begin
@@ -142,7 +148,10 @@ export const defaultSeriesSources: SeriesSources = {
     return computeBillingInfraCosts(90, 0, true);
   },
   finops: fetchFinopsHistory,
-  store: firestoreSeriesStore,
+  // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
+  store: process.env.K_REVISION
+    ? firestoreSeriesStore
+    : readThroughStore(firestoreSeriesStore),
 };
 
 /** Leg results. Each leg is complete, partial (some periods failed) or failed. */
@@ -153,11 +162,11 @@ export interface Legs {
   retainedHistory?: AggregateRows;
   establishedHistory?: AggregateRows;
   curve?: AggregateRows;
-  /** 30-day MAU keyed by days before today: week 1 (headline priors) … */
-  mauRecent?: Record<number, number>;
-  /** … and weeks 2–7 (chart history). Split so a slow history read never
-   * holds back the headline. */
-  mauHistory?: Record<number, number>;
+  /** 30-day MAU keyed by days before today: days 7–13 (headline priors) … */
+  mauPrior?: Record<number, number>;
+  /** … and every other day the unit-economics chart draws. Split so a slow
+   * history read never holds back the headline. */
+  mauDaily?: Record<number, number>;
   finops?: FinopsHistory;
   billing?: Billing;
   shopify?: {
@@ -169,12 +178,12 @@ export interface Legs {
 }
 type LegName = keyof Legs;
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
-  headline: ["finops", "mauRecent", "billing"],
+  headline: ["finops", "mauPrior", "billing"],
   growth: ["growth"],
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
-  revenue: ["finops", "mauRecent", "mauHistory", "shopify"],
-  health: ["billing", "finops", "mauRecent", "mauHistory"],
+  revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
+  health: ["billing", "finops", "mauPrior", "mauDaily"],
 };
 
 /** Shift period numbers of a chunk read at an older end date. */
@@ -243,16 +252,17 @@ export function legJobs(
       COHORT_WEEKS - SNAPSHOT_PERIODS
     ).then((rows) => offsetRows(rows, SNAPSHOT_PERIODS));
   };
-  // Week 0 is the snapshot's own MAU; read 30-day windows at earlier week
-  // ends (ARPMAU) and one day earlier (cost/MAU, settled D−2).
-  const mauWeeks = async (from: number, to: number) => {
+  // 30-day MAU for every day the unit-economics chart draws: one read per
+  // week of seven daily offsets (one scan of 36 days, about the cost of one).
+  // Day 0 is the snapshot's own MAU; cost/MAU (settled D−2) uses day + 1.
+  const mauWeeks = async (weeks: number[]) => {
     const out: Record<number, number> = {};
     let failure: string | null = null;
-    for (let week = from; week < to; week++) {
+    for (const week of weeks) {
       try {
         const rows = await read(
-          { kind: "mau", end: back(week), offsets: [0, 1] },
-          mauOffsetsQuery(back(week), [0, 1])
+          { kind: "mau", end: back(week), offsets: WEEK_OFFSETS },
+          mauOffsetsQuery(back(week), WEEK_OFFSETS)
         );
         for (const r of rows) out[7 * week + Number(r[0])] = Number(r[1]);
       } catch (error) {
@@ -303,8 +313,11 @@ export function legJobs(
           retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end)
         )
       ),
-    mauRecent: () => mauWeeks(1, 2),
-    mauHistory: () => mauWeeks(2, MONEY_WEEKS),
+    mauPrior: () => mauWeeks([1]),
+    mauDaily: () =>
+      mauWeeks(
+        Array.from({ length: MAU_WEEKS }, (_, w) => w).filter((w) => w !== 1)
+      ),
     finops: () => sources.finops(isoDay(now)),
     billing: async () => {
       const bill = await sources.billing();
@@ -338,7 +351,7 @@ export function legJobs(
 // ---------------------------------------------------------------- assembly
 
 const mauAt = (legs: Legs, offset: number) =>
-  legs.mauRecent?.[offset] ?? legs.mauHistory?.[offset] ?? null;
+  legs.mauPrior?.[offset] ?? legs.mauDaily?.[offset] ?? null;
 
 const round = (v: number | null, digits = 2) =>
   v == null || !Number.isFinite(v)
@@ -398,6 +411,17 @@ function cohortSeries(
   return mergeSnapshot(points, m, (t) =>
     cohortRow(t.value, t.split, t.denominator)
   );
+}
+
+/** The board's shaded "maturing" span: from the newest cohort whose window
+ * has closed (`stop` − 1, the cohort's label) to now. Cohorts roll daily, so
+ * the line always ends `maturity` + 1 days back; nothing is pending a weekly
+ * release. A hidden 0–1 axis draws it full height. */
+function maturingBand(stop: Date, now: Date): Row[] {
+  return [
+    { date: ts(isoDay(shiftDay(stop, -1))), maturing: 1 },
+    { date: now.toISOString(), maturing: 1 },
+  ];
 }
 
 export function growthFrames(
@@ -518,7 +542,12 @@ export function activationFrames(
     };
   });
   sources.sort((a, b) => b.people - a.people);
-  return { activation, capture: captured, sources };
+  return {
+    activation,
+    capture: captured,
+    sources,
+    maturing: maturingBand(stop, now),
+  };
 }
 
 export function retentionFrames(
@@ -581,6 +610,7 @@ export function retentionFrames(
     ...curves,
     established,
     retained,
+    retainedMaturing: maturingBand(shiftDay(end, -37), now),
     power: growthFrames(legs, snapshot, now).power,
   };
 }
@@ -623,15 +653,17 @@ export function revenueFrames(
 
   const mauNow = usable(metric(snapshot, "engagement.mau"));
   const arpLive = usable(metric(snapshot, "revenue.arpmau"));
+  // Daily: the FinOps book at each day ÷ that day's 30-day MAU. Days without
+  // a book snapshot (before 2026-09-18) are absent, never zero.
   const arpmau: Row[] = [];
-  for (let k = MONEY_WEEKS - 1; k >= 0; k--) {
-    const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, 7 * k) ?? null;
-    const book = finopsMrr(legs.finops, shiftDay(end, -7 * k));
+  for (let k = UNIT_DAYS - 1; k >= 0; k--) {
+    const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, k) ?? null;
+    const book = finopsMrr(legs.finops, shiftDay(end, -k));
     const finopsArp = mau && book != null ? book / mau : null;
     const value = k === 0 && arpLive ? arpLive.value : finopsArp;
     if (value == null) continue;
     arpmau.push({
-      date: ts(isoDay(shiftDay(end, -7 * k - 1))),
+      date: ts(isoDay(shiftDay(end, -k - 1))),
       arpmau: value,
       finopsArpmau: round(finopsArp),
       mau,
@@ -692,22 +724,23 @@ export function healthFrames(
     ])
   );
   const live = usable(metric(snapshot, "cost.per_mau_month"));
+  // Daily, settled D−2: day k's 30-day all-in cost ÷ the same window's MAU.
   const costPerMau: Row[] = [];
-  for (let k = MONEY_WEEKS - 1; k >= 0; k--) {
-    const windowEnd = shiftDay(end, -1 - 7 * k); // exclusive; D−2 inclusive
+  for (let k = UNIT_DAYS - 1; k >= 1; k--) {
+    const windowEnd = shiftDay(end, -k); // exclusive; D−2 inclusive at k = 1
     const window = Array.from({ length: 30 }, (_, i) =>
       byDay.get(isoDay(shiftDay(windowEnd, -30 + i)))
     );
-    const mau = k === 0 ? live?.denominator ?? null : mauAt(legs, 7 * k + 1);
+    const mau = k === 1 ? live?.denominator ?? null : mauAt(legs, k);
     const settled = window.every((v) => v != null);
     const value =
-      k === 0 && live
+      k === 1 && live
         ? live.value
         : settled && mau
         ? window.reduce<number>((s, v) => s + (v as number), 0) / mau
         : null;
     if (value == null) continue;
-    const arpmau = arp.get(isoDay(shiftDay(end, -7 * k - 1)));
+    const arpmau = arp.get(isoDay(shiftDay(windowEnd, -1)));
     costPerMau.push({
       date: ts(isoDay(shiftDay(windowEnd, -1))),
       costPerMau: value,
@@ -841,7 +874,17 @@ export function headlineFrames(
         }
       )
     : [];
-  const [arpPrior, arpNow] = revenue.arpmau.slice(-2);
+  // Per-user stats compare with the point a week earlier (the charts are daily).
+  const weekBefore = (rows: Row[]) => {
+    const last = rows.at(-1);
+    if (!last) return [undefined, undefined] as const;
+    const day = isoDay(shiftDay(new Date(String(last.date)), -7));
+    return [
+      rows.find((r) => String(r.date).slice(0, 10) === day),
+      last,
+    ] as const;
+  };
+  const [arpPrior, arpNow] = weekBefore(revenue.arpmau);
   frames.arpmau = arpNow
     ? pair(
         arpPrior && arpNow.finopsArpmau
@@ -859,8 +902,8 @@ export function headlineFrames(
         }
       )
     : [];
-  const [cpmPrior, cpmNow] = healthFrames(legs, snapshot, now).costPerMau.slice(
-    -2
+  const [cpmPrior, cpmNow] = weekBefore(
+    healthFrames(legs, snapshot, now).costPerMau
   );
   frames.costPerMau = cpmNow
     ? pair(
@@ -974,13 +1017,13 @@ const sqlHash = (sql: string) =>
 class StoreTimeout extends Error {}
 class LeaseLost extends Error {}
 
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+function withTimeout<T>(work: Promise<T>, wait = STORE_WAIT): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     work,
     new Promise<T>(
       (_, reject) =>
-        (timer = setTimeout(() => reject(new StoreTimeout()), STORE_WAIT))
+        (timer = setTimeout(() => reject(new StoreTimeout()), wait))
     ),
   ]).finally(() => clearTimeout(timer));
 }
@@ -1037,7 +1080,11 @@ async function legState(
     return cached;
   let doc = cached?.doc ?? null;
   try {
-    const shared = await withTimeout(store.read<LegEntry>(name));
+    // A fresh process's first read also opens the store channel.
+    const shared = await withTimeout(
+      store.read<LegEntry>(name),
+      doc ? STORE_WAIT : COLD_STORE_WAIT
+    );
     storeOk();
     if (shared) doc = shared;
   } catch {

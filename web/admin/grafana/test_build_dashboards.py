@@ -694,6 +694,34 @@ class WallV2Contract(unittest.TestCase):
                 self.assertEqual(bool(re.search(pattern, name)), other == age, (age, other))
         self.assertEqual([o["properties"][2]["value"] for o in ramp][0], 3)  # newest is thickest
 
+    def test_cohort_lines_end_at_an_explained_maturing_band(self):
+        board = load("omi-tv-v2")
+        bands = {"Activation by platform": ("activation", "frames.maturing", "Maturing"),
+                 "Week-one capture": ("activation", "frames.maturing", "Maturing"),
+                 "Retention by week": ("retention", "frames.retainedMaturing", "If activated: maturing")}
+        for title, (series, frame, name) in bands.items():
+            panel = next(p for p in board["panels"] if p["title"] == title)
+            band = next(t for t in panel["targets"] if t["root_selector"] == frame)
+            self.assertTrue(band["url"].endswith("/" + series))
+            props = next({p["id"]: p["value"] for p in o["properties"]}
+                         for o in panel["fieldConfig"]["overrides"] if o["matcher"]["options"] == name)
+            # Its own 0–1 scale (not the percent axis), hidden, filled, legend only.
+            self.assertEqual((props["unit"], props["min"], props["max"]), ("none", 0, 1))
+            self.assertEqual(props["custom.axisPlacement"], "hidden")
+            self.assertEqual(props["custom.lineWidth"], 0)
+            self.assertEqual(props["custom.hideFrom"], {"legend": False, "tooltip": True, "viz": False})
+            self.assertIn("band", panel["description"])
+            self.assertNotIn("Oct 24", panel["description"])  # cohorts roll daily: no release date
+
+    def test_unit_economics_is_daily_and_breaks_on_missing_days(self):
+        board = load("omi-tv-v2")
+        panel = next(p for p in board["panels"] if p["title"] == "Unit economics")
+        custom = panel["fieldConfig"]["defaults"]["custom"]
+        self.assertEqual(custom["insertNulls"], 2 * 86_400_000)
+        self.assertFalse(custom["spanNulls"])  # a gap is drawn as a gap
+        self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
+        self.assertIn("one point per day", panel["description"])
+
     def test_platform_hues_mean_platforms(self):
         from build_wall_dashboard import PLATFORM
         board = load("omi-tv-v2")

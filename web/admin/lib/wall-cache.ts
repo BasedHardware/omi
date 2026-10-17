@@ -39,6 +39,9 @@ const MAX_AGE = 24 * 60 * 60_000;
 const COLD_WAIT = 5_000;
 const SHARED_READ_MS = 10_000;
 const STORE_WAIT = 2_000;
+/** A fresh process's first store read also opens the Firestore channel; it
+ * gets longer so a new revision serves the last good instead of "—". */
+export const COLD_STORE_WAIT = 4_500;
 const STORE_FAIL_LIMIT = 5;
 const STORE_FAIL_WINDOW = 10 * 60_000;
 export const SNAPSHOT_LEG = "snapshot";
@@ -69,13 +72,13 @@ const computeCachedWall: typeof computeWall = (sources, now) =>
 
 class StoreTimeout extends Error {}
 class LeaseLost extends Error {}
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+function withTimeout<T>(work: Promise<T>, wait = STORE_WAIT): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     work,
     new Promise<T>(
       (_, reject) =>
-        (timer = setTimeout(() => reject(new StoreTimeout()), STORE_WAIT))
+        (timer = setTimeout(() => reject(new StoreTimeout()), wait))
     ),
   ]).finally(() => clearTimeout(timer));
 }
@@ -112,7 +115,10 @@ function adopt(entry: SnapshotEntry | null | undefined) {
 function syncShared(store: SeriesStore, now: number) {
   if (!sharedRead || now - sharedReadAt >= SHARED_READ_MS) {
     sharedReadAt = now;
-    sharedRead = withTimeout(store.read<SnapshotEntry>(SNAPSHOT_LEG)).then(
+    sharedRead = withTimeout(
+      store.read<SnapshotEntry>(SNAPSHOT_LEG),
+      cached ? STORE_WAIT : COLD_STORE_WAIT
+    ).then(
       (doc) => {
         storeFailures = [];
         adopt(doc?.entry);
