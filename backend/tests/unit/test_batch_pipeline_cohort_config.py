@@ -45,7 +45,7 @@ def hosts(config):
     }
 
 
-def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest):
+def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():
             assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
@@ -58,6 +58,8 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest)
                 assert env['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'false'
                 assert env['BATCH_PIPELINE_UID_ALLOWLIST']['value'] == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
+    for chart_env in listen_chart_envs:
+        assert chart_env.get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
 
 
 def test_quarantine_recovery_is_david_only_on_prod_integration(

@@ -106,7 +106,7 @@ env:
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: ''
   - name: BATCH_PIPELINE_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_SERVING_ENABLED
