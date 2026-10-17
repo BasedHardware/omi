@@ -67,3 +67,54 @@ def test_stale_queued_job_is_never_finalized(monkeypatch):
 
     assert sync_jobs.get_sync_job('j4')['status'] == 'queued'
     assert fake.sets == []
+
+
+def test_is_sync_job_stale_sequenced_processing(monkeypatch):
+    # Processing sequenced jobs must be flagged stale if the worker died past threshold (#21943)
+    monkeypatch.setenv('SYNC_SEQUENCED_STALE_SECONDS', '600')
+    stale_job = {
+        'id': 'j5',
+        'status': 'processing',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time() - 700,
+    }
+    assert sync_jobs.is_sync_job_stale(stale_job) is True
+
+    fresh_job = {
+        'id': 'j6',
+        'status': 'processing',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time(),
+    }
+    assert sync_jobs.is_sync_job_stale(fresh_job) is False
+
+
+def test_is_sync_job_stale_sequenced_queued(monkeypatch):
+    # Queued sequenced jobs exceeding the stale threshold are flagged stale
+    monkeypatch.setenv('SYNC_SEQUENCED_STALE_SECONDS', '1800')
+    stale_queued = {
+        'id': 'j7',
+        'status': 'queued',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time() - 2000,
+    }
+    assert sync_jobs.is_sync_job_stale(stale_queued) is True
+
+    fresh_queued = {
+        'id': 'j8',
+        'status': 'queued',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time() - 100,
+    }
+    assert sync_jobs.is_sync_job_stale(fresh_queued) is False
+
+    # Pending retry (attempt/started_at set) must never be flipped stale
+    retrying_queued = {
+        'id': 'j9',
+        'status': 'queued',
+        'dispatch_mode': 'sequenced',
+        'attempt': 1,
+        'started_at': time.time() - 2000,
+        'updated_at': time.time() - 2000,
+    }
+    assert sync_jobs.is_sync_job_stale(retrying_queued) is False

@@ -282,20 +282,20 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     and that pending retry must never be flipped terminal by a poll, however
     long its backoff.
     """
-    # The UID owner/sweeper, not a polling reader, owns liveness for accepted
-    # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
-    # direct Cloud Tasks dispatch-stale threshold for a heavy account.
-    if job.get('dispatch_mode') == 'sequenced':
-        return False
     status = job.get('status')
-    if status == 'processing':
+    dispatch_mode = job.get('dispatch_mode')
+    if status == 'queued' and (job.get('started_at') is not None or job.get('attempt') is not None):
+        return False
+
+    if dispatch_mode == 'sequenced':
+        # The UID owner/sweeper owns liveness for accepted sequenced jobs.
+        # Waiting in the per-UID queue can take several hours on heavy accounts.
+        # However, an unstarted queued or lost processing sequenced job exceeding
+        # the 12h wait limit must not deadlock the account queue forever (#21943).
+        threshold = int(os.getenv('SYNC_SEQUENCED_STALE_SECONDS', '43200'))
+    elif status == 'processing':
         threshold = STALE_THRESHOLD_SECONDS
-    elif (
-        status == 'queued'
-        and job.get('dispatch_mode') == 'cloud_tasks'
-        and job.get('started_at') is None
-        and job.get('attempt') is None
-    ):
+    elif status == 'queued' and dispatch_mode == 'cloud_tasks':
         threshold = QUEUED_DISPATCH_STALE_SECONDS
     else:
         return False
