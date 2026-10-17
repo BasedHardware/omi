@@ -71,6 +71,14 @@ def load_manifest(path: Path = MANIFEST) -> Mapping[str, Any]:
             auth = [key for key in ("oidc", "oauth") if key in target]
             if len(auth) > 1:
                 raise ReconcileError(f"{env}/{job['name']}: choose only one auth token type")
+            for auth_type in auth:
+                email = _mapping(target[auth_type]).get("service_account")
+                # User-managed IAM account IDs are 6-30 chars. Validate before
+                # authentication or writes, including jobs still marked planned.
+                if not isinstance(email, str) or not re.fullmatch(
+                    r"[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z0-9.-]+\.iam\.gserviceaccount\.com", email
+                ):
+                    raise ReconcileError(f"{env}/{job['name']}: service_account must have a valid 6-30 character ID")
             for key, value in _mapping(target.get("headers")).items():
                 if not isinstance(value, Mapping) or set(value) != {"secret", "version"}:
                     raise ReconcileError(f"{env}/{job['name']}: header {key} must use a Secret Manager reference")

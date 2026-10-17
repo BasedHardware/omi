@@ -57,8 +57,13 @@ class Session:
                 assert self.job is not None and url.endswith(self.job['name'])
                 assert set(kwargs['params']) == {'validateOnly'}
                 assert kwargs['json'] == ops.desired_job(IMAGE)
+            else:
+                assert method == 'POST' and url.endswith('/jobs')
+                assert 'name' not in kwargs['json']
+                assert kwargs['params']['jobId'] == 'messaging-maintenance-job'
             if kwargs['params']['validateOnly'] == 'false':
                 self.job = copy.deepcopy(kwargs['json'])
+                self.job['name'] = ops.desired_job(IMAGE)['name']
             value = {'name': 'projects/based-hardware/locations/us-central1/operations/validation'}
         else:
             value = copy.deepcopy(kwargs['json'])
@@ -91,6 +96,54 @@ def test_alert_create_is_verified_and_second_run_is_noop():
     assert len(session.policies) == 10
     session.calls.clear()
     assert not ops.reconcile_alerts(session, CHANNELS, 'apply')
+    assert all(c[0] == 'GET' for c in session.calls)
+
+
+@pytest.mark.parametrize('mode', ['validate', 'apply'])
+def test_new_job_omits_name_only_on_create_and_then_matches(mode):
+    session = Session()
+    ops.reconcile_job(session, IMAGE, mode)
+    method, url, kwargs = session.calls[-1]
+    assert method == 'POST' and url.endswith('/locations/us-central1/jobs')
+    assert kwargs['params'] == {
+        'jobId': 'messaging-maintenance-job',
+        'validateOnly': 'true' if mode == 'validate' else 'false',
+    }
+    assert kwargs['json'] == {k: v for k, v in ops.desired_job(IMAGE).items() if k != 'name'}
+    assert (session.job is None) == (mode == 'validate')
+    if mode == 'apply':
+        assert not ops.reconcile_job(session, IMAGE, 'check')
+
+
+def test_alert_groups_install_nine_then_rate_without_touching_other_policies(monkeypatch):
+    session = Session()
+    ops.reconcile_log_metrics(session, 'apply')
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'messaging_operations.py',
+            'alerts',
+            '--apply',
+            '--alert-group',
+            'operational',
+            '--notification-channels',
+            *CHANNELS,
+        ],
+    )
+    monkeypatch.setattr(ops.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0, stdout='fake-token'))
+    monkeypatch.setattr(ops, 'AuthorizedSession', lambda credentials: session)
+    assert ops.main() == 0
+    assert len(session.policies) == 9
+    assert all(p['displayName'] != ops.CONTEXT_RATE_POLICY for p in session.policies)
+    installed = copy.deepcopy(session.policies)
+    session.calls.clear()
+    assert ops.reconcile_alerts(session, CHANNELS, 'apply', 'context-rate')
+    assert len(session.policies) == 10 and session.policies[:9] == installed
+    assert sum(c[0] == 'POST' for c in session.calls) == 1
+    session.calls.clear()
+    assert not ops.reconcile_alerts(session, CHANNELS, 'check', 'operational')
+    assert not ops.reconcile_alerts(session, CHANNELS, 'check', 'context-rate')
     assert all(c[0] == 'GET' for c in session.calls)
 
 
