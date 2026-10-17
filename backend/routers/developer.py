@@ -2600,12 +2600,16 @@ def get_goal(
     - **goal_id**: The ID of the goal to retrieve
     """
     goals = goals_db.get_all_goals(uid, include_inactive=True)
-    goal = next((g for g in goals if g.get('id') == goal_id), None)
+    goal = next((g for g in goals if hasattr(g, 'get') and g.get('id') == goal_id), None)
 
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    return _serialize_goal_datetimes(goal)
+    try:
+        return GoalResponse.model_validate(_serialize_goal_datetimes(dict(goal)))
+    except (AttributeError, TypeError, ValidationError, ValueError) as e:
+        logger.warning("Goal %s failed response validation for uid %s: %s", sanitize(goal_id), sanitize(uid), e)
+        raise HTTPException(status_code=404, detail="Goal not found")
 
 
 @router.post("/v1/dev/user/goals", tags=["Goals"], response_model=GoalResponse, operation_id="createGoal")
@@ -2724,7 +2728,19 @@ def get_goal_history(
     - **days**: Number of days of history to return (max 365, default 30)
     """
     history = goals_db.get_goal_history(uid, goal_id, days)
-    return [normalize_goal_history_entry(entry) for entry in history]
+    valid_history = []
+    for entry in history:
+        try:
+            if not entry.get('date'):
+                logger.warning("Skipping malformed goal history record for goal %s", sanitize(goal_id))
+                continue
+            norm = normalize_goal_history_entry(entry)
+            GoalHistoryEntryResponse.model_validate(norm)
+            valid_history.append(norm)
+        except (AttributeError, TypeError, ValidationError, ValueError) as e:
+            logger.warning("Skipping invalid goal history doc for goal %s: %s", sanitize(goal_id), e)
+            continue
+    return valid_history
 
 
 @router.delete(
