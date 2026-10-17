@@ -4948,10 +4948,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Additional Speech Sample Removed';
 
   @override
-  String get consentDataMessage =>
-      'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
-
-  @override
   String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
 
   @override
@@ -13882,4 +13878,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
+
+  @override
+  String get consentShortMessage =>
+      'Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Pinoproseso gamit ang $providers.';
+  }
 }

@@ -1504,7 +1504,6 @@
     "additionalSampleIndex": "Lisanäidis {index}",
     "durationSeconds": "Kestus: {seconds} sekundit",
     "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud",
-    "consentDataMessage": "Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
     "tasksEmptyStateMessage": "Ülesande loomiseks alusta vestlust.",
     "clearChatAction": "Tühjenda vestlus",
     "enableApps": "Luba rakendused",
@@ -4221,5 +4220,7 @@
     "summaryLimitTitle": "Kokkuvõtete limiit on täis",
     "summaryLimitBody": "Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.",
     "summaryFailedTitle": "Kokkuvõtet ei õnnestunud teha",
-    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti."
+    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti.",
+    "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
+    "consentAiProviders": "Töödeldakse teenustega {providers}."
 }

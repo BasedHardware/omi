@@ -5782,10 +5782,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "با ادامه دادن، مکالمات، ضبط‌ها و اطلاعات شخصی شما به طور ایمن در سرورهای ما ذخیره می‌شود. ضبط‌های صوتی و رونوشت‌های شما توسط سرویس‌های هوش مصنوعی شخص ثالث (از جمله Deepgram برای رونویسی و OpenAI برای تحلیل) پردازش می‌شوند تا بینش‌های مبتنی بر هوش مصنوعی را به شما ارائه دهند و تمام ویژگی‌های برنامه را فعال کنند.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "برای ایجاد یک کار، گفتگو را شروع کنید.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11644,5 +11640,7 @@
     "summaryLimitTitle": "به سقف خلاصه‌ها رسیدید",
     "summaryLimitBody": "در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.",
     "summaryFailedTitle": "خلاصه‌سازی انجام نشد",
-    "summaryFailedBody": "هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد."
+    "summaryFailedBody": "هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد.",
+    "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
+    "consentAiProviders": "پردازش با {providers}."
 }

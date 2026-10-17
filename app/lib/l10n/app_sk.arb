@@ -1504,7 +1504,6 @@
     "additionalSampleIndex": "Ďalšia vzorka {index}",
     "durationSeconds": "Trvanie: {seconds} sekúnd",
     "additionalSpeechSampleRemoved": "Ďalšia hlasová vzorka odstránená",
-    "consentDataMessage": "Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.",
     "tasksEmptyStateMessage": "Začnite konverzáciu a vytvorte úlohu.",
     "clearChatAction": "Vymazať chat",
     "enableApps": "Povoliť aplikácie",
@@ -4221,5 +4220,7 @@
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",
     "summaryFailedTitle": "Zhrnutie sa nepodarilo",
-    "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo."
+    "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo.",
+    "consentShortMessage": "Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.",
+    "consentAiProviders": "Spracúva {providers}."
 }

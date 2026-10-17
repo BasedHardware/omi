@@ -5782,10 +5782,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "جاری رکھ کر، آپ کی بات چیت، ریکارڈنگز اور ذاتی معلومات ہمارے سرورز پر محفوظ طریقے سے ذخیرہ کی جائیں گی۔ آپ کی آڈیو ریکارڈنگز اور ٹرانسکرپٹس تھرڈ پارٹی AI سروسز کے ذریعے پراسیس کی جاتی ہیں (بشمول ٹرانسکرپشن کے لیے Deepgram اور تجزیے کے لیے OpenAI) تاکہ آپ کو AI سے چلنے والی بصیرتیں فراہم کی جا سکیں اور ایپ کی تمام خصوصیات کو فعال کیا جا سکے۔",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "ٹاسک بنانے کے لیے گفتگو شروع کریں۔",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11644,5 +11640,7 @@
     "summaryLimitTitle": "خلاصے کی حد پوری ہو گئی",
     "summaryLimitBody": "آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔",
     "summaryFailedTitle": "خلاصہ نہیں ہو سکا",
-    "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔"
+    "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔",
+    "consentShortMessage": "Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔",
+    "consentAiProviders": "{providers} کے ذریعے پروسیس کیا جاتا ہے۔"
 }

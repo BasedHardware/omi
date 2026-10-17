@@ -4883,10 +4883,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'अतिरिक्त भाषण नमूना हटाया गया';
 
   @override
-  String get consentDataMessage =>
-      'जारी रखने पर, आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी हमारे सर्वर पर सुरक्षित रूप से संग्रहीत की जाएगी। आपकी ऑडियो रिकॉर्डिंग और ट्रांसक्रिप्ट तीसरे पक्ष की AI सेवाओं (ट्रांसक्रिप्शन के लिए Deepgram और विश्लेषण के लिए OpenAI सहित) द्वारा संसाधित किए जाते हैं ताकि आपको AI-संचालित अंतर्दृष्टि प्रदान की जा सके और सभी ऐप सुविधाएँ सक्षम की जा सकें।';
-
-  @override
   String get tasksEmptyStateMessage => 'टास्क बनाने के लिए बातचीत शुरू करें।';
 
   @override
@@ -13755,4 +13751,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।';
+
+  @override
+  String get consentShortMessage =>
+      'Omi AI की मदद से आपकी बातचीत को नोट्स में बदलता है। आप उन्हें कभी भी हटा सकते हैं।';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers के साथ प्रोसेस किया जाता है।';
+  }
 }

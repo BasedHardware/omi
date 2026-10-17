@@ -4908,10 +4908,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Lisäpuhenäyte poistettu';
 
   @override
-  String get consentDataMessage =>
-      'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
-
-  @override
   String get tasksEmptyStateMessage => 'Aloita keskustelu luodaksesi tehtävän.';
 
   @override
@@ -13780,4 +13776,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Jokin meni vikaan tätä keskustelua tiivistettäessä.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Käsittely: $providers.';
+  }
 }

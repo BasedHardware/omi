@@ -4936,10 +4936,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'S\'ha eliminat la mostra de veu addicional';
 
   @override
-  String get consentDataMessage =>
-      'Continuant, les vostres converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d\'àudio i transcripcions són processats per serveis d\'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l\'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
-
-  @override
   String get tasksEmptyStateMessage => 'Inicia una conversa per crear una tasca.';
 
   @override
@@ -13845,4 +13841,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Alguna cosa ha anat malament en resumir aquesta conversa.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Processat amb $providers.';
+  }
 }

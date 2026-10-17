@@ -4945,10 +4945,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Zusätzliche Sprachprobe entfernt';
 
   @override
-  String get consentDataMessage =>
-      'Durch Fortfahren werden Ihre Gespräche, Aufnahmen und persönlichen Daten sicher auf unseren Servern gespeichert. Ihre Audioaufnahmen und Transkripte werden von KI-Diensten Dritter verarbeitet (einschließlich Deepgram für die Transkription und OpenAI für die Analyse), um Ihnen KI-gestützte Erkenntnisse zu liefern und alle App-Funktionen zu ermöglichen.';
-
-  @override
   String get tasksEmptyStateMessage => 'Starte ein Gespräch, um eine Aufgabe zu erstellen.';
 
   @override
@@ -13879,4 +13875,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Beim Zusammenfassen dieses Gesprächs ist ein Fehler aufgetreten.';
+
+  @override
+  String get consentShortMessage => 'Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Verarbeitet mit $providers.';
+  }
 }

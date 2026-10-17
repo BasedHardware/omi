@@ -4869,10 +4869,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'تمت إزالة عينة الكلام الإضافية';
 
   @override
-  String get consentDataMessage =>
-      'بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا. تتم معالجة تسجيلاتك الصوتية ونصوصك بواسطة خدمات ذكاء اصطناعي تابعة لجهات خارجية (بما في ذلك Deepgram للنسخ و OpenAI للتحليل) لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.';
-
-  @override
   String get tasksEmptyStateMessage => 'ابدأ محادثة لإنشاء مهمة.';
 
   @override
@@ -13699,4 +13695,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'حدث خطأ ما أثناء تلخيص هذه المحادثة.';
+
+  @override
+  String get consentShortMessage => 'يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'تتم المعالجة بواسطة $providers.';
+  }
 }

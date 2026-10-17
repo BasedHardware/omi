@@ -4914,10 +4914,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Papildu balss paraugs noņemts';
 
   @override
-  String get consentDataMessage =>
-      'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
-
-  @override
   String get tasksEmptyStateMessage => 'Sāciet sarunu, lai izveidotu uzdevumu.';
 
   @override
@@ -13805,4 +13801,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Apkopojot šo sarunu, radās kļūda.';
+
+  @override
+  String get consentShortMessage => 'Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Apstrādā $providers.';
+  }
 }

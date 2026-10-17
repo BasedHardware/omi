@@ -4894,10 +4894,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Yderligere stemmeprøve fjernet';
 
   @override
-  String get consentDataMessage =>
-      'Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere. Dine lydoptagelser og udskrifter behandles af tredjeparts AI-tjenester (herunder Deepgram til transskription og OpenAI til analyse) for at give dig AI-drevne indsigter og aktivere alle appfunktioner.';
-
-  @override
   String get tasksEmptyStateMessage => 'Start en samtale for at oprette en opgave.';
 
   @override
@@ -13763,4 +13759,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Noget gik galt under opsummeringen af denne samtale.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Behandles med $providers.';
+  }
 }

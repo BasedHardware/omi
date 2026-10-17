@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "追加サンプル {index}",
     "durationSeconds": "長さ: {seconds} 秒",
     "additionalSpeechSampleRemoved": "追加の音声サンプルを削除しました",
-    "consentDataMessage": "続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。",
     "tasksEmptyStateMessage": "会話を始めてタスクを作成しましょう。",
     "clearChatAction": "チャットを消去",
     "enableApps": "アプリを有効化",
@@ -4221,5 +4220,7 @@
     "summaryLimitTitle": "要約の上限に達しました",
     "summaryLimitBody": "過去 1 時間に何度も要約を再生成しました。しばらくしてからもう一度お試しください。",
     "summaryFailedTitle": "要約できませんでした",
-    "summaryFailedBody": "この会話の要約中に問題が発生しました。"
+    "summaryFailedBody": "この会話の要約中に問題が発生しました。",
+    "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
+    "consentAiProviders": "{providers} で処理されます。"
 }

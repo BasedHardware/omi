@@ -1504,7 +1504,6 @@
     "additionalSampleIndex": "Muestra adicional {index}",
     "durationSeconds": "Duración: {seconds} segundos",
     "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada",
-    "consentDataMessage": "Al continuar, tus conversaciones, grabaciones e información personal se almacenarán de forma segura en nuestros servidores. Tus grabaciones de audio y transcripciones son procesadas por servicios de IA de terceros (incluyendo Deepgram para transcripción y OpenAI para análisis) para proporcionarte información impulsada por IA y habilitar todas las funciones de la aplicación.",
     "tasksEmptyStateMessage": "Inicia una conversación para crear una tarea.",
     "clearChatAction": "Borrar chat",
     "enableApps": "Habilitar apps",
@@ -4221,5 +4220,7 @@
     "summaryLimitTitle": "Límite de resúmenes alcanzado",
     "summaryLimitBody": "Has regenerado varios resúmenes en la última hora. Inténtalo de nuevo más tarde.",
     "summaryFailedTitle": "No se pudo resumir",
-    "summaryFailedBody": "Algo salió mal al resumir esta conversación."
+    "summaryFailedBody": "Algo salió mal al resumir esta conversación.",
+    "consentShortMessage": "Omi usa IA para convertir tus conversaciones en notas. Puedes eliminarlas cuando quieras.",
+    "consentAiProviders": "Procesado con {providers}."
 }

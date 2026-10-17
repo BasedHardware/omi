@@ -5782,10 +5782,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "కొనసాగించడం ద్వారా, మీ సంభాషణలు, రికార్డింగ్‌లు మరియు వ్యక్తిగత సమాచారం మా సర్వర్‌లలో సురక్షితంగా నిల్వ చేయబడతాయి. మీ ఆడియో రికార్డింగ్‌లు మరియు ట్రాన్‌స్క్రిప్ట్‌లు థర్డ్-పార్టీ AI సేవల ద్వారా ప్రాసెస్ చేయబడతాయి (ట్రాన్‌స్క్రిప్షన్ కోసం Deepgram మరియు విశ్లేషణ కోసం OpenAI సహా) AI-ఆధారిత అంతర్దృష్టులను అందించడానికి మరియు అన్ని యాప్ ఫీచర్‌లను ప్రారంభించడానికి.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "పనిని సృష్టించడానికి సంభాషణను ప్రారంభించండి.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11644,5 +11640,7 @@
     "summaryLimitTitle": "సారాంశ పరిమితిని చేరుకున్నారు",
     "summaryLimitBody": "గత గంటలో మీరు అనేక సారాంశాలను మళ్లీ రూపొందించారు. తర్వాత మళ్లీ ప్రయత్నించండి.",
     "summaryFailedTitle": "సారాంశం చేయలేకపోయాము",
-    "summaryFailedBody": "ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది."
+    "summaryFailedBody": "ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది.",
+    "consentShortMessage": "Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.",
+    "consentAiProviders": "{providers} ద్వారా ప్రాసెస్ చేయబడుతుంది."
 }

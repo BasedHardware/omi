@@ -4903,10 +4903,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Ďalšia hlasová vzorka odstránená';
 
   @override
-  String get consentDataMessage =>
-      'Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.';
-
-  @override
   String get tasksEmptyStateMessage => 'Začnite konverzáciu a vytvorte úlohu.';
 
   @override
@@ -13770,4 +13766,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Pri zhrnutí tohto rozhovoru sa niečo pokazilo.';
+
+  @override
+  String get consentShortMessage => 'Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Spracúva $providers.';
+  }
 }
