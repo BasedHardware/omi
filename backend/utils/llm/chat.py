@@ -496,9 +496,9 @@ def get_custom_instructions_section(
         return ""
     if enabled_override is None and not bool(custom_instructions.get("enabled", True)):
         return ""
-    about_user = str(custom_instructions.get("about_user") or "").strip()
+    about_me = str(custom_instructions.get("about_me") or custom_instructions.get("about_user") or "").strip()
     response_style = str(custom_instructions.get("response_style") or "").strip()
-    if not about_user and not response_style:
+    if not about_me and not response_style:
         return ""
 
     parts: List[str] = [
@@ -506,8 +506,8 @@ def get_custom_instructions_section(
         "The user configured the following account-wide custom instructions for how you should know them and respond.",
         "Precedence and safety rules: Existing safety, privacy, authorization, factual accuracy, tool-use, citation, memory, file, and current-context scope rules always take precedence over conflicting custom instructions. If a selected chat app or persona (<selected_chat_app> / <plugin_instructions>) is active for this conversation, its persona identity and task focus take precedence on direct conflicts, while non-conflicting user preferences below remain in effect.",
     ]
-    if about_user:
-        parts.append(f"<about_user>\n{escape(about_user, quote=False)}\n</about_user>")
+    if about_me:
+        parts.append(f"<about_user>\n{escape(about_me, quote=False)}\n</about_user>")
     if response_style:
         parts.append(f"<response_preferences>\n{escape(response_style, quote=False)}\n</response_preferences>")
     parts.append("</user_custom_instructions>")

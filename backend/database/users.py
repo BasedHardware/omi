@@ -2507,8 +2507,9 @@ def _normalize_custom_instructions_dict(raw: Any) -> dict:
     if not isinstance(raw, dict):
         return _default_custom_instructions()
     enabled = raw.get('enabled')
+    about_raw = raw.get('about_me') if isinstance(raw.get('about_me'), str) else raw.get('about_user')
     about_me = sanitize_custom_instruction_text(
-        raw.get('about_me') if isinstance(raw.get('about_me'), str) else ''
+        about_raw if isinstance(about_raw, str) else ''
     )[:CUSTOM_INSTRUCTIONS_MAX_LENGTH]
     response_style = sanitize_custom_instruction_text(
         raw.get('response_style') if isinstance(raw.get('response_style'), str) else ''

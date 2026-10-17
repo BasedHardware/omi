@@ -224,7 +224,6 @@ class UserWebhookUrlResponse(BaseModel):
 
 class UserDataExportResponse(BaseModel):
     profile: Dict[str, Any] = Field(default_factory=dict)
-    custom_instructions: Dict[str, Any] = Field(default_factory=dict)
     conversations: List[Dict[str, Any]] = Field(default_factory=list)
     conversation_photo_manifest: List[Dict[str, Any]] = Field(default_factory=list)
     frame_requests: List[Dict[str, Any]] = Field(default_factory=list)
