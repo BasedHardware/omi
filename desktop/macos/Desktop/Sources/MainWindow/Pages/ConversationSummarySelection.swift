@@ -30,11 +30,15 @@ enum ConversationSummarySelection {
   }
 
   static func primarySummary(for conversation: ServerConversation) -> Primary {
+    let valid = Set(conversation.transcriptSegments.flatMap { [$0.id, $0.backendId].compactMap { $0 } })
+    func presentable(_ text: String) -> String {
+      NoteCitationContract.repair(text.trimmingCharacters(in: .whitespacesAndNewlines), valid: valid).text
+    }
     if let (resultIndex, result) = conversation.appsResults.enumerated().first(where: {
       !$0.element.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }) {
       return Primary(
-        content: result.content.trimmingCharacters(in: .whitespacesAndNewlines),
+        content: presentable(result.content),
         kind: .app,
         appId: result.appId,
         resultIndex: resultIndex
@@ -47,7 +51,7 @@ enum ConversationSummarySelection {
       return Primary(content: renderedSections, kind: .sections, appId: nil, resultIndex: nil)
     }
     if !overview.isEmpty {
-      return Primary(content: overview, kind: .overview, appId: nil, resultIndex: nil)
+      return Primary(content: presentable(overview), kind: .overview, appId: nil, resultIndex: nil)
     }
     if !renderedSections.isEmpty {
       return Primary(content: renderedSections, kind: .sections, appId: nil, resultIndex: nil)

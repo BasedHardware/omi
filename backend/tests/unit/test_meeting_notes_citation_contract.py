@@ -10,6 +10,8 @@ import pytest
 from models.structured import Structured
 from utils.llm.meeting_notes_validation import (
     _CODE_RE,
+    _repair_note_citation_pass,
+    PresentationContractReport,
     enforce_structured_presentation_contract,
     repair_note_citations,
     sanitize_structured_speaker_placeholders,
@@ -30,7 +32,7 @@ def assert_visible_invariants(note):
             assert re.sub(r'[\s,;]', '', content), (field, text)
             assert not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+', content), (field, text)
             tokens = [t for t in re.split(r'[\s,;]+', content) if t]
-            assert not all(token in KNOWN for token in tokens), (field, text)
+            assert not any(token in KNOWN for token in tokens), (field, text)
             header = content.split()
             assert not (len(header) == 2 and header[0] in KNOWN and re.fullmatch(r'[?]?[0-9A-Za-z]{1,3}', header[1])), (
                 field,
@@ -181,3 +183,37 @@ def test_early_speaker_sanitizer_also_masks_code():
     assert note.title == f'Use {code}'
     assert note.participants[0].name == f'Name {code}'
     assert_visible_invariants(note)
+
+
+@pytest.mark.parametrize(
+    'case', [case for case in CONTRACT['cases'] if 'strict_output' in case], ids=lambda c: c['name']
+)
+def test_review_strict_and_fallback_contract(case):
+    report = PresentationContractReport()
+    text, ids = repair_note_citations(case['input'], KNOWN, safe_fallback=False, report=report)
+    assert text == case['strict_output']
+    assert ids == case['strict_source_ids']
+    assert report.violations == set(case['strict_violations'])
+    fallback = repair_note_citations(text, KNOWN)
+    assert fallback[0] == case['output']
+    assert list(dict.fromkeys(ids + fallback[1])) == case['source_ids']
+
+
+@pytest.mark.parametrize('case', CONTRACT['cases'], ids=lambda c: c['name'])
+def test_review_fixed_point_does_not_oscillate(case):
+    # Exercise the internal pass independently: convergence cannot be hidden by
+    # repair_note_citations' fixed-point loop. Each changing state must be new.
+    known = set(case.get('known_ids', KNOWN))
+    for fallback in (False, True):
+        text = case['input']
+        seen = {text}
+        for _ in range(len(text) + 1):
+            cleaned, _ = _repair_note_citation_pass(text, known, safe_fallback=fallback)
+            if cleaned == text:
+                break
+            assert cleaned not in seen, (case['name'], fallback, seen)
+            seen.add(cleaned)
+            text = cleaned
+        else:
+            pytest.fail(f"Repair did not converge: {case['name']}")
+        assert repair_note_citations(text, known, safe_fallback=fallback)[0] == text

@@ -28,7 +28,7 @@ describe('message-local chat citations', () => {
     ]);
     fireEvent.click(links[1]);
     expect(push).toHaveBeenCalledWith('/conversations?id=meeting-b');
-    expect(screen.getByText(/Unknown \[3\] and \[0\]/)).toBeInTheDocument();
+    expect(screen.getByText(/Unknown/).textContent).not.toMatch(/\[(?:3|0)\]/);
   });
 
   it('accepts whitespace and list separators from the server citation grammar', () => {
@@ -49,10 +49,10 @@ describe('message-local chat citations', () => {
       '1',
       '2',
     ]);
-    expect(screen.getByText(/\[9\]/)).toBeInTheDocument();
+    expect(screen.getByText(/Claim/).textContent).toBe('Claim 1 2 1 2 1, 2 1, 2.');
   });
 
-  it('protects code and existing links and keeps missing-memory markers inert', () => {
+  it('protects code and existing links and removes only missing-memory numeric markers', () => {
     const { container } = render(
       <ChatMarkdown memories={memories}>
         {
@@ -70,9 +70,13 @@ describe('message-local chat citations', () => {
       'https://example.com/',
     );
     expect(container.querySelector('code')?.textContent).toBe('[1]');
-    const other = render(<ChatMarkdown>{'Only [1] 【2】 [^1]'}</ChatMarkdown>);
+    const other = render(
+      <ChatMarkdown>
+        {'Only [1] 【2】 [^1] [0] [#3] [1, 2; 9] [see appendix] [RFC-123]'}
+      </ChatMarkdown>,
+    );
     expect(other.container.querySelector('a')).toBeNull();
-    expect(other.container.textContent).toContain('[1] 【2】 [^1]');
+    expect(other.container.textContent).toBe('Only       [see appendix] [RFC-123]');
   });
 
   it('binds the same marker to its own message when history changes', () => {

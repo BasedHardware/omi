@@ -19,6 +19,11 @@ function repairPass(input, knownIDs) {
     recovered.push(...ids);
     return marker;
   };
+  const cleanSeparators = (value) =>
+    value
+      .replace(/[\0\x01]/g, "")
+      .replace(/^[\s,;]+|[\s,;]+$/g, "")
+      .replace(/([,;])(?:\s*[,;])+/g, "$1");
   const linkPattern = /^\[([^\]\n]*)\]\(([^)\n]*)\)$/;
   const unit = (value) => {
     const link = value.match(linkPattern);
@@ -64,6 +69,13 @@ function repairPass(input, knownIDs) {
       /^[?]?[0-9A-Za-z]{1,3}$/.test(header[1])
     )
       return remove([header[0]]);
+    const mixedIDs = tokens.filter((id) => valid.has(id));
+    if (mixedIDs.length) {
+      recovered.push(...mixedIDs);
+      return cleanSeparators(
+        content.replace(/[^\s,;]+/g, (token) => (valid.has(token) ? "" : token))
+      );
+    }
     if (
       !tokens.length ||
       /^(?:spk|speaker)[ _]\d+:?$/i.test(content) ||
@@ -86,6 +98,15 @@ function repairPass(input, knownIDs) {
     );
   }
   text = text.replace(/\b(?:spk|speaker)[ _]\d+\b:?[ \t]*/gi, marker);
+  for (;;) {
+    const cleaned = text.replace(/\([^()\n]*\)/g, (value) => {
+      if (!/[\0\x01]/.test(value)) return value;
+      const content = cleanSeparators(value.slice(1, -1));
+      return content ? `(${content})` : "\x01";
+    });
+    if (cleaned === text) break;
+    text = cleaned;
+  }
   if (text.includes(marker)) {
     text = text
       .replace(/\0(?:[ \t]*\0)+/g, marker)
@@ -95,6 +116,7 @@ function repairPass(input, knownIDs) {
       .replace(/\0/g, "")
       .trim();
   }
+  if (text.includes("\x01")) text = text.replaceAll("\x01", "").trim();
   for (const [key, value] of [...protectedUnits].reverse())
     text = text.replaceAll(key, value);
   return { text, sourceIDs: [...new Set(recovered)] };

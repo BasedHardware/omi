@@ -35,6 +35,11 @@ enum NoteCitationContract {
       recovered.append(contentsOf: ids)
       return marker
     }
+    func cleanSeparators(_ value: String) -> String {
+      var content = value.replacingOccurrences(of: marker, with: "").replacingOccurrences(of: "\u{0001}", with: "")
+      content = replace(content, pattern: #"^[\s,;]+|[\s,;]+$"#) { _ in "" }
+      return replace(content, pattern: #"([,;])(?:\s*[,;])+"#) { String($0.prefix(1)) }
+    }
     let linkPattern = #"^\[([^\]\n]*)\]\(([^)\n]*)\)$"#
     func unit(_ value: String) -> String {
       if let groups = groups(value, pattern: linkPattern) {
@@ -52,7 +57,7 @@ enum NoteCitationContract {
           let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
           return groups(trimmed, pattern: linkPattern)?.first?.trimmingCharacters(in: .whitespacesAndNewlines)
             ?? trimmed
-        }
+        }.filter { !$0.isEmpty }
         return !ids.isEmpty && ids.allSatisfy { valid.contains($0) }
           ? remove(ids)
           : replace(value, pattern: #"\[[^\[\]\n]*\]\([^\n)]*\)|[\[［【][^\[\]［］【】\n]*[\]］】]"#, transform: unit)
@@ -70,6 +75,11 @@ enum NoteCitationContract {
       if header.count == 2, valid.contains(header[0]), matches(header[1], #"^[?]?[0-9A-Za-z]{1,3}$"#) {
         return remove([header[0]])
       }
+      let mixedIDs = tokens.filter { valid.contains($0) }
+      if !mixedIDs.isEmpty {
+        recovered.append(contentsOf: mixedIDs)
+        return cleanSeparators(replace(content, pattern: #"[^\s,;]+"#) { valid.contains($0) ? "" : $0 })
+      }
       if tokens.isEmpty || matches(content, #"(?i)^(?:spk|speaker)[ _]\d+:?$"#)
         || matches(content, #"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$"#)
       {
@@ -85,6 +95,15 @@ enum NoteCitationContract {
       { _ in marker }
     }
     text = replace(text, pattern: #"(?i)\b(?:spk|speaker)[ _]\d+\b:?[ \t]*"#) { _ in marker }
+    while true {
+      let cleaned = replace(text, pattern: #"\([^()\n]*\)"#) { value in
+        guard value.contains(marker) || value.contains("\u{0001}") else { return value }
+        let content = cleanSeparators(String(value.dropFirst().dropLast()))
+        return content.isEmpty ? "\u{0001}" : "(\(content))"
+      }
+      if cleaned == text { break }
+      text = cleaned
+    }
     if text.contains(marker) {
       let escaped = NSRegularExpression.escapedPattern(for: marker)
       text = replace(text, pattern: escaped + "(?:[ \\t]*" + escaped + ")+") { _ in marker }
@@ -92,6 +111,9 @@ enum NoteCitationContract {
       text = replace(text, pattern: "[ \\t]+" + escaped + #"(?=[,.;:]|\n|$)"#) { _ in "" }
       text = replace(text, pattern: escaped + "[ \\t]+") { _ in "" }
       text = text.replacingOccurrences(of: marker, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    if text.contains("\u{0001}") {
+      text = text.replacingOccurrences(of: "\u{0001}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
     for (key, value) in protected.reversed() { text = text.replacingOccurrences(of: key, with: value) }
     var seen = Set<String>()

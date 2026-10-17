@@ -26,6 +26,11 @@
     return marker;
   }
 
+  String cleanSeparators(String value) => value
+      .replaceAll(RegExp(r'[\x00\x01]'), '')
+      .replaceAll(RegExp(r'^[\s,;]+|[\s,;]+$'), '')
+      .replaceAllMapped(RegExp(r'([,;])(?:\s*[,;])+'), (match) => match[1]!);
+
   final linkPattern = RegExp(r'^\[([^\]\n]*)\]\(([^)\n]*)\)$');
   String unit(String value) {
     final link = linkPattern.firstMatch(value);
@@ -60,6 +65,12 @@
     if (header.length == 2 && valid.contains(header[0]) && RegExp(r'^[?]?[0-9A-Za-z]{1,3}$').hasMatch(header[1])) {
       return remove([header[0]]);
     }
+    final mixedIDs = tokens.where(valid.contains).toList();
+    if (mixedIDs.isNotEmpty) {
+      recovered.addAll(mixedIDs);
+      return cleanSeparators(
+          content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!));
+    }
     if (tokens.isEmpty ||
         RegExp(r'^(?:spk|speaker)[ _]\d+:?$', caseSensitive: false).hasMatch(content) ||
         RegExp(r'^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$').hasMatch(content)) {
@@ -76,6 +87,16 @@
     text = text.replaceAll(RegExp('(?<![\\w-])${RegExp.escape(id)}(?![\\w-])'), marker);
   }
   text = text.replaceAll(RegExp(r'\b(?:spk|speaker)[ _]\d+\b:?[ \t]*', caseSensitive: false), marker);
+  while (true) {
+    final cleaned = text.replaceAllMapped(RegExp(r'\([^()\n]*\)'), (match) {
+      final value = match[0]!;
+      if (!RegExp(r'[\x00\x01]').hasMatch(value)) return value;
+      final content = cleanSeparators(value.substring(1, value.length - 1));
+      return content.isEmpty ? '\x01' : '($content)';
+    });
+    if (cleaned == text) break;
+    text = cleaned;
+  }
   if (text.contains(marker)) {
     text = text
         .replaceAll(RegExp('$marker(?:[ \\t]*$marker)+'), marker)
@@ -85,6 +106,7 @@
         .replaceAll(marker, '')
         .trim();
   }
+  if (text.contains('\x01')) text = text.replaceAll('\x01', '').trim();
   for (final entry in protected.entries.toList().reversed) {
     text = text.replaceAll(entry.key, entry.value);
   }

@@ -23,6 +23,7 @@ import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { ActionItemsTab, NextStepsList } from './NoteActionItems';
+import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
 import { NoteInsights } from './NoteInsights';
 import { NoteParticipants } from './NoteParticipants';
 import { NoteSections } from './NoteSections';
@@ -127,10 +128,16 @@ function calculateDuration(start: string | null, end: string | null): number {
 const OVERVIEW_MARKDOWN_CLASS =
   'text-text-secondary leading-relaxed text-lg prose max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-headings:text-text-primary prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-text-primary first:prose-headings:mt-0';
 
-function OverviewMarkdown({ overview }: { overview: string }) {
+function OverviewMarkdown({
+  overview,
+  transcriptIDs,
+}: {
+  overview: string;
+  transcriptIDs: string[];
+}) {
   return (
     <div className={OVERVIEW_MARKDOWN_CLASS}>
-      <ReactMarkdown>{overview}</ReactMarkdown>
+      <ReactMarkdown>{repairNoteCitations(overview, transcriptIDs).text}</ReactMarkdown>
     </div>
   );
 }
@@ -171,6 +178,9 @@ export function SummaryTab({
     structured: { overview, sections },
     apps_results: appResults,
   });
+  const transcriptIDs = transcriptSegments.flatMap((segment) =>
+    segment.id ? [segment.id] : [],
+  );
   const isStructuredNote = isFirstPartyNoteSelection(summary.kind, sections);
   const secondaryAppResults = (appResults ?? []).filter(
     (result, index) => result.content?.trim() && index !== summary.resultIndex,
@@ -232,7 +242,9 @@ export function SummaryTab({
                     </span>
                   </div>
                 )}
-                {isStructuredNote && <NoteInsights insights={insights} />}
+                {isStructuredNote && (
+                  <NoteInsights insights={insights} transcriptIDs={transcriptIDs} />
+                )}
                 {isStructuredNote && sections ? (
                   <NoteSections
                     sections={sections}
@@ -242,7 +254,10 @@ export function SummaryTab({
                     )}
                   />
                 ) : (
-                  <OverviewMarkdown overview={summary.content} />
+                  <OverviewMarkdown
+                    overview={summary.content}
+                    transcriptIDs={transcriptIDs}
+                  />
                 )}
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
@@ -301,7 +316,9 @@ export function SummaryTab({
               </span>
             </div>
           )}
-          {isStructuredNote && <NoteInsights insights={insights} />}
+          {isStructuredNote && (
+            <NoteInsights insights={insights} transcriptIDs={transcriptIDs} />
+          )}
           {isStructuredNote && sections ? (
             <NoteSections
               sections={sections}
@@ -311,7 +328,7 @@ export function SummaryTab({
               )}
             />
           ) : (
-            <OverviewMarkdown overview={summary.content} />
+            <OverviewMarkdown overview={summary.content} transcriptIDs={transcriptIDs} />
           )}
         </div>
       )}

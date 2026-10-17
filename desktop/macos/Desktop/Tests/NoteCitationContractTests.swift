@@ -14,11 +14,13 @@ final class NoteCitationContractTests: XCTestCase {
         contentsOf:
           root.appendingPathComponent("contracts/note_citation_contract.json")))
     XCTAssertFalse(contract.cases.isEmpty)
+    print("Cross-client note citation contract: \(contract.cases.count) vectors")
     for item in contract.cases {
       let knownIDs = item.known_ids ?? contract.known_ids
       let result = NoteCitationContract.repair(item.input, valid: Set(knownIDs))
       XCTAssertEqual(result.text, item.output, item.name)
       XCTAssertEqual(result.sourceIDs, item.source_ids, item.name)
+      XCTAssertEqual(NoteCitationContract.repair(result.text, valid: Set(knownIDs)).text, item.output, item.name)
       let segments = knownIDs.map {
         TranscriptSegment(
           id: $0, backendId: nil, text: "Evidence", speaker: nil, isUser: false,

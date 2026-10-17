@@ -95,6 +95,30 @@ def _clean_after_removal(text: str) -> str:
     return text.replace(_REMOVAL_MARKER, '').strip()
 
 
+def _clean_separators(text: str) -> str:
+    """Clean separators only inside a unit whose citation content was removed."""
+    text = text.replace(_REMOVAL_MARKER, '').replace('\x01', '')
+    text = re.sub(r'^[\s,;]+|[\s,;]+$', '', text)
+    return re.sub(r'([,;])(?:\s*[,;])+', r'\1', text)
+
+
+def _clean_parenthetical_removals(text: str) -> str:
+    # Propagate an empty-shell marker outward through arbitrarily nested parens.
+    # Unlike a whole citation, an emptied prose parenthetical preserves outer spacing.
+    def clean(match: re.Match[str]) -> str:
+        value = match.group(0)
+        if _REMOVAL_MARKER not in value and '\x01' not in value:
+            return value
+        content = _clean_separators(value[1:-1])
+        return '(' + content + ')' if content else '\x01'
+
+    while True:
+        cleaned = re.sub(r'\([^()\n]*\)', clean, text)
+        if cleaned == text:
+            return text
+        text = cleaned
+
+
 def _bracket_ids(content: str, valid_ids: set[str]) -> list[str]:
     tokens = [token for token in re.split(r'[\s,;]+', content.strip()) if token]
     if tokens and all(token in valid_ids for token in tokens):
@@ -116,7 +140,7 @@ def _repair_note_citation_pass(
 
     Unknown single-token brackets are ambiguous in strict mode. Safe Markdown
     links take precedence over that grammar, including ID-shaped ordinary labels.
-    Mixed known/unknown multiword brackets are ordinary prose, kept as a unit.
+    Mixed brackets containing known IDs require revision, or unwrap their remaining prose in fallback.
     """
     report = report if report is not None else PresentationContractReport()
     protected: dict[str, str] = {}
@@ -166,6 +190,17 @@ def _repair_note_citation_pass(
         ids = _bracket_ids(content, valid_ids)
         if ids:
             return remove(ids)
+        tokens = [token for token in re.split(r'[\s,;]+', content) if token]
+        mixed_ids = [token for token in tokens if token in valid_ids]
+        if mixed_ids:
+            if not safe_fallback:
+                report.violations.add('source_id_in_prose')
+                return protect(value)
+            # Remove known tokens as a whole group, retaining remaining prose without a shell.
+            remainder = re.sub(r'[^\s,;]+', lambda m: '' if m.group(0) in valid_ids else m.group(0), content)
+            recovered.extend(mixed_ids)
+            report.repairs.add('source_id_in_prose')
+            return _clean_separators(remainder)
         if not re.sub(r'[\s,;]', '', content):
             return remove([], 'empty_citation_dropped')
         if re.fullmatch(r'(?i)(?:spk|speaker)[ _]\d+:?', content):
@@ -190,7 +225,10 @@ def _repair_note_citation_pass(
     without_speakers = _SPEAKER_PLACEHOLDER_RE.sub(_REMOVAL_MARKER, text)
     if without_speakers != text:
         report.repairs.add('speaker_placeholder')
+    without_speakers = _clean_parenthetical_removals(without_speakers)
     text = _clean_after_removal(without_speakers) if _REMOVAL_MARKER in without_speakers else without_speakers
+    if '\x01' in text:
+        text = text.replace('\x01', '').strip()
     for key, value in reversed(protected.items()):
         text = text.replace(key, value)
     return text, list(dict.fromkeys(recovered))
