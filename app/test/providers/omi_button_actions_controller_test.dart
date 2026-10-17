@@ -458,4 +458,69 @@ void main() {
     provider.dispose();
     onboarding.dispose();
   });
+
+  test('single tap and legacy long press refuse to start a silent voice session while muted (#20478)', () async {
+    await DebugLogManager.setEnabled(true);
+    addTearDown(() => DebugLogManager.setEnabled(false));
+    await DebugLogManager.clear();
+
+    final hapticPulses = <int>[];
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, level) async {
+        hapticPulses.add(level);
+        return true;
+      },
+    );
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    await SharedPreferencesUtil().setCaptureMuted(true);
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+    provider.handleButtonEventForTesting('test-id', 3);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    // Each refused start plays the double-pulse failure haptic (2 pulses per refusal = 4 pulses total).
+    expect(hapticPulses, [1, 1, 1, 1]);
+    expect(actions.sendCount, 0);
+
+    final files = await DebugLogManager.listLogFiles();
+    final lines = files.isEmpty ? <String>[] : await files.first.readAsLines();
+    final refusedEvents = [
+      for (final line in lines)
+        if (jsonDecode(line) case final Map<String, dynamic> event
+            when event['type'] == 'pendant_voice_question' && event['phase'] == 'refused_muted')
+          event,
+    ];
+    expect(refusedEvents.length, 2);
+    provider.dispose();
+  });
+
+  test('double-tap mute cancels an active voice question session (#20478)', () async {
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().doubleTapAction = 1; // Mute/unmute
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    // Double-tap to mute while a voice question session is active
+    provider.handleButtonEventForTesting('test-id', 2);
+    await provider.pendingSourceSwitch;
+
+    expect(provider.isPaused, isTrue);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    expect(actions.sendCount, 0);
+    provider.dispose();
+  });
 }
