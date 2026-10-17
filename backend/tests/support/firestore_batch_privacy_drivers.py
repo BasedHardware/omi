@@ -11,7 +11,10 @@ def entries():
             'database.batch_pipeline_privacy_queries.owner_documents',
             base={'key': 'synthetic-owner-hash'},
             domains={'namespace': namespaces, 'table': ['jobs', 'results', 'artifacts', 'projections', 'intakes']},
-            neutrals={'after': (None, 'document cursor only; filters unchanged')},
+            neutrals={
+                'after': (None, 'document cursor only; filters unchanged'),
+                'limit': (100, 'bounded page size only'),
+            },
         ),
         DriverEntry(
             'database.batch_pipeline_privacy_queries.predecessor_documents',

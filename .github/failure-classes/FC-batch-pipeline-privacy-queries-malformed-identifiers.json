@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-batch-pipeline-privacy-queries-malformed-identifiers",
+  "violated_contract": "Batch pipeline privacy queries derive Firestore collection paths directly from namespace and table parameters, and match against owner keys and segment identifiers. When identifiers contain surrounding whitespace, empty strings, or non-string values, Firestore queries silently build invalid collection paths or fail unexpectedly. In addition, stream queries during GDPR/privacy sweeps must fail closed: swallowing stream exceptions and returning empty lists causes pagination loops in purge_batch_owner to misinterpret errors as end-of-data, incorrectly marking the user's data erasure as finished while un-erased records remain.",
+  "canonical_prevention": "Sanitize and strip whitespace from all identifier arguments across batch privacy query builders, fail closed by raising ValueError on invalid or empty values, clamp query limits to a documented maximum ceiling, and allow stream exceptions to propagate out of query builders so that calling erasure workers crash and retry safely rather than silently truncating sweeps.",
+  "canonical_prevention_artifact": [
+    "backend/database/batch_pipeline_privacy_queries.py",
+    "backend/tests/unit/test_batch_pipeline_privacy_queries.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/batch_pipeline_privacy_queries.py",
+    "backend/database/batch_pipeline_purge.py",
+    "backend/utils/batch_pipeline/retention.py"
+  ],
+  "status": "open"
+}
