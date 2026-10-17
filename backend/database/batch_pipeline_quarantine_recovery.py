@@ -15,7 +15,7 @@ class RecoveryStore:
     def __init__(self, store: Any):
         self.store = store
 
-    def checked(self, tx, segment_id, *, allow_completed_silence=False):
+    def checked(self, tx, segment_id, *, allow_completed_silence=False, allow_completed_speech_redrive=False):
         job = tx.get('jobs', segment_id)
         if not job or not job.get('projection_binding'):
             raise ProjectionBlocked('recovery intake binding required')
@@ -47,6 +47,13 @@ class RecoveryStore:
                     and ledger.get('job_id') == binding.job_id
                     and job.get('silence_disposition', {}).get('state') == 'completed'
                     and job.get('result', {}).get('outcome') == 'silence'
+                )
+                or (
+                    allow_completed_speech_redrive
+                    and ledger.get('status') == 'completed'
+                    and ledger.get('job_id') == binding.job_id
+                    and job.get('speech_redrive', {}).get('state') == 'completed'
+                    and job.get('result', {}).get('outcome') == 'success'
                 )
             )
         ):
@@ -216,6 +223,7 @@ class SilenceDispositionStore(RecoveryStore):
                 or job.get('quarantine_reason') != 'worker_failed'
                 or job.get('recovery_state') != 'failed_held'
                 or not job.get('recovery', {}).get('settled_at')
+                or job.get('speech_redrive')
                 or job.get('token')
                 or job.get('lease_until', 0) > now
                 or job.get('merge_pending') is not False

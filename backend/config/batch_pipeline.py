@@ -116,3 +116,8 @@ def empty_asr_disposition_enabled() -> bool:
 
 def projection_contention_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def speech_empty_multilingual_enabled() -> bool:
+    """Dark alternate-provider recovery; one call per durable paid intent."""
+    return os.getenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false').strip().lower() == 'true'
