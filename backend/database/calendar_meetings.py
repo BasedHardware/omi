@@ -21,10 +21,9 @@ def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
     return transactional(func)
 
 
-def _get_meetings_collection(uid: str, client: Any = None) -> Any:
+def _get_meetings_collection(uid: str) -> Any:
     """Get user's meetings collection reference"""
-    target_db = client if client is not None else db
-    return target_db.collection('users').document(uid).collection('meetings')
+    return db.collection('users').document(uid).collection('meetings')
 
 
 @_typed_transactional
@@ -38,7 +37,7 @@ def _upsert_meeting_transaction(transaction: Any, doc_ref: Any, meeting_data: Di
     transaction.set(doc_ref, payload, merge=True)
 
 
-def create_meeting(uid: str, meeting_data: Dict[str, Any], client: Any = None) -> str:
+def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
     """
     Create or idempotently upsert a calendar meeting in Firestore.
     Returns the deterministic Firestore document ID.
@@ -53,8 +52,7 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any], client: Any = None) -
     except KeyError as exc:
         raise ValueError(f'meeting_data missing required field: {exc}') from exc
     meeting_id = calendar_meeting_doc_id(uid, calendar_source, calendar_event_id)
-    target_db = client if client is not None else db
-    doc_ref = _get_meetings_collection(uid, client=client).document(meeting_id)
+    doc_ref = _get_meetings_collection(uid).document(meeting_id)
     now = datetime.now(timezone.utc)
 
     @firestore.transactional
@@ -63,22 +61,20 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any], client: Any = None) -
 
     # Concurrent calendar syncs for the same user contend on the transaction —
     # a bare db.transaction() abandons on Aborted. Bounded equal-jitter retry.
-    run_with_transaction_contention_retry(target_db.transaction, upsert, operation_name='calendar_meeting_create')
+    run_with_transaction_contention_retry(db.transaction, upsert, operation_name='calendar_meeting_create')
     return meeting_id
 
 
-def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any], client: Any = None) -> bool:
+def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> bool:
     """
-    Update an existing calendar meeting.
-    Returns True if updated successfully, False if document not found.
+    Update an existing calendar meeting. Returns True if updated, False if document missing.
 
     NOTE: Times should already be in UTC before calling this function.
     """
     # Update synced_at timestamp (always in UTC for consistent querying)
     meeting_data['synced_at'] = datetime.now(timezone.utc)
 
-    # Update document with existence & TOCTOU guard
-    doc_ref = _get_meetings_collection(uid, client=client).document(meeting_id)
+    doc_ref = _get_meetings_collection(uid).document(meeting_id)
     if not getattr(doc_ref.get(), "exists", False):
         return False
     try:
@@ -89,9 +85,9 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any], clie
         return False
 
 
-def get_meeting(uid: str, meeting_id: str, client: Any = None) -> Optional[Dict[str, Any]]:
+def get_meeting(uid: str, meeting_id: str) -> Optional[Dict[str, Any]]:
     """Get a calendar meeting by its Firestore document ID"""
-    doc = _get_meetings_collection(uid, client=client).document(meeting_id).get()
+    doc = _get_meetings_collection(uid).document(meeting_id).get()
 
     if not getattr(doc, "exists", False):
         return None
@@ -102,15 +98,13 @@ def get_meeting(uid: str, meeting_id: str, client: Any = None) -> Optional[Dict[
     return data
 
 
-def get_meeting_id_by_calendar_event(
-    uid: str, calendar_event_id: str, calendar_source: str, client: Any = None
-) -> Optional[str]:
+def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_source: str) -> Optional[str]:
     """
     Find a meeting by its external calendar event ID and source.
     Returns the Firestore document ID if found, None otherwise.
     """
     query = (
-        _get_meetings_collection(uid, client=client)
+        _get_meetings_collection(uid)
         .where('calendar_event_id', '==', calendar_event_id)
         .where('calendar_source', '==', calendar_source)
         .limit(1)
@@ -128,14 +122,10 @@ def _to_utc(dt: datetime) -> datetime:
 
 
 def list_meetings(
-    uid: str,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    limit: int = 50,
-    client: Any = None,
+    uid: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, limit: int = 50
 ) -> List[Dict[str, Any]]:
     """List calendar meetings, optionally filtered by date range, sorted by start_time descending."""
-    query: Any = _get_meetings_collection(uid, client=client)
+    query: Any = _get_meetings_collection(uid)
     if start_date:
         query = query.where('start_time', '>=', _to_utc(start_date))
     if end_date:
@@ -152,22 +142,21 @@ def list_meetings(
     return meetings
 
 
-def delete_meeting(uid: str, meeting_id: str, client: Any = None) -> bool:
+def delete_meeting(uid: str, meeting_id: str) -> bool:
     """Delete a calendar meeting. Returns True if deleted, False if document not found."""
-    doc_ref = _get_meetings_collection(uid, client=client).document(meeting_id)
+    doc_ref = _get_meetings_collection(uid).document(meeting_id)
     if not getattr(doc_ref.get(), "exists", False):
         return False
     doc_ref.delete()
     return True
 
 
-def delete_old_meetings(uid: str, before_date: datetime, client: Any = None) -> int:
+def delete_old_meetings(uid: str, before_date: datetime) -> int:
     """Delete meetings that ended before a certain date. Returns the number of meetings deleted."""
-    query = _get_meetings_collection(uid, client=client).where('end_time', '<', _to_utc(before_date))
+    query = _get_meetings_collection(uid).where('end_time', '<', _to_utc(before_date))
 
     deleted_count = 0
-    target_db = client if client is not None else db
-    batch = target_db.batch()
+    batch = db.batch()
     batch_size = 0
 
     for doc in query.stream():
@@ -176,7 +165,7 @@ def delete_old_meetings(uid: str, before_date: datetime, client: Any = None) -> 
         deleted_count += 1
         if batch_size >= 500:
             batch.commit()
-            batch = target_db.batch()
+            batch = db.batch()
             batch_size = 0
 
     if batch_size > 0:
@@ -185,12 +174,10 @@ def delete_old_meetings(uid: str, before_date: datetime, client: Any = None) -> 
     return deleted_count
 
 
-def get_meetings_in_time_range(
-    uid: str, start_time: datetime, end_time: datetime, client: Any = None
-) -> List[Dict[str, Any]]:
+def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
     """Find meetings that overlap with the given time range, sorted by start_time ascending."""
     query = (
-        _get_meetings_collection(uid, client=client)
+        _get_meetings_collection(uid)
         .where('start_time', '<', _to_utc(end_time))
         .where('end_time', '>', _to_utc(start_time))
         .order_by('start_time', direction=firestore.Query.ASCENDING)
