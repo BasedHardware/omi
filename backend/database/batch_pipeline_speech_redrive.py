@@ -4,7 +4,12 @@ from copy import deepcopy
 from dataclasses import asdict
 from uuid import uuid4
 
-from config.batch_pipeline import recovery_enabled_for, speech_empty_multilingual_enabled
+from config.batch_pipeline import (
+    recovery_enabled_for,
+    speech_empty_multilingual_enabled,
+    terminal_empty_disposition_enabled,
+)
+from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.contracts import WorkResult
@@ -26,7 +31,9 @@ class SpeechRedriveStore:
         return (
             job.get('state') == 'quarantined'
             and job.get('quarantine_reason') == 'worker_failed'
-            and job.get('recovery_state') == 'failed_held'
+            and (
+                job.get('recovery_state') == 'failed_held' or terminal_empty_disposition_enabled() and spent_canary(job)
+            )
             and bool(job.get('recovery', {}).get('settled_at'))
             and not job.get('token')
             and job.get('lease_until', 0) <= now
@@ -36,7 +43,7 @@ class SpeechRedriveStore:
             and not job.get('silence_disposition')
         )
 
-    def prepare(self, segment_id, owner_id, plan_digest, expected_recovery, now):
+    def prepare(self, segment_id, owner_id, plan_digest, expected_recovery, now, *, gpu_padded_retry_empty=False):
         if not speech_empty_multilingual_enabled() or not recovery_enabled_for(owner_id):
             raise ProjectionBlocked('speech redrive disabled')
         token = uuid4().hex
@@ -65,6 +72,7 @@ class SpeechRedriveStore:
             if not self.terminal(job, existing, now):
                 raise ProjectionBlocked('terminal held obligation required')
             job['speech_redrive'] = {
+                'gpu_padded_retry_empty': gpu_padded_retry_empty,
                 'paid_epoch': PAID_EPOCH,
                 'token': token,
                 'plan_digest': plan_digest,
@@ -105,7 +113,7 @@ class SpeechRedriveStore:
 
         return self.store.run(commit)
 
-    def settle(self, segment_id, token, plan_digest, now, result_uri=None, *, failure=None):
+    def settle(self, segment_id, token, plan_digest, now, result_uri=None, *, failure=None, outcome="success"):
         def commit(tx):
             job, binding = self.checked(tx, segment_id)
             existing = tx.get('results', segment_id)
@@ -121,10 +129,12 @@ class SpeechRedriveStore:
                 return False
             if marker.get('state') == 'completed':
                 return isinstance(result_uri, str) and job.get('result') == asdict(
-                    WorkResult(segment_id, result_uri, 'success')
+                    WorkResult(segment_id, result_uri, outcome)
                 )
             if marker.get('state') != 'running' or not self.terminal(job, existing, now):
                 return False
+            if outcome not in {'success', 'no_recoverable_speech'}:
+                raise ValueError('closed speech outcome required')
             if result_uri:
                 owner = tx.get('owners', owner_key(job['owner_id']))
                 owner['revision'] = owner.get('revision', 0) + 1
@@ -133,7 +143,7 @@ class SpeechRedriveStore:
                     state='result_ready',
                     merge_pending=True,
                     recovery_state='recovered',
-                    result=asdict(WorkResult(segment_id, result_uri, 'success')),
+                    result=asdict(WorkResult(segment_id, result_uri, outcome)),
                 )
                 tx.put('owners', owner_key(job['owner_id']), owner)
             else:

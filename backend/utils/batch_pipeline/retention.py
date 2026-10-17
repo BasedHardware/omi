@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
-from config.batch_pipeline import speech_empty_multilingual_enabled
+from config.batch_pipeline import speech_empty_multilingual_enabled, terminal_empty_disposition_enabled
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 
@@ -117,11 +117,21 @@ def register_batch_artifact(
             and bool(disposition.get('token'))
             and uri.endswith(f"/{disposition['token']}.enc")
         )
+        terminal = job.get('terminal_disposition') or {}
+        terminal_write = (
+            terminal_empty_disposition_enabled()
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') in {'held', 'failed_held'}
+            and terminal.get('state') == 'prepared'
+            and terminal.get('privacy_generation') == expected_generation
+            and bool(terminal.get('token'))
+            and uri.endswith(f"/{terminal['token']}.enc")
+        )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
             speech_empty_multilingual_enabled()
             and job.get('state') == 'quarantined'
-            and job.get('recovery_state') == 'failed_held'
+            and job.get('recovery_state') in {'held', 'failed_held'}
             and redrive.get('state') == 'running'
             and redrive.get('paid_epoch') == 2
             and redrive.get('privacy_generation') == expected_generation
@@ -134,6 +144,7 @@ def register_batch_artifact(
             and not recovery_write
             and not disposition_write
             and not redrive_write
+            and not terminal_write
         ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and job.get('owner_id') != uid:

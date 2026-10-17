@@ -310,7 +310,9 @@ class Scheduler:
             self.metrics.record('completed')
         return accepted
 
-    def fail(self, segment_id: str, token: str, now: float, *, quarantine: bool = False) -> bool:
+    def fail(
+        self, segment_id: str, token: str, now: float, *, quarantine: bool = False, padded_retry_empty: bool = False
+    ) -> bool:
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
@@ -330,6 +332,8 @@ class Scheduler:
                     quarantined_at=now,
                     recovery_state='held',
                 )
+                if quarantine and padded_retry_empty:
+                    job['worker_empty_evidence'] = {'padded_retry': 'empty', 'version': 1}
                 job.pop('retry_started_at', None)
                 tx.put('owners', job['owner_key'], owner)
             else:

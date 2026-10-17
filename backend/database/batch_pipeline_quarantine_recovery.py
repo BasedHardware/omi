@@ -15,7 +15,15 @@ class RecoveryStore:
     def __init__(self, store: Any):
         self.store = store
 
-    def checked(self, tx, segment_id, *, allow_completed_silence=False, allow_completed_speech_redrive=False):
+    def checked(
+        self,
+        tx,
+        segment_id,
+        *,
+        allow_completed_silence=False,
+        allow_completed_speech_redrive=False,
+        allow_completed_terminal=False,
+    ):
         job = tx.get('jobs', segment_id)
         if not job or not job.get('projection_binding'):
             raise ProjectionBlocked('recovery intake binding required')
@@ -53,7 +61,14 @@ class RecoveryStore:
                     and ledger.get('status') == 'completed'
                     and ledger.get('job_id') == binding.job_id
                     and job.get('speech_redrive', {}).get('state') == 'completed'
-                    and job.get('result', {}).get('outcome') == 'success'
+                    and job.get('result', {}).get('outcome') in {'success', 'no_recoverable_speech'}
+                )
+                or (
+                    allow_completed_terminal
+                    and ledger.get('status') == 'completed'
+                    and ledger.get('job_id') == binding.job_id
+                    and job.get('terminal_disposition', {}).get('state') == 'completed'
+                    and job.get('result', {}).get('outcome') == job['terminal_disposition'].get('outcome')
                 )
             )
         ):
@@ -92,7 +107,7 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def start(self, segment_id, token, now):
+    def start(self, segment_id, token, now, *, provider="legacy_sync"):
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
             result = tx.get('results', segment_id)
@@ -107,6 +122,9 @@ class RecoveryStore:
             ):
                 return False
             job['recovery_state'] = 'running'
+            if provider not in {'legacy_sync', 'modulate'}:
+                raise ValueError('closed recovery provider required')
+            job['recovery']['provider'] = provider
             job['recovery']['started_at'] = now
             tx.put('jobs', segment_id, job)
             return True
@@ -149,7 +167,9 @@ class RecoveryStore:
 
         changed, seconds = self.store.run(commit)
         if changed and seconds:
-            record_correctness('recovered', seconds=seconds)
+            record_correctness(
+                'no_recoverable_speech' if outcome == 'no_recoverable_speech' else 'recovered', seconds=seconds
+            )
         return changed
 
 

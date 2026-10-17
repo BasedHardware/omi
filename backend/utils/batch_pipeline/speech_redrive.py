@@ -3,26 +3,51 @@
 from dataclasses import fields
 import time
 
-from config.batch_pipeline import recovery_enabled_for, speech_empty_multilingual_enabled
+from config.batch_pipeline import (
+    recovery_enabled_for,
+    speech_empty_multilingual_enabled,
+    terminal_empty_disposition_enabled,
+)
 from config.prerecorded_stt import require_provider_environment, PrerecordedSTTService
 from config.stt_cap_dispatch import enabled as cap_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.quarantine_recovery import transcribe, log_failure
-from utils.batch_pipeline.recovery_disposition import inspect_audio, result_outcome, RecoveryFailure
+from utils.batch_pipeline.quarantine_recovery import transcribe, log_failure, log_terminal_empty
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline.recovery_disposition import (
+    inspect_audio,
+    result_outcome,
+    RecoveryFailure,
+    MultilingualEmpty,
+    terminal_empty_payload,
+    padded_empty,
+)
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.fallback import record_fallback
 from utils.observability.stt_cap_dispatch import record_audio
 
 
-def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, clock=time.time, stt=transcribe):
+def redrive_one(
+    store,
+    artifacts,
+    sid,
+    uid,
+    plan_digest,
+    expected_recovery,
+    *,
+    clock=time.time,
+    stt=transcribe,
+    gpu_padded_retry_empty=False
+):
     """No automatic retry after dispatch, even on uncertain network/process loss."""
     if not speech_empty_multilingual_enabled() or not recovery_enabled_for(uid):
         return 'disabled'
     protocol = SpeechRedriveStore(store)
-    job = protocol.prepare(sid, uid, plan_digest, expected_recovery, clock())
+    job = protocol.prepare(
+        sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty
+    )
     marker = job['speech_redrive']
     token = marker['token']
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
@@ -34,9 +59,16 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
         uri = artifacts.find_recovery_result(item, token)
         if uri:
             payload = artifacts.load_result(item, uri)
-            if result_outcome(payload) != 'success' or not payload.get('words'):
+            outcome = result_outcome(payload)
+            if outcome not in {'success', 'no_recoverable_speech'} or (
+                outcome == 'success' and not payload.get('words')
+            ):
                 raise RecoveryFailure('payload_validation', 'invalid_payload')
-            return 'reconciled' if protocol.settle(sid, token, plan_digest, clock(), uri) else 'fenced'
+            return (
+                'reconciled'
+                if protocol.settle(sid, token, plan_digest, clock(), uri, outcome=result_outcome(payload))
+                else 'fenced'
+            )
         if clock() - marker['started_at'] > 900:
             failure = {'stage': 'provider', 'reason': 'abandoned_running'}
             if protocol.settle(sid, token, plan_digest, clock(), failure=failure):
@@ -70,6 +102,13 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
             if isinstance(error, RecoveryFailure)
             else {'stage': 'provider', 'reason': 'operation_failed'}
         )
+        if (
+            terminal_empty_disposition_enabled()
+            and isinstance(error, MultilingualEmpty)
+            and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)
+        ):
+            payload = terminal_empty_payload(error.duration, error.spans)
+            failure = None
     else:
         failure = None
     if failure:
@@ -89,4 +128,9 @@ def redrive_one(store, artifacts, sid, uid, plan_digest, expected_recovery, *, c
     # A storage/commit exception intentionally leaves running intact. A later
     # invocation may reconcile the object, but can never call the provider again.
     uri = artifacts.persist_recovery_result(item, payload, token)
-    return 'recovered' if protocol.settle(sid, token, plan_digest, clock(), uri) else 'fenced'
+    outcome = result_outcome(payload)
+    changed = protocol.settle(sid, token, plan_digest, clock(), uri, outcome=outcome)
+    if changed and outcome == 'no_recoverable_speech':
+        record_correctness('no_recoverable_speech', seconds=item.duration_seconds)
+        log_terminal_empty()
+    return 'recovered' if changed else 'fenced'

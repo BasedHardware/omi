@@ -147,3 +147,8 @@ def projection_contention_enabled() -> bool:
 def speech_empty_multilingual_enabled() -> bool:
     """Dark alternate-provider recovery; one call per durable paid intent."""
     return os.getenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false').strip().lower() == 'true'
+
+
+def terminal_empty_disposition_enabled() -> bool:
+    """Dark, evidenced terminal empty result; never grants another paid intent."""
+    return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'

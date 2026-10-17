@@ -77,6 +77,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
         {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
