@@ -188,6 +188,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
+        "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
         "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": "false",
         "DEMAND_PROCESSING_ENABLED": "false",
         "DEMAND_PROCESSING_LAZY_ENABLED": "false",
