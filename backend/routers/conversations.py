@@ -20,6 +20,7 @@ from database.vector_db import (
     delete_action_item_vectors_batch,
     delete_vector,
     delete_transcript_chunk_vectors,
+    upsert_action_item_vector,
 )
 import database.vector_db as vector_db
 from utils.other.storage import (
@@ -1572,10 +1573,23 @@ def update_action_item_description(
 
     # Mirror description update in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.old_description:
                 action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
+                upsert_action_item_vector(uid, ai['id'], data.description)
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description=data.description,
+                        completed=False,
+                        due_at=ai.get('due_at'),
+                        status=ai.get('status'),
+                        deleted=bool(ai.get('deleted')),
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item description update: {e}')
     return {"status": "Ok"}
