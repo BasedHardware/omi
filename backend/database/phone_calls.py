@@ -49,17 +49,19 @@ def _prepare_phone_number_for_read(data: Dict[str, Any], uid: str) -> Dict[str, 
 
 @set_data_protection_level(data_arg_name='phone_number_data')
 @prepare_for_write(data_arg_name='phone_number_data', prepare_func=_prepare_phone_number_for_write)
-def upsert_phone_number(uid: str, phone_number_data: Dict[str, Any]) -> None:
+def upsert_phone_number(uid: str, phone_number_data: Dict[str, Any], client: Any = None) -> None:
     """Create or update a verified phone number for a user."""
-    user_ref = db.collection('users').document(uid)
+    target_db = client if client is not None else db
+    user_ref = target_db.collection('users').document(uid)
     phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_data['id'])
     phone_ref.set(phone_number_data)
 
 
 @prepare_for_read(decrypt_func=_prepare_phone_number_for_read)
-def get_phone_numbers(uid: str) -> List[Dict[str, Any]]:
+def get_phone_numbers(uid: str, client: Any = None) -> List[Dict[str, Any]]:
     """Get all verified phone numbers for a user."""
-    user_ref = db.collection('users').document(uid)
+    target_db = client if client is not None else db
+    user_ref = target_db.collection('users').document(uid)
     phone_refs = user_ref.collection(phone_numbers_collection).stream()
     out: List[Dict[str, Any]] = []
     for doc in phone_refs:
@@ -70,9 +72,10 @@ def get_phone_numbers(uid: str) -> List[Dict[str, Any]]:
 
 
 @prepare_for_read(decrypt_func=_prepare_phone_number_for_read)
-def get_phone_number(uid: str, phone_number_id: str) -> Optional[Dict[str, Any]]:
+def get_phone_number(uid: str, phone_number_id: str, client: Any = None) -> Optional[Dict[str, Any]]:
     """Get a specific verified phone number."""
-    user_ref = db.collection('users').document(uid)
+    target_db = client if client is not None else db
+    user_ref = target_db.collection('users').document(uid)
     phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_id)
     doc = phone_ref.get()
     if getattr(doc, "exists", False):
@@ -81,13 +84,14 @@ def get_phone_number(uid: str, phone_number_id: str) -> Optional[Dict[str, Any]]
     return None
 
 
-def get_phone_number_by_number(uid: str, phone_number: str) -> Optional[Dict[str, Any]]:
+def get_phone_number_by_number(uid: str, phone_number: str, client: Any = None) -> Optional[Dict[str, Any]]:
     """Get a verified phone number by the actual phone number string.
 
     For enhanced protection, queries by hash since the phone_number field is encrypted.
     Falls back to plaintext query for standard protection (backward compatibility).
     """
-    user_ref = db.collection('users').document(uid)
+    target_db = client if client is not None else db
+    user_ref = target_db.collection('users').document(uid)
     phone_hash = _hash_phone_number(phone_number)
 
     # Try hash-based lookup first (encrypted records)
@@ -108,24 +112,29 @@ def get_phone_number_by_number(uid: str, phone_number: str) -> Optional[Dict[str
     return None
 
 
-def delete_phone_number(uid: str, phone_number_id: str) -> None:
-    """Delete a verified phone number."""
-    user_ref = db.collection('users').document(uid)
+def delete_phone_number(uid: str, phone_number_id: str, client: Any = None) -> bool:
+    """Delete a verified phone number. Returns True if deleted, False if document not found."""
+    target_db = client if client is not None else db
+    user_ref = target_db.collection('users').document(uid)
     phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_id)
+    if not getattr(phone_ref.get(), "exists", False):
+        return False
     phone_ref.delete()
+    return True
 
 
 @prepare_for_read(decrypt_func=_prepare_phone_number_for_read)
-def get_primary_phone_number(uid: str) -> Optional[Dict[str, Any]]:
+def get_primary_phone_number(uid: str, client: Any = None) -> Optional[Dict[str, Any]]:
     """Get the user's primary verified phone number."""
-    user_ref = db.collection('users').document(uid)
+    target_db = client if client is not None else db
+    user_ref = target_db.collection('users').document(uid)
     query = user_ref.collection(phone_numbers_collection).where('is_primary', '==', True).limit(1)
     docs = list(query.stream())
     if docs:
         raw: object = docs[0].to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     # Fallback to first available number
-    all_numbers = get_phone_numbers(uid)
+    all_numbers = get_phone_numbers(uid, client=target_db)
     if all_numbers:
         return all_numbers[0]
     return None
@@ -138,13 +147,14 @@ def get_primary_phone_number(uid: str) -> Optional[Dict[str, Any]]:
 PENDING_VERIFICATION_TTL_SECONDS = 300  # 5 minutes
 
 
-def set_pending_verification(uid: str, phone_number: str) -> None:
+def set_pending_verification(uid: str, phone_number: str, client: Any = None) -> None:
     """Record that a user initiated verification for a phone number.
 
     Uses a hash of the phone number as the document ID for efficient lookup.
     """
+    target_db = client if client is not None else db
     doc_id = _hash_phone_number(phone_number)
-    db.collection('pending_verifications').document(doc_id).set(
+    target_db.collection('pending_verifications').document(doc_id).set(
         {
             'uid': uid,
             'phone_number_hash': doc_id,
@@ -153,13 +163,14 @@ def set_pending_verification(uid: str, phone_number: str) -> None:
     )
 
 
-def get_pending_verification_uid(phone_number: str) -> Optional[str]:
+def get_pending_verification_uid(phone_number: str, client: Any = None) -> Optional[str]:
     """Get the UID of the user who initiated verification for a phone number.
 
     Returns None if no pending verification exists or if it has expired.
     """
+    target_db = client if client is not None else db
     doc_id = _hash_phone_number(phone_number)
-    doc = db.collection('pending_verifications').document(doc_id).get()
+    doc = target_db.collection('pending_verifications').document(doc_id).get()
     if not getattr(doc, "exists", False):
         return None
     raw: object = doc.to_dict()
@@ -173,7 +184,7 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
         )
     except (TypeError, ValueError):
         # Malformed/legacy pending verification (missing or non-ISO created_at); treat as expired.
-        db.collection('pending_verifications').document(doc_id).delete()
+        target_db.collection('pending_verifications').document(doc_id).delete()
         return None
     # A stored created_at without a timezone (legacy/naive value) would raise on the aware/naive
     # subtraction below; normalize it to UTC so the elapsed-time check never 500s.
@@ -181,13 +192,14 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
         created_at = created_at.replace(tzinfo=timezone.utc)
     elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
     if elapsed > PENDING_VERIFICATION_TTL_SECONDS:
-        db.collection('pending_verifications').document(doc_id).delete()
+        target_db.collection('pending_verifications').document(doc_id).delete()
         return None
     uid_value = data.get('uid')
     return str(uid_value) if uid_value is not None else None
 
 
-def delete_pending_verification(phone_number: str) -> None:
+def delete_pending_verification(phone_number: str, client: Any = None) -> None:
     """Delete a pending verification record after it has been processed."""
+    target_db = client if client is not None else db
     doc_id = _hash_phone_number(phone_number)
-    db.collection('pending_verifications').document(doc_id).delete()
+    target_db.collection('pending_verifications').document(doc_id).delete()
