@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -221,6 +223,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           onPressed: () {
             final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
             deviceProvider.resetFirmwareUpdateState();
+            unawaited(deviceProvider.initiateConnection('FirmwareUpdateDone', boundDeviceOnly: true));
             // Back to the Home underneath, not a second Home on top of the stack.
             HomeNavigation.returnHome(context);
           },
