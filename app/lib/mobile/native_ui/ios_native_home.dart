@@ -16,6 +16,9 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart';
+import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
@@ -24,7 +27,9 @@ import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -86,6 +91,7 @@ class IosNativeHome extends StatefulWidget {
       {super.key,
       this.requestInitialLoad = true,
       this.loadRecaps,
+      this.pendingWork,
       this.header = const [],
       this.footer = const [],
       this.alerts = const [],
@@ -94,6 +100,9 @@ class IosNativeHome extends StatefulWidget {
 
   final bool requestInitialLoad;
   final RecentRecapsLoader? loadRecaps;
+
+  /// Injectable for tests; defaults to [PendingWorkStore.instance].
+  final PendingWorkStore? pendingWork;
   final List<NativeHomeAction> header, footer, alerts;
 
   /// The Flutter Home shown once Swift refuses a snapshot; defaults to the classic conversation list.
@@ -114,6 +123,7 @@ class IosNativeHomeState extends State<IosNativeHome> {
   bool _captureScheduled = false;
   late final ConversationProvider _conversations;
   late final LocalRecordingsProvider _recordings;
+  late final SyncProvider _sync;
   late final NativeReadSession _session;
   StreamSubscription<int>? _authSubscription;
   MethodChannel? _channel;
@@ -124,6 +134,8 @@ class IosNativeHomeState extends State<IosNativeHome> {
 
   static const _rejection = 'omi.native_ui.home_rejected';
 
+  PendingWorkStore get _pendingWork => widget.pendingWork ?? PendingWorkStore.instance;
+
   @override
   void initState() {
     super.initState();
@@ -131,12 +143,15 @@ class IosNativeHomeState extends State<IosNativeHome> {
     _rejected = PageStorage.maybeOf(context)?.readState(context, identifier: _rejection) == true;
     _conversations = context.read<ConversationProvider>();
     _recordings = context.read<LocalRecordingsProvider>();
+    _sync = context.read<SyncProvider>();
     final owner = AuthService.instance.captureSessionSnapshot();
     _session = NativeReadSession(
       isCurrent: () => owner != null && AuthService.instance.isSessionSnapshotCurrent(owner),
     );
     _conversations.addListener(_scheduleUpdate);
     _recordings.addListener(_scheduleUpdate);
+    _sync.addListener(_scheduleUpdate);
+    _pendingWork.addListener(_scheduleUpdate);
     _authSubscription = AuthService.instance.sessionGenerationEvents.listen((_) {
       if (!_session.active) {
         _invalidate();
@@ -155,7 +170,10 @@ class IosNativeHomeState extends State<IosNativeHome> {
       });
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_loadRecaps());
+      if (!mounted) return;
+      unawaited(_loadRecaps());
+      // Server work the phone did not start only shows up once the store has read it.
+      if (_session.active) unawaited(_pendingWork.refresh());
     });
   }
 
@@ -199,15 +217,6 @@ class IosNativeHomeState extends State<IosNativeHome> {
     final dates = OmiDateFormat.of(context);
     final seen = <String>{};
     final groups = <Map<String, Object?>>[
-      if (visible && _conversations.processingConversations.isNotEmpty)
-        {
-          'id': 'processing',
-          'title': context.l10n.processing,
-          'conversations': [
-            for (final conversation in _conversations.processingConversations)
-              if (conversation.id.isNotEmpty && seen.add(conversation.id)) _project(conversation),
-          ],
-        },
       if (visible)
         for (final group in _conversations.groupedConversations.entries)
           {
@@ -271,6 +280,7 @@ class IosNativeHomeState extends State<IosNativeHome> {
               ]
             : <Object>[],
         'capture': visible ? _captureProjection() : null,
+        'pending': visible ? _pendingProjection() : null,
       },
     };
   }
@@ -302,6 +312,18 @@ class IosNativeHomeState extends State<IosNativeHome> {
             'enabled': true,
           },
       ],
+    };
+  }
+
+  /// Home's one row for work that is not a conversation yet, by [HomePendingRow]'s rules: recordings
+  /// syncing or transcribing, conversations still processing, server work the phone did not start.
+  /// Slow work never reads as a problem here; what failed belongs to Activity.
+  Map<String, Object?>? _pendingProjection() {
+    if (!HomePendingRow.hasWork(_sync, _pendingWork, _conversations)) return null;
+    final l10n = context.l10n;
+    return {
+      'title': SyncPendingWork.isLargeBacklog(_sync) ? l10n.homePendingCatchingUp : l10n.homePendingTitle,
+      'subtitle': SyncPendingWork.shouldShow(_sync) ? SyncPendingWork.stageLabel(_sync, l10n) : l10n.processing,
     };
   }
 
@@ -408,6 +430,7 @@ class IosNativeHomeState extends State<IosNativeHome> {
           _conversations.getInitialConversations(),
           _recordings.refresh(),
           _loadRecaps(),
+          _pendingWork.refresh(),
         ]);
       case 'loadMore':
         await _conversations.getMoreConversationsFromServer();
@@ -420,6 +443,8 @@ class IosNativeHomeState extends State<IosNativeHome> {
         PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: recap.id, date: recap.date);
         final result = await routeToPage(context, DailySummaryDetailPage(summaryId: recap.id, summary: recap));
         if (mounted && result is Map && result['deleted'] == true) _recaps.removeWhere((item) => item.id == recap.id);
+      case 'openPending':
+        await routeToPage(context, const OnTheWayPage());
       case 'capture':
         await _capture?.onOpen();
       case 'pauseCapture':
@@ -489,6 +514,8 @@ class IosNativeHomeState extends State<IosNativeHome> {
     _invalidate();
     _conversations.removeListener(_scheduleUpdate);
     _recordings.removeListener(_scheduleUpdate);
+    _sync.removeListener(_scheduleUpdate);
+    _pendingWork.removeListener(_scheduleUpdate);
     unawaited(_authSubscription?.cancel());
     super.dispose();
   }

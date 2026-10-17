@@ -208,6 +208,9 @@ struct NativeHomeView: View {
         if let capture = chrome.capture {
             Section { captureCard(capture) }
         }
+        if let pending = chrome.pending {
+            Section { pendingRow(pending) }
+        }
         if !chrome.alerts.isEmpty {
             Section {
                 ForEach(chrome.alerts) { control($0) }
@@ -227,6 +230,31 @@ struct NativeHomeView: View {
                 }
             }
         }
+    }
+
+    /// Recordings and conversations still on their way, as one calm row above the dated list: a
+    /// spinner, what is happening, and the On the Way page behind it. No progress bar or hour count.
+    private func pendingRow(_ pending: NativeHomeSnapshot.Chrome.Pending) -> some View {
+        Button { dispatch("openPending") } label: {
+            HStack(spacing: 12) {
+                ProgressView()
+                    .frame(width: 36, height: 36)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: NativeMetrics.blockRadius))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(pending.title).font(.headline).foregroundStyle(.primary).lineLimit(1)
+                    Text(pending.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .frame(minHeight: NativeMetrics.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(state.pending.contains("openPending"))
+        .accessibilityLabel("\(pending.title), \(pending.subtitle)")
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     /// One recap fills the row; several page horizontally with the next card peeking in.

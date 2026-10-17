@@ -42,7 +42,7 @@ route. The bar uses the existing account-scoped command bridge, with no separate
 | Area | Native presentation | Stays classic or owned elsewhere |
 |---|---|---|
 | Main navigation | System tab bar, localized labels, selected state and lazy retained root screens | |
-| Home and capture | Home, capture card, live capture and processing pages, record options/listening and problem sheets, recaps with journey, memories-learned review and stats | Static map images with explicit Maps hand-off (no MapKit tiles); upstream's Review entry and its Review/Recent changes pages |
+| Home and capture | Home, capture card, pending row for recordings and conversations on their way (opens the classic On the Way page), live capture page, record options/listening and problem sheets, recaps with journey, memories-learned review and stats | Static map images with explicit Maps hand-off (no MapKit tiles); upstream's Review entry and its Review/Recent changes pages |
 | Library and search | Dated lists, paging, bulk select/merge/delete/move, row menus, day list, folders, Places map and cluster chooser, recent/starred, scoped search with People and date filter | |
 | Conversations | Full summary/transcript reader, playback/timeline following, editors, speaker review and earlier voice matches, feedback/template/visibility/share sheets, test prompt, calendar/recording sheets, photo zoom/paging/share, recording-file detail and local recording sheet | Upstream entity pages |
 | People | Search, filters, pinning, confidence, voice samples, cleanup, create/edit/move/delete sheets | |

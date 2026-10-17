@@ -33,6 +33,12 @@ struct NativeHomeSnapshot: Decodable, Equatable {
             let date: String
             let emoji: String
         }
+        /// Home's one row for recordings and conversations that are not conversations yet; nil when
+        /// nothing is on its way. Opening it is the `openPending` action.
+        struct Pending: Decodable, Equatable {
+            let title: String
+            let subtitle: String
+        }
         struct Capture: Decodable, Equatable {
             let status: String
             let detail: String
@@ -51,6 +57,7 @@ struct NativeHomeSnapshot: Decodable, Equatable {
         let alerts: [Action]
         let recaps: [Recap]
         let capture: Capture?
+        let pending: Pending?
     }
     struct Group: Decodable, Equatable, Identifiable {
         let id: String

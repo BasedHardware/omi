@@ -126,6 +126,7 @@ Widget _home({VoidCallback? onRejected, Key? key}) => IosNativeHome(
     key: key,
     requestInitialLoad: false,
     loadRecaps: _noRecaps,
+    pendingWork: inertPendingWorkStore(),
     fallback: const Text(_classicHome),
     onRejected: onRejected);
 

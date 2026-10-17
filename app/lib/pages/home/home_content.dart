@@ -61,6 +61,7 @@ class HomeContentPageState extends State<HomeContentPage> {
           key: _nativeKey,
           requestInitialLoad: widget.requestInitialLoad,
           loadRecaps: widget.loadRecaps,
+          pendingWork: widget.pendingWork,
           fallback: classic,
         );
       },
