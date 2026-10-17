@@ -47,7 +47,6 @@ from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_ser
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from utils.executors import log_executor_health, start_background_task
 from utils.desktop_loop_watchdog import DesktopLoopWatchdog, InFlightRequestsMiddleware
-from utils.llm.desktop_gemini_telemetry import ProxyAdmissionMiddleware
 
 
 def _initialize_firebase_admin() -> None:
@@ -156,10 +155,6 @@ def _build_app() -> FastAPI:
     # always returns None here and BYOK users silently ride the managed/quota
     # lane instead of their own keys. main.py installs the same middleware.
     app.add_middleware(BYOKMiddleware)
-    # Admission stamps the monotonic request-entry time for the desktop stream
-    # deadline before CORS/BYOK token verify or any route dependency, but stays
-    # inside DesktopProxyDeadlineMiddleware, which owns the outermost hop.
-    app.add_middleware(ProxyAdmissionMiddleware)
     app.add_middleware(DesktopProxyDeadlineMiddleware)
     app.include_router(desktop_core.router)
     app.include_router(auth.router)

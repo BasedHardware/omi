@@ -99,8 +99,9 @@ _DAILY_HARD_LIMIT = 1500
 
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
-# incident tail. Non-streaming stays at 75s. Streaming keeps an idle-gap
-# timeout plus a wall clock under Cloud Run's 300s request timeout.
+# incident tail. Restore the bounded non-stream contract while adding the phase
+# evidence that was missing. Streaming uses an idle-gap timeout in the shared
+# client because a healthy SSE response may legitimately last longer.
 _TOTAL_TIMEOUT_SECONDS = 75.0
 _CREDENTIAL_TIMEOUT_SECONDS = 5.0
 _POOL_WAIT_SECONDS = 5.0
@@ -823,10 +824,7 @@ async def _stream_provider(
     upstream: httpx.Response | None = None
     held = False
     attempt_model, capacity = model, route.headers.get(ptr.REQUEST_TYPE_HEADER, '')
-    deadline = desktop_gemini_gateway.admission_deadline(telemetry)
     try:
-        if deadline <= asyncio.get_running_loop().time():
-            raise TimeoutError
         # Each entry is one upstream attempt. Overflow attempts are appended
         # only after the reservation actually reports itself full, so the
         # ordinary path opens exactly one stream as before.
@@ -835,8 +833,7 @@ async def _stream_provider(
         ]
         while pending:
             attempt_route, attempt_body, attempt_model, capacity = pending.pop(0)
-            remaining = min(_TOTAL_TIMEOUT_SECONDS, deadline - asyncio.get_running_loop().time())
-            async with asyncio.timeout(max(0.0, remaining)):
+            async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
                 context, upstream = await open_attempt(attempt_route, attempt_body)
                 held = True
             telemetry.phase = 'first_byte'
@@ -847,7 +844,7 @@ async def _stream_provider(
                 break
             # The body carries the difference between 'reservation full' and
             # ordinary rate limiting, and a streamed error body is not read yet.
-            await desktop_gemini_gateway.await_before_deadline(upstream.aread(), deadline)
+            await upstream.aread()
             # This dispatch is over; record it before recovery routing can fail.
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
             pending = []
@@ -888,8 +885,7 @@ async def _stream_provider(
             yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
             return
         assert upstream is not None
-        async for chunk in desktop_gemini_gateway.iter_before_deadline(upstream.aiter_bytes(), deadline):
-            telemetry.phase = 'body'
+        async for chunk in upstream.aiter_bytes():
             usage_observer.feed(chunk)
             yield chunk
         usage_observer.finish()
@@ -1204,7 +1200,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             if route.provider == 'vertex_ai' and action == 'embedContent':
                 body = _vertex_embedding_request(body)
             if streaming:
-                return desktop_gemini_gateway.DeadlineStreamingResponse(
+                return StreamingResponse(
                     _stream_provider(
                         request,
                         route,
@@ -1214,8 +1210,6 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
                         action=action,
                         query=dict(request.query_params),
                     ),
-                    deadline=desktop_gemini_gateway.admission_deadline(telemetry),
-                    telemetry=telemetry,
                     media_type='text/event-stream',
                     headers=_response_headers(telemetry),
                 )

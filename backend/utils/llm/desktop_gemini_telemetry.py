@@ -17,7 +17,6 @@ from uuid import uuid4
 from fastapi import HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from fastapi.routing import APIRoute
-from starlette.types import ASGIApp, Receive, Scope, Send
 
 from config.desktop_gemini_attribution_generated import (
     GEMINI_CLIENT_PLATFORMS,
@@ -50,31 +49,6 @@ _TRACE_PATTERN = re.compile(r'^([0-9a-fA-F]{32})(?:/[^;]+)?(?:;o=[01])?$')
 _LEGACY_PREVIEW_MODEL = 'gemini-3-flash-preview'
 
 _PROXY_TELEMETRY_ATTR = 'desktop_gemini_proxy_telemetry'
-
-# Monotonic admission stamp written by ProxyAdmissionMiddleware (the outermost
-# ASGI hop) and adopted by ProxyTelemetry, so executor-backed route dependencies
-# (auth, plan gate, metering) count against the desktop stream deadline.
-PROXY_ADMISSION_ATTR = 'desktop_gemini_proxy_admission'
-
-
-class ProxyAdmissionMiddleware:
-    """Stamp request admission before any route dependency executes.
-
-    FastAPI resolves ``Depends`` handlers — including executor-backed database
-    work — before the route body constructs telemetry. Without this stamp the
-    270s stream wall clock starts only after those dependencies finish, letting
-    a trickled stream reach Cloud Run's 300s request timeout anyway.
-    """
-
-    def __init__(self, app: ASGIApp) -> None:
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope['type'] == 'http':
-            state = scope.setdefault('state', {})
-            state.setdefault(PROXY_ADMISSION_ATTR, time.monotonic())
-        await self.app(scope, receive, send)
-
 
 _PLATFORM_BY_CLIENT_KIND: Mapping[str, str] = {
     'desktop_macos': 'macos',
@@ -164,13 +138,7 @@ class ProxyTelemetry:
         self.traffic_type = 'unknown'
         self.phase: str = 'validation'
         self.shape = desktop_gemini_gateway.PayloadShape('unknown', 'unknown', 'unknown')
-        # Admission (outermost ASGI hop) when the middleware stamped it; route
-        # construction otherwise. Dependencies that ran in between must count
-        # against the stream deadline, not be granted a fresh 270s budget.
-        admitted = getattr(request.state, PROXY_ADMISSION_ATTR, None)
-        if isinstance(admitted, bool) or not isinstance(admitted, (int, float)):
-            admitted = time.monotonic()
-        self.started = admitted
+        self.started = time.monotonic()
         self.request_deadline = self.started + desktop_proxy_lifetime.REQUEST_TIMEOUT_SECONDS
         self.completed = False
         self.defer_terminal = False

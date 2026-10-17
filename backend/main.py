@@ -383,13 +383,6 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
-
-from utils.llm.desktop_gemini_telemetry import ProxyAdmissionMiddleware
-
-# Admission stamps the monotonic request-entry time for the desktop stream
-# deadline. It must run before BYOK token verify and any route dependency, but
-# stay inside DesktopProxyDeadlineMiddleware, which owns the outermost hop.
-app.add_middleware(ProxyAdmissionMiddleware)
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
