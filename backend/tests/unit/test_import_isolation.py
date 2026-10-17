@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, SourceFileLoader
 import sys
 from pathlib import Path
@@ -49,9 +50,7 @@ def test_stub_modules_restores_child_attribute_when_child_is_stubbed_before_pare
 
 
 @pytest.mark.parametrize("native_preloaded", [False, True])
-def test_stub_modules_preserves_native_extension_owner_and_evicts_python_siblings(
-    tmp_path: Path, native_preloaded: bool
-):
+def test_stub_modules_evicts_unlisted_native_extension_and_python_siblings(tmp_path: Path, native_preloaded: bool):
     package_name = "_import_isolation_extension_package"
     extension_name = f"{package_name}.native"
     sibling_name = f"{package_name}.sibling"
@@ -96,13 +95,18 @@ def test_stub_modules_preserves_native_extension_owner_and_evicts_python_sibling
             package.sibling = sibling
             package.external_fake = external_fake
 
-        assert sys.modules[package_name] is package
-        assert sys.modules[extension_name] is extension
-        assert package.native is extension
+        if native_preloaded:
+            assert sys.modules[package_name] is package
+            assert sys.modules[extension_name] is extension
+            assert package.native is extension
+        else:
+            assert package_name not in sys.modules
+            assert extension_name not in sys.modules
         assert sibling_name not in sys.modules
-        assert not hasattr(package, "sibling")
         assert fake_name not in sys.modules
-        assert not hasattr(package, "external_fake")
+        if native_preloaded:
+            assert not hasattr(package, "sibling")
+            assert not hasattr(package, "external_fake")
     finally:
         sys.modules.pop(fake_name, None)
         sys.modules.pop(sibling_name, None)
@@ -150,11 +154,10 @@ def test_stub_modules_evicts_fake_with_origin_inside_native_namespace_family(tmp
             package.secret = fake_parent
             fake_parent.internal = fake
 
-        assert sys.modules[package_name] is package
-        assert sys.modules[extension_name] is extension
+        assert package_name not in sys.modules
+        assert extension_name not in sys.modules
         assert fake_name not in sys.modules
         assert fake_parent_name not in sys.modules
-        assert not hasattr(package, "secret")
     finally:
         sys.modules.pop(fake_name, None)
         sys.modules.pop(fake_parent_name, None)
@@ -208,16 +211,79 @@ def test_stub_modules_evicts_fake_with_forged_native_origin_suffix(tmp_path: Pat
             package.secret = fake_parent
             fake_parent.internal = fake
 
-        assert sys.modules[package_name] is package
-        assert sys.modules[extension_name] is extension
+        assert package_name not in sys.modules
+        assert extension_name not in sys.modules
         assert fake_name not in sys.modules
         assert fake_parent_name not in sys.modules
-        assert not hasattr(package, "secret")
     finally:
         sys.modules.pop(fake_name, None)
         sys.modules.pop(fake_parent_name, None)
         sys.modules.pop(extension_name, None)
         sys.modules.pop(package_name, None)
+
+
+def test_stub_modules_evicts_unlisted_extension_with_forged_loader_and_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    package = importlib.import_module("pydantic_core")
+    extension_name = "pydantic_core._pydantic_core"
+    fake_origin = tmp_path / "fake.so"
+    fake_origin.touch()
+    fake = ModuleType(extension_name)
+    fake.__spec__ = ModuleSpec(
+        extension_name,
+        loader=ExtensionFileLoader(extension_name, str(fake_origin)),
+        origin=str(fake_origin),
+    )
+    monkeypatch.delitem(sys.modules, extension_name, raising=False)
+    monkeypatch.delattr(package, "_pydantic_core", raising=False)
+
+    with stub_modules({}):
+        sys.modules[extension_name] = fake
+        package._pydantic_core = fake
+
+    assert extension_name not in sys.modules
+    assert not hasattr(package, "_pydantic_core")
+
+
+def test_stub_modules_preserves_allowlisted_jiter_extension_with_existing_origin(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    package = importlib.import_module("jiter")
+    extension = importlib.import_module("jiter.jiter")
+    package_origin = package.__spec__.origin
+    extension_origin = extension.__spec__.origin
+    assert isinstance(package_origin, str) and Path(package_origin).is_file()
+    assert isinstance(extension_origin, str) and Path(extension_origin).is_file()
+    assert isinstance(extension.__spec__.loader, ExtensionFileLoader)
+
+    fake_package = ModuleType("jiter")
+    fake_package.__path__ = list(package.__path__)  # type: ignore[attr-defined]
+    fake_package.__spec__ = ModuleSpec(
+        "jiter",
+        loader=SourceFileLoader("jiter", package_origin),
+        origin=package_origin,
+        is_package=True,
+    )
+    fake_package.__spec__.submodule_search_locations = list(package.__path__)
+    fake_extension = ModuleType("jiter.jiter")
+    fake_extension.__spec__ = ModuleSpec(
+        "jiter.jiter",
+        loader=ExtensionFileLoader("jiter.jiter", extension_origin),
+        origin=extension_origin,
+    )
+
+    monkeypatch.delitem(sys.modules, "jiter.jiter", raising=False)
+    monkeypatch.delitem(sys.modules, "jiter", raising=False)
+    monkeypatch.delattr(package, "jiter", raising=False)
+    with stub_modules({}):
+        sys.modules["jiter"] = fake_package
+        sys.modules["jiter.jiter"] = fake_extension
+        fake_package.jiter = fake_extension
+
+    assert sys.modules["jiter"] is fake_package
+    assert sys.modules["jiter.jiter"] is fake_extension
+    assert fake_package.jiter is fake_extension
 
 
 @pytest.fixture

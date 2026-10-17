@@ -57,6 +57,18 @@ class AutoMockModule(ModuleType):
         return mock
 
 
+def _has_existing_file_origin(module: ModuleType | None) -> bool:
+    spec = getattr(module, "__spec__", None)
+    origin = getattr(spec, "origin", None) if spec else None
+    return isinstance(origin, str) and Path(origin).is_file()
+
+
+def _is_existing_extension_module(module: ModuleType | None) -> bool:
+    spec = getattr(module, "__spec__", None)
+    loader = getattr(spec, "loader", None) if spec else None
+    return isinstance(loader, ExtensionFileLoader) and _has_existing_file_origin(module)
+
+
 def _set_parent_attr(name: str, module: ModuleType | None) -> None:
     if "." not in name:
         return
@@ -79,12 +91,10 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
     including deleting entries that were absent before and repairing parent attrs.
 
     It ALSO snapshots the FULL ``sys.modules`` mapping (key -> object) at entry and
-    restores it on teardown: newly-added keys are evicted except for non-backend
-    modules that cannot safely be re-imported, and existing keys whose object was
-    swapped (e.g. by ``load_module_fresh`` re-exec'ing a module against the fakes)
-    are restored to the original object. When native state requires retention,
-    only the native extension, its exact top-level package, and explicitly listed
-    companion modules remain. Explicit fakes are restored and backend-owned
+    restores it on teardown: newly-added keys are evicted except for exact names in
+    the explicit import-safety allowlist, and existing keys whose object was swapped
+    (e.g. by ``load_module_fresh`` re-exec'ing a module against the fakes) are
+    restored to the original object. Explicit fakes are restored and backend-owned
     modules are always evicted, so a stub-fed backend copy never leaks to later
     test files.
 
@@ -136,16 +146,13 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
         # 2. Evict any module keys that appeared during the block (e.g. a module
         #    exec'd via load_module_fresh against the fakes) and clear the parent
         #    attribute each one set, so a stub-fed version never leaks to later files.
-        #    Native extensions cannot always be safely re-imported after removal.
-        #    Backend-owned modules (database.*, utils.*, etc.) are always evicted
-        #    because they may be stubs that must not leak.
-        _backend_prefixes = ("database.", "utils.", "models.", "routers.", "jobs.", "dependencies")
-        # Generated Google API message modules register descriptors in the
-        # process-global pool owned by google._upb._message. Preserve the exact
-        # message modules that this backend imports; preserving the whole google
-        # namespace would also preserve unrelated or fake modules under it.
+        # Preserve only these exact families. Jiter's source package must remain
+        # paired with its extension because its initializer binds the child module;
+        # the listed Google modules register descriptors in protobuf's global pool.
+        # Add future native families explicitly rather than discovering .so files.
         _extension_family_companions = {
             "google": (
+                "google._upb._message",
                 "proto",
                 "google.ai.generativelanguage_v1beta.types.cache_service",
                 "google.ai.generativelanguage_v1beta.types.cached_content",
@@ -166,44 +173,26 @@ def stub_modules(mapping: dict[str, ModuleType | None]) -> Iterator[None]:
                 "google.ai.generativelanguage_v1beta.types.text_service",
                 "google.ai.generativelanguage_v1beta.types.tuned_model",
             ),
-            # Jiter's package initializer relies on this C-extension submodule
-            # remaining paired with the package across isolated imports.
-            "jiter": ("jiter.jiter",),
+            "jiter": ("jiter", "jiter.jiter"),
         }
         extra_names = list(sys.modules.keys() - saved_keys)
-        # Some extension modules cannot be safely re-imported after removal. Keep
-        # only each native module, its exact top-level package, and explicitly
-        # required companion modules. Do not use package paths to infer family
-        # membership: namespace-package paths (for example ``google``) can span a
-        # large installed tree, and a fake can point its spec into that tree.
         preserve_for_import_safety: set[str] = set()
         extra_name_set = set(extra_names)
-        # A native extension may predate this block (for example, tests import
-        # google.auth.credentials at module scope). Its package family still has
-        # to keep the exact owning package when this block imports more modules.
-        for candidate_name, candidate_module in list(sys.modules.items()):
-            spec = getattr(candidate_module, "__spec__", None)
-            origin = getattr(spec, "origin", None) if spec else None
-            loader = getattr(spec, "loader", None) if spec else None
-            is_backend = any(candidate_name == p.rstrip(".") or candidate_name.startswith(p) for p in _backend_prefixes)
-            if (
-                is_backend
-                or not isinstance(loader, ExtensionFileLoader)
-                or not origin
-                or not origin.endswith((".so", ".pyd"))
-            ):
-                continue
-            root_name = candidate_name.partition(".")[0]
-            if candidate_name in extra_name_set:
-                preserve_for_import_safety.add(candidate_name)
-            # Keep the exact top-level owner of this verified extension. The
-            # explicit companion map below adds only packages with known
-            # process-global import state; neither mechanism infers membership
-            # from a package path.
-            if root_name in extra_name_set:
-                preserve_for_import_safety.add(root_name)
-            for companion_name in _extension_family_companions.get(root_name, ()):
-                if companion_name in extra_name_set:
+        google_extension_loaded = _is_existing_extension_module(sys.modules.get("google._upb._message"))
+        jiter_extension_loaded = _is_existing_extension_module(sys.modules.get("jiter.jiter"))
+        if google_extension_loaded:
+            for companion_name in _extension_family_companions["google"]:
+                if companion_name in extra_name_set and _has_existing_file_origin(sys.modules.get(companion_name)):
+                    preserve_for_import_safety.add(companion_name)
+        if jiter_extension_loaded:
+            for companion_name in _extension_family_companions["jiter"]:
+                if companion_name not in extra_name_set:
+                    continue
+                companion = sys.modules.get(companion_name)
+                if companion_name == "jiter.jiter":
+                    if _is_existing_extension_module(companion):
+                        preserve_for_import_safety.add(companion_name)
+                elif _has_existing_file_origin(companion):
                     preserve_for_import_safety.add(companion_name)
         for extra in extra_names:
             if extra in preserve_for_import_safety:
