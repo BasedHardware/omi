@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ArrowLeft, Brain, Loader2, RefreshCw } from 'lucide-react'
 import type { KnowledgeGraph } from '../../../../shared/types'
 import { BrainGraph } from './LazyBrainGraph'
+import { MemoryAtlas } from './MemoryAtlas'
 import { EmptyState } from '../ui/EmptyState'
 import { capGraph, isCapped, DEFAULT_NODE_CAP, DEFAULT_LABEL_TOPK } from '../../lib/graphDisplay'
 
@@ -38,6 +39,11 @@ export function KnowledgeGraphViewer(props: {
   // showAll (4 states) — all labels of the key nodes, or all labels of the full
   // graph. Component state (not durable), matching showAll above.
   const [showAllLabels, setShowAllLabels] = useState(false)
+  // Two ways of reading the same graph. The graph hides nodes to stay legible;
+  // the map hides none and groups them into named regions instead. Component
+  // state, like the two toggles above, so neither view is imposed on a return
+  // visit.
+  const [view, setView] = useState<'graph' | 'map'>('graph')
 
   // The full graph stays reachable: showAll lifts the cap entirely (capGraph
   // returns the same graph ref, so the sim re-lays out the complete set). When
@@ -57,7 +63,8 @@ export function KnowledgeGraphViewer(props: {
     // blurred surface pins the GPU re-blending on every unrelated repaint (same
     // reason the Memories card uses a solid tint).
     <div className="relative h-full w-full overflow-hidden bg-black/40">
-      {hasGraph ? (
+      {hasGraph && view === 'map' && <MemoryAtlas graph={graph} centerNodeId={centerNodeId} />}
+      {hasGraph && view === 'graph' ? (
         <BrainGraph
           interactive
           graph={visibleGraph}
@@ -69,7 +76,7 @@ export function KnowledgeGraphViewer(props: {
           frameLoop="demand"
           labelMode={showAllLabels ? 'all' : 'declutter'}
         />
-      ) : (
+      ) : hasGraph ? null : (
         <div className="flex h-full w-full items-center justify-center">
           <EmptyState
             icon={Brain}
@@ -113,7 +120,21 @@ export function KnowledgeGraphViewer(props: {
           </span>
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
-          {hasGraph && capsBite && (
+          {hasGraph && (
+            <button
+              onClick={() => setView((v) => (v === 'graph' ? 'map' : 'graph'))}
+              className="btn-ghost px-3 py-2"
+              title={
+                view === 'graph'
+                  ? 'Group your memories into named regions instead of hiding nodes'
+                  : 'Back to the connection graph'
+              }
+              aria-pressed={view === 'map'}
+            >
+              {view === 'graph' ? 'Map' : 'Graph'}
+            </button>
+          )}
+          {hasGraph && view === 'graph' && capsBite && (
             <button
               onClick={() => setShowAll((v) => !v)}
               className="btn-ghost px-3 py-2"
@@ -127,7 +148,7 @@ export function KnowledgeGraphViewer(props: {
               {showAll ? `Show key ${DEFAULT_NODE_CAP}` : `Show all ${graph.nodes.length}`}
             </button>
           )}
-          {hasGraph && labelsBite && (
+          {hasGraph && view === 'graph' && labelsBite && (
             <button
               onClick={() => setShowAllLabels((v) => !v)}
               className="btn-ghost px-3 py-2"
