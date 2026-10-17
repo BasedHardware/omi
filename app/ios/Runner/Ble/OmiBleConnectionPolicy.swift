@@ -3,6 +3,14 @@ import Foundation
 
 /// Pure decisions for connection recovery and GATT authentication failures.
 enum OmiBleConnectionPolicy {
+    static func savedRetryAllowed(saved: Bool, everConnected: Bool, manual: Bool, pairingLost: Bool) -> Bool {
+        (saved || everConnected) && !manual && !pairingLost
+    }
+
+    static func savedRetryDelay(attempt: Int) -> TimeInterval {
+        min(60, pow(2, Double(min(max(attempt - 1, 0), 6))))
+    }
+
     enum ReadyRecoveryAction: Equatable {
         case connect
         case replayReady

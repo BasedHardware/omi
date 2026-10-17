@@ -581,6 +581,12 @@ class AnalyticsManager {
     }
   }
 
+  Future<bool> isBooleanFeatureEnabled(String key) async =>
+      await _readFlag((a) => a is AnalyticsBooleanFlagAdapter
+          ? (a as AnalyticsBooleanFlagAdapter).isBooleanFeatureEnabled(key)
+          : Future.value(false)) ??
+      false;
+
   Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
   Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
   Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));

@@ -1,0 +1,17 @@
+{
+  "id": "saved-pendant-reconnect",
+  "kind": "question",
+  "owner": "Mobile reliability",
+  "question": "Do saved pendants recover after cold-start failure, by trigger, result, platform and release build? Count attempted and connected separately; native and Dart attempts are separate series.",
+  "query": "contracts/analytics/consumers/saved-pendant-reconnect.sql",
+  "events": [
+    "savedPendantReconnectObserved"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "trigger",
+    "result"
+  ],
+  "zero_policy": "No reconnect events is not success. Compare attempts and outcomes within the same build and trigger; missing outcomes require investigation."
+}

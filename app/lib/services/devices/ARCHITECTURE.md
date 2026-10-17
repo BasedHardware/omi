@@ -2,7 +2,27 @@
 
 Native BLE owns bonding, connection attempts, and automatic reconnection.
 `DeviceService` retains its connection and `NativeBleTransport` after the
-60-second launch timeout. A later `BleBridge.onDeviceReady` can therefore
+60-second launch timeout and, with saved reconnect enabled, transient adapter or
+native fail-to-connect errors before readiness. Device-specific setup errors after
+readiness still tear down partial connections. `SavedPendantReconnect` owns one
+Dart attempt at a time and a 5-second exponential backoff capped at five minutes,
+also ensuring the saved BLE pairing on resume and adapter-on. It reuses the same
+connection/transport; native owns the radio retries. Explicit disconnect and
+Forget persist suppression before asynchronous teardown. The stale-bond block
+still requires explicit user recovery.
+
+This fix ships default ON per owner approval. Only boolean PostHog
+`saved-pendant-reconnect-kill=true` disables the new policy; missing, unreachable,
+or variant-valued flags leave it ON. Flags refresh before disconnected attempts.
+Disabling preserves the legacy one-shot launch connect. iOS derives eligibility
+from Dart's saved pairing rather than persisting the scan-discovered peripheral
+set. Android preserves its existing native retry loop and makes repeated Dart
+manage requests idempotent, with user-disconnect protection for queued starts.
+`Saved Pendant Reconnect` records bounded trigger/result fields, attempt count,
+and time since the observed disconnect (launch time if the prior process's
+outage start is unknown); native and Dart counters are separate series.
+
+A later `BleBridge.onDeviceReady` can therefore
 publish a connected device without returning through the original `connect()`.
 Bluetooth readiness alone does not establish the pendant's audio mode.
 

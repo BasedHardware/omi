@@ -68,3 +68,8 @@ abstract interface class AnalyticsFeatureFlagAdapter {
   /// cached; false on failure, timeout, or an identity change while the request was in flight.
   Future<bool> reloadFeatureFlags();
 }
+
+/// Boolean kill switches must not treat multivariate arms as enabled.
+abstract interface class AnalyticsBooleanFlagAdapter {
+  Future<bool> isBooleanFeatureEnabled(String key);
+}
