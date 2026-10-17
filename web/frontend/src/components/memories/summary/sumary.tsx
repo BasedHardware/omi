@@ -5,8 +5,8 @@ import ScreenMoments from './screen-moments';
 import MemoryEvents from '../events/memory-events';
 import Plugins from '../plugins/plugins';
 import Markdown from 'markdown-to-jsx';
-import { resolvableNoteSources } from '../../../../../shared/note-sources.mjs';
-import { repairNoteCitations } from '../../../../../shared/note-citations.mjs';
+import { resolvableNoteSources } from '../../../../shared/note-sources.mjs';
+import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
 
 interface SummaryProps {
   memory: Memory;
