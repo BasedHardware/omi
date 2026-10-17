@@ -187,7 +187,17 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         if intake_ref is not None and intake is not None and intake.exists:
             transaction.update(intake_ref, {'expires_at': expires})
         for artifact in artifacts:
-            transaction.update(artifact.reference, {'cleanup_after': completed_at + ARTIFACT_RETENTION})
+            metadata = artifact.to_dict() or {}
+            # The native audio artifact is a small reference manifest. Keep its
+            # proof through the receipt window so a first late WAL can prove
+            # coverage without reprocessing retained audio. GPU results keep
+            # their existing 24h retention; privacy erasure remains immediate.
+            retention = (
+                RECEIPT_RETENTION
+                if (job.get('projection_binding') or {}).get('native_record') and metadata.get('kind') == 'audio'
+                else ARTIFACT_RETENTION
+            )
+            transaction.update(artifact.reference, {'cleanup_after': completed_at + retention})
         return True
 
     return expire(client.transaction())
@@ -224,20 +234,25 @@ def cleanup_completed_artifacts(
     return cleaned
 
 
-def batch_artifact_authorize(store: Any, item: Any):
+def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None):
     """B's required authorize(item) callback, using uncached transactional reads."""
     from utils.batch_pipeline.artifacts import ProtectionContext
 
     @firestore.transactional
     def authorize(transaction):
+        loaded = {}
         generation = assert_batch_write_allowed(
             store.client,
             transaction,
             item.owner_id,
             conversation_ids=(item.conversation_id,) if item.conversation_id else (),
             expected_generation=item.privacy_generation,
+            snapshots=loaded,
         )
-        user = store.client.collection('users').document(item.owner_id).get(transaction=transaction).to_dict() or {}
+        if snapshots is not None:
+            snapshots.clear()
+            snapshots.update(loaded)
+        user = loaded['user']
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
     return authorize(store.client.transaction())

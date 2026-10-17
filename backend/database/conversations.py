@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
 from database.dream_dirty import after_write
-from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 import utils.other.hume as hume
@@ -345,6 +345,8 @@ def _prepare_conversation_for_write(
             data[owner_diagnostics.FIELD] = value
         else:
             data.pop(owner_diagnostics.FIELD, None)
+    if level not in {'standard', 'enhanced'}:
+        data.pop('record_lane_owner', None)
     segments = data.get('transcript_segments')
     if isinstance(segments, list) and any('original_text' in segment for segment in segments):
         from utils.agent_capabilities.transcripts import originals
@@ -955,6 +957,10 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
+            if existing.get('record_lane_owner'):
+                write_data['record_lane_owner'] = existing['record_lane_owner']
+            else:
+                write_data.pop('record_lane_owner', None)
 
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
@@ -1066,7 +1072,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
-
+        if existing.get('record_lane_owner'):
+            write_data['record_lane_owner'] = existing['record_lane_owner']
         if (
             existing.get('deleted')
             or summary_delivery.repair_fenced(existing)
@@ -1755,7 +1762,9 @@ def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
 
 
 @after_write('conversations')
-def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
+def update_conversation(
+    uid: str, conversation_id: str, update_data: dict, *, record_owner_out: dict | None = None
+) -> bool:
     """Apply ``update_data`` to a conversation.
 
     Returns False when the conversation no longer exists, so callers that keep
@@ -1773,6 +1782,10 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     if not doc_snapshot.exists:
         return False
 
+    if record_owner_out is not None:
+        owner = doc_snapshot.to_dict().get('record_lane_owner')
+        if owner in {'batch_live_v1', 'batch_sync_v1'}:
+            record_owner_out[conversation_id] = owner
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
         update_data = {
@@ -1793,6 +1806,37 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     invalidate_people_stats_cache(uid)
     if _SEARCH_INDEXED_FIELD_ROOTS.intersection(str(key).split('.', 1)[0] for key in update_data):
         _sync_conversation_search_index(uid, conversation_id)
+    return True
+
+
+def claim_record_lane_owner(uid: str, conversation_id: str, owner: str, expected_updated_at, *, firestore_client=None):
+    """CAS against the caller's loaded revision: one owner, zero added reads."""
+    if owner not in {'batch_live_v1', 'batch_sync_v1', 'legacy_final_pass_v1'} or expected_updated_at is None:
+        return None
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    try:
+        result = ref.update(
+            {'record_lane_owner': owner}, option=client.write_option(last_update_time=expected_updated_at)
+        )
+    except (NotFound, FailedPrecondition):
+        return None
+    return result.update_time
+
+
+def seal_record_audio(uid: str, conversation_id: str) -> bool:
+    """Pusher's upload barrier: blind metadata update, never recreates a row."""
+    ref = (
+        get_firestore_client()
+        .collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+    )
+    try:
+        ref.update({'record_audio_closed': True})
+    except NotFound:
+        return False
     return True
 
 
@@ -3255,6 +3299,10 @@ def update_conversation_segments(
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
+        if current.get('record_projection_revision') and segment_update_fields is None:
+            # The durable record owns the finalized capture. A delayed socket
+            # flush cannot append its provisional twin after projection.
+            return False
         doc_level = current.get('data_protection_level') or data_protection_level or 'standard'
         receipt = decode_manual_speaker_assignments(
             uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
@@ -4098,6 +4146,7 @@ def promote_final_pass_if_current(
             or deleting.exists
             or is_soft_deleted(current)
             or current.get('is_locked')
+            or current.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
             or current.get('discarded')
             or current.get('status') != 'completed'
             or firestore_revision_datetime(snapshot.update_time) != expected_updated_at

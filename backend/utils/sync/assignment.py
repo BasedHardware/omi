@@ -28,6 +28,7 @@ from utils.conversations.fragment_visibility import is_rule_discard_decision, is
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
+from utils.batch_pipeline.live_projection import replace_record
 from utils.sync.capture_repeat_evidence import capture_covered_indices
 from utils.sync.live_speech_dedupe import (
     MAX_LIVE_SEGMENTS,
@@ -222,7 +223,7 @@ def assign_in_transaction(
     incoming = deepcopy(incoming)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
-    index = AssignmentIndex(transaction, user_ref)
+    record_span = incoming.pop('_batch_replace_live', None)
     collection = user_ref.collection('conversations')
     read: dict[str, dict | None] = {}
 
@@ -268,6 +269,15 @@ def assign_in_transaction(
         # timestamp anchor here becomes a twin when listen later persists. The
         # already-read target document fences concurrent create on replay.
         raise SyncAssignmentConflict('batch live target not persisted', subtype='other')
+    if record_span is not None:
+        if not target or not target_id:
+            raise SyncAssignmentConflict('record target missing', subtype='other')
+        result, survivors = replace_record(decode(target), incoming, record_span)
+        invalidate(result)
+        encoded = encode(result)
+        transaction.update(collection.document(target_id), encoded)
+        return result, False, survivors
+    index = AssignmentIndex(transaction, user_ref)
     redirected = False
     if flatten:
         if target and target.get('sync_merged_into'):

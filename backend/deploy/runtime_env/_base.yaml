@@ -537,6 +537,9 @@ environment_shared:
         BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+          value: 'false'
+          category: rollout
         BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
           value: 'false'
           category: rollout
@@ -576,6 +579,7 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
         REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
@@ -1329,6 +1333,9 @@ environment_shared:
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
@@ -1742,6 +1749,9 @@ environment_shared:
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
@@ -2120,6 +2130,9 @@ environment_shared:
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'false'
             category: rollout
@@ -2430,6 +2443,9 @@ environment_shared:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:

@@ -11,3 +11,6 @@ cryptography==46.0.3
 # Stage-qualified Firestore reference helper imports the backend HTTP/env types.
 fastapi==0.121.0
 python-dotenv==1.1.1
+
+# Decode generation-pinned retained Opus captures; native libopus comes from ffmpeg.
+opuslib==3.0.1
