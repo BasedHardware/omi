@@ -1,7 +1,7 @@
 """Tests for timezone-aware action-item timestamps in chat retrieval (issue #4643).
 
 The agentic chat tool ``get_action_items_tool`` used to render action-item
-timestamps with a bare ``strftime`` and no timezone, e.g. ``Due: 2026-06-26 22:00:00``.
+timestamps with a bare ``strftime`` and no timezone, e.g. ``Due: 2026-06-26 22:00``.
 The chat model then read that UTC wall-clock time as the user's local time and
 mislabelled the time of day ("tonight" when it was actually mid-afternoon).
 
@@ -142,6 +142,14 @@ langchain_runnables.RunnableConfig = FakeRunnableConfig
 
 # Stub utils packages
 _stub_package("utils")
+_model_text_spec = importlib.util.spec_from_file_location("utils.model_text", BACKEND_DIR / "utils/model_text.py")
+_model_text = importlib.util.module_from_spec(_model_text_spec)
+sys.modules["utils.model_text"] = _model_text
+_model_text_spec.loader.exec_module(_model_text)
+_user_clock_spec = importlib.util.spec_from_file_location("utils.user_clock", BACKEND_DIR / "utils/user_clock.py")
+_user_clock = importlib.util.module_from_spec(_user_clock_spec)
+sys.modules["utils.user_clock"] = _user_clock
+_user_clock_spec.loader.exec_module(_user_clock)
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.conversations")
@@ -194,6 +202,7 @@ _chat_scope_stub.chat_scope_from_config = _chat_scope_from_config
 # ---------------------------------------------------------------------------
 # Load the module under test
 # ---------------------------------------------------------------------------
+_load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
 action_item_tools = _load_module_from_file(
     "utils.retrieval.tools.action_item_tools",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
@@ -211,13 +220,17 @@ for _name in list(sys.modules):
     else:
         del sys.modules[_name]
 del _SYS_MODULES_SNAPSHOT
+runtime_notifications_db = importlib.import_module("database.notifications")
 
 
-def _make_config(uid="test-user-123"):
-    return {"configurable": {"user_id": uid}}
+def _make_config(uid="test-user-123", tz=None):
+    values = {"user_id": uid}
+    if tz is not None:
+        values["user_timezone"] = tz
+    return {"configurable": values}
 
 
-# A fixed instant: 22:00:00 UTC == 15:00:00 in America/Los_Angeles (PDT, UTC-7 in June).
+# A fixed instant: 22:00 UTC == 15:00:00 in America/Los_Angeles (PDT, UTC-7 in June).
 _UTC_INSTANT = datetime(2026, 6, 26, 22, 0, 0, tzinfo=timezone.utc)
 
 
@@ -235,74 +248,83 @@ def _item(**over):
 
 
 def _run(items, tz):
-    with patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=items), patch.object(
-        action_item_tools.notification_db, 'get_user_time_zone', return_value=tz
-    ):
-        return get_action_items_tool(config=_make_config())
+    with patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=items):
+        return get_action_items_tool(config=_make_config(tz=tz))
 
 
 # ===========================================================================
-# format_local_time helper (shared, from utils.conversations.render)
+# Shared model-facing instant formatter
 # ===========================================================================
 class TestFormatLocalHelper:
     def test_aware_utc_converted_to_user_tz_with_label(self):
-        out = action_item_tools.format_local_time(_UTC_INSTANT, ZoneInfo("America/Los_Angeles"), "America/Los_Angeles")
-        assert out == "2026-06-26 15:00:00 America/Los_Angeles"
+        out = _model_text.format_instant(_UTC_INSTANT, _model_text.DisplayClock.from_name("America/Los_Angeles"))
+        assert out == "Fri 26 Jun 2026, 15:00 America/Los_Angeles (UTC-07:00)"
 
     def test_naive_value_treated_as_utc(self):
         naive = datetime(2026, 6, 26, 22, 0, 0)  # no tzinfo
-        out = action_item_tools.format_local_time(naive, ZoneInfo("America/Los_Angeles"), "America/Los_Angeles")
-        assert out == "2026-06-26 15:00:00 America/Los_Angeles"
+        out = _model_text.format_instant(naive, _model_text.DisplayClock.from_name("America/Los_Angeles"))
+        assert out == "Fri 26 Jun 2026, 15:00 America/Los_Angeles (UTC-07:00)"
 
     def test_utc_label_unchanged(self):
-        out = action_item_tools.format_local_time(_UTC_INSTANT, timezone.utc, "UTC")
-        assert out == "2026-06-26 22:00:00 UTC"
+        out = _model_text.format_instant(_UTC_INSTANT, _model_text.DisplayClock.utc())
+        assert out == "Fri 26 Jun 2026, 22:00 UTC"
 
 
 # ===========================================================================
 # get_action_items_tool rendering
 # ===========================================================================
 class TestActionItemsTimezoneRendering:
+    def test_0718_utc_renders_as_1418_with_the_turn_zone_label(self):
+        instant = datetime(2026, 9, 26, 7, 18, tzinfo=timezone.utc)
+        result = _run([_item(created_at=instant, due_at=instant)], tz="Asia/Ho_Chi_Minh")
+        assert result.startswith(
+            "Action items (1 found, pending first, soonest due date first, newest created first (undated last)):"
+        )
+        assert "User Action Items" not in result
+        assert "Created: Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)" in result
+        assert "Due: Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)" in result
+
     def test_due_date_rendered_in_user_timezone(self):
         result = _run([_item()], tz="America/Los_Angeles")
-        assert "Due: 2026-06-26 15:00:00 America/Los_Angeles" in result
+        assert "Due: Fri 26 Jun 2026, 15:00 America/Los_Angeles (UTC-07:00)" in result
         # The raw UTC wall-clock time must not leak through unlabeled.
-        assert "22:00:00" not in result
+        assert "22:00" not in result
 
     def test_created_and_completed_rendered_in_user_timezone(self):
         result = _run([_item(completed=True)], tz="America/Los_Angeles")
-        assert "Created: 2026-06-26 15:00:00 America/Los_Angeles" in result
-        assert "Completed: 2026-06-26 15:00:00 America/Los_Angeles" in result
+        assert "Created: Fri 26 Jun 2026, 15:00 America/Los_Angeles (UTC-07:00)" in result
+        assert "Completed: Fri 26 Jun 2026, 15:00 America/Los_Angeles (UTC-07:00)" in result
 
     def test_utc_when_timezone_is_utc(self):
         result = _run([_item()], tz="UTC")
-        assert "Due: 2026-06-26 22:00:00 UTC" in result
+        assert "Due: Fri 26 Jun 2026, 22:00 UTC" in result
 
     def test_empty_timezone_falls_back_to_utc(self):
-        result = _run([_item()], tz="")
-        assert "Due: 2026-06-26 22:00:00 UTC" in result
+        with patch.object(runtime_notifications_db, 'get_user_time_zone', return_value=None):
+            result = _run([_item()], tz="")
+        assert "Due: Fri 26 Jun 2026, 22:00 UTC" in result
 
     def test_invalid_timezone_falls_back_to_utc_without_crashing(self):
         result = _run([_item()], tz="Not/AZone")
-        assert "Due: 2026-06-26 22:00:00 UTC" in result
+        assert "Due: Fri 26 Jun 2026, 22:00 UTC" in result
 
     def test_naive_timestamp_is_converted_as_utc(self):
         naive_item = _item(due_at=datetime(2026, 6, 26, 22, 0, 0))  # naive
         result = _run([naive_item], tz="America/Los_Angeles")
-        assert "Due: 2026-06-26 15:00:00 America/Los_Angeles" in result
+        assert "Due: Fri 26 Jun 2026, 15:00 America/Los_Angeles (UTC-07:00)" in result
 
     def test_label_on_every_timestamp_line(self):
         result = _run([_item(completed=True)], tz="Asia/Tokyo")
         # Tokyo is UTC+9, so 22:00 UTC == 07:00 the next day.
         assert result.count("Asia/Tokyo") == 3
-        assert "2026-06-27 07:00:00 Asia/Tokyo" in result
+        assert "Sat 27 Jun 2026, 07:00 Asia/Tokyo (UTC+09:00)" in result
 
     def test_timezone_lookup_failure_falls_back_to_utc(self):
         # A Firestore failure in the timezone lookup must not abort retrieval; it
         # falls back to UTC formatting instead (cubic finding on #8483).
         with patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=[_item()]), patch.object(
-            action_item_tools.notification_db, 'get_user_time_zone', side_effect=RuntimeError("firestore down")
+            runtime_notifications_db, 'get_user_time_zone', side_effect=RuntimeError("firestore down")
         ):
             result = get_action_items_tool(config=_make_config())
-        assert "Due: 2026-06-26 22:00:00 UTC" in result
+        assert "Due: Fri 26 Jun 2026, 22:00 UTC" in result
         assert "Error" not in result

@@ -1,5 +1,16 @@
 {
     "schema_version": 1,
+    "logging_chart_images": {
+        "backend-listen": "backend",
+        "llm-gateway": "backend",
+        "messaging-maintenance": "backend",
+        "diarizer": "diarizer",
+        "batch-pipeline-worker": "batch-pipeline-worker",
+        "nllb-translation": "nllb-translation",
+        "pusher": "pusher",
+        "parakeet": "parakeet",
+        "vad": "models"
+    },
     "images": [
         {
             "name": "backend",
@@ -76,7 +87,8 @@
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
             "dependency_probe_exclusions": {
-                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback."
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback.",
+                "onnxruntime": "utils.stt.vad guards the local Silero ONNX import; pusher images ship without onnxruntime and stored-audio VAD compaction abstains to original audio there."
             }
         },
         {
@@ -257,8 +269,29 @@
             "build_context": ".",
             "source_root": "backend/diarizer",
             "workdir": "/app",
-            "entrypoints": ["main"],
+            "entrypoints": ["main", "batch_main"],
+            "image_import_smoke": true,
+            "smoke_entrypoints": ["main", "batch_main"],
+            "smoke_prelude": "from pyannote.audio import Model, Pipeline; Model.from_pretrained = Pipeline.from_pretrained = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('model loading is forbidden during import smoke')); from runtime_smoke import run_smoke; run_smoke()",
+            "dependency_probe_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_logging": "Standalone first-party logging module copied into /app; the isolated dependency probe cannot see /app.",
+                "utils.stt.diarization_turns": "First-party module the Dockerfile copies from backend/utils/stt into /app; the -I probe cannot see /app, so it is not an installed dependency.",
+                "utils.logging_config": "First-party module the Dockerfile copies from backend/utils into /app; the -I probe cannot see /app, so it is not an installed dependency."
+            },
+            "pull_request_smoke": false
+        },
+        {
+            "name": "batch-pipeline-worker",
+            "dockerfile": "backend/diarizer/Dockerfile.batch-pipeline",
+            "deployment_workflows": [".github/workflows/gcp_diarizer.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["diarizer.batch_pipeline_runtime"],
             "image_import_smoke": false,
+            "smoke_entrypoints": ["diarizer.batch_pipeline_runtime"],
             "dependency_probe_smoke": true,
             "pull_request_smoke": false
         },
@@ -272,17 +305,23 @@
             "entrypoints": ["main"],
             "image_import_smoke": false,
             "dependency_probe_smoke": true,
+            "dependency_probe_exclusions": {
+                "utils.logging_config": "The parakeet checkout shim omi_logging_config.py re-exports this module. The image overwrites that shim with logging_config.py because the NeMo image already binds the name utils, and the -I probe cannot see /app."
+            },
             "pull_request_smoke": false
         },
         {
             "name": "nllb-translation",
             "dockerfile": "backend/nllb_translation/Dockerfile",
             "deployment_workflows": [".github/workflows/gcp_nllb_translation.yml"],
-            "build_context": "backend/nllb_translation",
+            "build_context": ".",
             "source_root": "backend/nllb_translation",
+            "dependency_probe_exclusions": {
+                "omi_logging": "Standalone first-party module copied into /app; the isolated dependency probe cannot see /app."
+            },
             "workdir": "/app",
             "entrypoints": ["main"],
-            "image_import_smoke": false,
+            "image_import_smoke": true,
             "smoke_python": "python3",
             "dependency_probe_smoke": true,
             "pull_request_smoke": false

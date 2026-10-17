@@ -8,6 +8,7 @@ from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption, Query
 
 from config.memory_confidence import CONFIDENCE_BANDS
+from database.legal_holds import assert_destructive_gate_still_ours
 from database import memory_ledger
 from database.firestore_index_registry import (
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
@@ -188,6 +189,8 @@ def purge_stale_review_conflicts_for_memories(
     db_client: Any = None,
     include_legacy_commits: bool = False,
     preserve_source_replacement_receipts: bool = False,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> List[str]:
     """Purge every review-derived record that references removed memories."""
     target_ids = sorted({memory_id for memory_id in memory_ids if memory_id})
@@ -243,6 +246,8 @@ def purge_stale_review_conflicts_for_memories(
                     # material, so even a redacted row is a dictionary oracle.
                     # The server-keyed deletion receipt is the only surviving
                     # audit fence; remove this derived document whole.
+                    if revalidate_gate:
+                        assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=client)
                     doc.reference.delete()
                     purged.add(str(item.get('review_id') or doc.id))
 
@@ -252,6 +257,8 @@ def purge_stale_review_conflicts_for_memories(
     _purge_correction_history_for_memories(
         uid,
         target_ids,
+        revalidate_gate=revalidate_gate,
+        gate_kind=gate_kind,
         reason=reason,
         db_client=client,
     )
@@ -261,6 +268,8 @@ def purge_stale_review_conflicts_for_memories(
             target_ids,
             firestore_client=client,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+            revalidate_gate=revalidate_gate,
+            gate_kind=gate_kind,
         )
     return sorted(purged)
 
@@ -283,6 +292,8 @@ def _purge_correction_history_for_memories(
     *,
     reason: str,
     db_client: Any,
+    revalidate_gate: bool = False,
+    gate_kind: str = "explicit_memory_deletion",
 ) -> List[str]:
     """Exhaustively scrub legacy and current correction rows for deleted IDs.
 
@@ -317,6 +328,8 @@ def _purge_correction_history_for_memories(
             # payload redaction alone cannot meet source-identifier deletion.
             # The canonical deletion receipt is the bounded audit authority;
             # derived correction history is removed completely.
+            if revalidate_gate:
+                assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
             doc.reference.delete()
             scrubbed.append(str(item.get('correction_id') or doc.id))
         if len(page) < REVIEW_PURGE_PAGE_SIZE:

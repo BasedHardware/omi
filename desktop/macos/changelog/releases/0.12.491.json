@@ -1,0 +1,9 @@
+{
+  "version": "0.12.491",
+  "date": "2026-10-16",
+  "changes": [
+    "Fixed the Memories list showing every memory when the selected category has no memories",
+    "Fixed a deleted memory staying in the Memories list while a search or category filter was active",
+    "The assistant no longer asks you to approve Messages, Mail or AppleScript actions it cannot run yet; it says the action is not available and carries on"
+  ]
+}

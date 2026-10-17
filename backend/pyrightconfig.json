@@ -17,6 +17,7 @@
         "scripts/backfill_legacy_memories.py",
         "scripts/backfill_mcp_key_full_access.py",
         "scripts/backfill_user_signup_platform.py",
+        "scripts/conversation_transaction_expiry_emulator_test.py",
         "scripts/chat/stream_test.py",
         "scripts/chat_first_materialization_drop_rate.py",
         "scripts/check_module_stub_pollution.py",

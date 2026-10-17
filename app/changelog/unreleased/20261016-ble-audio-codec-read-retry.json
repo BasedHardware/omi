@@ -1,0 +1,3 @@
+{
+  "change": "Retries transient BLE audio codec reads to prevent premature fallback to PCM8 on device connection"
+}

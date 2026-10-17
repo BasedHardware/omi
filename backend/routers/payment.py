@@ -1,3 +1,4 @@
+from database.fsr_read_cache import fresh_reader, fresh_reads
 import os
 from datetime import datetime, timezone
 
@@ -18,7 +19,7 @@ from database import (
 )
 from database.locked_content import has_recoverable_locked_content
 from database.redis_db import set_credits_invalidation_signal
-from config.plan_catalog import plan_uses_overage
+from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
     preserves_current_paid_subscription,
@@ -300,29 +301,31 @@ def _build_subscription_from_stripe_object(
 
 
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
-    customer_id = session.get('customer')
-    subscription_id = session.get('subscription')
+    with fresh_reads():
+        customer_id = session.get('customer')
+        subscription_id = session.get('subscription')
 
-    try:
-        if customer_id:
-            users_db.set_stripe_customer_id(uid, customer_id)
+        try:
+            if customer_id:
+                users_db.set_stripe_customer_id(uid, customer_id)
 
-        if subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription_id)
-            if stripe_sub:
-                new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
-                if new_subscription is None:
-                    return False
-                users_db.update_user_subscription(uid, new_subscription.model_dump())
-                logger.info(f"Subscription for user {uid} updated from session {session.id}.")
-    except FirestoreNotFound:
-        logger.warning(
-            f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
-        )
+            if subscription_id:
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                if stripe_sub:
+                    new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+                    if new_subscription is None:
+                        return False
+                    users_db.update_user_subscription(uid, new_subscription.model_dump())
+                    logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+        except FirestoreNotFound:
+            logger.warning(
+                f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
+            )
 
-    return True
+        return True
 
 
+@fresh_reader
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
@@ -614,6 +617,7 @@ def _validate_price_id(price_id: str) -> None:
     response_model=PaymentCheckoutSessionResponse,
     response_model_exclude_none=True,
 )
+@fresh_reader
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     _validate_price_id(request.price_id)
     # Check if user can make a new payment
@@ -694,6 +698,7 @@ def _unlock_paid_content(uid: str) -> None:
 
 
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
+@fresh_reader
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -856,6 +861,7 @@ class CancelSubscriptionRequest(BaseModel):
 
 
 @router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
+@fresh_reader
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -946,6 +952,7 @@ async def stripe_webhook(
     return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
 
 
+@fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
@@ -1031,16 +1038,21 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         )
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
-            if persisted is False and webhook_ledger_enabled():
-                return RetryableBillingSkip(status='success')
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
-            subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
-            if subscription and is_paid_plan(subscription.plan):
+            # A stored paid label with a missing, zero, or past period is Basic
+            # on get_user_valid_subscription. Unlock only an open paid period.
+            subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            period_open = subscription is not None and _paid_period_still_open(
+                subscription.current_period_end, datetime.fromtimestamp(time.time(), tz=timezone.utc)
+            )
+            if subscription and is_paid_plan(subscription.plan) and period_open:
                 await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+            if persisted is False and webhook_ledger_enabled():
+                return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:

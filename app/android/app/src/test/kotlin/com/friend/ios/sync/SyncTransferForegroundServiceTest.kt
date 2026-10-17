@@ -125,29 +125,30 @@ class SyncTransferForegroundServiceTest {
     }
 
     @Test
-    fun `queued stop uses its own id when a later start was already accepted`() {
+    fun `a stale queued stop does not terminate a later accepted start`() {
         val context = RuntimeEnvironment.getApplication()
         assertTrue(SyncTransferForegroundService.start(context))
         val firstStart = shadowOf(context).getNextStartedService()
         SyncTransferForegroundService.stop(context)
         val staleStop = shadowOf(context).getNextStartedService()
-        // Android has accepted the newer start before it delivers the old stop.
+        // The later start() resets cancellationRequested synchronously, before
+        // the system delivers the queued stop above to onStartCommand.
         assertTrue(SyncTransferForegroundService.start(context))
         val laterStart = shadowOf(context).getNextStartedService()
         val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
         val service = controller.get()
         service.onStartCommand(firstStart, 0, 1)
-        val unscopedStopId = shadowOf(service).stopSelfId
+        // The stale stop's own action is ACTION_STOP, but cancellationRequested
+        // is already false, so it must not call stopSelfResult -- an id-based
+        // staleness check on this intent could race against the OS still
+        // believing it to be the most recently delivered command.
         service.onStartCommand(staleStop, 0, 2)
-        assertEquals(2, shadowOf(service).stopSelfResultId)
-        assertEquals(unscopedStopId, shadowOf(service).stopSelfId)
+        assertEquals(0, shadowOf(service).stopSelfResultId)
         assertFalse(shadowOf(service).isForegroundStopped)
         assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
         service.onStartCommand(laterStart, 0, 3)
         assertNotNull(shadowOf(service).lastForegroundNotification)
         assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
-        // Robolectric records stop IDs; Android's ActivityManager decides whether
-        // that ID is stale. The companion emulator probe verifies its real result.
         controller.destroy()
         assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
     }

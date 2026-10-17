@@ -590,6 +590,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('integrations:signLanguage:setEnabled', enabled),
   signLanguageGetEnabled: (): Promise<boolean> =>
     ipcRenderer.invoke('integrations:signLanguage:getEnabled'),
+  onSignLanguageEnabledChanged: (cb: (enabled: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, enabled: boolean): void => cb(enabled)
+    ipcRenderer.on('integrations:signLanguage:changed', listener)
+    return () => ipcRenderer.removeListener('integrations:signLanguage:changed', listener)
+  },
   // --- Bar chat bridge (main-window side) ---
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
     const listener = (

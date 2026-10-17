@@ -1,9 +1,9 @@
-"""Rotating owner pages plus weighted age avoid a permanent score-top-100 window."""
+"""Durable due-work queue: bootstrap discovery is independent from admission."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from google.cloud import firestore
 from database._client import get_firestore_client
-from config.plan_catalog import PAID_PLAN_IDS
+from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
@@ -12,81 +12,105 @@ def priority(row, now, *, weight=1):
     last = row.get('last_pass_at')
     if not isinstance(last, datetime) or last.tzinfo is None:
         last = EPOCH
-    return weight * max(0, (now - last).total_seconds()), weight
+    return max(0, (now - last).total_seconds()) + min(500, row.get('score', 0)) * 60, row.get('score', 0)
 
 
-def candidate_page(*, after=None, limit=100, transaction=None, firestore_client=None):
+def due_time(state, now):
+    last = state.get('last_attempt_at') or state.get('last_pass_at') or EPOCH
+    if not isinstance(last, datetime) or last.tzinfo is None:
+        last = EPOCH
+    if state.get('score', 0) > 0:
+        return last - timedelta(minutes=min(500, state['score']))
+    return last + hunt_interval(state.get('size_bucket'))
+
+
+def candidate_page(*, after=None, limit=499, transaction=None, firestore_client=None):
     database = firestore_client if firestore_client is not None else get_firestore_client()
-    users = database.collection('dream_users')
+    users = database.collection('users')
     query = users.order_by('__name__')
     if after:
         query = query.start_after({'__name__': users.document(after)})
-    return list(query.limit(max(1, min(limit, 100))).stream(transaction=transaction, timeout=3))
-
-
-class CandidatePage(list):
-    def __init__(self, owners, *, ordered, after):
-        super().__init__(owners)
-        self.ordered = ordered
-        self.after = after
-
-
-def candidates(*, limit=100, now=None, firestore_client=None):
-    if limit <= 0:
-        return CandidatePage([], ordered=[], after=None)
-    database = firestore_client if firestore_client is not None else get_firestore_client()
-    cursor = database.collection('dream_scheduler').document('rotation')
-    now = now or datetime.now(timezone.utc)
-    after = (cursor.get(timeout=3).to_dict() or {}).get('after')
-    rows = candidate_page(after=after, limit=limit, firestore_client=database)
-    if not rows and after:
-        rows = candidate_page(limit=limit, firestore_client=database)
-    # Entitlements are a projected read outside a transaction, with no user locks.
-    owners = (
-        {
-            snapshot.id: snapshot.to_dict() or {}
-            for snapshot in database.get_all(
-                [database.collection('users').document(row.id) for row in rows],
-                timeout=3,
-                field_paths=['subscription.plan', 'plan'],
-            )
-        }
-        if rows
-        else {}
-    )
-    weights = {
-        uid: 2 if (user.get('subscription') or {}).get('plan', user.get('plan', '')) in PAID_PLAN_IDS else 1
-        for uid, user in owners.items()
-    }
-    return CandidatePage(
-        [
-            row.id
-            for row in sorted(
-                rows, key=lambda row: priority(row.to_dict() or {}, now, weight=weights.get(row.id, 1)), reverse=True
-            )
-        ],
-        ordered=[row.id for row in rows],
-        after=after,
+    return list(
+        query.select(['subscription.plan', 'plan', 'dream_canary', 'deleted', 'deletion_requested_at'])
+        .limit(max(1, min(limit, 499)))
+        .stream(transaction=transaction, timeout=3)
     )
 
 
-def advance(page, tried, *, firestore_client=None):
-    # Priority order can differ from document order. Only advance over a contiguous
-    # prefix of attempted owners so capacity waits never skip anyone.
-    after = page.after
-    for uid in page.ordered:
-        if uid not in tried:
+def discover(database, now, *, pages=20):
+    """10,000 owners/hour on bootstrap, without waiting for any session to finish.
+
+    Dirty writes enqueue immediately; this rotating scan supplies never-dirty
+    owners and repairs missing queue rows. Future hunts remain in the queue.
+    """
+    cursor = database.collection('dream_scheduler').document('discovery')
+    listed = allowlist_uids() if eligibility() == 'allowlist' else None
+    after = None if listed is not None else (cursor.get(timeout=3).to_dict() or {}).get('after')
+    for _ in range(1 if listed is not None else pages):
+        if listed is not None:
+            # Allowlist rollout: read only listed owners instead of scanning every user each sweep.
+            users = database.collection('users')
+            rows = [
+                snapshot
+                for snapshot in database.get_all([users.document(uid) for uid in listed[:499]], timeout=3)
+                if snapshot.exists
+            ]
+        else:
+            rows = candidate_page(after=after, firestore_client=database)
+        if not rows:
+            if listed is None:
+                cursor.set({'after': None})
             break
-        after = uid
-    if after == page.after:
-        return
+
+        @firestore.transactional
+        def initialize(tx):
+            queued = {
+                snapshot.id
+                for snapshot in database.get_all(
+                    [database.collection('dream_due').document(row.id) for row in rows], transaction=tx, timeout=3
+                )
+                if snapshot.exists
+            }
+            states = {
+                snapshot.id: snapshot.to_dict() or {}
+                for snapshot in database.get_all(
+                    [database.collection('dream_users').document(row.id) for row in rows], transaction=tx, timeout=3
+                )
+            }
+            for row in rows:
+                target = database.collection('dream_due').document(row.id)
+                if eligible(row.id, row.to_dict() or {}):
+                    if row.id not in queued:
+                        tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
+                else:
+                    tx.delete(target)
+            if listed is None:
+                tx.set(cursor, {'after': rows[-1].id})
+
+        initialize(database.transaction())
+        after = rows[-1].id
+
+
+def remove_due(uid, *, firestore_client=None):
+    """Drop an ineligible scheduler row, retaining owner state and dirty work.
+
+    Discovery recreates the row if the owner becomes eligible again.
+    """
     database = firestore_client if firestore_client is not None else get_firestore_client()
-    cursor = database.collection('dream_scheduler').document('rotation')
+    database.collection('dream_due').document(uid).delete()
 
-    @firestore.transactional
-    def finish(tx):
-        current = (cursor.get(transaction=tx).to_dict() or {}).get('after')
-        if current == page.after:
-            tx.set(cursor, {'after': after})
 
-    finish(database.transaction())
+def candidates(*, limit=5000, now=None, firestore_client=None):
+    if limit <= 0 or not enabled():
+        return []
+    database = firestore_client if firestore_client is not None else get_firestore_client()
+    now = now or datetime.now(timezone.utc)
+    discover(database, now)
+    rows = (
+        database.collection('dream_due')
+        .where(filter=firestore.FieldFilter('due_at', '<=', now))
+        .order_by('due_at')
+        .limit(min(limit, 5000))
+        .stream(timeout=3)
+    )
+    return [row.id for row in rows]

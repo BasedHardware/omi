@@ -11,7 +11,8 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
 from utils.messaging.adapters.base import BaseAdapter
-from utils.messaging.adapters.media import MEDIA_TYPES
+from utils.messaging.adapters.media import MEDIA_TYPES, OUTBOUND_MEDIA_TYPES, is_audio_video
+from utils.messaging.adapters.modalities import emoji_only, location_text
 from utils.share_links import share_base_url
 from utils.messaging.adapters.rendering import plain, split_text, item_list_link, valid_item_link
 from utils.observability.fallback import record_fallback
@@ -114,20 +115,39 @@ class LinqProvider:
             parts = data['message']['parts']
         else:
             raise ValueError('Unsupported Linq webhook version')
-        text = '\n'.join(str(p['value']) for p in parts if p['type'] in ('text', 'link'))
+        text = '\n'.join(str(p.get('value', '')) for p in parts if p.get('type') in ('text', 'link'))
         command = text.strip().lower()
         proof = _link_code(text)
-        attachments = tuple(
-            InboundAttachment(
-                p['url'],
-                p.get('filename', 'attachment'),
-                p.get('mime_type', 'application/octet-stream'),
-                p.get('size_bytes', 0),
-                p['type'] == 'voice_memo',
-            )
-            for p in parts
-            if p['type'] in ('media', 'voice_memo')
-        )
+        attachments = []
+        acknowledgement = False
+        unsupported = False
+        for part in parts:
+            kind = part.get('type')
+            if kind in ('media', 'voice_memo'):
+                if part.get('sticker') or part.get('mime_type') == 'image/gif':
+                    acknowledgement = True
+                    continue
+                attachment = InboundAttachment(
+                    part['url'],
+                    part.get('filename', 'attachment'),
+                    part.get('mime_type', 'application/octet-stream'),
+                    part.get('size_bytes', 0),
+                    kind == 'voice_memo',
+                    part.get('duration_ms', 0) / 1000,
+                )
+                from dataclasses import replace
+
+                attachments.append(replace(attachment, voice=is_audio_video(attachment)))
+            elif kind == 'location':
+                text += '\n' + location_text(part.get('location', part), part)
+            elif kind == 'imessage_app':
+                unsupported = True
+        if not text.strip() and not attachments and not acknowledgement and not unsupported:
+            return ()
+        quoted = data.get('reply_to') or data.get('message', {}).get('reply_to') or {}
+        quoted_text = quoted.get('text') or quoted.get('value')
+        if not quoted_text and quoted.get('parts'):
+            quoted_text = '\n'.join(str(p.get('value', '')) for p in quoted['parts'] if p.get('type') == 'text')
         # Message ID, not delivery/event ID: two received events for one message
         # must not buy duplicate ratio credit or re-execute a write.
         # sent_at is the user's send time. Webhook created_at and local now() are
@@ -144,8 +164,28 @@ class LinqProvider:
                 reply_to=message_id,
                 link_proof=proof,
                 unlink=command in ('unlink', '/unlink', 'stop', 'unsubscribe'),
-                command='help' if command in ('help', '/help') else ('undo' if command == 'undo' else None),
-                attachments=attachments,
+                command=(
+                    'unsupported'
+                    if unsupported
+                    else (
+                        'ack'
+                        if (
+                            acknowledgement
+                            and not text.strip()
+                            and not attachments
+                            or emoji_only(text)
+                            and not attachments
+                        )
+                        else (
+                            'help'
+                            if command in ('help', '/help')
+                            else ('new' if command == 'new chat' else 'undo' if command == 'undo' else None)
+                        )
+                    )
+                ),
+                attachments=tuple(attachments),
+                quoted_text=quoted_text[:2000] if isinstance(quoted_text, str) else None,
+                quoted_message_id=str(quoted['message_id'])[:200] if quoted.get('message_id') else None,
             ),
         )
 
@@ -244,7 +284,7 @@ class IMessageAdapter(BaseAdapter):
             reactions=True,
             max_text_len=1200,
             media_in=MEDIA_TYPES,
-            media_out=tuple(m for m in MEDIA_TYPES if m != 'audio/ogg'),
+            media_out=tuple(m for m in OUTBOUND_MEDIA_TYPES if m != 'audio/ogg'),
             rate_limits={'chat_per_minute': 30, 'max_send_receive_ratio': max_ratio},
         )
 

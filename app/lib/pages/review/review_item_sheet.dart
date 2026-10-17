@@ -727,7 +727,10 @@ class _SpellingDetailState extends State<_SpellingDetail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.item.quote != null) ...[
+        if (spelling.context != null) ...[
+          ReviewSpellingContext(context: spelling.context!),
+          const SizedBox(height: OmiSpacing.md),
+        ] else if (widget.item.quote != null) ...[
           _EvidenceBox(children: [Text('“${widget.item.quote}”', style: OmiType.callout)]),
           const SizedBox(height: OmiSpacing.md),
         ],

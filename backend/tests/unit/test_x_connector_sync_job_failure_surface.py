@@ -121,3 +121,19 @@ def test_x_connector_sync_job_allows_partial_success(monkeypatch, x_connector_sy
     monkeypatch.setattr(x_connector_sync_job, "run_x_sync_job", ok_run)
 
     x_connector_sync_job.main()
+
+
+def test_x_connector_sync_job_initializes_firebase_with_adc(monkeypatch, x_connector_sync_job):
+    calls = []
+    monkeypatch.setenv("OMI_CUSTOMER_DATA_PROJECT", "based-hardware")
+    monkeypatch.delenv("SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setattr(
+        x_connector_sync_job.firebase_admin,
+        "initialize_app",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    x_connector_sync_job._init_firebase()
+
+    assert calls == [((), {"options": {"projectId": "based-hardware"}})]

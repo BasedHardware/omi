@@ -52,6 +52,57 @@ void main() {
     flagEnabled = true;
   });
 
+  test('batch suppresses transcript alarms and preserves BLE ingress recovery', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    final handle = connectedSession(monitor);
+    monitor.onSocketBytesSent(handle, 320);
+    monitor.setTranscriptExpected(handle, false);
+    for (var minute = 0; minute < 3; minute++) {
+      now = now.add(const Duration(minutes: 1));
+      monitor.onBleIngressBytes('dev-a', 80);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+    }
+    expect(forEvent('Capture Wedge Detected'), isEmpty);
+    now = now.add(CaptureWedgeMonitor.connectedNoBytesWindow);
+    monitor.runConnectedWatchdog();
+    await pumpEventQueue();
+    expect(retriedDevices, ['dev-a']);
+    expect(forEvent('Capture Wedge Detected').single['trigger'], CaptureWedgeMonitor.triggerConnectedNoBytes);
+  });
+
+  test('batch socket endings never create a zero-byte or no-transcript streak', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    for (var cycle = 0; cycle < 4; cycle++) {
+      final handle = connectedSession(monitor);
+      monitor.setTranscriptExpected(handle, false);
+      monitor.onCaptureSessionEnded(handle, binaryBytesSent: cycle.isEven ? 0 : 320);
+    }
+    await pumpEventQueue();
+    expect(forEvent('Capture Wedge Detected'), isEmpty);
+    expect(retriedDevices, isEmpty);
+  });
+
+  test('live handback gives transcript progress a fresh deadline', () async {
+    final monitor = makeMonitor(withRetry: true);
+    addTearDown(monitor.dispose);
+    final handle = connectedSession(monitor);
+    monitor.setTranscriptExpected(handle, false);
+    now = now.add(const Duration(minutes: 4));
+    monitor.onBleIngressBytes('dev-a', 80);
+    monitor.setTranscriptExpected(handle, true);
+    monitor.onSocketBytesSent(handle, 320);
+    monitor.runConnectedWatchdog();
+    await pumpEventQueue();
+    expect(forEvent('Capture Wedge Detected'), isEmpty);
+    now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+    monitor.runConnectedWatchdog();
+    await pumpEventQueue();
+    expect(forEvent('Capture Wedge Detected').single['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+  });
+
   test('native recovery owns retries and only exhausted failure projects a banner', () async {
     final monitor = makeMonitor(withRetry: true);
     addTearDown(monitor.dispose);

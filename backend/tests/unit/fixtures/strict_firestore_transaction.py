@@ -4,6 +4,8 @@ This fixture models document-reference ``get(transaction=...)`` plus transaction
 ``create``, ``set``, and ``update``. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
+Parent reference navigation preserves the owning store and performs no IO.
+
 It also supports the direct-document is_locked projection used at dispatch,
 and equality-only, document-id projections with a positive limit,
 proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
@@ -79,6 +81,11 @@ class StrictFirestoreDocument:
         """The document's own id, as ``DocumentReference.id`` (e.g. the uid of ``users/{uid}``)."""
         return self.path[-1]
 
+    @property
+    def parent(self) -> StrictFirestoreCollection:
+        """Navigate to the owning collection without reading or changing stores."""
+        return StrictFirestoreCollection(self._database, self.path[:-1])
+
     def collection(self, name: str) -> StrictFirestoreCollection:
         return StrictFirestoreCollection(self._database, (*self.path, name))
 
@@ -122,6 +129,12 @@ class StrictFirestoreCollection:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
+
+    @property
+    def parent(self) -> StrictFirestoreDocument | None:
+        if len(self._path) == 1:
+            return None
+        return StrictFirestoreDocument(self._database, self._path[:-1])
 
     def document(self, name: str) -> StrictFirestoreDocument:
         return StrictFirestoreDocument(self._database, (*self._path, name))

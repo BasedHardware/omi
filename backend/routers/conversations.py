@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Optional
@@ -11,6 +12,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import (
@@ -20,7 +22,7 @@ from database.vector_db import (
     delete_transcript_chunk_vectors,
 )
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files, delete_owner_prompt_embedding_cache
+from utils.other.storage import delete_privacy_conversation_audio, delete_owner_prompt_embedding_cache
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -779,6 +781,9 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    from database import processing_attention as attention_db
+
+    input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
@@ -786,6 +791,40 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    # Reprocess is a new user intent once the prior writer finishes. Share the
+    # active writer across app selections to avoid racing summary writes.
+    try:
+        operation, owned = attention_db.claim(
+            uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
+        )
+    except attention_db.ClaimRejected as error:
+        raise HTTPException(status_code=404, detail='Conversation not found') from error
+    if not owned or not attention_db.owns_live_claim(uid, operation):
+        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
+    try:
+        result = execute_reprocess(
+            uid,
+            conversation_id,
+            conversation,
+            language_code,
+            app_id,
+            explicit_app,
+            was_discarded,
+            background_tasks,
+            response,
+        )
+    except Exception:
+        attention_db.finish(uid, operation, 'failed')
+        raise
+    attention_db.finish(
+        uid, operation, 'succeeded' if getattr(getattr(result, 'structured', None), 'overview', None) else 'failed'
+    )
+    return result
+
+
+def execute_reprocess(
+    uid, conversation_id, conversation, language_code, app_id, explicit_app, was_discarded, background_tasks, response
+):
     receipt_applied: list = []
 
     processed_conversation = process_conversation(
@@ -1255,12 +1294,9 @@ def patch_conversation_segment_text(
 ):
     _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
-    if result == 'not_found':
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if result == 'locked':
-        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
-    if result == 'segment_not_found':
-        raise HTTPException(status_code=404, detail="Segment not found")
+    if result != 'ok':
+        status, detail = TRANSCRIPT_EDIT_HTTP_ERRORS.get(result, (500, 'Transcript edit failed'))
+        raise HTTPException(status_code=status, detail=detail)
     return {'status': 'Ok'}
 
 
@@ -1323,7 +1359,11 @@ def delete_conversation(
                 ) from error
             except RuntimeError as error:
                 # Isolated router tests stub database/utils.other at import time.
-                if type(error).__name__ != "DestructiveOperationInProgress":
+                if type(error).__name__ not in {
+                    "DestructiveGateTakeover",
+                    "DestructiveOperationInProgress",
+                    "LegalHoldAuthorityUnavailable",
+                }:
                     raise
                 from utils.other.account_gate_http import account_gate_busy_http_exception
 
@@ -1346,7 +1386,13 @@ def delete_conversation(
                 delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
             except Exception as e:
                 logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+        # Snapshot retained bridge donors before shared metadata cleanup removes them.
+        source_ids = (
+            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
+            if os.getenv('BUCKET_CANONICAL_AUDIO')
+            else []
+        )
+        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
@@ -1906,7 +1952,12 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
 
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    try:
+        conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")

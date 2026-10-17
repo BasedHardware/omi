@@ -49,6 +49,12 @@ class VoiceRecorderProvider extends ChangeNotifier {
   final List<double> _audioLevels = List.generate(50, (_) => 0.05);
   Timer? _waveformTimer;
 
+  /// Ticks at ~60Hz while recording. Only the waveform listens to it; the
+  /// provider itself notifies on state changes, so the chat composer is not
+  /// rebuilt 60 times a second while the user dictates.
+  final ValueNotifier<int> _waveformTick = ValueNotifier<int>(0);
+  Listenable get waveformTick => _waveformTick;
+
   // Callbacks for UI integration
   Function(String transcript, bool autoSend)? _onTranscriptReady;
   VoidCallback? _onClose;
@@ -160,11 +166,12 @@ class VoiceRecorderProvider extends ChangeNotifier {
 
     // Repaint at ~60Hz so the wave flows smoothly. Levels are shifted in
     // onByteReceived (audio callback rate, much faster than the UI), but the
-    // canvas only re-renders on notifyListeners — so a slower timer made the
-    // wave appear frozen / laggy.
+    // canvas only re-renders on a tick — so a slower timer made the wave
+    // appear frozen / laggy. Tick [waveformTick], not the whole provider.
+    // omi-perf-allow: fast-periodic-timer -- ticks only waveformTick, which only the waveform paints from
     _waveformTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
       if (_state == VoiceRecorderState.recording) {
-        notifyListeners();
+        _waveformTick.value++;
       }
     });
 
@@ -620,6 +627,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   @override
   void dispose() {
     _waveformTimer?.cancel();
+    _waveformTick.dispose();
     _pcmSink?.close();
     if (_state == VoiceRecorderState.recording) {
       _mic.stop();

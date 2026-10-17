@@ -156,7 +156,12 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     ),
                   ),
                   const SizedBox(width: 6.0),
-                  Text(status, style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                  Flexible(
+                    child: Text(status,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.caption.copyWith(fontSize: 12, color: OmiColors.textSecondary)),
+                  ),
                 ],
               );
             } else {
@@ -179,7 +184,10 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   // spoken label).
                   if (isMemoriesPage) ...[
                     const SizedBox(width: 6),
-                    Text(label, style: OmiType.caption.copyWith(fontSize: 12)),
+                    Flexible(
+                      child: Text(label,
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.caption.copyWith(fontSize: 12)),
+                    ),
                   ],
                 ],
               );

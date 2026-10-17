@@ -224,18 +224,18 @@ void main() {
       expect(sent, ['app_store@12500']);
     });
 
-    test('a store build never asks the server and stays off', () async {
+    test('a Store build uses server availability by default', () async {
       var calls = 0;
       final provider = ReviewProvider(
-        isEligible: () => false,
+        releaseChannel: () => 'app_store',
         loadItems: () async {
           calls++;
           return ApiSuccess(ReviewItemsResponse(items: [_item(_speakerJson('a'))], remainingToday: 1));
         },
       );
       await provider.load();
-      expect(calls, 0);
-      expect(provider.availability, ReviewAvailability.off);
+      expect(calls, 1);
+      expect(provider.availability, ReviewAvailability.on);
     });
 
     test('a transient failure keeps the surface state and reports it', () async {

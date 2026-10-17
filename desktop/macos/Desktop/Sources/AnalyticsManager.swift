@@ -993,6 +993,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    ClientTelemetryShadow.captureFloatingVoice(event)
     questionAnswered(forChatEvent: event)
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
@@ -1271,6 +1272,7 @@ class AnalyticsManager {
   }
 
   func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    guard outcome.emitsAnalytics else { return }
     let payload = SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
     captureSuggestionAssistantTelemetryForTests(
       SuggestionAssistantTelemetry.gateOutcomeEventName,

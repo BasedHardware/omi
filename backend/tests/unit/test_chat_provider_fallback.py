@@ -130,7 +130,7 @@ async def test_openai_compatible_runner_attributes_usage_and_errors_to_selected_
             'operation': operation,
         }
 
-    def fake_set_usage_context(user_id, feature):
+    def fake_set_usage_context(user_id, feature, **_kwargs):
         calls['usage'] = (user_id, feature)
         return usage_token
 

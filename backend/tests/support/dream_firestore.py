@@ -48,6 +48,9 @@ class Document(StrictFirestoreDocument):
     def set(self, data, merge=False):
         self._database.rows[self.path] = merged(self._database.rows.get(self.path, {}), data, merge)
 
+    def delete(self):
+        self._database.rows.pop(self.path, None)
+
 
 class Query:
     def __init__(self, database, path, *, order=None, descending=False, bound=None):
@@ -96,6 +99,30 @@ class Query:
 
 
 class Transaction(StrictFirestoreTransaction):
+    def update(self, ref, data):
+        # Dotted paths and DELETE_FIELD are witnessed by the real local SDK
+        # overlay/invalidation/Undo test, rather than guessed in this fixture.
+        super().update(ref, data)
+        row = self._database.rows[ref.path]
+        for field, value in data.items():
+            if '.' not in field:
+                if value is firestore.DELETE_FIELD:
+                    row.pop(field, None)
+                continue
+            row.pop(field, None)
+            parent = row
+            parts = field.split('.')
+            for part in parts[:-1]:
+                if value is firestore.DELETE_FIELD and part not in parent:
+                    parent = None
+                    break
+                parent = parent.setdefault(part, {})
+            if parent is not None:
+                if value is firestore.DELETE_FIELD:
+                    parent.pop(parts[-1], None)
+                else:
+                    parent[parts[-1]] = deepcopy(value)
+
     def set(self, ref, data, merge=False):
         super().set(ref, merged(self._database.rows.get(ref.path, {}), data, merge))
 

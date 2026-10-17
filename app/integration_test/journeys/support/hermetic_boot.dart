@@ -13,6 +13,7 @@ import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -20,11 +21,13 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/dev_controls/journey_faults.dart';
+import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/utils/platform/platform_manager.dart';
 
 import 'fixture_backend.dart';
@@ -114,6 +117,7 @@ final class JourneyHermeticBoot {
           ChangeNotifierProvider(create: (_) => AppProvider()),
           ChangeNotifierProvider(create: (_) => createProductionConversationProvider()),
           ChangeNotifierProvider(create: (_) => HomeProvider()),
+          ChangeNotifierProvider<SyncProvider>.value(value: InertSyncProvider()),
           ChangeNotifierProvider(create: (_) => IntegrationProvider()),
           ChangeNotifierProvider(create: (_) => MessagingChannelsProvider(readConfig: () async => ChatAppsConfig.off)),
           ChangeNotifierProvider(create: (_) => FolderProvider()),
@@ -210,3 +214,31 @@ void mockCommonPlatformChannels() {
 /// The lane this run executes in: `hermetic` (host) or `simulator` (device).
 /// Selected by the runner; the journey definitions themselves are identical.
 String get journeyLane => Platform.environment['OMI_JOURNEY_LANE'] ?? 'hermetic';
+
+/// Home's processing card (and any sync-reading surface) gets an inert
+/// pipeline here: nothing in flight, nothing uploaded — the card stays hidden
+/// and does no I/O, without constructing a real [SyncProvider] and its
+/// background sync machinery inside hermetic tests.
+class InertSyncProvider extends ChangeNotifier implements SyncProvider {
+  @override
+  SyncState get syncState => const SyncState();
+
+  @override
+  bool get isSyncing => false;
+
+  @override
+  List<Wal> get allWals => const [];
+
+  @override
+  List<Wal> get uploadedWals => const [];
+
+  @override
+  bool get isRateLimited => false;
+
+  @override
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds =>
+      (doneSeconds: 0, totalSeconds: 0, tracked: false);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

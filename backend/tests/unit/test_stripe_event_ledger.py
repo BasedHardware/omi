@@ -11,7 +11,13 @@ from database import stripe_event_ledger as ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import billing_flags, stripe_webhook_ledger as delivery
 from routers import payment
-from tests.unit.test_subscription_ingestion_characterization import lane, event as lifecycle_event, run as run_lifecycle
+from models.users import PlanType, Subscription
+from tests.unit.test_subscription_ingestion_characterization import (
+    NOW as STORED_NOW,
+    event as lifecycle_event,
+    lane,
+    run as run_lifecycle,
+)
 
 NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
 
@@ -369,7 +375,7 @@ def test_failed_newer_claim_does_not_advance_success_order():
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-def test_unresolved_checkout_retains_legacy_cache_effects_when_gate_off(lane, monkeypatch, enabled):
+def test_unresolved_checkout_keeps_cache_effects_without_writing_the_plan(lane, monkeypatch, enabled):
     import stripe
 
     db = StrictFirestore()
@@ -390,7 +396,51 @@ def test_unresolved_checkout_retains_legacy_cache_effects_when_gate_off(lane, mo
     )
     assert run_lifecycle(lane) == {'status': 'success'}
     assert lane.current is None
-    assert [name for name, _ in lane.calls] == (['customer'] if enabled else ['customer', 'credits', 'trial_cache'])
+    assert [name for name, _ in lane.calls] == ['customer', 'credits', 'trial_cache']
+    if enabled:
+        assert receipt(db)['outcome'] == 'failed'
+    else:
+        assert db.rows == {}
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize(
+    'period_end,unlocks',
+    [
+        (None, False),
+        (0, False),
+        (STORED_NOW - 1, False),
+        (STORED_NOW, True),
+        (STORED_NOW + 100, True),
+    ],
+)
+def test_unresolved_checkout_unlocks_only_an_open_paid_period(lane, monkeypatch, enabled, period_end, unlocks):
+    import stripe
+
+    db = StrictFirestore()
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true' if enabled else 'false')
+    monkeypatch.setattr(ledger, '_client', lambda client: db)
+    lane.current = Subscription(plan=PlanType.plus, current_period_end=period_end)
+    before = lane.current.model_dump_json()
+    lane.stripe_obj = lifecycle_event('customer.subscription.updated', 'active')['data']['object']
+    lane.stripe_obj['items']['data'][0]['price']['id'] = 'price_unknown'
+    lane.event = event(kind='checkout.session.completed')
+    lane.event['data']['object'] = stripe.checkout.Session.construct_from(
+        {
+            'id': 'cs-fixture',
+            'client_reference_id': 'fixture-user',
+            'metadata': {},
+            'customer': 'cus-fixture',
+            'subscription': 'sub-current',
+        },
+        'fixture',
+    )
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert lane.current.model_dump_json() == before
+    expected = ['customer', 'credits', 'trial_cache']
+    if unlocks:
+        expected += ['conversations', 'memories', 'actions', 'fair_use']
+    assert [name for name, _ in lane.calls] == expected
     if enabled:
         assert receipt(db)['outcome'] == 'failed'
     else:

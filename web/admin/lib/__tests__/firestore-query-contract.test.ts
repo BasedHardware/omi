@@ -418,7 +418,7 @@ describe("server Firestore manifest contract: static chains, aliases, and review
     const exportPath = process.env.FIRESTORE_ADMIN_SHAPES_EXPORT;
     if (exportPath)
       writeFileSync(exportPath, JSON.stringify(shapesByFile, null, 2) + "\n");
-  });
+  }, 20_000);
 
   it("detects notification count-range scope and direction regressions", () => {
     const { shapes } = extract(

@@ -4,13 +4,16 @@ import asyncio
 import logging
 import os
 
-from utils.executors import start_background_task
+from utils.executors import start_background_task, run_blocking, sync_executor
+from utils.messaging.adapters.decoder import MediaDecoderUnavailable, get_media_decoder
 
 logger = logging.getLogger(__name__)
 
 
 def configured_adapters():
-    if os.getenv('OMI_MESSAGING_CHANNELS', 'off') != 'on':
+    from config.messaging import channel_enabled
+
+    if not any(channel_enabled(c) for c in ('telegram', 'imessage')):
         return ()
     from utils.messaging.adapters.telegram import TelegramAdapter
     from utils.messaging.adapters.linq import IMessageAdapter, LinqProvider
@@ -26,6 +29,7 @@ def configured_adapters():
                 os.environ['TELEGRAM_BOT_TOKEN'],
                 os.environ['TELEGRAM_WEBHOOK_SECRET'],
                 streaming=streaming,
+                shared_pacing=os.getenv('OMI_TELEGRAM_SHARED_PACING', 'on') == 'on',
             )
         )
     if os.getenv('OMI_IMESSAGE_ENABLED', 'off') == 'on':
@@ -57,6 +61,7 @@ async def recover_pending(gateways, stop, *, interval=30):
         for gateway in gateways:
             try:
                 await gateway.drain(limit=100)
+                await gateway.expired_notices()
             except Exception as error:
                 logger.warning(
                     'Messaging recovery paused provider=%s error_type=%s',
@@ -69,10 +74,17 @@ async def recover_pending(gateways, stop, *, interval=30):
             continue
 
 
-def start_adapters(register):
-    gateways = tuple(register(adapter.channel, adapter) for adapter in configured_adapters())
-    if not gateways:
+async def start_adapters(register):
+    adapters = configured_adapters()
+    if not adapters:
         return None
+    # Probe once so a broken image is loud at startup. It must not take the whole API down:
+    # text turns keep working, and voice notes get the typed decode reply.
+    try:
+        await run_blocking(sync_executor, get_media_decoder)
+    except MediaDecoderUnavailable:
+        logger.error('Messaging audio decoder unavailable at startup; voice notes will be declined')
+    gateways = tuple(register(adapter.channel, adapter) for adapter in adapters)
     stop = asyncio.Event()
     task = start_background_task(recover_pending(gateways, stop), name='messaging-pending-recovery')
     return stop, task

@@ -245,7 +245,10 @@ class FleetHealth(CostHealthMixin):
         return self._client
 
     async def _bounded(self, operation: Any) -> Any:
-        return await asyncio.wait_for(operation, timeout=_timeout())
+        # Keep caller cancellation on this task. wait_for can swallow a cancellation
+        # when its child operation completes at the same time (Python 3.11).
+        async with asyncio.timeout(_timeout()):
+            return await operation
 
     def _score_keys(self, scope: str, language: str, bucket: int) -> tuple[str, str]:
         return _selection_score_keys(scope, language, bucket)

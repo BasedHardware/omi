@@ -176,6 +176,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     super.build(context);
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
+        // filteredMemories filters (and, while searching, lowercases) every
+        // memory. Take it once per build: reading it per row made each row
+        // built during a scroll cost O(all memories).
+        final visibleMemories = provider.filteredMemories;
         return Scaffold(
           backgroundColor: OmiColors.surface0,
           appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
@@ -217,7 +221,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                 ),
                               ),
                             ),
-                          if (provider.showLoadError || provider.filteredMemories.isEmpty)
+                          if (provider.showLoadError || visibleMemories.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
                               child: MemoriesEmptyOrError(
@@ -231,7 +235,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                               padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
                               sliver: SliverList(
                                 delegate: SliverChildBuilderDelegate((context, index) {
-                                  final memory = provider.filteredMemories[index];
+                                  final memory = visibleMemories[index];
                                   return MemoryItem(
                                     memory: memory,
                                     highlighted: memory.id == _highlightedMemoryId,
@@ -242,7 +246,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       _showQuickEditSheet(context, tappedMemory, tappedProvider);
                                     },
                                   );
-                                }, childCount: provider.filteredMemories.length),
+                                }, childCount: visibleMemories.length),
                               ),
                             ),
                         ],

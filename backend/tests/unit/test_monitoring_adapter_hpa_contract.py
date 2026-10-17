@@ -8,28 +8,54 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.diff_prod_adapter import API_SERVICES, NLLB_RULE, compare, expected_config
+from scripts.diff_prod_adapter import (
+    API_SERVICES,
+    NLLB_RULE,
+    DIARIZER_BATCH_RULE,
+    PARAKEET_QUEUE_RULES,
+    compare,
+    expected_config,
+)
 from scripts import select_backend_unit_tests as selector
 
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
 ADAPTER = CHARTS / 'monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml'
 
 
-@pytest.mark.parametrize(
-    'service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation', 'deepgram-self-hosted']
-)
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_queue_rules_live_under_adapter_rules_and_keep_both_lanes(environment):
+    values = yaml.safe_load(
+        (CHARTS / f'monitoring/prometheus-adapter/{environment}_omi_prometheus_adapter.yaml').read_text()
+    )
+    rules = {rule['name']['as']: rule for rule in values['rules']['custom']}
+    for rule in PARAKEET_QUEUE_RULES:
+        assert rules[rule['name']['as']] == rule
+    assert 'parakeet_active_requests_total' in rules
+    assert isinstance(values['extraArguments'], list)
+
+
+def test_diff_accepts_only_exact_new_parakeet_queue_rules():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']
+    live = {'rules': rules['custom'], 'externalRules': rules['external']}
+    old = copy.deepcopy(live)
+    old['rules'] = [r for r in old['rules'] if r['name']['as'] not in {q['name']['as'] for q in PARAKEET_QUEUE_RULES}]
+    assert expected_config(old) == expected_config(live)
+    broken = copy.deepcopy(live)
+    next(r for r in broken['rules'] if r['name']['as'] == 'parakeet_live_queue_age_seconds')[
+        'metricsQuery'
+    ] = 'vector(0)'
+    with pytest.raises(ValueError, match='Unexpected live Parakeet queue rule'):
+        expected_config(broken)
+
+
+@pytest.mark.parametrize('service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation'])
 def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('helm is not installed')
     chart = CHARTS / service
-    if service == 'deepgram-self-hosted':
-        chart /= 'nova-3'
-        values = chart / 'prod_omi_values.yaml'
-        templates = ['templates/engine/engine.hpa.yaml', 'templates/api/api.hpa.yaml']
-    else:
-        values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
-        templates = ['templates/hpa.yaml']
+    values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
+    templates = ['templates/hpa.yaml']
     command = [
         helm,
         'template',
@@ -70,7 +96,6 @@ def test_cluster_adapter_keeps_all_parakeet_rules():
 def test_hpa_and_adapter_changes_select_this_contract():
     sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
     sources += list(CHARTS.glob('*/templates/hpa.yaml'))
-    sources += [CHARTS / 'deepgram-self-hosted/nova-3/prod_omi_values.yaml']
     owned = {
         'parakeet',
         'backend-listen',
@@ -98,6 +123,10 @@ def _comparison_inputs():
     listen = live['externalRules'][0]
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
+    # Captured pre-upgrade queries, independent of the candidate values above.
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    gpu['seriesQuery'] = 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+    gpu['metricsQuery'] = 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
     deployment = {'kind': 'Deployment', 'spec': {'template': {'spec': {'containers': [{'args': ['--config=x']}]}}}}
     api = {
         'kind': 'APIService',
@@ -122,6 +151,40 @@ def _comparison_inputs():
 
 def test_diff_allows_only_canary_filter_nllb_rule_and_api_port_default():
     assert compare(*_comparison_inputs())[1] == []
+
+
+def test_diff_accepts_reviewed_unscoped_to_parakeet_gpu_queries():
+    inputs = _comparison_inputs()
+    live = yaml.safe_load(inputs[1]['data']['config.yaml'])
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    assert gpu['seriesQuery'] == 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+    assert gpu['metricsQuery'] == 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
+    assert compare(*inputs)[1] == []
+    # The reviewed upgrade must never be admitted as an exact-live rollback.
+    assert compare(*inputs, allow_reviewed_changes=False)[1]
+
+
+@pytest.mark.parametrize('field', ['seriesQuery', 'metricsQuery'])
+def test_diff_rejects_unreviewed_live_parakeet_gpu_query(field):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    gpu[field] = 'unreviewed'
+    with pytest.raises(ValueError, match='Unexpected live Parakeet GPU'):
+        expected_config(live)
+
+
+@pytest.mark.parametrize('change', ['missing', 'duplicate'])
+def test_diff_rejects_ambiguous_live_parakeet_gpu_rule(change):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    gpu = next(rule for rule in live['externalRules'] if rule['name']['as'] == 'parakeet_gpu_utilization')
+    if change == 'missing':
+        live['externalRules'].remove(gpu)
+    else:
+        live['externalRules'].append(copy.deepcopy(gpu))
+    with pytest.raises(ValueError, match='Unexpected live Parakeet GPU rule count'):
+        expected_config(live)
 
 
 def test_diff_accepts_reconciled_live_and_rule_reordering():
@@ -211,3 +274,24 @@ def test_diff_rejects_unexpected_live_nllb_query():
     config['externalRules'].append(dict(NLLB_RULE, metricsQuery='vector(0)'))
     with pytest.raises(ValueError, match='Unexpected live NLLB'):
         expected_config(config)
+
+
+def test_diff_allows_only_exact_batch_queue_rule_addition():
+    rendered, cm, deployment, apis = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    live['rules'].remove(DIARIZER_BATCH_RULE)
+    cm['data']['config.yaml'] = yaml.safe_dump(live)
+    assert compare(rendered, cm, deployment, apis)[1] == []
+
+
+@pytest.mark.parametrize('change', ['query', 'duplicate'])
+def test_diff_rejects_unreviewed_live_batch_queue_rule(change):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    rule = next(r for r in live['rules'] if r['name']['as'] == DIARIZER_BATCH_RULE['name']['as'])
+    if change == 'query':
+        rule['metricsQuery'] = 'sum(omi_diarization_v2_queue_depth)'
+    else:
+        live['rules'].append(copy.deepcopy(rule))
+    with pytest.raises(ValueError, match='Unexpected live batch queue rule'):
+        expected_config(live)

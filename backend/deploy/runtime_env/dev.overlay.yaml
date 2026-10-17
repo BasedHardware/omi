@@ -4,48 +4,82 @@ compute_project: based-hardware-dev
 data_plane_project: based-hardware
 overlay:
   llm_gateway:
-    env:
-      # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-      PROACTIVITY_V2_POSTHOG_TOKEN:
-        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-        category: rollout
-      PROACTIVITY_V2_POSTHOG_HOST:
-        value: https://us.posthog.com
-        category: rollout
     static_address_name: dev-llm-gateway-ilb-ip-address
   gke:
     backend-listen:
       env:
+        BATCH_PIPELINE_UID_ALLOWLIST:
+          value: ''
+        BATCH_PIPELINE_API_URL:
+          value: ''
+        BUCKET_BATCH_PIPELINE:
+          value: ''
+        AUDIO_ARCHIVE_PERCENT:
+          value: '0'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        AUDIO_TIMELINE_SPANS:
+          value: 'false'
+        LIVE_SPEAKER_SPAN_RESOLUTION:
+          value: 'false'
+        LIVE_CAPTURE_WINDOW_MERGE_UNION:
+          value: 'false'
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+          value: 'false'
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+          value: 'false'
+        SONIOX_WIRE_LEDGER:
+          value: 'false'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
+          category: rollout
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'true'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          config_map:
+            name: dev-omi-backend-config
+            key: FREE_TIER_LOCAL_PROCESSING_COHORT
+        STT_LIVE_DEMAND_ENABLED:
+          value: 'false'
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: ''
+        STT_FAILOVER_RECOVERY_ENABLED:
+          value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        STT_ROUTING_ON_PERCENT:
+          value: '0'
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '0'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '1'
+        PARAKEET_WINDOW_MAX_SESSIONS:
+          value: '1'
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '1'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
+        HOSTED_PARAKEET_API_URL:
+          value: http://parakeet.omiapi.com
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://172.16.48.49/diarizer
+        PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: gateway
+        HOSTED_TRANSLATION_API_URL:
+          value: http://172.16.48.49/nllb
+        MEMORY_BELIEF_MODEL_ENABLED:
+          value: 'true'
+        REFERRAL_PUBLIC_BASE_URL:
+          value: https://api.omiapi.com
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
-        # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-        PROACTIVITY_V2_POSTHOG_TOKEN:
-          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_HOST:
-          value: https://us.posthog.com
-          category: rollout
-        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
-          category: storage_retention
-        LISTEN_RECONNECT_BUDGET_PER_MIN:
-          value: '6'
-          category: reliability
-        PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-          value: 'gateway'
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -63,56 +97,8 @@ overlay:
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
-        FREE_TIER_LOCAL_PROCESSING:
-          value: 'true'
-        FREE_TIER_LOCAL_PROCESSING_COHORT:
-          config_map:
-            name: dev-omi-backend-config
-            key: FREE_TIER_LOCAL_PROCESSING_COHORT
-        FREE_TIER_EMERGENCY_STOP:
-          value: 'false'
-        STT_SERVICE_MODELS:
-          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
-        STT_RESILIENT_RECONNECT:
-          value: 'false'
-        STT_FAILOVER_RECOVERY_ENABLED:
-          value: 'false'
-          category: rollout
-        STT_ROUTING_MODE:
-          value: shadow
-        STT_LEARNED_LANGUAGE_PROFILE:
-          value: 'true'
-        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-          value: '100'
-        PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '1'
-        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'true'
-        CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-          value: '25'
-        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-          value: 'true'
-        HOSTED_PARAKEET_API_URL:
-          value: http://parakeet.omiapi.com
-        HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://diarizer.omiapi.com:80
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
-        HOSTED_TRANSLATION_API_URL:
-          value: http://nllb.omiapi.com
-        MEMORY_BELIEF_MODEL_ENABLED:
-          value: 'true'
-        MEMORY_BELIEF_AUTOMATION_PAUSED:
-          value: 'false'
-        REFERRAL_PUBLIC_BASE_URL:
-          value: https://api.omiapi.com
-        CONVERSATION_RELEVANCE_JEV_ENABLED:
-          value: 'true'
-          category: rollout
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
           category: rollout
@@ -121,64 +107,47 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-          value: '100'
-          category: rollout
-        MEMORY_OWNER_JEV_SHADOW_PERCENT:
-          value: '100'
-          category: rollout
-        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-          value: '0'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-          value: '60000'
-          category: rollout
-        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-          value: '60000'
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
           value: ''
           category: rollout
-        CAPTURE_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        CAPTURE_JEV_SHADOW_PERCENT:
-          value: '0'
-          category: rollout
-        REVIEW_SURFACE_MODE:
-          value: 'on'
-          category: rollout
     pusher:
       env:
+        AUDIO_ARCHIVE_PERCENT:
+          value: '0'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+        AUDIO_TIMELINE_SPANS:
+          value: 'false'
+        LIVE_SPEAKER_SPAN_RESOLUTION:
+          value: 'false'
+        LIVE_CAPTURE_WINDOW_MERGE_UNION:
+          value: 'false'
+        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
+          value: 'false'
+        SONIOX_CAPTURE_AXIS_DIAGNOSTICS:
+          value: 'false'
+        SONIOX_WIRE_LEDGER:
+          value: 'false'
+        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+          value: shadow
+          category: rollout
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'true'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          config_map:
+            name: dev-omi-backend-config
+            key: FREE_TIER_LOCAL_PROCESSING_COHORT
+        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+          value: 'true'
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://172.16.48.49/diarizer
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
-        CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
-        # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-        PROACTIVITY_V2_POSTHOG_TOKEN:
-          value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-          category: rollout
-        PROACTIVITY_V2_POSTHOG_HOST:
-          value: https://us.posthog.com
-          category: rollout
-        AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-        LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-        LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-        SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-        SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-        SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-        CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
-          category: storage_retention
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -194,14 +163,6 @@ overlay:
         TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
           value: '1'
           category: rollout
-        FREE_TIER_LOCAL_PROCESSING:
-          value: 'true'
-        FREE_TIER_LOCAL_PROCESSING_COHORT:
-          config_map:
-            name: dev-omi-backend-config
-            key: FREE_TIER_LOCAL_PROCESSING_COHORT
-        FREE_TIER_EMERGENCY_STOP:
-          value: 'false'
         OMI_LLM_GATEWAY_URL:
           value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
           category: service_discovery
@@ -221,23 +182,7 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: OMI_LLM_GATEWAY_SERVICE_TOKEN
-        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'true'
-        CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-          value: 'true'
-        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-          value: '25'
-        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-          value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
-          value: 'true'
-          category: rollout
-        MEMORY_BELIEF_AUTOMATION_PAUSED:
-          value: 'false'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_ENABLED:
           value: 'true'
           category: rollout
         MEMORY_OWNER_JEV_FLIP_ENABLED:
@@ -248,33 +193,8 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-          value: '100'
-          category: rollout
-        MEMORY_OWNER_JEV_SHADOW_PERCENT:
-          value: '100'
-          category: rollout
-        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-          value: '0'
-          category: rollout
-        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-          value: '60000'
-          category: rollout
-        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-          value: '60000'
-          category: rollout
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
           value: ''
-          category: rollout
-        CAPTURE_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        CAPTURE_JEV_SHADOW_PERCENT:
-          value: '0'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -325,14 +245,11 @@ overlay:
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omiapi.com
           category: service_discovery
-        HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://diarizer.omiapi.com:80
-          category: service_discovery
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: modulate-velma-2,soniox,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -381,8 +298,10 @@ overlay:
             name: dev-omi-backend-secrets
             key: METRICS_SECRET
     config_map:
-      name: dev-omi-backend-config
       entries:
+        STT_SERVICE_MODELS:
+          value: modulate-velma-2,soniox,parakeet
+          source: literal
         FREE_TIER_LOCAL_PROCESSING_COHORT:
           source: environment
           default: ''
@@ -409,9 +328,6 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
-        STT_SERVICE_MODELS:
-          source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -424,30 +340,23 @@ overlay:
           source: environment
         X_OAUTH_REDIRECT_URI:
           source: environment
+      name: dev-omi-backend-config
   desktop_backend:
     env:
-      # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-      PROACTIVITY_V2_POSTHOG_TOKEN:
-        value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-        category: rollout
-      PROACTIVITY_V2_POSTHOG_HOST:
-        value: https://us.posthog.com
-        category: rollout
       FREE_TIER_LOCAL_PROCESSING:
         value: 'true'
       FREE_TIER_LOCAL_PROCESSING_COHORT:
         env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
         default: ''
-      FREE_TIER_EMERGENCY_STOP:
-        value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'true'
       BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
         value: 'true'
-      MEMORY_BELIEF_AUTOMATION_PAUSED:
-        value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
+    secrets:
+      GEMINI_API_KEY:
+        secret: GEMINI_API_KEY
   cloud_run:
     network:
       flags:
@@ -459,65 +368,29 @@ overlay:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
-          SCREEN_FRAME_SIGNING_SECRET:
-            secret: SCREEN_FRAME_SIGNING_SECRET
-            version: latest
         env:
-          REDIS_DB_PORT:
-            value: '13151'
-            category: service_discovery
-          OMI_SHAPED_AGENT_MODE:
-            value: 'on'
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ''
+          BATCH_PIPELINE_API_URL:
+            value: ''
+          BUCKET_BATCH_PIPELINE:
+            value: ''
+          BUCKET_TEMPORAL_SYNC_LOCAL:
+            value: syncing-local-development
+          AUDIO_ARCHIVE_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
             category: rollout
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
-          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
-          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'gateway'
-          SCREEN_FRAME_EGRESS_ENABLED:
-            value: 'true'
-            category: rollout
-          REVIEW_SURFACE_MODE:
-            value: 'on'
-            category: rollout
-          BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
-            category: storage_retention
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
-          FIREBASE_SIGNER_SERVICE_ACCOUNT:
-            value: dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
             env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
             default: ''
-          FREE_TIER_EMERGENCY_STOP:
-            value: 'false'
-          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'true'
-          CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -525,11 +398,22 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omiapi.com:80
+            value: http://172.16.48.49/diarizer
+          POSTHOG_HOST:
+            value: https://app.posthog.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_UID_ALLOWLIST:
+            value: ''
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FIREBASE_SIGNER_SERVICE_ACCOUNT:
+            value: dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -550,9 +434,6 @@ overlay:
           HOSTED_PUSHER_API_URL:
             value: http://pusher.omiapi.com
             category: service_discovery
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
@@ -561,36 +442,13 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
       backend-sync:
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - HOSTED_PUSHER_API_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -601,38 +459,65 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          REDIS_DB_PORT:
-            value: '13151'
-            category: service_discovery
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ''
+          BATCH_PIPELINE_API_URL:
+            value: ''
+          BATCH_PIPELINE_WORKER_AUDIENCE:
+            value: ''
+          BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+            value: ''
+          BUCKET_BATCH_PIPELINE:
+            value: ''
+          AUDIO_ARCHIVE_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
+            category: rollout
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'true'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
+            default: ''
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'false'
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'false'
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'false'
+          HOSTED_PARAKEET_API_URL:
+            value: http://parakeet.omiapi.com
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://172.16.48.49/diarizer
+          SYNC_LEGACY_FRESH_ENABLED:
+            value: 'false'
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'false'
+          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+            value: ''
+          SYNC_LEGACY_FRESH_PERCENT:
+            value: '0'
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+            value: '60'
+          SYNC_LEGACY_FRESH_BURST_TOKENS:
+            value: '10'
+          POSTHOG_HOST:
+            value: https://app.posthog.com
+          MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
+            value: 'true'
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
-          SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
-          SYNC_PHASE_METRICS_PROJECT: {value: based-hardware-dev, category: telemetry}
-          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
-          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST:
+            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
-            category: storage_retention
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'gateway'
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -650,31 +535,6 @@ overlay:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
-          FREE_TIER_LOCAL_PROCESSING:
-            value: 'true'
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
-            env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
-            default: ''
-          FREE_TIER_EMERGENCY_STOP:
-            value: 'false'
-          HOSTED_PARAKEET_API_URL:
-            value: http://parakeet.omiapi.com
-          HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omiapi.com:80
-          MEMORY_BELIEF_MODEL_ENABLED:
-            value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
-          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'true'
-          CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'true'
-          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
-            value: '25'
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -692,9 +552,6 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
-          CONVERSATION_RELEVANCE_JEV_ENABLED:
-            value: 'true'
-            category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
@@ -703,36 +560,17 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
             value: '0'
-            category: rollout
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
       backend-sync-backfill:
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - HOSTED_PUSHER_API_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -743,54 +581,61 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          REDIS_DB_PORT:
-            value: '13151'
-            category: service_discovery
-          OMI_SHAPED_AGENT_MODE:
-            value: 'on'
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ''
+          BATCH_PIPELINE_API_URL:
+            value: ''
+          BUCKET_BATCH_PIPELINE:
+            value: ''
+          AUDIO_ARCHIVE_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
             category: rollout
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
-          SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
-          SYNC_PHASE_METRICS_PROJECT: {value: based-hardware-dev, category: telemetry}
-          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
-          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'gateway'
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
             env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
             default: ''
-          FREE_TIER_EMERGENCY_STOP:
-            value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
+          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
+            value: 'false'
+          SYNC_REPROCESS_COALESCE_ENABLED:
+            value: 'false'
+          CONVERSATION_LLM_INPUT_DEDUPE_ENABLED:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omiapi.com:80
+            value: http://172.16.48.49/diarizer
+          SYNC_LEGACY_FRESH_ENABLED:
+            value: 'false'
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
+            value: 'false'
+          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+            value: ''
+          SYNC_LEGACY_FRESH_PERCENT:
+            value: '0'
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+            value: '60'
+          SYNC_LEGACY_FRESH_BURST_TOKENS:
+            value: '10'
+          POSTHOG_HOST:
+            value: https://app.posthog.com
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_UID_ALLOWLIST:
+            value: ''
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -810,33 +655,15 @@ overlay:
             category: replay_capture
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
             value: '0'
-            category: rollout
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
-            value: '0'
-            category: rollout
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
-            value: '60000'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
-            category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
-            category: rollout
       backend-integration:
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - HOSTED_PUSHER_API_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -846,54 +673,44 @@ overlay:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
-          POSTHOG_EVENTS_API_KEY:
-            secret: POSTHOG_EVENTS_API_KEY
-            version: latest
         env:
-          REDIS_DB_PORT:
-            value: '13151'
-            category: service_discovery
-          OMI_SHAPED_AGENT_MODE:
-            value: 'on'
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ''
+          BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'false'
+          BATCH_PIPELINE_API_URL:
+            value: ''
+          BUCKET_BATCH_PIPELINE:
+            value: ''
+          AUDIO_ARCHIVE_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          LIVE_SPEAKER_SPAN_RESOLUTION:
+            value: 'false'
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
+            value: shadow
             category: rollout
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
-          # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
-          PROACTIVITY_V2_POSTHOG_TOKEN:
-            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
-            category: rollout
-          PROACTIVITY_V2_POSTHOG_HOST:
-            value: https://us.posthog.com
-            category: rollout
-          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-          CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'gateway'
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
             env_var: FREE_TIER_LOCAL_PROCESSING_COHORT
             default: ''
-          FREE_TIER_EMERGENCY_STOP:
-            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omiapi.com:80
+            value: http://172.16.48.49/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
+          POSTHOG_HOST:
+            value: https://app.posthog.com
+          OMI_SHAPED_AGENT_MODE:
+            value: 'on'
+            category: rollout
+          DREAM_AGENT_UID_ALLOWLIST:
+            value: ''
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           OMI_PARITY_PACK_CAPTURE:
@@ -916,10 +733,10 @@ overlay:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
         forbidden_env:
@@ -928,11 +745,9 @@ overlay:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           --remove-env-vars: HOSTED_PUSHER_API_URL
-        secrets:
-          REDIS_DB_PASSWORD:
-            secret: REDIS_DB_PASSWORD
-            version: latest
         env:
+          PINECONE_INDEX_NAME:
+            value: memories-backend-dev
           REDIS_DB_HOST:
             value: redis-10797.c62.us-east-1-4.ec2.redns.redis-cloud.com
           REDIS_DB_PORT:
@@ -941,10 +756,6 @@ overlay:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
-          OMI_BACKGROUND_FLEX_CAPABLE:
-            value: 'true'
-          PINECONE_INDEX_NAME:
-            value: memories-backend-dev
         forbidden_env:
         - HOSTED_PUSHER_API_URL
       memory-maintenance-job:
@@ -953,38 +764,30 @@ overlay:
           --cpu: '2'
           --memory: 2Gi
         env:
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
             value: '25'
       frame-request-retention-job:
-        flags:
-          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
       daily-memory-sweep-job:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
-          OMI_CUSTOMER_DATA_PROJECT:
-            value: based-hardware
-          GOOGLE_CLOUD_PROJECT:
-            value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'true'
-          MEMORY_BELIEF_AUTOMATION_PAUSED:
-            value: 'false'
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
@@ -993,26 +796,28 @@ overlay:
             value: gpt-6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             value: '0.80'
-          MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
-            value: 'false'
-          MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG:
-            value: ''
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'true'
-      knowledge-ledger-drain-job:
-        flags:
-          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
-        env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+      knowledge-ledger-drain-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
+        env:
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
       day3-reengagement-email-job:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          DAY3_REENGAGEMENT_EMAIL_ENABLED:
+            value: 'false'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           BASE_API_URL:

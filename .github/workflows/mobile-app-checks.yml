@@ -125,7 +125,7 @@ jobs:
     name: Dart Analyze & Tests
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'
+    if: github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -804,9 +804,9 @@ jobs:
   #    "head_branch":"main", "head_sha":"<source_sha>",
   #    "repository":"BasedHardware/omi"}
   #
-  # Conditional jobs are deliberately allowed to be skipped: a skipped job is
-  # an inapplicable area, not a failure. Changes itself must succeed, and any
-  # applicable job that fails or is cancelled makes this aggregate fail.
+  # Selected Dart coverage must succeed, including on cheap-tier forks. Other
+  # conditional jobs may be skipped for inapplicable or deferred heavy coverage.
+  # Changes itself must succeed; failures and cancellations remain ineligible.
   mobile-release-eligibility:
     name: Mobile Release Eligibility
     runs-on: ubuntu-latest
@@ -826,6 +826,7 @@ jobs:
       - name: Aggregate conditional mobile checks
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          DART_EXPECTED: ${{ github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true' }}
           FULL_CI: ${{ needs.changes.outputs.full_ci }}
           HAS_GENERATED: ${{ needs.changes.outputs.has_flutter_generated }}
           HAS_DART: ${{ needs.changes.outputs.has_app_dart }}
@@ -847,14 +848,17 @@ jobs:
             echo "Detect Changes did not complete successfully: $CHANGES_RESULT" >&2
             exit 1
           fi
+          if [[ ( "${HAS_DART:-false}" == true || "${DART_EXPECTED:-false}" == true ) && "$ANALYZE_AND_TEST_RESULT" != success ]]; then
+            echo "Required Dart Analyze & Tests did not pass: $ANALYZE_AND_TEST_RESULT" >&2
+            exit 1
+          fi
           if [[ "$FULL_CI" != "true" ]]; then
-            if [[ "$HAS_GENERATED" == true || "$HAS_DART" == true || "$HAS_JOURNEYS" == true || "$HAS_ANDROID" == true || "$HAS_IOS" == true ]]; then
+            if [[ "$HAS_GENERATED" == true || "$HAS_JOURNEYS" == true || "$HAS_ANDROID" == true || "$HAS_IOS" == true ]]; then
               notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
               echo "::notice title=Heavy CI deferred::$notice"
               echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
               for spec in \
                 "$HAS_GENERATED:$GENERATED_FILES_RESULT" \
-                "$HAS_DART:$ANALYZE_AND_TEST_RESULT" \
                 "$HAS_DART:$DART_TIMEZONE_RESULT" \
                 "$HAS_JOURNEYS:$JOURNEYS_RESULT" \
                 "$HAS_ANDROID:$ANDROID_COMPILE_RESULT" \
@@ -870,7 +874,11 @@ jobs:
               done
               exit 0
             fi
-            echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            if [[ "${HAS_DART:-false}" == true || "${DART_EXPECTED:-false}" == true ]]; then
+              echo 'Mobile Release Eligibility: Dart Analyze & Tests passed; no deferred heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
             exit 0
           fi
           if [[ "$EMULATOR_EXPECTED" == true && "$ANDROID_EMULATOR_RESULT" != success ]]; then
@@ -898,40 +906,47 @@ jobs:
 
   post-merge-failure-issues:
     name: Post-merge mobile failure issues
-    needs: [changes, journeys-hermetic, android-compile-smoke, android-unit-tests, android-emulator-checks, dart-tests-kiritimati]
+    needs: [changes, analyze-and-test, journeys-hermetic, android-compile-smoke, android-unit-tests, android-emulator-checks, dart-tests-kiritimati]
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
     steps:
-      - name: Open or update one issue per failed suite
+      - name: Reconcile one issue per mobile suite
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DART: ${{ needs.analyze-and-test.result }}
           JOURNEYS: ${{ needs.journeys-hermetic.result }}
           ANDROID_COMPILE: ${{ needs.android-compile-smoke.result }}
           ANDROID_JVM: ${{ needs.android-unit-tests.result }}
           ANDROID_EMULATOR: ${{ needs.android-emulator-checks.result }}
           TIMEZONES: ${{ needs.dart-tests-kiritimati.result }}
           EVENT: ${{ github.event_name }}
+          DART_EXPECTED: ${{ needs.changes.outputs.has_app_dart }}
           JOURNEYS_EXPECTED: ${{ needs.changes.outputs.has_app_journeys }}
           ANDROID_EXPECTED: ${{ needs.changes.outputs.has_app_compile_smoke }}
           TIMEZONES_EXPECTED: ${{ needs.changes.outputs.has_app_dart }}
         run: |
           set -euo pipefail
           failed=0
-          for spec in "Seeded Journeys:$JOURNEYS:$JOURNEYS_EXPECTED" "Android Compile Smoke:$ANDROID_COMPILE:$ANDROID_EXPECTED" "Android JVM Unit Tests:$ANDROID_JVM:$ANDROID_EXPECTED" "Android Emulator Acceptance:$ANDROID_EMULATOR:$ANDROID_EXPECTED" "Dart Far Timezones:$TIMEZONES:$TIMEZONES_EXPECTED"; do
+          for spec in "Dart Analyze & Tests:$DART:$DART_EXPECTED" "Seeded Journeys:$JOURNEYS:$JOURNEYS_EXPECTED" "Android Compile Smoke:$ANDROID_COMPILE:$ANDROID_EXPECTED" "Android JVM Unit Tests:$ANDROID_JVM:$ANDROID_EXPECTED" "Android Emulator Acceptance:$ANDROID_EMULATOR:$ANDROID_EXPECTED" "Dart Far Timezones:$TIMEZONES:$TIMEZONES_EXPECTED"; do
             suite="${spec%%:*}"
             rest="${spec#*:}"
             result="${rest%%:*}"
             expected="${rest#*:}"
             [[ "$EVENT" == push && "$expected" != true && "$result" == skipped ]] && continue
-            [[ "$result" == success ]] && continue
-            failed=1
             title="CI post-merge failure: $suite"
-            issue_number="$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+            issue_number="$(gh api --method GET "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp | jq -r --arg title "$title" '[.[][] | select(.title == $title and .pull_request == null)][0].number // empty')"
+            if [[ "$result" == success ]]; then
+              if [[ -n "$issue_number" ]]; then
+                gh issue close "$issue_number" --repo "$REPO" --reason completed
+              fi
+              continue
+            fi
+            failed=1
             printf 'The %s suite was %s on a main or nightly run.\n\nEvidence: %s\n' "$suite" "$result" "$RUN_URL" > /tmp/ci-suite-issue.md
             if [[ -n "$issue_number" ]]; then
               gh issue edit "$issue_number" --repo "$REPO" --body-file /tmp/ci-suite-issue.md

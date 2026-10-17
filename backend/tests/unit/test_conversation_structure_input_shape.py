@@ -40,6 +40,7 @@ def processing(stack, monkeypatch):
     pc = stack.process
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda *_: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda *_: 'en')
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])

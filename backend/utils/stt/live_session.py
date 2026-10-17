@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketState
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio
 from utils.stt import streaming as st
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
@@ -26,6 +27,8 @@ from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.stt_provider_policy import provider_for_model_token
+from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import capture_spans
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
@@ -84,8 +87,15 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
+    @session_admission
     async def connect(
-        self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
+        self,
+        sample_rate: int,
+        epoch: Any = None,
+        *,
+        same_provider: bool = False,
+        replay_start_sample: int = 0,
+        demand_lane: str | None = None,
     ) -> STTSocket:
         host = self.receiver.host
         constructed: list[LiveLegSocket] = []
@@ -94,12 +104,24 @@ class LiveChainSession:
         models = [m.strip() for m in st.stt_service_models]
         keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None and not demand.eligible:
+            demand = None
+        if demand is not None:
+            self.no_text_rescue.enabled = False
         window_eligible = (
             window_allocation(uid)
+            and (demand.window_permitted if demand is not None else True)
             and window_language_supported(host.language, language)
             and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         )
-        rnnt_eligible = st.parakeet_is_configured_fallback(language)
+        if demand is not None and not window_eligible:
+            models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
+        if demand_lane == 'parakeet':
+            models = ['parakeet-window']
+        elif demand_lane == 'vendor':
+            models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
+        rnnt_eligible = demand is None and st.parakeet_is_configured_fallback(language)
         parakeet_models = ([host.stt_model] if host.stt_service == st.STTService.parakeet else []) + models
         parakeet_token = next(
             (
@@ -283,10 +305,28 @@ class LiveChainSession:
                 if is_window:
                     from utils.stt.parakeet_window import connect_window
 
-                    raw = connect_window(callback, sample_rate)
-                    if self.no_text_rescue.enabled:
-                        raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
-                        raw.progress_deadline_enabled = True
+                    def new_window():
+                        window_raw = connect_window(callback, sample_rate)
+                        if self.no_text_rescue.enabled:
+                            window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
+                            window_raw.progress_deadline_enabled = True
+                        return window_raw
+
+                    admission = getattr(self.receiver, 'cap_admission', None)
+                    if admission is None:
+                        raw = new_window()
+                    else:
+
+                        async def open_window():
+                            return new_window()
+
+                        raw = CapSocket(
+                            admission,
+                            'parakeet',
+                            sample_rate,
+                            open_window,
+                            new_window() if admission.allowed('parakeet') else None,
+                        )
                 elif service == st.STTService.parakeet:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
@@ -350,7 +390,24 @@ class LiveChainSession:
                 for service, callback in callbacks.items()
             }
             models = ['parakeet-window']
-        primary = callbacks.get(host.stt_service)
+        primary_service = host.stt_service
+        if demand_lane is not None:
+            service = next(
+                (
+                    st.STTService(provider_for_model_token(model))
+                    for model in models
+                    if provider_for_model_token(model) in {'parakeet', 'soniox', 'modulate', 'deepgram'}
+                ),
+                None,
+            )
+            if service is None:
+                raise st.ParakeetConnectionError('config_incomplete')
+            primary_service = service
+            callbacks = {
+                key: value if (key == st.STTService.parakeet) == (demand_lane == 'parakeet') else None
+                for key, value in callbacks.items()
+            }
+        primary = callbacks.get(primary_service)
         primary_missing = primary is None
         if primary_missing:
 
@@ -387,6 +444,18 @@ class LiveChainSession:
                     record_managed_leg_handoff(socket)
                 finally:
                     connecting_target.reset(token)
+            elif demand_lane is not None:
+                socket, actual = await connect_configured_chain(
+                    primary_service=primary_service,
+                    connect_primary=primary,
+                    callbacks=callbacks,
+                    failed=set(),
+                    models=models,
+                    routing_models=engine_models,
+                    routing_language=host.language,
+                    routing_uid=uid if demand_lane == 'vendor' else None,
+                    optional_handover=True,
+                )
             else:
                 socket, actual = await st.connect_stt_socket_with_fallback(
                     primary_service=host.stt_service,
@@ -542,7 +611,11 @@ class LiveLegSocket(STTSocket):
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
 
-            if isinstance(raw, WindowedParakeetSocket):
+            if isinstance(raw, CapSocket):
+                raw.on_open(
+                    lambda transport: transport.set_replay_progress_callback(self._trim_window_replay_to_anchor)
+                )
+            elif isinstance(raw, WindowedParakeetSocket):
                 raw.set_replay_progress_callback(self._trim_window_replay_to_anchor)
             if WINDOW_INGEST_AGC:
                 self._ingest_gain = SessionPcmGain()
@@ -749,6 +822,8 @@ class LiveLegSocket(STTSocket):
 
         if self._routing_active:
             self._health_success, self._health_close = on_success, on_close
+        elif self.window and isinstance(self.raw, CapSocket):
+            self.raw.on_open(lambda transport: transport.set_health_callbacks(on_success, on_close))
         elif isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
@@ -801,6 +876,8 @@ class LiveLegSocket(STTSocket):
         setattr(gate, 'process_audio', process_replay_capture)
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
+        if suppress_socket_audio(self.raw, data):
+            return True
         if self._closing_for_health:
             return False
         if self.is_connection_dead:
@@ -1019,6 +1096,8 @@ class LiveLegSocket(STTSocket):
             commit()
 
     def send_admitted_audio(self, data: bytes, spans: Any) -> bool:
+        if suppress_socket_audio(self.raw, data):
+            return True
         from utils.stt.soniox_idle import unaccepted_onset
 
         data, spans = unaccepted_onset(data, spans, self._send_tracker)
