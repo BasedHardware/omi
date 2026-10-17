@@ -869,12 +869,16 @@ class TestActionItems:
             sse.execute_tool(UID, 'get_action_items', {'due_start_date': 'not-a-date'})
 
     @patch('utils.mcp_server.handlers.action_items.action_items_db')
-    def test_locked_description_truncated(self, mock_db):
+    def test_locked_items_filtered(self, mock_db):
+        # Paywalled tasks never reach MCP clients (#21863): list, sync, and
+        # search exclude is_locked rows outright rather than truncating them.
         long_desc = 'x' * 200
-        mock_db.get_action_items.return_value = [_action_item('a1', desc=long_desc, locked=True)]
+        mock_db.get_action_items.return_value = [
+            _action_item('a1', desc=long_desc, locked=True),
+            _action_item('a2', desc='open task'),
+        ]
         result = sse.execute_tool(UID, 'get_action_items', {})
-        assert result['action_items'][0]['description'].endswith('...')
-        assert len(result['action_items'][0]['description']) == 73
+        assert [i['id'] for i in result['action_items']] == ['a2']
 
 
 class TestGoals:
