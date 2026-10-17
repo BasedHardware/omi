@@ -38,6 +38,16 @@ class CreateFolderRequest(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
 
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if value is not None:
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError('folder name cannot be empty or blank')
+            return stripped
+        return value
+
 
 class UpdateFolderRequest(BaseModel):
     """Request model for updating folder metadata."""
@@ -47,6 +57,16 @@ class UpdateFolderRequest(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
     order: Optional[int] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError('folder name cannot be empty or blank')
+            return stripped
+        return value
 
 
 class MoveConversationRequest(BaseModel):
