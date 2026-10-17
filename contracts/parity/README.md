@@ -26,6 +26,7 @@ cross-platform decision instead of a single-platform drive-by.
 | `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
 | `capture_group_collapse.json`      | One list row per recorded event: which loaded member represents a capture group, and that a lone loaded member is never hidden |
 | `deterministic_title.json`         | The model-free title: first sentence of the joined transcript, 60 code points cut on a word boundary (the clients' last-resort title for an untitled legacy row) |
+| `agent_routing.json`               | Which coding agent a spoken task names: alias matching on word boundaries, and clause-scoped negation                        |
 
 The [conversation summary contract](conversation-summary.md) and `conversation_summary.json`
 define one primary body across backend, Flutter, macOS, and web, including edited overviews,
@@ -54,6 +55,19 @@ all text while recognizing only the v1 ledger authority, and `ChatMessageDB`
 keeps chat text while ignoring the unrecognized evidence envelope rather than
 projecting it into metadata or content blocks. This proves inert compatibility;
 it does not claim that macOS renders structured chat evidence.
+
+`agent_routing.json` is a runtime rule rather than a renderer one, so it has its own
+per-platform suites alongside the table above:
+
+| Platform | Suite | Runs |
+|---|---|---|
+| macOS agent runtime | `desktop/macos/agent/tests/parity-agent-routing.test.ts` | `npm test` in `desktop/macos/agent` |
+| Windows main process | `desktop/windows/src/main/codingAgent/parityAgentRouting.test.ts` | `npm test` in `desktop/windows` |
+
+Its first run earned the contract: the Windows port compiled its alias table from
+`PRODUCTION_ADAPTER_IDS`, which deliberately omits `pi-mono`, so Windows was deaf to
+"pi mono" while macOS still heard it. Fixed by iterating the alias table itself —
+recognising a spoken name is separate from being allowed to run the task.
 
 The backend suite validates every fixture file structurally (parseable, complete
 expectations, self-consistent day-key arithmetic) so a malformed fixture cannot pass
