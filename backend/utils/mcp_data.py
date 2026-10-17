@@ -49,10 +49,13 @@ def date_only_to_utc_epoch(value: str, *, end_of_day: bool = False) -> float:
 
 
 def clean_action_item(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Shape an action_item doc for MCP output (locked descriptions truncated)."""
+    """Shape an action_item doc for MCP output. Locked (paywalled) items
+    are excluded upstream on every read path — if one reaches here it
+    must not leak content, so its description is dropped entirely
+    rather than truncated."""
     description = item.get("description", "") or ""
-    if item.get("is_locked", False) and len(description) > 70:
-        description = description[:70] + "..."
+    if item.get("is_locked", False):
+        description = ""
     return {
         "id": item.get("id", ""),
         "description": description,
