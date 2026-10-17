@@ -6,7 +6,7 @@ require 'tmpdir'
 
 class WatchRecordingRecoveryTest < Minitest::Test
   IOS = File.expand_path('..', __dir__)
-  SCENARIOS = %w[roundtrip custody restart_tail stale_session storage_full unbound wrong_owner receipt_after_delete conflicting_retry corrupt_audio invalid_metadata out_of_order_rotation].freeze
+  SCENARIOS = %w[roundtrip custody restart_tail stale_session storage_full unbound wrong_owner receipt_after_delete conflicting_retry corrupt_audio invalid_metadata out_of_order_rotation damaged_partial conflicting_partial oversized_partial transfer_queue].freeze
 
   def self.binary
     return @binary if @binary

@@ -85,6 +85,22 @@
         }
       }
     },
+    "watch.recovery.savedAudioError" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some saved audio needs recovery. Keep Omi installed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存済み音声の一部に復元が必要です。Omiを削除しないでください。"
+          }
+        }
+      }
+    },
     "watch.recovery.storageError" : {
       "localizations" : {
         "en" : {

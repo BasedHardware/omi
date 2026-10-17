@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 /// Durable custody for Watch audio, independent of the live transcript channel.
-/// Queue-confined by the caller. Files use the existing native batch wire format.
+/// Files use the existing native batch wire format; operations are serialized below.
 struct WatchRecordingMetadata: Codable, Equatable {
     let version: Int
     let sessionID: String
@@ -29,6 +29,7 @@ final class WatchRecordingStore: @unchecked Sendable {
     static let frameBytes = 320 // 10 ms, 16 kHz mono PCM16
     static let maxFrames = 6_000 // one minute, bounded transfer and memory
     let directory: URL
+    private(set) var recoveryFailures = 0
     private let hasSpace: () -> Bool
     private let lock = NSRecursiveLock()
     private var metadata: WatchRecordingMetadata?
@@ -218,33 +219,64 @@ final class WatchRecordingStore: @unchecked Sendable {
     private func recoverInterruptedSegments() throws {
         for part in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             where part.lastPathComponent.hasSuffix(".bin.part") {
-            let url = part.deletingPathExtension()
-            guard let metadata = try? Self.readMetadata(url), metadata.isValid, metadata.fileName == url.lastPathComponent else { continue }
-            // A torn last frame is retained in the .part until the complete prefix is secured.
-            var bytes = try Data(contentsOf: part)
-            let complete = bytes.count / (Self.frameBytes + 4) * (Self.frameBytes + 4)
-            bytes = bytes.prefix(complete)
-            if let encoded = try? Data(contentsOf: tailURL(metadata)),
-               let tail = try? JSONDecoder().decode(Tail.self, from: encoded), tail.offset == UInt64(complete),
-               !tail.bytes.isEmpty, tail.bytes.count < Self.frameBytes, tail.bytes.count % 2 == 0 {
-                bytes.append(contentsOf: [0x40, 0x01, 0, 0])
-                bytes.append(tail.bytes)
-                bytes.append(Data(count: Self.frameBytes - tail.bytes.count))
-            }
-            guard !bytes.isEmpty else { continue }
-            let recovered = url.appendingPathExtension("recovering")
-            try bytes.write(to: recovered, options: .atomic)
-            _ = try Self.validatedFrameCount(recovered)
-            let handle = try FileHandle(forWritingTo: recovered)
-            try handle.synchronize()
-            try handle.close()
-            if !FileManager.default.fileExists(atPath: url.path) { try FileManager.default.moveItem(at: recovered, to: url) }
-            // Preserve a torn suffix for diagnostics rather than destroy original bytes.
-            if complete < (try part.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0) {
-                try FileManager.default.moveItem(at: part, to: part.appendingPathExtension("torn"))
-            } else { try FileManager.default.removeItem(at: part) }
-            try? FileManager.default.removeItem(at: tailURL(metadata))
+            do { try recoverInterruptedSegment(part) }
+            catch { recoveryFailures += 1 } // Preserve the original; other recordings must remain usable.
         }
+    }
+
+    private func recoverInterruptedSegment(_ part: URL) throws {
+        let url = part.deletingPathExtension()
+        let metadata = try Self.readMetadata(url)
+        guard metadata.isValid, metadata.fileName == url.lastPathComponent else { throw WatchRecordingError.invalidMetadata }
+        let size = try part.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= Self.maxFrames * (Self.frameBytes + 4) else { throw WatchRecordingError.invalidAudio }
+        // A torn last frame is retained in the .part until the complete prefix is secured.
+        var bytes = try Data(contentsOf: part)
+        let complete = bytes.count / (Self.frameBytes + 4) * (Self.frameBytes + 4)
+        bytes = bytes.prefix(complete)
+        if let encoded = try? Data(contentsOf: tailURL(metadata)),
+           let tail = try? JSONDecoder().decode(Tail.self, from: encoded), tail.offset == UInt64(complete),
+           !tail.bytes.isEmpty, tail.bytes.count < Self.frameBytes, tail.bytes.count % 2 == 0 {
+            bytes.append(contentsOf: [0x40, 0x01, 0, 0])
+            bytes.append(tail.bytes)
+            bytes.append(Data(count: Self.frameBytes - tail.bytes.count))
+        }
+        guard !bytes.isEmpty else { return }
+        let recovered = url.appendingPathExtension("recovering")
+        try bytes.write(to: recovered, options: .atomic)
+        _ = try Self.validatedFrameCount(recovered)
+        let handle = try FileHandle(forWritingTo: recovered)
+        try handle.synchronize()
+        try handle.close()
+        if FileManager.default.fileExists(atPath: url.path) {
+            // Never discard a partial merely because a different sealed copy exists.
+            guard try Self.digest(url) == Self.digest(recovered) else { throw WatchRecordingError.conflictingReceipt }
+            try FileManager.default.removeItem(at: recovered)
+        } else { try FileManager.default.moveItem(at: recovered, to: url) }
+        // Preserve a torn suffix for diagnostics rather than destroy original bytes.
+        if complete < size {
+            try FileManager.default.moveItem(at: part, to: part.appendingPathExtension("torn"))
+        } else { try FileManager.default.removeItem(at: part) }
+        try? FileManager.default.removeItem(at: tailURL(metadata))
+    }
+}
+
+/// Do not repeatedly send another account's retained recordings ahead of the
+/// current account. Retry timing uses uptime so a clock correction cannot stall it.
+enum WatchRecoveryTransferQueue {
+    static func candidates(_ files: [(URL, WatchRecordingMetadata)], ownerUID: String,
+                           inFlight: Set<String>, attempts: [String: TimeInterval], uptime: TimeInterval) -> [(URL, WatchRecordingMetadata)] {
+        guard !ownerUID.isEmpty else { return [] }
+        return Array(files.filter { url, metadata in
+            metadata.ownerUID == ownerUID && !inFlight.contains(url.lastPathComponent)
+                && uptime - (attempts[url.lastPathComponent] ?? -.infinity) >= 60
+        }.sorted { left, right in
+            let leftAttempt = attempts[left.0.lastPathComponent] ?? -.infinity
+            let rightAttempt = attempts[right.0.lastPathComponent] ?? -.infinity
+            if leftAttempt != rightAttempt { return leftAttempt < rightAttempt }
+            if left.1.startedAt != right.1.startedAt { return left.1.startedAt < right.1.startedAt }
+            return left.0.lastPathComponent < right.0.lastPathComponent
+        }.prefix(max(0, 4 - inFlight.count)))
     }
 }
 

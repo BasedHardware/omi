@@ -11,7 +11,7 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     @Published private(set) var recoveryError: String?
     private var archive: WatchRecordingStore?
     private var recoveryTimer: Timer?
-    private var lastTransferAttempt: [String: Date] = [:]
+    private var lastTransferAttempt: [String: TimeInterval] = [:]
     private var recordingGeneration = UUID()
     private var archiveSessionID = ""
     private var isStarting = false
@@ -445,19 +445,22 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         guard let archive else { return }
         do {
             pendingRecoverySegments = try archive.pending().count
+            if archive.recoveryFailures > 0, !isRecording {
+                recoveryError = String(localized: "watch.recovery.savedAudioError")
+            }
             guard session.activationState == .activated else { return }
             let inFlight = Set(session.outstandingFileTransfers.map { $0.file.fileURL.lastPathComponent })
             try archive.pruneAcknowledged(excluding: inFlight)
             let files = try archive.pending()
             pendingRecoverySegments = files.count
             lastTransferAttempt = lastTransferAttempt.filter { entry in files.contains { $0.0.lastPathComponent == entry.key } }
-            var capacity = max(0, 4 - inFlight.count)
-            for (url, metadata) in files where capacity > 0 {
-                let name = url.lastPathComponent
-                guard !inFlight.contains(name), Date().timeIntervalSince(lastTransferAttempt[name] ?? .distantPast) >= 60 else { continue }
+            let owner = UserDefaults.standard.string(forKey: "omiOwnerUID") ?? ""
+            let uptime = ProcessInfo.processInfo.systemUptime
+            let candidates = WatchRecoveryTransferQueue.candidates(files, ownerUID: owner,
+                inFlight: inFlight, attempts: lastTransferAttempt, uptime: uptime)
+            for (url, metadata) in candidates {
                 session.transferFile(url, metadata: ["method": "watchRecordingFile", "recording": try JSONEncoder().encode(metadata)])
-                lastTransferAttempt[name] = Date()
-                capacity -= 1
+                lastTransferAttempt[url.lastPathComponent] = uptime
             }
         } catch {
             recoveryError = String(localized: "watch.recovery.storageError")

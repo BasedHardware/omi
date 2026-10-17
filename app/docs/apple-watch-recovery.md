@@ -32,6 +32,11 @@ stops on storage failure, and shows an error. Interruption and missing-frame
 checks retire the recording indicator instead of leaving a timer running after
 capture has stopped.
 
+Interrupted segments recover independently: a corrupt or oversized partial
+cannot disable capture or access to healthy recordings. Originals remain on
+disk and the Watch reports saved audio needing recovery. If a sealed copy
+already exists, the partial is removed only when their digests match.
+
 WatchConnectivity transfers finalized files, with at most four outstanding.
 The source remains on the Watch after OS transfer completion. The iPhone's
 `didReceive file` handler synchronously validates framing and account ownership,
@@ -49,6 +54,9 @@ adopt it into another account. Account context is refreshed through the existing
 Watch host and carried on immediate start commands. An unbound Watch asks the
 user to open Omi on iPhone before capture; queued files owned by a different
 account stay on Watch until that account is available.
+Only files belonging to the current account enter the transfer queue. Retry
+backoff uses monotonic uptime, and least-recently attempted files go first so
+missing receipts for a few files cannot starve a long recording's later segments.
 
 ## User workflow
 
@@ -76,6 +84,8 @@ for the new file format or manual processing path.
 - [x] Deduplicate receipts across restart, processing and deletion.
 - [x] Bind ownership before listing, playing, polling or uploading backups.
 - [x] Surface pending transfer and an explicit retry on Watch.
+- [x] Isolate damaged partials, preserve conflicting originals and fairly retry
+  current-account transfers without blocking later segments.
 - [ ] Qualify physical paired devices with screen off, phone terminated, phone
   unavailable, disk pressure, account switch, Stop before transfer and at least
   11h06m of capture. Compare sample counts/digests, memory, battery and transfer
