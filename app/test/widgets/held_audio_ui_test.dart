@@ -31,8 +31,8 @@ void main() {
       retainLive: retainLive,
       recordings: recordings ??
           [
-            HeldAudioRecording(id: 'newer', startedAt: 200, seconds: 90),
-            HeldAudioRecording(id: 'older', startedAt: 100, seconds: 30),
+            const HeldAudioRecording(id: 'newer', startedAt: 200, seconds: 90),
+            const HeldAudioRecording(id: 'older', startedAt: 100, seconds: 30),
           ],
     );
   }
