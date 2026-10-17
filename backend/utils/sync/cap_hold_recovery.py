@@ -50,7 +50,18 @@ def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
             cap_hold.get_private_cloud_sync_bucket().blob(path).delete()
         except NotFound:
             pass
-    snapshot.reference.delete()
+    if row.get('live_custody_version') == 4:
+        # Keep the publication idempotency barrier after source deletion. A lost
+        # writer reply must not recreate/retranscribe a capture already recovered.
+        snapshot.reference.set(
+            {
+                'state': 'purged',
+                'live_custody_version': 4,
+                'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT,
+            }
+        )
+    else:
+        snapshot.reference.delete()
 
 
 def _stored(value: Any) -> Any:

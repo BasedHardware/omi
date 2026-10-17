@@ -19,15 +19,15 @@ from google.cloud import firestore
 from database._client import get_firestore_client
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
-from utils.sync import cap_hold, live_cap_manifest
+from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec
 
 logger = logging.getLogger(__name__)
 
-# Per UID / UTC month, across concurrent sockets and all channels. Reservations
-# are conservative on upload failures. No audio is silently dropped at capacity.
+# Legacy v3 PCM reservations remain readable/recoverable. New Opus source
+# reservations use live_cap_capacity; failures never silently discard audio.
 MAX_MONTHLY_BYTES = 96 * 1024**3
 MAX_MONTHLY_CHUNKS = 3_000_000
-CHUNK_SECONDS = 1
+CHUNK_SECONDS = 60
 MAX_PENDING_SECONDS = 60
 
 
@@ -81,15 +81,41 @@ class LiveHeldAudio:
         self.paused = False
         self.last_notice = None
         self.buffers = {}
-        self.groups: dict[int, dict[str, Any]] = {}
+        self.capacity: live_cap_capacity.Capacity | None = None
+        self.capacity_identity: str | None = None
+        self._summary_ready = False
+        self._charged: set[str] = set()
+        self._buffer_opened = {}
         self._lock = asyncio.Lock()
         self._last_flush = time.monotonic()
 
     def append(self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int = 0) -> None:
+        # Reserve against the capture month, including packets straddling reset.
+        from calendar import timegm
+        from math import ceil
+
+        if len(data) % 2 or rate <= 0:
+            raise ValueError('held PCM requires whole samples and a positive rate')
+        while data:
+            moment = datetime.fromtimestamp(timestamp, timezone.utc)
+            year, month = (moment.year + 1, 1) if moment.month == 12 else (moment.year, moment.month + 1)
+            boundary = timegm((year, month, 1, 0, 0, 0))
+            frames = min(len(data) // 2, max(1, ceil((boundary - timestamp) * rate)))
+            size = frames * 2
+            self._append(data[:size], rate, timestamp, conversation_id, channel)
+            data = data[size:]
+            timestamp += frames / rate
+            if data:
+                self._queue((channel, rate, conversation_id))
+
+    def _append(self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int) -> None:
         if not data:
             return
         buffered = self.pending_bytes + sum(len(item[0]) for item in self.buffers.values())
-        if buffered + len(data) > MAX_PENDING_SECONDS * rate * 2:
+        if (
+            buffered >= MAX_PENDING_SECONDS * rate * 2
+            or len(data) > (MAX_PENDING_SECONDS if not buffered else 1) * rate * 2
+        ):
             raise RuntimeError('live held audio packet exceeds custody bound')
         if len(data) % 2:
             raise ValueError('held PCM must contain whole PCM16 samples')
@@ -102,10 +128,15 @@ class LiveHeldAudio:
         if key in self.buffers:
             existing, start = self.buffers[key]
             expected = start + len(existing) / (2 * rate)
-            if abs(timestamp - expected) > 0.1:
+            if (
+                abs(timestamp - expected) > 0.1
+                or datetime.fromtimestamp(start, timezone.utc).month
+                != datetime.fromtimestamp(timestamp, timezone.utc).month
+            ):
                 self._queue(key)  # Preserve real clock gaps, never concatenate them.
         if key not in self.buffers:
             self.buffers[key] = [bytearray(), timestamp]
+            self._buffer_opened[key] = time.monotonic()
         buffer, start = self.buffers[key]
         buffer.extend(data)
         while len(buffer) >= rate * 2 * CHUNK_SECONDS:
@@ -120,6 +151,7 @@ class LiveHeldAudio:
 
     def _queue(self, key: tuple[int, int, str | None]) -> None:
         buffer, start = self.buffers.pop(key)
+        self._buffer_opened.pop(key, None)
         if buffer:
             channel, rate, owner = key
             self.pending.append((bytes(buffer), rate, start, owner, channel))
@@ -127,26 +159,22 @@ class LiveHeldAudio:
 
     async def flush(self, *, force: bool = False) -> None:
         # Callers include host-owned updater/receive tasks. Their cancellation
-        # must not release the lock or delete a WAV beneath an executor upload.
+        # must not release the lock or delete a source beneath an executor upload.
         custody = start_background_task(self._flush(force=force), name='stt_cap_live_publish')
         await asyncio.shield(custody)
 
     async def _flush(self, *, force: bool = False) -> None:
         async with self._lock:
-            if force or time.monotonic() - self._last_flush >= CHUNK_SECONDS:
-                for key in list(self.buffers):
+            for key in list(self.buffers):
+                if force or time.monotonic() - self._buffer_opened[key] >= CHUNK_SECONDS:
                     self._queue(key)
             while self.pending:
                 data, rate, start, owner, channel = self.pending[0]
-                # Header + authenticated chunk framing; quota reserves before
-                # any upload. Frozen recovery pieces are bounded by this source.
-                size = len(data) + 44
-                size += 32 * ((size + cap_hold.AUDIO_CHUNK_BYTES - 1) // cap_hold.AUDIO_CHUNK_BYTES)
                 month = datetime.fromtimestamp(start, timezone.utc).strftime('%Y-%m')
                 directory = await run_blocking(storage_executor, cap_hold.recovery_directory, self.host.request.uid)
                 try:
-                    path = str(Path(directory.name) / f'{start:.6f}.wav')
-                    await run_blocking(storage_executor, write_wav, path, data, rate)
+                    path = str(Path(directory.name) / f'{start:.6f}.opus')
+                    await run_blocking(storage_executor, live_cap_codec.encode, path, data, rate)
                     context = getattr(self.host, 'client_device_context', None)
                     metadata = {
                         'origin': 'live',
@@ -157,65 +185,66 @@ class LiveHeldAudio:
                         'recording_session_id': str(self.host.session_id),
                         'client_device_id': getattr(context, 'device_id', None),
                         'channel': channel,
-                        'file_name': Path(path).name,
+                        'file_name': f'{start:.6f}.wav',
                         'full_capture': True,
+                        'audio_codec': 'ogg_opus',
+                        'sample_rate': rate,
+                        'source_frames': len(data) // 2,
+                        'live_custody_version': 4,
                     }
-                    identity, duration, metadata = await run_blocking(
-                        storage_executor, cap_hold.describe, path, metadata
-                    )
+                    # Identity is over capture PCM/context, not an encoder's Ogg
+                    # serial or implementation version. Retries name one object.
+                    import hashlib
+                    import json
+
+                    identity = hashlib.sha256(data + json.dumps(metadata, sort_keys=True).encode()).hexdigest()
+                    duration = len(data) / (rate * 2)
+                    if not self._summary_ready:
+                        await run_blocking(db_executor, cap_hold.ensure_summary, self.host.request.uid)
+                        self._summary_ready = True
+                    retry = identity in self._charged
+                    if not retry:
+                        if self.capacity is not None and self.capacity.month != month:
+                            await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
+                            self.capacity = None
+                        if self.capacity is None or self.capacity.used == live_cap_capacity.BLOCK_GROUPS:
+                            from uuid import uuid4
+
+                            # Keep the acquisition key when its reply is lost.
+                            self.capacity_identity = self.capacity_identity or uuid4().hex
+                            self.capacity = await run_blocking(
+                                db_executor,
+                                live_cap_capacity.acquire,
+                                self.host.request.uid,
+                                month,
+                                self.capacity_identity,
+                            )
+                            self.capacity_identity = None
+                        self.capacity.consume()
+                        self._charged.add(identity)
                     await run_blocking(
-                        db_executor, reserve, self.host.request.uid, size, month=month, reservation_id=identity
-                    )
-                    fields = await run_blocking(
                         storage_executor,
-                        cap_hold.upload_held_audio,
+                        live_cap_manifest.publish,
                         self.host.request.uid,
                         path,
                         identity,
                         metadata,
-                        immutable=True,
+                        duration,
+                        retry=retry,
                     )
-                    group = self.groups.get(channel)
-                    if group and (
-                        group['rate'] != rate
-                        or group['owner'] != owner
-                        or group['month'] != month
-                        or abs(start - group['start'] - group['seconds']) > 0.1
-                        or group['seconds'] + duration > live_cap_manifest.CAPTURE_SECONDS
-                    ):
-                        await self.seal(channel)
-                        group = None
-                    if group is None:
-                        group = live_cap_manifest.new_group(start, channel, rate, owner, month)
-                        self.groups[channel] = group
-                    total = await run_blocking(
-                        db_executor, live_cap_manifest.append, self.host.request.uid, group, fields, duration
-                    )
-                    if total is None:
-                        await self.seal(channel)
-                        group = live_cap_manifest.new_group(start, channel, rate, owner, month)
-                        self.groups[channel] = group
-                        total = await run_blocking(
-                            db_executor, live_cap_manifest.append, self.host.request.uid, group, fields, duration
-                        )
-                    if total is None:
-                        raise RuntimeError('live capture ownership changed')
-                    newly_published = max(0.0, total - group['seconds'])
-                    group['seconds'] = total
-                    # No await between the durable reply and receipt retirement.
-                    # Cancellation during cleanup/sealing cannot replay this part.
-                    self.seconds += newly_published
-                    if newly_published:
-                        cap_hold.record_audio(
-                            'live',
-                            'held',
-                            'unknown',
-                            newly_published,
-                            getattr(getattr(self.host.state, 'stt_cap_admission', None), 'reason', '')
-                            == 'plan_allowance_exhausted',
-                        )
+                    # No await between durable publication and retiring bytes.
+                    self.seconds += duration
                     self.pending.popleft()
                     self.pending_bytes -= len(data)
+                    self._charged.discard(identity)
+                    cap_hold.record_audio(
+                        'live',
+                        'held',
+                        'unknown',
+                        duration,
+                        getattr(getattr(self.host.state, 'stt_cap_admission', None), 'reason', '')
+                        == 'plan_allowance_exhausted',
+                    )
                 finally:
                     try:
                         await run_blocking(storage_executor, directory.cleanup)
@@ -224,24 +253,11 @@ class LiveHeldAudio:
                             'event=stt_cap_live_held outcome=scratch_cleanup_failed exception_type=%s',
                             type(error).__name__,
                         )
-                if group['seconds'] >= live_cap_manifest.CAPTURE_SECONDS:
-                    await self.seal(channel)
-            self._last_flush = time.monotonic()
 
     async def seal(self, channel: int | None = None) -> None:
-        for key in list(self.groups):
-            if channel is not None and key != channel:
-                continue
-            group = self.groups.pop(key, None)
-            if group is None:
-                continue
-            await run_blocking(
-                db_executor,
-                cap_hold.release,
-                self.host.request.uid,
-                cap_hold.holds(self.host.request.uid).document(group['id']),
-                group['token'],
-            )
+        # Source groups are immutable and born sealed in their publication tx.
+        # Preserve the explicit flush barrier used by resume and close callers.
+        await self.flush(force=True)
 
     async def notice(self, *, paused: bool | None = None) -> None:
         if paused is False:
@@ -350,4 +366,7 @@ class LiveHeldAudio:
     async def close(self) -> None:
         await self.flush(force=True)
         await self.seal()
+        if self.capacity is not None:
+            await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
+            self.capacity = None
         await self.notice()

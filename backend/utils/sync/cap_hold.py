@@ -85,7 +85,9 @@ def _exists(uid: str, identity: str) -> bool:
 
 
 def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, immutable: bool = False) -> dict:
-    blob_path = f'chunks/{uid}/cap-held/{identity}.wav.enc'
+    codec = metadata.get('audio_codec')
+    extension = 'opus' if codec == 'ogg_opus' else 'wav'
+    blob_path = f'chunks/{uid}/cap-held/{identity}.{extension}.enc'
     bucket = get_private_cloud_sync_bucket()
     with external_write_fence(uid), owner_storage_write_gate(uid, bucket):
         blob = bucket.blob(blob_path)
@@ -94,12 +96,14 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
             with open(path, 'rb') as source:
                 while chunk := source.read(AUDIO_CHUNK_BYTES):
                     encrypted.write(encrypt_audio_chunk(chunk, uid))
+            encrypted_size = encrypted.tell()
             encrypted.seek(0)
             try:
                 blob.upload_from_file(
                     encrypted,
                     content_type='application/octet-stream',
                     **({'if_generation_match': 0} if immutable else {}),
+                    **({'timeout': 10, 'retry': None, 'size': encrypted_size} if codec == 'ogg_opus' else {}),
                 )
             except PreconditionFailed:
                 if not immutable:
@@ -108,6 +112,10 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
                 # preserve the first authenticated object across upload retries.
         encoded_metadata = encrypt(json.dumps(metadata), uid)
         fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
+        if codec == 'ogg_opus':
+            fields.update(
+                audio_codec=codec, sample_rate=metadata['sample_rate'], source_frames=metadata['source_frames']
+            )
         if len(encoded_metadata.encode()) > 512 * 1024:
             metadata_digest = hashlib.sha256(encoded_metadata.encode()).hexdigest()
             metadata_path = f'chunks/{uid}/cap-held/{identity}.{metadata_digest}.metadata.enc'
@@ -333,7 +341,7 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
     def commit(tx: Any):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() if snapshot.exists else None
-        if not row or row.get('state') in {'completed', 'retained'} or row.get('lease_until', 0) > now:
+        if not row or row.get('state') in {'completed', 'retained', 'purged'} or row.get('lease_until', 0) > now:
             return None
         token = uuid4().hex
         tx.update(ref, {'lease_until': now + 1800, 'lease_token': token})
@@ -372,6 +380,16 @@ def _read_single_audio(uid: str, row: dict[str, Any], path: str) -> None:
 
 
 def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
+    if row.get('source_slice'):
+        return _read_source_slice(uid, row, path)
+    if row.get('audio_codec') == 'ogg_opus':
+        from utils.sync.live_cap_codec import decode
+
+        with TemporaryDirectory(dir=Path(path).parent) as directory:
+            compressed = str(Path(directory) / 'source.opus')
+            _read_single_audio(uid, row, compressed)
+            decode(compressed, path, int(row['sample_rate']), int(row['source_frames']))
+        return
     parts = row.get('audio_parts')
     if not parts:
         return _read_single_audio(uid, row, path)
@@ -396,6 +414,26 @@ def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
     except BaseException:
         Path(path).unlink(missing_ok=True)
         raise
+
+
+def _read_source_slice(uid: str, row: dict[str, Any], path: str) -> None:
+    from utils.sync.live_cap_codec import pcm_description
+
+    cache_name = hashlib.sha256(row['audio_path'].encode()).hexdigest()
+    source = str(Path(path).parent / f'.source-{cache_name}.wav')
+    if not Path(source).exists():
+        read_audio(uid, {key: value for key, value in row.items() if key != 'source_slice'}, source)
+    selection = row['source_slice']
+    with wave.open(source, 'rb') as audio, wave.open(path, 'wb') as output:
+        first, frames = selection['start'], selection['frames']
+        if first < 0 or frames <= 0 or first + frames > audio.getnframes():
+            raise ValueError('held source slice exceeds source')
+        output.setparams(audio.getparams())
+        audio.setpos(first)
+        output.writeframes(audio.readframes(frames))
+    if pcm_description(path)[2] != selection['sha256']:
+        Path(path).unlink(missing_ok=True)
+        raise ValueError('held source decode changed since frozen plan')
 
 
 def metadata(uid: str, row: dict[str, Any]) -> dict[str, Any]:

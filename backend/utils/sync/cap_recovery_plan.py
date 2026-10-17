@@ -55,6 +55,27 @@ async def ensure_plan(
             'source_position_map': source_maps.get(path),
             'lineage_binding': bindings.get(path, meta.get('lineage_binding')),
         }
+        if row.get('live_custody_version') == 4:
+            from utils.encryption import encrypt
+            from utils.sync.live_cap_codec import pcm_description
+
+            position = source_maps.get(path)
+            if not position or not position[0].get('live_source_slice'):
+                raise ValueError('live VAD piece lacks an exact source offset')
+            context['source_position_map'] = None  # Internal offsets are not WAL lineage.
+            frames, rate, digest = await run_blocking(storage_executor, pcm_description, path)
+            encoded_context = await run_blocking(storage_executor, encrypt, json.dumps(context), uid)
+            plan[name] = {
+                'audio_path': row['audio_path'],
+                'audio_codec': row['audio_codec'],
+                'sample_rate': rate,
+                'source_frames': row['source_frames'],
+                'metadata': encoded_context,
+                'seconds': frames / rate,
+                'source_slice': {'start': position[1], 'frames': frames, 'sha256': digest},
+            }
+            local_paths[name], contexts[name] = path, context
+            continue  # Immutable source + frozen offsets/hash; no second upload.
         if meta.get('origin') == 'live':
             from utils.sync.live_cap_hold import reserve
 

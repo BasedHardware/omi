@@ -137,37 +137,30 @@ def main():
             )
         assert cap_hold.summary_ref(uid).get().to_dict()['seconds'] == total['seconds'] - 5.25
         assert not cap_hold.checkpoint(uid, ref, 'stale', {'state': 'completed'})
-        # Growing live captures use the same real transactional summary and
-        # cannot be appended after recovery takes ownership of their lease.
+        # A minute is immutable and born sealed, immediately claimable. Retry
+        # lookup must also respect purged receipts after recovery deletes audio.
+        uploads = []
         with patch.object(live_cap_manifest, 'get_firestore_client', lambda: client), patch.object(
-            live_cap_manifest, 'external_write_fence', lambda uid: nullcontext()
+            live_cap_manifest, 'external_write_fence', lambda uid, **kwargs: nullcontext()
+        ), patch.object(
+            cap_hold, 'upload_held_audio', side_effect=lambda *a, **k: uploads.append(a) or {'audio_path': 'fake'}
         ):
             before = cap_hold.summary_ref(uid).get().to_dict()
-            group = live_cap_manifest.new_group(1000, 0, 16000, 'synthetic-owner', '2026-10')
-            first = {'audio_path': f'chunks/{uid}/cap-held/part-1.wav.enc'}
-            second = {'audio_path': f'chunks/{uid}/cap-held/part-2.wav.enc'}
-            assert live_cap_manifest.append(uid, group, first, 1.0) == 1.0
-            assert live_cap_manifest.append(uid, group, second, 1.5) == 2.5
+            live_cap_manifest.publish(uid, 'unused', 'minute', {'timestamp': 1000}, 60)
             live_total = cap_hold.summary_ref(uid).get().to_dict()
-            assert live_total == {
-                'version': 2,
-                'seconds': before['seconds'] + 2.5,
-                'count': before['count'] + 1,
-            }, live_total
-            assert live_cap_manifest.append(uid, group, second, 1.5) == 2.5
-            assert cap_hold.summary_ref(uid).get().to_dict() == live_total
-            live_ref = cap_hold.holds(uid).document(group['id'])
-            assert cap_hold.claim(uid, live_ref, cap_hold.time.time()) is None
-            cap_hold.release(uid, live_ref, group['token'])
-            claimed = cap_hold.claim(uid, live_ref, cap_hold.time.time())
-            assert claimed and claimed['lease_token'] != group['token']
-            assert (
-                live_cap_manifest.append(uid, group, {'audio_path': f'chunks/{uid}/cap-held/part-3.wav.enc'}, 1.0)
-                is None
-            )
+            assert live_total['seconds'] == before['seconds'] + 60
+            assert live_total['count'] == before['count'] + 1
+            ref = cap_hold.holds(uid).document('minute')
+            assert cap_hold.claim(uid, ref, cap_hold.time.time())
+            live_cap_manifest.publish(uid, 'unused', 'minute', {'timestamp': 1000}, 60, retry=True)
+            ref.set({'state': 'purged', 'live_custody_version': 4})
+            live_cap_manifest.publish(uid, 'unused', 'minute', {'timestamp': 1000}, 60, retry=True)
+            assert len(uploads) == 1
             assert cap_hold.summary_ref(uid).get().to_dict() == live_total
     client.recursive_delete(client.collection('users').document(uid))
-    print('PASS: 805 legacy rows, paged concurrent rebuild/publish, deletion/retry fences, live append/lease handoff')
+    print(
+        'PASS: 805 legacy rows, paged concurrent rebuild/publish, deletion/retry fences, sealed publication/lease handoff and purged retry'
+    )
 
 
 if __name__ == '__main__':
