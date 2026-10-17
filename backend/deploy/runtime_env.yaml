@@ -3014,7 +3014,7 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
-            BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3218,7 +3218,7 @@ environments:
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
@@ -3309,9 +3309,11 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -3336,6 +3338,10 @@ environments:
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+              category: reliability
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -3371,7 +3377,7 @@ environments:
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-            VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -3596,7 +3602,7 @@ environments:
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
@@ -3673,9 +3679,11 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -3683,6 +3691,33 @@ environments:
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
+            SYNC_BACKFILL_ORDER_PERCENT: {value: '0', category: rollout}
+            SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_TASKS_HANDLER_URL:
+              env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_QUEUE:
+              value: sync-backfill
+              category: reliability
+            SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
+            SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_TASKS_QUEUE:
+              value: sync-jobs
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -3710,7 +3745,7 @@ environments:
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-            VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
@@ -3920,7 +3955,7 @@ environments:
             BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
@@ -3988,9 +4023,11 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -4000,6 +4037,33 @@ environments:
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
+            SYNC_BACKFILL_ORDER_PERCENT: {value: '0', category: rollout}
+            SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_TASKS_HANDLER_URL:
+              env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_QUEUE:
+              value: sync-backfill
+              category: reliability
+            SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
+            SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_TASKS_QUEUE:
+              value: sync-backfill
+              category: reliability
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -4181,15 +4245,15 @@ environments:
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
-            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -4222,20 +4286,25 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_QUEUE:
               value: sync-jobs
               category: reliability
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
