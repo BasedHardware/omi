@@ -16,7 +16,7 @@ is decrypted on demand, per request, by the admin context endpoint.
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -138,15 +138,15 @@ class FeedbackEvent(BaseModel):
     to thumbs-up produces a second event rather than erasing the first, because
     the moment the answer disappointed them is the thing worth reviewing."""
 
-    id: str
-    uid: str
+    id: str = Field(min_length=1, max_length=128)
+    uid: str = Field(min_length=1, max_length=256)
     surface: FeedbackSurface
     target_kind: FeedbackTargetKind
-    target_id: str
-    value: int = Field(description='1 = thumbs up, -1 = thumbs down, 0 = rating cleared')
+    target_id: str = Field(min_length=1, max_length=256)
+    value: int = Field(ge=-1, le=1, description='1 = thumbs up, -1 = thumbs down, 0 = rating cleared')
     created_at: datetime
 
-    reason: Optional[FeedbackReason | MobileFeedbackReason] = None
+    reason: Optional[Union[FeedbackReason, MobileFeedbackReason]] = None
     comment: Optional[str] = None
 
     platform: Optional[str] = None
@@ -179,6 +179,24 @@ class FeedbackEvent(BaseModel):
     correlation_id: Optional[str] = None
     related_conversation_id: Optional[str] = None
 
+    @field_validator('id', 'uid', 'target_id')
+    @classmethod
+    def _trim_identifiers(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('feedback identifiers must not be blank')
+        return normalized
+
+    @field_validator('comment', mode='before')
+    @classmethod
+    def _normalize_comment(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError('comment must be a string')
+        normalized = value.strip()
+        return normalized or None
+
 
 class MobileFeedbackRequest(BaseModel):
     """Authenticated, idempotent mobile summary/recording feedback write."""
@@ -209,6 +227,16 @@ class MobileFeedbackRequest(BaseModel):
         if not normalized:
             raise ValueError('feedback identifiers must not be blank')
         return normalized
+
+    @field_validator('comment', mode='before')
+    @classmethod
+    def _normalize_comment(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError('comment must be a string')
+        normalized = value.strip()
+        return normalized or None
 
     @model_validator(mode='after')
     def _validate_reason_surface(self) -> 'MobileFeedbackRequest':
@@ -280,8 +308,8 @@ class FeedbackContextPointer(BaseModel):
     target_kind: FeedbackTargetKind
     target_id: str
     turns: List[FeedbackContextTurn] = []
-    follow_up_count: int = 0
-    follow_up_window_seconds: int = 0
+    follow_up_count: int = Field(default=0, ge=0)
+    follow_up_window_seconds: int = Field(default=0, ge=0)
     truncated_before: bool = False
     """True when the session had more preceding turns than the cap allowed."""
     truncated_after: bool = False
@@ -305,10 +333,10 @@ class FeedbackReport(BaseModel):
 
     date: str = Field(description='UTC calendar date, YYYY-MM-DD')
     generated_at: datetime
-    total_negative: int
-    counts_by_surface: dict[str, int] = {}
-    counts_by_reason: dict[str, int] = {}
-    counts_by_platform: dict[str, int] = {}
+    total_negative: int = Field(ge=0)
+    counts_by_surface: Dict[str, int] = Field(default_factory=dict)
+    counts_by_reason: Dict[str, int] = Field(default_factory=dict)
+    counts_by_platform: Dict[str, int] = Field(default_factory=dict)
     entries: List[FeedbackReportEntry] = []
     truncated: bool = False
     """True when the day held more negative events than this report carries —
