@@ -1828,14 +1828,61 @@ void main() {
       provider.dispose();
     });
 
-    test('pauseDeviceRecording persists the mute to prefs', () async {
+    test('pauseDeviceRecording cannot confirm mute without a device connection', () async {
       final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      await expectLater(provider.pauseDeviceRecording(), throwsStateError);
+
+      expect(provider.isPaused, isFalse);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      provider.dispose();
+    });
+
+    test('pauseDeviceRecording persists local mute after the pendant acknowledges', () async {
+      final written = <bool>[];
+      final provider = CaptureProvider(
+        deviceMuteWriter: (id, muted) async {
+          expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+          written.add(muted);
+        },
+      );
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
 
       await provider.pauseDeviceRecording();
 
+      expect(written, [true]);
       expect(provider.isPaused, isTrue);
       expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      provider.dispose();
+    });
+
+    test('reconnect restores paused UI from device mute state', () async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
+      final provider = CaptureProvider();
+      expect(provider.isPaused, isFalse);
+
+      expect(await provider.applyReconnectMute(deviceMuted: true), isTrue);
+      expect(provider.isPaused, isTrue);
+      expect(SharedPreferencesUtil().deviceMuted, isTrue);
+      provider.dispose();
+    });
+
+    test('reconnect stays paused when device mute is unknown and local mute is set', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
+      final provider = CaptureProvider();
+      expect(await provider.applyReconnectMute(deviceMuted: null), isTrue);
+      expect(provider.isPaused, isTrue);
+      provider.dispose();
+    });
+
+    test('reconnect unpauses when the device reports unmuted', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
+      final provider = CaptureProvider();
+      expect(provider.isPaused, isTrue);
+      expect(await provider.applyReconnectMute(deviceMuted: false), isFalse);
+      expect(provider.isPaused, isFalse);
+      expect(SharedPreferencesUtil().deviceMuted, isFalse);
       provider.dispose();
     });
   });

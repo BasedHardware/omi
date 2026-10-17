@@ -37,6 +37,7 @@ import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_lifetime.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/device_mute_sync.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
@@ -62,6 +63,7 @@ import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
@@ -135,6 +137,8 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  final Future<bool?> Function(String deviceId)? _deviceMuteReader;
+  final Future<void> Function(String deviceId, bool muted)? _deviceMuteWriter;
   int _captureExplanationGeneration = 0;
   int? _deliveredExplanationGeneration;
   int? _announcedNoConversationGeneration;
@@ -352,6 +356,8 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
+    Future<bool?> Function(String deviceId)? deviceMuteReader,
+    Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     ValueListenable<PhoneCallState>? omiCallState,
@@ -384,9 +390,14 @@ class CaptureController extends ChangeNotifier
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
-        _preferences = preferences ?? SharedPreferencesUtil() {
+        _preferences = preferences ?? SharedPreferencesUtil(),
+        _deviceMuteReader = deviceMuteReader,
+        _deviceMuteWriter = deviceMuteWriter {
     if (mobileStandardBatch != null) installMobileStandardBatch(mobileStandardBatch);
     _isConnected = _connectivity.initiallyConnected;
+    // Local mute lives in capturePolicy (isPaused). On reconnect,
+    // streamDeviceRecording() reads the pendant over BLE (device wins) and
+    // falls back to this policy for firmware without the mute characteristic.
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
     final ingress = _ingressPort;
@@ -4312,6 +4323,54 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<DeviceMuteResolved> _resolveDeviceMute() async =>
+      DeviceMuteResolved(await applyReconnectMute(deviceMuted: await _readDeviceMute()));
+
+  Future<bool?> _readDeviceMute() async {
+    final device = _recordingDevice;
+    if (device == null) return null;
+    try {
+      if (_deviceMuteReader != null) {
+        return await _deviceMuteReader!(device.id);
+      }
+      final connection = await _ensureDeviceConnection(device.id);
+      if (connection is OmiDeviceConnection) {
+        return await connection.getCaptureMuted();
+      }
+    } catch (e) {
+      Logger.debug('Failed to read device mute: $e');
+    }
+    return null;
+  }
+
+  Future<void> _writeDeviceMute(bool muted) async {
+    final device = _recordingDevice;
+    if (device == null) return;
+    if (_deviceMuteWriter != null) {
+      await _deviceMuteWriter!(device.id, muted);
+      return;
+    }
+    final connection = await _ensureDeviceConnection(device.id);
+    if (connection == null) throw StateError('Capture connection unavailable');
+    if (connection is OmiDeviceConnection) {
+      await connection.setCaptureMuted(muted);
+    }
+  }
+
+  /// Apply the device-reported mute (or local fallback) as the reconnect
+  /// pause bit. Device state wins when present (issue #5054).
+  @visibleForTesting
+  Future<bool> applyReconnectMute({required bool? deviceMuted}) async {
+    final paused = DeviceMuteSync.resolveReconnectPaused(
+      deviceMuted: deviceMuted,
+      localMuted: isPaused,
+    );
+    if (paused != isPaused) {
+      await _setCaptureMuted(paused);
+    }
+    return isPaused;
+  }
+
   /// Pause whichever source is live. The live page, the Home capture card and the quick actions
   /// all call this, so the rule for what a pause does lives in one place.
   Future<void> pauseCapture() async {
@@ -4440,12 +4499,14 @@ class CaptureController extends ChangeNotifier
       ? Future<Object?>.value(null)
       : switch (stage) {
           UpdateRecordingDeviceStage() => Future.sync(() => _updateRecordingDeviceBody(stage.device)),
+          ResolveDeviceMuteStage() => _resolveDeviceMute(),
           StartDeviceSessionStage() => _startDeviceSessionBody(
               deviceRequested: stage.deviceRequested,
               promptLocation: stage.promptLocation,
             ),
           StopDeviceSessionStage() => _stopDeviceSessionBody(cleanDevice: stage.cleanDevice),
           SilencePauseMarkerStage() => _preferences.saveBool(_silencePausedKey, stage.paused),
+          PersistDeviceMuteStage() => _writeDeviceMute(stage.muted),
           PauseDeviceTailStage() => _pauseDeviceTailBody(),
           ResumeDeviceTailStage() => _resumeDeviceTailBody(),
           SuspendPendantStage() => _suspendPendantBody(reason: stage.reason, wasPaused: stage.wasPaused),

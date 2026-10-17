@@ -52,6 +52,7 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
     [
       const PolicyWrite(false),
       MintRecording(sessionKey: key, telemetrySource: 'pendant_live'),
+      const RunStage(ResolveDeviceMuteStage()),
       const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)),
     ],
   );
@@ -59,7 +60,7 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
 
 CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
   if (env.silencePaused) {
-    return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
+    return _reducePause(state, env);
   }
   if (state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.phoneBatchLive) {
     return _reducePause(state, env);
@@ -72,6 +73,7 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
   };
   if (nextPhase != state.phase) {
     return CaptureTransition(state.copyWith(phase: nextPhase), const [
+      RunStage(PersistDeviceMuteStage(true)),
       PolicyWrite(true),
       RunStage(PauseDeviceTailStage()),
     ]);
@@ -82,7 +84,11 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
     return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)), const []);
   }
   if (state.phase == CapturePhase.idle && !state.callActive) {
-    return CaptureTransition(state, const [PolicyWrite(true), RunStage(PauseDeviceTailStage())]);
+    return CaptureTransition(state, [
+      if (state.connectedDevice != null) const RunStage(PersistDeviceMuteStage(true)),
+      const PolicyWrite(true),
+      const RunStage(PauseDeviceTailStage()),
+    ]);
   }
   return CaptureTransition(state, const []);
 }
