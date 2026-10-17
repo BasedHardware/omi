@@ -136,8 +136,9 @@ bindings and all retained prices for webhook recognition and renewal. Turn off
 budget, Pro, daily-cap and identity switches independently to restore the legacy
 admission paths. Restore alias acceptance immediately if a decoder/stored-row
 regression appears. Never rewrite legacy subscription prices, usage history or
-captured content. Existing reset recovery has its own default-off switch and
-requires its documented runbook; this PR does not enable it.
+captured content. The existing default-off reset-recovery switch can unlock
+already-processed locked content under its runbook. It never grants consent to
+process held audio or deferred transcripts; this PR does not enable it.
 
 
 ## Efficiency admission gate (David, 2026-10-14 later ruling)
