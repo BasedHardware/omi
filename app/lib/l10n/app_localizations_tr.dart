@@ -4381,6 +4381,16 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan planınız $date tarihinde sona erer.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Avantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Planınız $date tarihinde iptal edilecek şekilde ayarlandı.\nAvantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
   }
@@ -4388,6 +4398,11 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Aylık planınız sona erdiğinde yıllık planınız otomatik olarak başlayacak.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan planınız $date tarihinde yenilenecek.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4420,6 +4435,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get continueText => 'Devam Et';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Plan değiştirmek için önce yeniden abone olun.';
 
   @override
   String get resubscribe => 'Yeniden Abone Ol';
@@ -5032,9 +5050,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get content => 'İçerik';
-
-  @override
-  String get noContentToDisplay => 'Gösterilecek içerik yok';
 
   @override
   String get noSummary => 'Özet yok';
@@ -9820,9 +9835,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
 
   @override
-  String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
 
@@ -13491,4 +13503,287 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Yeni';
+
+  @override
+  String get activityNeedsAttention => 'İlgi gerekiyor';
+
+  @override
+  String get activityRetryAll => 'Tümünü yeniden dene';
+
+  @override
+  String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
+
+  @override
+  String get connectAgentHeadline => 'Omi hafızanı ChatGPT\'de ve yapay zeka ajanlarında kullan';
+
+  @override
+  String get connectAgentIntro => 'Bir kez bağlan. Ardından onlara konuşmalarını, anılarını ve görevlerini sor.';
+
+  @override
+  String get connectAgentOneTap => 'Tek Dokunuşla';
+
+  @override
+  String get connectAgentComputerAgents => 'Kendi Bilgisayarı Olan Ajanlar';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Tek bir istem kopyala. Omi yalnızca o ajan için bir anahtar oluşturur ve güvenle gönderir.';
+
+  @override
+  String get connectAgentOtherAgent => 'Diğer Ajan';
+
+  @override
+  String get connectAgentKeyActive => 'Anahtar etkin';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Son kullanım: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Geliştiriciler için MCP ve API anahtarları';
+
+  @override
+  String get connectAgentLoadFailed => 'Bağlantıların yüklenemedi.';
+
+  @override
+  String get connectAgentActionFailed => 'Bir sorun oluştu. Tekrar dene.';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPT\'yi Bağla';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Yaklaşık 30 saniye sürer. ChatGPT içinde onaylarsın; telefonunda ve bilgisayarında çalışır.';
+
+  @override
+  String get connectChatGptStepOpen => 'Omi\'yi ChatGPT\'de açıyoruz';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT doğrudan Omi uygulama sayfasında açılır.';
+
+  @override
+  String get connectChatGptStepApprove => '\"Bağlan\" düğmesine dokun, ardından Omi\'de oturum aç';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Burada kullandığın hesabın aynısını kullan.';
+
+  @override
+  String get connectChatGptStepReturn => 'Omi\'ye geri dön';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Bağlantıyı otomatik olarak kontrol ederiz.';
+
+  @override
+  String get openChatGpt => 'ChatGPT\'yi Aç';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Telefonda ve bilgisayarda bağlı';
+
+  @override
+  String get tryAskingChatGpt => 'ChatGPT\'ye Sormayı Dene';
+
+  @override
+  String get tryAskingChatGptFooter => 'Birine dokun, ChatGPT soru yazılı halde açılsın.';
+
+  @override
+  String get chatGptExampleMeetings => 'Dünkü toplantılarda neyi kabul ettim?';
+
+  @override
+  String get chatGptExampleTasks => 'Açık Omi görevlerimi bu haftanın planına dönüştür.';
+
+  @override
+  String get chatGptExampleGoals => 'Omi hedeflerim hakkında ne biliyor?';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPT Bağlantısını Kes';
+
+  @override
+  String get disconnectChatGptQuestion => 'ChatGPT bağlantısı kesilsin mi?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT artık Omi anılarını, konuşmalarını veya görevlerini okuyamayacak.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$name Bağla';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Tek bir istem yapıştır. $name, Omi\'yi kendi bilgisayarında kurar.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Tek bir istem yapıştır. Ajanın, Omi\'yi kendi bilgisayarında kurar.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '“$name” anahtarı oluşturuldu';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'İstemde anahtarın kendisi değil, tek kullanımlık bir bağlantı var. Yalnızca bir kez açılır ve 1 saat içinde sona erer. Anahtarı istediğin zaman buradan iptal edebilirsin.';
+
+  @override
+  String get connectAgentPreparing => 'Anahtar ve güvenli bağlantı oluşturuluyor…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Anahtar oluşturulamadı. Bağlantını kontrol et ve tekrar dene.';
+
+  @override
+  String get copyPrompt => 'İstemi Kopyala';
+
+  @override
+  String get connectAgentNewLink => 'Bağlantının Süresi mi Doldu? Yenisini Oluştur';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name Bağlı';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name bir Omi anahtarına sahip. Erişimi kesmek için anahtarı iptal et. İstediğin zaman yeniden bağlanabilirsin.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '$name Anahtarı İptal Edilsin mi?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name, Omi hafızana erişimini hemen kaybeder.';
+  }
+
+  @override
+  String get askAboutConversation => 'Bu Konuşma Hakkında Sor';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'ChatGPT\'yi sorun hazır halde açar. Konuşmayı Omi üzerinden bulur, böylece dökümü yapıştırman gerekmez.';
+
+  @override
+  String get askYourQuestion => 'Sorun';
+
+  @override
+  String get askSuggestFollowUp => 'Bu konuşmadan bir takip e-postası taslağı hazırla.';
+
+  @override
+  String get askSuggestCommitments => 'Bu konuşmada neye söz verdim?';
+
+  @override
+  String get askSuggestDoc => 'Bu konuşmayı kısa bir belgeye dönüştür.';
+
+  @override
+  String get askInChatGpt => 'ChatGPT\'ye Sor';
+
+  @override
+  String get copyForAnyApp => 'Herhangi Bir Uygulama İçin Kopyala';
+
+  @override
+  String get askConnectChatGptFirst => 'Konuşmaların hakkında sormak için ChatGPT\'yi bir kez bağla.';
+
+  @override
+  String get reconnect => 'Yeniden bağlan';
+
+  @override
+  String get chatGptNeedsReconnect => 'Daha fazla erişim gerekiyor. Düzeltmek için yeniden bağlan.';
+
+  @override
+  String get connectAgentWaiting => 'Ajanın anahtarını kullanması bekleniyor';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name Henüz Bağlanmadı';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Henüz özetlenmedi';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi bu konuşmayı genel bakış, önemli noktalar ve yapılacaklara dönüştürebilir.';
+
+  @override
+  String get summaryWithOmi => 'Omi ile özetle';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name ile özetle';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Başka şablon kullan';
+
+  @override
+  String get summaryFromTheTranscript => 'Transkriptten';
+
+  @override
+  String get summaryReadFullTranscript => 'Tüm transkripti oku';
+
+  @override
+  String get summarySheetTitle => 'Şununla özetle';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Genel bakış, önemli noktalar ve yapılacaklar';
+
+  @override
+  String get summaryYourTemplates => 'Şablonlarınız';
+
+  @override
+  String get summarySuggestedTemplates => 'Bu konuşma için önerilenler';
+
+  @override
+  String get summaryBrowseTemplates => 'Şablonlara göz at';
+
+  @override
+  String get summaryCreateYourOwn => 'Kendin oluştur';
+
+  @override
+  String get summaryUseForNewConversations => 'Bunu varsayılanım yap';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Şablonlarınız yüklenemedi. Omi çalışmaya devam ediyor.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Henüz hiç şablon eklemediniz. Birkaçına göz atın veya kendinizinkini oluşturun.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name ile özetleniyor…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name tamamlanamadı';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Şablon bu konuşma için bir özet döndürmedi.';
+
+  @override
+  String get summaryWithOmiInstead => 'Bunun yerine Omi ile özetle';
+
+  @override
+  String get summaryBusyTitle => 'Hâlâ işleniyor';
+
+  @override
+  String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
+
+  @override
+  String get summaryCheckAgain => 'Tekrar kontrol et';
+
+  @override
+  String get summaryLimitTitle => 'Özet sınırına ulaşıldı';
+
+  @override
+  String get summaryLimitBody => 'Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.';
+
+  @override
+  String get summaryFailedTitle => 'Özetlenemedi';
+
+  @override
+  String get summaryFailedBody => 'Bu konuşma özetlenirken bir sorun oluştu.';
 }

@@ -5,7 +5,7 @@ from threading import Lock
 from typing import Any
 
 from prometheus_client import REGISTRY, Counter
-from prometheus_client.core import HistogramMetricFamily, Metric
+from prometheus_client.core import CounterMetricFamily, Metric
 from prometheus_client.registry import Collector
 
 from config.fleet_telemetry import REASONS, registry
@@ -40,20 +40,31 @@ class FleetHistograms(Collector):
     def collect(self) -> Iterable[Metric]:
         with self._lock:
             snapshot = {key: list(value) for key, value in self._counts.items()}
-        families: dict[str, HistogramMetricFamily] = {}
+        families: dict[str, tuple[CounterMetricFamily, CounterMetricFamily]] = {}
         for (name, platform, channel), counts in snapshot.items():
-            family = families.setdefault(
+            buckets, total = families.setdefault(
                 name,
-                HistogramMetricFamily(
-                    'omi_client_' + name,
-                    'Client cumulative bucket deltas; sum unavailable.',
-                    labels=['platform', 'build_channel'],
+                (
+                    CounterMetricFamily(
+                        'omi_client_' + name + '_bucket',
+                        'Client cumulative bucket deltas; exact sum unavailable.',
+                        labels=['platform', 'build_channel', 'le'],
+                    ),
+                    CounterMetricFamily(
+                        'omi_client_' + name + '_count',
+                        'Client histogram observation deltas.',
+                        labels=['platform', 'build_channel'],
+                    ),
                 ),
             )
+            # GMP drops histogram families without a sum. These are independent
+            # counters because bucket deltas cannot recover the measured sum.
             edges = registry()['histograms'][name]['buckets']
-            family.add_metric([platform, channel], [(str(edge), count) for edge, count in zip(edges, counts)], None)
-            family.add_sample(family.name + '_count', {'platform': platform, 'build_channel': channel}, counts[-1])
-        yield from families.values()
+            for edge, count in zip(edges, counts):
+                buckets.add_metric([platform, channel, str(edge)], count)
+            total.add_metric([platform, channel], counts[-1])
+        for pair in families.values():
+            yield from pair
 
 
 HISTOGRAMS = FleetHistograms()

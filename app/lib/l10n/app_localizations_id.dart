@@ -4378,6 +4378,16 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Paket $plan Anda berakhir pada $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Berlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Paket Anda diatur untuk dibatalkan pada $date.\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga $date.';
   }
@@ -4385,6 +4395,11 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Paket tahunan Anda akan dimulai secara otomatis saat paket bulanan Anda berakhir.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Paket $plan Anda akan diperpanjang pada $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4417,6 +4432,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get continueText => 'Lanjutkan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Berlangganan lagi dulu untuk mengubah paket.';
 
   @override
   String get resubscribe => 'Berlangganan lagi';
@@ -5030,9 +5048,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get content => 'Konten';
-
-  @override
-  String get noContentToDisplay => 'Tidak ada konten untuk ditampilkan';
 
   @override
   String get noSummary => 'Tidak ada ringkasan';
@@ -9814,9 +9829,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.';
 
   @override
-  String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.';
 
@@ -13488,4 +13500,292 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baru';
+
+  @override
+  String get activityNeedsAttention => 'Perlu perhatian';
+
+  @override
+  String get activityRetryAll => 'Coba lagi semua';
+
+  @override
+  String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
+
+  @override
+  String get connectAgentHeadline => 'Gunakan memori Omi Anda di ChatGPT dan agen AI Anda';
+
+  @override
+  String get connectAgentIntro =>
+      'Hubungkan sekali. Lalu tanyakan kepada mereka tentang percakapan, kenangan, dan tugas Anda.';
+
+  @override
+  String get connectAgentOneTap => 'Sekali Ketuk';
+
+  @override
+  String get connectAgentComputerAgents => 'Agen dengan Komputer Sendiri';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Salin satu prompt. Omi membuat kunci khusus untuk agen itu dan mengirimkannya dengan aman.';
+
+  @override
+  String get connectAgentOtherAgent => 'Agen Lain';
+
+  @override
+  String get connectAgentKeyActive => 'Kunci aktif';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Terakhir digunakan $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Kunci MCP dan API untuk developer';
+
+  @override
+  String get connectAgentLoadFailed => 'Tidak dapat memuat koneksi Anda.';
+
+  @override
+  String get connectAgentActionFailed => 'Terjadi kesalahan. Coba lagi.';
+
+  @override
+  String get connectChatGptTitle => 'Hubungkan ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Hanya sekitar 30 detik. Anda menyetujuinya di dalam ChatGPT, dan langsung berfungsi di ponsel serta komputer Anda.';
+
+  @override
+  String get connectChatGptStepOpen => 'Kami membuka Omi di ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT langsung terbuka di halaman aplikasi Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Ketuk \"Hubungkan\", lalu masuk ke Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Gunakan akun yang sama dengan yang Anda gunakan di sini.';
+
+  @override
+  String get connectChatGptStepReturn => 'Kembali ke Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Kami memeriksa koneksi secara otomatis.';
+
+  @override
+  String get openChatGpt => 'Buka ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Terhubung di ponsel dan komputer';
+
+  @override
+  String get tryAskingChatGpt => 'Coba Tanyakan ke ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Ketuk salah satu untuk membuka ChatGPT dengan pertanyaan yang sudah terisi.';
+
+  @override
+  String get chatGptExampleMeetings => 'Apa saja yang saya sepakati di rapat kemarin?';
+
+  @override
+  String get chatGptExampleTasks => 'Ubah tugas Omi saya yang belum selesai menjadi rencana untuk minggu ini.';
+
+  @override
+  String get chatGptExampleGoals => 'Apa yang Omi ketahui tentang tujuan saya?';
+
+  @override
+  String get disconnectChatGpt => 'Putuskan ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Putuskan ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT tidak akan bisa lagi membaca kenangan, percakapan, atau tugas Omi Anda.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Hubungkan $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Tempel satu prompt. $name menyiapkan Omi di komputernya sendiri.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Tempel satu prompt. Agen Anda menyiapkan Omi di komputernya sendiri.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Kunci “$name” dibuat';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Prompt berisi tautan sekali pakai, bukan kuncinya. Tautan hanya bisa dibuka sekali dan kedaluwarsa dalam 1 jam. Cabut kunci di sini kapan saja.';
+
+  @override
+  String get connectAgentPreparing => 'Membuat kunci dan tautan aman…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Tidak dapat membuat kunci. Periksa koneksi Anda dan coba lagi.';
+
+  @override
+  String get copyPrompt => 'Salin Prompt';
+
+  @override
+  String get connectAgentNewLink => 'Tautan Kedaluwarsa? Buat yang Baru';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name Terhubung';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name memegang kunci Omi. Cabut kunci untuk memutus akses. Anda bisa menghubungkan lagi kapan saja.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Cabut Kunci $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name langsung kehilangan akses ke memori Omi Anda.';
+  }
+
+  @override
+  String get askAboutConversation => 'Tanyakan Percakapan Ini';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Membuka ChatGPT dengan pertanyaan Anda yang sudah siap. ChatGPT mencari percakapan melalui Omi, jadi Anda tidak perlu menempelkan transkrip.';
+
+  @override
+  String get askYourQuestion => 'Pertanyaan Anda';
+
+  @override
+  String get askSuggestFollowUp => 'Buat draf email tindak lanjut dari percakapan ini.';
+
+  @override
+  String get askSuggestCommitments => 'Apa yang saya janjikan dalam percakapan ini?';
+
+  @override
+  String get askSuggestDoc => 'Ubah percakapan ini menjadi dokumen singkat.';
+
+  @override
+  String get askInChatGpt => 'Tanya ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Salin untuk Aplikasi Apa Pun';
+
+  @override
+  String get askConnectChatGptFirst => 'Hubungkan ChatGPT sekali untuk bertanya tentang percakapan Anda.';
+
+  @override
+  String get reconnect => 'Hubungkan ulang';
+
+  @override
+  String get chatGptNeedsReconnect => 'Perlu akses tambahan. Hubungkan ulang untuk memperbaiki.';
+
+  @override
+  String get connectAgentWaiting => 'Menunggu agen menggunakan kuncinya';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name Belum Terhubung';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Belum diringkas';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi dapat mengubah percakapan ini menjadi ringkasan umum, poin penting, dan tindakan.';
+
+  @override
+  String get summaryWithOmi => 'Ringkas dengan Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Ringkas dengan $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Gunakan template lain';
+
+  @override
+  String get summaryFromTheTranscript => 'Dari transkrip';
+
+  @override
+  String get summaryReadFullTranscript => 'Baca transkrip lengkap';
+
+  @override
+  String get summarySheetTitle => 'Ringkas dengan';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Ringkasan umum, poin penting, dan tindakan';
+
+  @override
+  String get summaryYourTemplates => 'Template Anda';
+
+  @override
+  String get summarySuggestedTemplates => 'Disarankan untuk percakapan ini';
+
+  @override
+  String get summaryBrowseTemplates => 'Jelajahi template';
+
+  @override
+  String get summaryCreateYourOwn => 'Buat sendiri';
+
+  @override
+  String get summaryUseForNewConversations => 'Jadikan default saya';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Tidak dapat memuat template Anda. Omi tetap berfungsi.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Anda belum menambahkan template. Jelajahi beberapa atau buat sendiri.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Meringkas dengan $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name tidak dapat menyelesaikan';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Template tidak menghasilkan ringkasan untuk percakapan ini.';
+
+  @override
+  String get summaryWithOmiInstead => 'Ringkas dengan Omi saja';
+
+  @override
+  String get summaryBusyTitle => 'Masih diproses';
+
+  @override
+  String get summaryBusyBody => 'Omi sedang memproses percakapan ini. Ringkasan akan muncul di sini setelah selesai.';
+
+  @override
+  String get summaryCheckAgain => 'Periksa lagi';
+
+  @override
+  String get summaryLimitTitle => 'Batas ringkasan tercapai';
+
+  @override
+  String get summaryLimitBody =>
+      'Anda telah membuat ulang beberapa ringkasan dalam satu jam terakhir. Coba lagi nanti.';
+
+  @override
+  String get summaryFailedTitle => 'Tidak dapat meringkas';
+
+  @override
+  String get summaryFailedBody => 'Terjadi kesalahan saat meringkas percakapan ini.';
 }

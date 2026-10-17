@@ -1,8 +1,44 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { NoteSections } from '../NoteSections';
 
 describe('NoteSections', () => {
+  it('opens only deduplicated typed sources resolving in this transcript', () => {
+    const onOpenSource = vi.fn();
+    const { rerender } = render(
+      <NoteSections
+        transcriptIDs={['s1', 's2']}
+        onOpenSource={onOpenSource}
+        sections={[
+          {
+            heading: 'Decision',
+            body_markdown: 'Approved. [s2]',
+            source_segment_ids: ['missing', 's1', 's1'],
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View transcript source 1 of 1' }),
+    );
+    expect(onOpenSource).toHaveBeenCalledWith('s1');
+    rerender(
+      <NoteSections
+        transcriptIDs={['s1', 's2']}
+        onOpenSource={onOpenSource}
+        sections={[
+          {
+            heading: 'Legacy',
+            body_markdown: 'Approved. [s2] []',
+            source_segment_ids: [],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Approved.')).toBeInTheDocument();
+  });
+
   it('renders real markdown elements for section bodies', () => {
     render(
       <NoteSections
@@ -65,5 +101,32 @@ describe('NoteSections', () => {
 
     const empty = render(<NoteSections sections={[]} />);
     expect(empty.container.querySelectorAll('section')).toHaveLength(0);
+  });
+  it('repairs legacy citations in the rendered note while preserving code and ordinary links', () => {
+    const section = {
+      heading: 'Decision [] [s01234]',
+      body_markdown:
+        'Approved. [s01234 0] []\n\n`[s01234] []` and [RFC-123](https://example.com).',
+      source_segment_ids: ['s01234'],
+    };
+    const { container } = render(<NoteSections sections={[section]} />);
+    expect(screen.getByRole('heading', { name: 'Decision' })).toBeInTheDocument();
+    expect(screen.getByText('Approved.')).toBeInTheDocument();
+    expect(container.querySelector('code')?.textContent).toBe('[s01234] []');
+    expect(screen.getByRole('link', { name: 'RFC-123' })).toHaveAttribute(
+      'href',
+      'https://example.com',
+    );
+    expect(section.heading).toBe('Decision [] [s01234]');
+  });
+  it('uses transcript identities to repair legacy headers even without typed section provenance', () => {
+    render(
+      <NoteSections
+        sections={[{ heading: 'Decision', body_markdown: 'Approved. [s01234 0]' }]}
+        transcriptIDs={['s01234']}
+      />,
+    );
+    expect(screen.getByText('Approved.')).toBeInTheDocument();
+    expect(screen.queryByText(/s01234/)).toBeNull();
   });
 });

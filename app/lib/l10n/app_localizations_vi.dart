@@ -4383,12 +4383,27 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Gói $plan của bạn kết thúc vào $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Đăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Gói của bạn được đặt để hủy vào $date.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Gói năm của bạn sẽ tự động bắt đầu khi gói tháng kết thúc.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Gói $plan của bạn sẽ gia hạn vào $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4421,6 +4436,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get continueText => 'Tiếp tục';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
 
   @override
   String get resubscribe => 'Đăng ký lại';
@@ -5034,9 +5052,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get content => 'Nội dung';
-
-  @override
-  String get noContentToDisplay => 'Không có nội dung để hiển thị';
 
   @override
   String get noSummary => 'Không có tóm tắt';
@@ -9808,9 +9823,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
 
   @override
-  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 
@@ -13476,4 +13488,291 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Mới';
+
+  @override
+  String get activityNeedsAttention => 'Cần chú ý';
+
+  @override
+  String get activityRetryAll => 'Thử lại tất cả';
+
+  @override
+  String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
+
+  @override
+  String get connectAgentHeadline => 'Dùng bộ nhớ Omi của bạn trong ChatGPT và các tác tử AI';
+
+  @override
+  String get connectAgentIntro =>
+      'Kết nối một lần. Sau đó hỏi chúng về các cuộc trò chuyện, kỷ niệm và nhiệm vụ của bạn.';
+
+  @override
+  String get connectAgentOneTap => 'Một chạm';
+
+  @override
+  String get connectAgentComputerAgents => 'Tác tử có máy tính riêng';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Sao chép một câu lệnh. Omi tạo khóa riêng cho tác tử đó và gửi đi một cách an toàn.';
+
+  @override
+  String get connectAgentOtherAgent => 'Tác tử khác';
+
+  @override
+  String get connectAgentKeyActive => 'Khóa đang hoạt động';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Dùng lần cuối $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Khóa MCP và API cho nhà phát triển';
+
+  @override
+  String get connectAgentLoadFailed => 'Không thể tải các kết nối của bạn.';
+
+  @override
+  String get connectAgentActionFailed => 'Đã xảy ra lỗi. Hãy thử lại.';
+
+  @override
+  String get connectChatGptTitle => 'Kết nối ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Chỉ mất khoảng 30 giây. Bạn chấp thuận ngay trong ChatGPT, và tính năng hoạt động trên cả điện thoại lẫn máy tính.';
+
+  @override
+  String get connectChatGptStepOpen => 'Chúng tôi mở Omi trong ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT mở thẳng đến trang ứng dụng Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Nhấn \"Kết nối\", sau đó đăng nhập vào Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Dùng cùng tài khoản bạn đang dùng ở đây.';
+
+  @override
+  String get connectChatGptStepReturn => 'Quay lại Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Chúng tôi tự động kiểm tra kết nối.';
+
+  @override
+  String get openChatGpt => 'Mở ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Đã kết nối trên điện thoại và máy tính';
+
+  @override
+  String get tryAskingChatGpt => 'Thử hỏi ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Nhấn vào một câu để mở ChatGPT với câu hỏi đã điền sẵn.';
+
+  @override
+  String get chatGptExampleMeetings => 'Tôi đã đồng ý những gì trong các cuộc họp hôm qua?';
+
+  @override
+  String get chatGptExampleTasks => 'Biến các nhiệm vụ Omi còn mở của tôi thành kế hoạch cho tuần này.';
+
+  @override
+  String get chatGptExampleGoals => 'Omi biết gì về các mục tiêu của tôi?';
+
+  @override
+  String get disconnectChatGpt => 'Ngắt kết nối ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Ngắt kết nối ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT sẽ không thể đọc kỷ niệm, cuộc trò chuyện hay nhiệm vụ Omi của bạn nữa.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Kết nối $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Dán một câu lệnh. $name sẽ tự thiết lập Omi trên máy tính của nó.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Dán một câu lệnh. Tác tử của bạn sẽ tự thiết lập Omi trên máy tính của nó.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Đã tạo khóa “$name”';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Câu lệnh chứa một liên kết dùng một lần, không phải chính khóa. Liên kết chỉ mở được một lần và hết hạn sau 1 giờ. Bạn có thể thu hồi khóa tại đây bất cứ lúc nào.';
+
+  @override
+  String get connectAgentPreparing => 'Đang tạo khóa và liên kết bảo mật…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Không thể tạo khóa. Hãy kiểm tra kết nối và thử lại.';
+
+  @override
+  String get copyPrompt => 'Sao chép câu lệnh';
+
+  @override
+  String get connectAgentNewLink => 'Liên kết hết hạn? Tạo liên kết mới';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name đã kết nối';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name đang giữ một khóa Omi. Thu hồi khóa để chặn quyền truy cập. Bạn có thể kết nối lại bất cứ lúc nào.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Thu hồi khóa của $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name sẽ mất quyền truy cập bộ nhớ Omi của bạn ngay lập tức.';
+  }
+
+  @override
+  String get askAboutConversation => 'Hỏi về cuộc trò chuyện này';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Mở ChatGPT với câu hỏi đã sẵn sàng. ChatGPT tra cứu cuộc trò chuyện qua Omi, nên bạn không cần dán bản ghi.';
+
+  @override
+  String get askYourQuestion => 'Câu hỏi của bạn';
+
+  @override
+  String get askSuggestFollowUp => 'Soạn nháp một email tiếp nối từ cuộc trò chuyện này.';
+
+  @override
+  String get askSuggestCommitments => 'Tôi đã cam kết những gì trong cuộc trò chuyện này?';
+
+  @override
+  String get askSuggestDoc => 'Biến cuộc trò chuyện này thành một tài liệu ngắn.';
+
+  @override
+  String get askInChatGpt => 'Hỏi ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Sao chép cho mọi ứng dụng';
+
+  @override
+  String get askConnectChatGptFirst => 'Kết nối ChatGPT một lần để hỏi về các cuộc trò chuyện của bạn.';
+
+  @override
+  String get reconnect => 'Kết nối lại';
+
+  @override
+  String get chatGptNeedsReconnect => 'Cần thêm quyền truy cập. Kết nối lại để khắc phục.';
+
+  @override
+  String get connectAgentWaiting => 'Đang chờ tác nhân sử dụng khóa của nó';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name chưa kết nối';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Chưa được tóm tắt';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi có thể biến cuộc trò chuyện này thành phần tổng quan, các ý chính và việc cần làm.';
+
+  @override
+  String get summaryWithOmi => 'Tóm tắt bằng Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Tóm tắt bằng $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Dùng mẫu khác';
+
+  @override
+  String get summaryFromTheTranscript => 'Trích từ bản ghi lời';
+
+  @override
+  String get summaryReadFullTranscript => 'Đọc toàn bộ bản ghi lời';
+
+  @override
+  String get summarySheetTitle => 'Tóm tắt bằng';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Tổng quan, ý chính và việc cần làm';
+
+  @override
+  String get summaryYourTemplates => 'Mẫu của bạn';
+
+  @override
+  String get summarySuggestedTemplates => 'Gợi ý cho cuộc trò chuyện này';
+
+  @override
+  String get summaryBrowseTemplates => 'Duyệt mẫu';
+
+  @override
+  String get summaryCreateYourOwn => 'Tự tạo mẫu';
+
+  @override
+  String get summaryUseForNewConversations => 'Đặt làm mặc định của tôi';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Không thể tải mẫu của bạn. Omi vẫn hoạt động.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Bạn chưa thêm mẫu nào. Hãy duyệt vài mẫu hoặc tự tạo mẫu riêng.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Đang tóm tắt bằng $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name không thể hoàn tất';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Mẫu không trả về bản tóm tắt cho cuộc trò chuyện này.';
+
+  @override
+  String get summaryWithOmiInstead => 'Chuyển sang tóm tắt bằng Omi';
+
+  @override
+  String get summaryBusyTitle => 'Vẫn đang xử lý';
+
+  @override
+  String get summaryBusyBody => 'Omi đang xử lý cuộc trò chuyện này. Bản tóm tắt sẽ xuất hiện ở đây khi hoàn tất.';
+
+  @override
+  String get summaryCheckAgain => 'Kiểm tra lại';
+
+  @override
+  String get summaryLimitTitle => 'Đã đạt giới hạn tóm tắt';
+
+  @override
+  String get summaryLimitBody => 'Bạn đã tạo lại nhiều bản tóm tắt trong giờ qua. Hãy thử lại sau.';
+
+  @override
+  String get summaryFailedTitle => 'Không thể tóm tắt';
+
+  @override
+  String get summaryFailedBody => 'Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.';
 }

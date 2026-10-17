@@ -26,7 +26,7 @@ from utils.conversations.finalizer import (
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, sync_executor, run_blocking
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
@@ -106,14 +106,33 @@ async def run_listen_finalization_job(
     task_retry_count: int = Depends(verify_listen_finalization_cloud_tasks_oidc),
 ):
     try:
-        parsed = _parse_task_payload(await request.json())
+        payload = await request.json()
     except Exception:
-        parsed = None
+        payload = None
+    if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        # The same OIDC identity owns both durable queues. This preserves the
+        # existing outbox protocol for listen/pusher hosts without sync bindings.
+        from utils.batch_pipeline.enrichment import run_enrichment
+
+        if set(payload) != {'kind', 'key', 'task_token'}:
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+        try:
+            status = await run_blocking(sync_executor, run_enrichment, payload['key'], payload['task_token'])
+            return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
+        except (ValueError, TypeError):
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+        except Exception:
+            return JSONResponse(status_code=503, content={'status': 'retry'})
+    parsed = _parse_task_payload(payload)
     if parsed is None:
         logger.warning('listen finalization handler dropped invalid opaque task payload')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     job_id, dispatch_generation = parsed
+    from utils.conversations.demand_processing import admit
+
+    if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
+        return JSONResponse(status_code=200, content={'status': 'priority_wait'})
     lock_key = f'listen-finalization:{job_id}'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:
@@ -268,6 +287,10 @@ async def run_listen_finalization_job(
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
+        if disposition == ConversationFinalizationDisposition.deferred:
+            # Acknowledge this delivery: the queued durable job is re-dispatched
+            # by reconciliation with a new generation, not a retry-header budget.
+            return JSONResponse(status_code=200, content={'status': 'deferred'})
         if disposition == ConversationFinalizationDisposition.fenced:
             completed = await run_blocking(
                 db_executor,

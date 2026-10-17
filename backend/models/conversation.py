@@ -152,13 +152,14 @@ class SharedActionItem(BaseModel):
 
 
 class SharedSection(BaseModel):
-    """Public note content, without internal transcript evidence IDs."""
+    """Public note content linked to the transcript segments on the same share payload."""
 
     model_config = {'extra': 'ignore'}
 
     heading: str
     body_markdown: str
     kind: Literal['main', 'side_notes'] = 'main'
+    source_segment_ids: List[str] = Field(default_factory=list)
 
 
 class SharedEvent(BaseModel):
@@ -444,6 +445,9 @@ class CaptureEvidenceMetadata(BaseModel):
 
 
 class Conversation(BaseModel):
+    notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
+    l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str
@@ -463,6 +467,8 @@ class Conversation(BaseModel):
     # the isolated fair-use lane and the conversation-processing credit gate:
     # custom-STT still hits LLM/post-processing metering (#7690).
     uses_custom_stt: bool = False
+    # Server route arbitration; canonical writers preserve the durable value.
+    record_lane_owner: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
 
     structured: Structured
 

@@ -31,10 +31,16 @@ from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
 from utils.executors import db_executor, run_blocking
+from utils.model_text import UNTRUSTED_LEGEND, truncation_note, untrusted_block
 from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _format_external_tool_result(source: str, result: str) -> str:
+    """Mark a successful third-party app or MCP response as quoted data."""
+    return f"{untrusted_block(source, result)}\n\n{UNTRUSTED_LEGEND}"
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -242,7 +248,8 @@ def create_app_tool(
                 else:
                     cb.record_success()
                     await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_MCP_TOOL)
-                return result
+                    return _format_external_tool_result(f"{app_name} {app_tool.name} MCP result", result)
+                return _format_external_tool_result(f"{app_name} {app_tool.name} MCP error", result)
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
                 action = await run_blocking(
@@ -374,15 +381,15 @@ async def _call_tool_endpoint(
                     if isinstance(loaded, dict):
                         data = cast(Dict[str, Any], loaded)
                         if 'result' in data:
-                            return str(data['result'])
+                            return _format_external_tool_result(f"{app_tool.name} app result", str(data['result']))
                         if 'message' in data:
-                            return str(data['message'])
-                        return str(data)
+                            return _format_external_tool_result(f"{app_tool.name} app result", str(data['message']))
+                        return _format_external_tool_result(f"{app_tool.name} app result", str(data))
                     if isinstance(loaded, str):
-                        return loaded
-                    return str(loaded)
+                        return _format_external_tool_result(f"{app_tool.name} app result", loaded)
+                    return _format_external_tool_result(f"{app_tool.name} app result", str(loaded))
                 except ValueError:
-                    return response.text
+                    return _format_external_tool_result(f"{app_tool.name} app result", response.text)
             else:
                 cb.record_failure()
                 action = await run_blocking(
@@ -403,18 +410,32 @@ async def _call_tool_endpoint(
                         f"configuration issue on the app's side. Please try again later "
                     )
                 error_msg = f"Error calling {app_tool.name}: HTTP {response.status_code}"
+                error_detail: Optional[str] = None
+                error_detail_total: Optional[int] = None
                 try:
                     loaded_err: object = response.json()
                     if isinstance(loaded_err, dict):
                         err_data = cast(Dict[str, Any], loaded_err)
                         if 'error' in err_data:
-                            error_msg += f" - {err_data['error']}"
+                            error_detail = str(err_data['error'])
                         else:
-                            error_msg += f" - {str(err_data)}"
+                            error_detail = str(err_data)
                     else:
-                        error_msg += f" - {str(loaded_err)}"
+                        error_detail = str(loaded_err)
                 except ValueError:
-                    error_msg += f" - {response.text[:200]}"
+                    error_detail_total = len(response.text)
+                    error_detail = response.text[:200]
+                if error_detail:
+                    error_msg += "\n" + _format_external_tool_result(
+                        f"{app_tool.name} app error response", error_detail
+                    )
+                    if error_detail_total is not None and error_detail_total > len(error_detail):
+                        error_msg += "\n" + truncation_note(
+                            shown=len(error_detail),
+                            total=error_detail_total,
+                            unit="app error response characters",
+                            how_to_get_more="The app response was capped to keep this error detail short.",
+                        )
                 return error_msg
 
     except httpx.TimeoutException:

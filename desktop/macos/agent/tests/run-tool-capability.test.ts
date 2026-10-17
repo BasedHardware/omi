@@ -506,6 +506,9 @@ describe("RunToolCapabilityBroker", () => {
     };
 
     expectCode(() => broker.authorize({ ...base, invocationId: "without-approval" }), "approval_required");
+    // The model relays this message; it must not send the user hunting for an approval control.
+    expect(() => broker.authorize({ ...base, invocationId: "without-approval-message" }))
+      .toThrow(/no approval prompt.*do not ask the user to approve/);
 
     store.insertGrant({
       sessionId: session.sessionId,

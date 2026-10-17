@@ -4371,6 +4371,16 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsų $plan planas baigiasi $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Persiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Jūsų planas nustatytas atšaukti $date.\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
   }
@@ -4378,6 +4388,11 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Jūsų metinis planas automatiškai prasidės, kai baigsis mėnesinis planas.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsų $plan planas bus atnaujintas $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4410,6 +4425,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get continueText => 'Tęsti';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
 
   @override
   String get resubscribe => 'Persiregistruoti';
@@ -5024,9 +5042,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get content => 'Turinys';
-
-  @override
-  String get noContentToDisplay => 'Nėra turinio rodyti';
 
   @override
   String get noSummary => 'Nėra santraukos';
@@ -9828,9 +9843,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
 
   @override
-  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
 
@@ -13502,4 +13514,290 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nauja';
+
+  @override
+  String get activityNeedsAttention => 'Reikia dėmesio';
+
+  @override
+  String get activityRetryAll => 'Bandyti visus iš naujo';
+
+  @override
+  String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
+
+  @override
+  String get connectAgentHeadline => 'Naudokite savo Omi atmintį ChatGPT ir savo DI agentuose';
+
+  @override
+  String get connectAgentIntro =>
+      'Prijunkite vieną kartą. Tada klauskite jų apie savo pokalbius, prisiminimus ir užduotis.';
+
+  @override
+  String get connectAgentOneTap => 'Vienu palietimu';
+
+  @override
+  String get connectAgentComputerAgents => 'Agentai su savo kompiuteriu';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Nukopijuokite vieną užklausą. Omi sukuria raktą tik tam agentui ir saugiai jį išsiunčia.';
+
+  @override
+  String get connectAgentOtherAgent => 'Kitas agentas';
+
+  @override
+  String get connectAgentKeyActive => 'Raktas aktyvus';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Paskutinį kartą naudota $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP ir API raktai kūrėjams';
+
+  @override
+  String get connectAgentLoadFailed => 'Nepavyko įkelti jūsų ryšių.';
+
+  @override
+  String get connectAgentActionFailed => 'Kažkas nepavyko. Bandykite dar kartą.';
+
+  @override
+  String get connectChatGptTitle => 'Prijungti ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Užtrunka apie 30 sekundžių. Patvirtinate tai ChatGPT, ir veikia jūsų telefone bei kompiuteryje.';
+
+  @override
+  String get connectChatGptStepOpen => 'Atidarome Omi ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT atsidaro tiesiai Omi programos puslapyje.';
+
+  @override
+  String get connectChatGptStepApprove => 'Palieskite „Prijungti“, tada prisijunkite prie Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Naudokite tą pačią paskyrą, kurią naudojate čia.';
+
+  @override
+  String get connectChatGptStepReturn => 'Grįžkite į Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Ryšį patikriname automatiškai.';
+
+  @override
+  String get openChatGpt => 'Atidaryti ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Prijungta telefone ir kompiuteryje';
+
+  @override
+  String get tryAskingChatGpt => 'Pabandykite paklausti ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Palieskite vieną, kad atidarytumėte ChatGPT su jau įrašytu klausimu.';
+
+  @override
+  String get chatGptExampleMeetings => 'Dėl ko sutikau vakarykščiuose susitikimuose?';
+
+  @override
+  String get chatGptExampleTasks => 'Paversk mano atviras Omi užduotis šios savaitės planu.';
+
+  @override
+  String get chatGptExampleGoals => 'Ką Omi žino apie mano tikslus?';
+
+  @override
+  String get disconnectChatGpt => 'Atjungti ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Atjungti ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT nebegalės skaityti jūsų Omi prisiminimų, pokalbių ar užduočių.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Prijungti $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Įklijuokite vieną užklausą. $name pats nustato Omi savo kompiuteryje.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Įklijuokite vieną užklausą. Jūsų agentas pats nustato Omi savo kompiuteryje.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Raktas „$name“ sukurtas';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Užklausoje yra vienkartinė nuoroda, o ne pats raktas. Ji atsidaro vieną kartą ir nustoja galioti po 1 valandos. Raktą čia galite atšaukti bet kada.';
+
+  @override
+  String get connectAgentPreparing => 'Kuriamas raktas ir saugi nuoroda…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Nepavyko sukurti rakto. Patikrinkite ryšį ir bandykite dar kartą.';
+
+  @override
+  String get copyPrompt => 'Kopijuoti užklausą';
+
+  @override
+  String get connectAgentNewLink => 'Nuoroda nebegalioja? Sukurkite naują';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name prijungtas';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name turi Omi raktą. Atšaukite jį, kad nutrauktumėte prieigą. Vėl prijungti galite bet kada.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Atšaukti $name raktą?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name iš karto praras prieigą prie jūsų Omi atminties.';
+  }
+
+  @override
+  String get askAboutConversation => 'Klausti apie šį pokalbį';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Atidaro ChatGPT su paruoštu klausimu. Pokalbį jis suranda per Omi, todėl nereikia įklijuoti nuorašo.';
+
+  @override
+  String get askYourQuestion => 'Jūsų klausimas';
+
+  @override
+  String get askSuggestFollowUp => 'Paruošk tolesnio laiško juodraštį pagal šį pokalbį.';
+
+  @override
+  String get askSuggestCommitments => 'Ką pažadėjau šiame pokalbyje?';
+
+  @override
+  String get askSuggestDoc => 'Paversk šį pokalbį trumpu dokumentu.';
+
+  @override
+  String get askInChatGpt => 'Klausti ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopijuoti bet kuriai programai';
+
+  @override
+  String get askConnectChatGptFirst => 'Vieną kartą prijunkite ChatGPT, kad galėtumėte jo klausti apie savo pokalbius.';
+
+  @override
+  String get reconnect => 'Prisijungti iš naujo';
+
+  @override
+  String get chatGptNeedsReconnect => 'Reikia daugiau prieigos. Prisijunkite iš naujo, kad ištaisytumėte.';
+
+  @override
+  String get connectAgentWaiting => 'Laukiama, kol agentas panaudos savo raktą';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name dar neprijungtas';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Dar nesantraukta';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi gali paversti šį pokalbį apžvalga, pagrindiniais punktais ir užduotimis.';
+
+  @override
+  String get summaryWithOmi => 'Apibendrinti su Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Apibendrinti su $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Naudoti kitą šabloną';
+
+  @override
+  String get summaryFromTheTranscript => 'Iš transkripcijos';
+
+  @override
+  String get summaryReadFullTranscript => 'Skaityti visą transkripciją';
+
+  @override
+  String get summarySheetTitle => 'Apibendrinti su';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Apžvalga, pagrindiniai punktai ir užduotys';
+
+  @override
+  String get summaryYourTemplates => 'Jūsų šablonai';
+
+  @override
+  String get summarySuggestedTemplates => 'Siūloma šiam pokalbiui';
+
+  @override
+  String get summaryBrowseTemplates => 'Naršyti šablonus';
+
+  @override
+  String get summaryCreateYourOwn => 'Sukurti savo';
+
+  @override
+  String get summaryUseForNewConversations => 'Nustatyti kaip numatytąjį';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Nepavyko įkelti jūsų šablonų. Omi vis tiek veikia.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Dar nepridėjote jokių šablonų. Peržiūrėkite kelis arba sukurkite savo.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Apibendrinama su $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nepavyko užbaigti';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Šablonas nepateikė šio pokalbio santraukos.';
+
+  @override
+  String get summaryWithOmiInstead => 'Verčiau apibendrinti su Omi';
+
+  @override
+  String get summaryBusyTitle => 'Vis dar apdorojama';
+
+  @override
+  String get summaryBusyBody => 'Omi jau apdoroja šį pokalbį. Santrauka bus parodyta čia, kai bus baigta.';
+
+  @override
+  String get summaryCheckAgain => 'Tikrinti dar kartą';
+
+  @override
+  String get summaryLimitTitle => 'Pasiektas santraukų limitas';
+
+  @override
+  String get summaryLimitBody =>
+      'Per pastarąją valandą kelis kartus iš naujo sugeneravote santraukas. Bandykite vėliau.';
+
+  @override
+  String get summaryFailedTitle => 'Nepavyko apibendrinti';
+
+  @override
+  String get summaryFailedBody => 'Apibendrinant šį pokalbį kažkas nutiko.';
 }

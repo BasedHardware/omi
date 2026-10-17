@@ -31,6 +31,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
 import pytest
+from starlette.datastructures import UploadFile
+
+# Keep additive batch imports real before legacy fixtures replace package roots.
+from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from utils.batch_pipeline import live_projection as _batch_live_projection  # noqa: F401
+from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
+from routers import batch_pipeline as _batch_router  # noqa: F401
+from models import sync_job_status as _sync_job_status  # noqa: F401
 
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
@@ -902,6 +910,54 @@ class TestVerifyCloudTasksOidc:
             'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'job-1-s7',
         )
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job(payload, dispatch_attempt=2)
+            cloud_tasks.enqueue_sync_job(payload, dispatch_attempt=2)
+        assert [call.args[2] for call in enqueue.call_args_list] == ['job-1-s7-d2', 'job-1-s7-d2']
+        assert all(call.args[3] == payload for call in enqueue.call_args_list)
+
+    @pytest.mark.parametrize('sequencer', ['on', 'off'])
+    def test_direct_backfill_newest_gets_earlier_eligibility(self, sequencer):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_BACKFILL_ORDER': 'newest',
+            'SYNC_BACKFILL_UID_SEQUENCER': sequencer,
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
+            'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            for age in (3600, 21600):
+                cloud_tasks.enqueue_sync_job(
+                    _valid_sync_task_payload(lane='backfill', enqueued_at=1000000, recording_age_seconds=age)
+                )
+            assert [call.kwargs['schedule_at'] for call in enqueue.call_args_list] == [1000013, 1000075]
+            cloud_tasks.enqueue_sync_job(_valid_sync_task_payload(lane='backfill', sequencer_epoch=1))
+            assert 'schedule_at' not in enqueue.call_args.kwargs
+
+    def test_explicit_oldest_cloud_task_is_byte_identical_to_default(self):
+        cloud_tasks = _load_cloud_tasks()
+        fake = MagicMock()
+        fake.queue_path.return_value = 'projects/p/locations/l/queues/sync'
+        fake.task_path.return_value = 'projects/p/locations/l/queues/sync/tasks/job-1'
+        env = {
+            **OIDC_ENV,
+            'SYNC_TASKS_PROJECT': 'p',
+            'SYNC_TASKS_LOCATION': 'l',
+            'SYNC_TASKS_QUEUE': 'sync',
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'false',
+        }
+        payload = _valid_sync_task_payload(lane='backfill')
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_get_tasks_client', return_value=fake):
+            os.environ.pop('SYNC_BACKFILL_ORDER', None)
+            cloud_tasks.enqueue_sync_job(payload)
+            default = fake.create_task.call_args.kwargs['task']
+            os.environ['SYNC_BACKFILL_ORDER'] = 'oldest'
+            cloud_tasks.enqueue_sync_job(payload)
+            explicit = fake.create_task.call_args.kwargs['task']
+            assert type(default).pb(default).SerializeToString(deterministic=True) == type(explicit).pb(
+                explicit
+            ).SerializeToString(deterministic=True)
 
     def test_fresh_lane_uses_main_queue_when_backfill_routing_enabled(self):
         cloud_tasks = _load_cloud_tasks()
@@ -1133,6 +1189,8 @@ class TestSyncRouterStructure:
 
 def _load_sync_router_for_fast_path():
     """Load routers/sync.py with heavy deps stubbed for fast-path behavioral tests."""
+    from services import summary_debt_repair  # noqa: F401 - load before flat database stubs
+
     import contextvars
     import importlib.util
     from io import BytesIO
@@ -2162,16 +2220,9 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
     )
     request.json.return_value['lane'] = 'backfill'
     setattr(module, 'finalize_sync_job_superseded', AsyncMock())
-    # A backfill task without a sequencer epoch first reads its own job to decide
-    # whether the UID sequencer should adopt it. This test covers the legacy direct
-    # path, so pin that decision off explicitly: sequencer disabled, no owner and
-    # nothing pending. The job is still `queued` at that point, so that read gets
-    # its own entry ahead of the three the processor makes.
+    # Sequencer off: the direct path goes straight to the processor without the
+    # adoption read, so only the processor's own job reads happen.
     module.uid_sequencer.enabled = MagicMock(return_value=False)
-    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
-    module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
-    processor_reads = list(module.get_sync_job.side_effect)
-    module.get_sync_job.side_effect = [processor_reads[0], *processor_reads]
 
     try:
         response = await module.run_sync_job(request, task_retry_count=0)
@@ -3196,22 +3247,23 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off(id
         module.sync_backfill_sequencer.register_job.assert_called_once()
         assert module.sync_backfill_sequencer.register_job.call_args.args[-1] == 940.0
         module._run_sync_job_body.assert_not_awaited()
+
+        # Kill switch: a sequenced backlog must not pull direct work back into
+        # the one-per-UID queue, nor pause that queue's drain.
         module.uid_sequencer.enabled.return_value = False
-        direct = await module.run_sync_job(request, task_retry_count=0)
-        assert direct.status_code == 200
-        module._run_sync_job_body.assert_awaited_once()
-        module.backfill_cutover.refresh_direct_run.assert_called_once_with('test-uid', 'job-1')
-        module.sync_backfill_sequencer.get_owner.return_value = {'active_job_id': 'older-sequenced-job'}
-        migrated_during_rollback = await module.run_sync_job(request, task_retry_count=0)
-        assert migrated_during_rollback.status_code == 200
-        assert module.sync_backfill_sequencer.register_job.call_count == 2
-        module._run_sync_job_body.assert_awaited_once()
-        module.sync_backfill_sequencer.get_owner.return_value = idle_owner
-        module.sync_backfill_sequencer.has_pending.return_value = True
-        migrated_from_pending = await module.run_sync_job(request, task_retry_count=0)
-        assert migrated_from_pending.status_code == 200
-        assert module.sync_backfill_sequencer.register_job.call_count == 3
-        module._run_sync_job_body.assert_awaited_once()
+        module.backfill_cutover.refresh_direct_run.reset_mock()
+        for owner, has_pending in (
+            (idle_owner, False),
+            ({'active_job_id': 'older-sequenced-job'}, False),
+            (idle_owner, True),
+        ):
+            module.sync_backfill_sequencer.get_owner.return_value = owner
+            module.sync_backfill_sequencer.has_pending.return_value = has_pending
+            direct = await module.run_sync_job(request, task_retry_count=0)
+            assert direct.status_code == 200
+        assert module.sync_backfill_sequencer.register_job.call_count == 1
+        assert module._run_sync_job_body.await_count == 3
+        module.backfill_cutover.refresh_direct_run.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -3629,3 +3681,125 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'test-uid')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    transaction, store = MagicMock(), MagicMock()
+    transaction.get.return_value = {}
+    store.run.side_effect = lambda body: body(transaction)
+    monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
+    module.has_byok_keys = MagicMock(return_value=True)
+    accepted = AsyncMock(wraps=_batch_intake.accept_upload)
+    module.accept_batch_upload = accepted
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))],
+            uid='test-uid',
+            conversation_id='unowned-record',
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
+        assert response.headers['Retry-After'] == '30'
+        accepted.assert_awaited_once()
+        assert accepted.call_args.kwargs['byok_enabled'] is True
+        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        transaction.put.assert_not_called()
+        module.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('batch_status', [202, 503])
+async def test_batch_cohort_upload_never_dispatches_or_claims_legacy(monkeypatch, batch_status):
+    """Even ambiguous batch admission owns the route; it must never fall through."""
+    from starlette.datastructures import UploadFile
+    from fastapi.responses import JSONResponse
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    accepted = AsyncMock(return_value=JSONResponse(status_code=batch_status, content={'job_id': 'bp_synthetic'}))
+    module.accept_batch_upload = accepted
+    module._run_full_pipeline_background_async = AsyncMock()
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+        assert response.status_code == batch_status
+        accepted.assert_awaited_once()
+        module.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+        module.release_sync_content_claim.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_coalesced_enrichment_task_uses_adapter_before_legacy_job_parsing(monkeypatch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    handler = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'processed'}))
+    module.enrichment_response = handler
+    request = MagicMock()
+    payload = {'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}
+    request.json = AsyncMock(return_value=payload)
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        handler.assert_awaited_once_with(payload)
+        module.get_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.accept_batch_upload = AsyncMock(return_value=None)
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))], uid='test-uid'
+        )
+        assert response.status_code == 202
+        module.accept_batch_upload.assert_awaited_once()
+        module.claim_sync_content.assert_called_once()
+        module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original

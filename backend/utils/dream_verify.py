@@ -146,7 +146,11 @@ async def verify_two(
                 turn = await model_turn(active, messages)
                 if telemetry is not None:
                     telemetry['transport_responses'] = telemetry.get('transport_responses', 0) + 1
-                used += turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+                used += (
+                    turn.price_weighted_tokens
+                    if turn.price_weighted_tokens is not None
+                    else turn.tokens if turn.accounted_tokens is None else turn.accounted_tokens
+                )
                 return turn
 
             try:

@@ -4305,12 +4305,27 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan 플랜은 $date에 종료됩니다.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }
 
   @override
   String get annualPlanStartsAutomatically => '월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan 플랜은 $date에 갱신됩니다.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4343,6 +4358,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get continueText => '계속';
+
+  @override
+  String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
   String get resubscribe => '재구독';
@@ -4942,9 +4960,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get content => '콘텐츠';
-
-  @override
-  String get noContentToDisplay => '표시할 콘텐츠가 없습니다';
 
   @override
   String get noSummary => '요약 없음';
@@ -9658,9 +9673,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
 
   @override
-  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
 
   @override
@@ -13296,4 +13308,284 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityNewItem => '새 항목';
+
+  @override
+  String get activityNeedsAttention => '확인 필요';
+
+  @override
+  String get activityRetryAll => '모두 다시 시도';
+
+  @override
+  String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
+
+  @override
+  String get connectAgentHeadline => 'ChatGPT와 AI 에이전트에서 Omi 메모리를 사용하세요';
+
+  @override
+  String get connectAgentIntro => '한 번만 연결하세요. 그다음 대화, 추억, 작업에 대해 물어보세요.';
+
+  @override
+  String get connectAgentOneTap => '한 번 탭';
+
+  @override
+  String get connectAgentComputerAgents => '자체 컴퓨터가 있는 에이전트';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle => '프롬프트 하나만 복사하세요. Omi가 그 에이전트 전용 키를 만들어 안전하게 보냅니다.';
+
+  @override
+  String get connectAgentOtherAgent => '기타 에이전트';
+
+  @override
+  String get connectAgentKeyActive => '키 활성';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return '마지막 사용: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => '개발자용 MCP 및 API 키';
+
+  @override
+  String get connectAgentLoadFailed => '연결을 불러오지 못했습니다.';
+
+  @override
+  String get connectAgentActionFailed => '문제가 발생했습니다. 다시 시도하세요.';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPT 연결';
+
+  @override
+  String get connectChatGptSubtitle => '약 30초면 됩니다. ChatGPT 안에서 승인하면 휴대폰과 컴퓨터 모두에서 작동합니다.';
+
+  @override
+  String get connectChatGptStepOpen => 'ChatGPT에서 Omi를 엽니다';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT가 Omi 앱 페이지로 바로 열립니다.';
+
+  @override
+  String get connectChatGptStepApprove => '\'연결\'을 탭한 다음 Omi에 로그인하세요';
+
+  @override
+  String get connectChatGptStepApproveBody => '여기에서 사용하는 것과 같은 계정을 사용하세요.';
+
+  @override
+  String get connectChatGptStepReturn => 'Omi로 돌아오세요';
+
+  @override
+  String get connectChatGptStepReturnBody => '연결은 자동으로 확인됩니다.';
+
+  @override
+  String get openChatGpt => 'ChatGPT 열기';
+
+  @override
+  String get chatGptConnectedEverywhere => '휴대폰과 컴퓨터에서 연결됨';
+
+  @override
+  String get tryAskingChatGpt => 'ChatGPT에 이렇게 물어보세요';
+
+  @override
+  String get tryAskingChatGptFooter => '하나를 탭하면 질문이 입력된 채로 ChatGPT가 열립니다.';
+
+  @override
+  String get chatGptExampleMeetings => '어제 회의에서 내가 무엇에 동의했지?';
+
+  @override
+  String get chatGptExampleTasks => 'Omi의 미완료 작업으로 이번 주 계획을 세워 줘.';
+
+  @override
+  String get chatGptExampleGoals => 'Omi는 내 목표에 대해 무엇을 알고 있지?';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPT 연결 해제';
+
+  @override
+  String get disconnectChatGptQuestion => 'ChatGPT 연결을 해제할까요?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT가 더 이상 Omi의 추억, 대화, 작업을 읽을 수 없게 됩니다.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$name 연결';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return '프롬프트 하나만 붙여넣으세요. $name이(가) 자체 컴퓨터에 Omi를 설정합니다.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => '프롬프트 하나만 붙여넣으세요. 에이전트가 자체 컴퓨터에 Omi를 설정합니다.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '\'$name\' 키가 생성됨';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      '프롬프트에는 키 자체가 아니라 일회용 링크가 들어 있습니다. 한 번만 열리며 1시간 후 만료됩니다. 키는 여기에서 언제든지 취소할 수 있습니다.';
+
+  @override
+  String get connectAgentPreparing => '키와 보안 링크를 만드는 중…';
+
+  @override
+  String get connectAgentPrepareFailed => '키를 만들지 못했습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String get copyPrompt => '프롬프트 복사';
+
+  @override
+  String get connectAgentNewLink => '링크가 만료되었나요? 새로 만들기';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name 연결됨';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name에 Omi 키가 있습니다. 접근을 차단하려면 키를 취소하세요. 언제든지 다시 연결할 수 있습니다.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '$name의 키를 취소할까요?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name은(는) 즉시 Omi 메모리에 접근할 수 없게 됩니다.';
+  }
+
+  @override
+  String get askAboutConversation => '이 대화에 대해 묻기';
+
+  @override
+  String get askAboutConversationSubtitle => '질문이 준비된 상태로 ChatGPT를 엽니다. Omi를 통해 대화를 찾아보므로 대화록을 붙여넣을 필요가 없습니다.';
+
+  @override
+  String get askYourQuestion => '질문';
+
+  @override
+  String get askSuggestFollowUp => '이 대화를 바탕으로 후속 이메일 초안을 작성해 줘.';
+
+  @override
+  String get askSuggestCommitments => '이 대화에서 내가 무엇을 하기로 약속했지?';
+
+  @override
+  String get askSuggestDoc => '이 대화를 짧은 문서로 정리해 줘.';
+
+  @override
+  String get askInChatGpt => 'ChatGPT에 묻기';
+
+  @override
+  String get copyForAnyApp => '다른 앱용으로 복사';
+
+  @override
+  String get askConnectChatGptFirst => 'ChatGPT를 한 번 연결하면 대화에 대해 물어볼 수 있습니다.';
+
+  @override
+  String get reconnect => '다시 연결';
+
+  @override
+  String get chatGptNeedsReconnect => '더 많은 액세스 권한이 필요합니다. 다시 연결하여 해결하세요.';
+
+  @override
+  String get connectAgentWaiting => '에이전트가 키를 사용하기를 기다리는 중';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name 아직 연결되지 않음';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => '아직 요약되지 않음';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi가 이 대화를 개요, 핵심 내용, 할 일로 정리해 드릴 수 있습니다.';
+
+  @override
+  String get summaryWithOmi => 'Omi로 요약';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name(으)로 요약';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => '다른 템플릿 사용';
+
+  @override
+  String get summaryFromTheTranscript => '대화 기록에서';
+
+  @override
+  String get summaryReadFullTranscript => '전체 대화 기록 보기';
+
+  @override
+  String get summarySheetTitle => '요약 방법';
+
+  @override
+  String get summaryOmiTemplateSubtitle => '개요, 핵심 내용 및 할 일';
+
+  @override
+  String get summaryYourTemplates => '내 템플릿';
+
+  @override
+  String get summarySuggestedTemplates => '이 대화에 추천';
+
+  @override
+  String get summaryBrowseTemplates => '템플릿 둘러보기';
+
+  @override
+  String get summaryCreateYourOwn => '직접 만들기';
+
+  @override
+  String get summaryUseForNewConversations => '기본값으로 설정';
+
+  @override
+  String get summaryTemplatesLoadFailed => '템플릿을 불러오지 못했습니다. Omi는 계속 사용할 수 있습니다.';
+
+  @override
+  String get summaryNoTemplatesYet => '아직 추가한 템플릿이 없습니다. 몇 가지 둘러보거나 직접 만들어 보세요.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name(으)로 요약 중…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name에서 요약을 완료하지 못했습니다';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => '템플릿이 이 대화의 요약을 반환하지 않았습니다.';
+
+  @override
+  String get summaryWithOmiInstead => '대신 Omi로 요약';
+
+  @override
+  String get summaryBusyTitle => '아직 처리 중';
+
+  @override
+  String get summaryBusyBody => 'Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.';
+
+  @override
+  String get summaryCheckAgain => '다시 확인';
+
+  @override
+  String get summaryLimitTitle => '요약 한도 도달';
+
+  @override
+  String get summaryLimitBody => '지난 1시간 동안 요약을 여러 번 다시 생성했습니다. 나중에 다시 시도해 주세요.';
+
+  @override
+  String get summaryFailedTitle => '요약하지 못함';
+
+  @override
+  String get summaryFailedBody => '이 대화를 요약하는 중 문제가 발생했습니다.';
 }

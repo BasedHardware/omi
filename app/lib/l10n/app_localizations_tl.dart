@@ -4410,6 +4410,16 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Magtatapos ang iyong $plan plan sa $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
   }
@@ -4417,6 +4427,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ang iyong annual plan ay awtomatikong magsisimula kapag nagtatapos ang iyong monthly plan.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Mare-renew ang iyong $plan plan sa $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4449,6 +4464,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get continueText => 'Magpatuloy';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Mag-subscribe muna ulit para magpalit ng plan.';
 
   @override
   String get resubscribe => 'Mag-subscribe Muli';
@@ -5065,9 +5083,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get content => 'Content';
-
-  @override
-  String get noContentToDisplay => 'Walang content na ipapakita';
 
   @override
   String get noSummary => 'Walang summary';
@@ -9896,9 +9911,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.';
 
   @override
-  String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.';
 
@@ -13583,4 +13595,291 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Bago';
+
+  @override
+  String get activityNeedsAttention => 'Kailangang tingnan';
+
+  @override
+  String get activityRetryAll => 'Subukan muli lahat';
+
+  @override
+  String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
+
+  @override
+  String get connectAgentHeadline => 'Gamitin ang iyong Omi memory sa ChatGPT at sa iyong mga AI agent';
+
+  @override
+  String get connectAgentIntro =>
+      'Ikonekta nang isang beses. Pagkatapos, tanungin sila tungkol sa iyong mga usapan, alaala, at gawain.';
+
+  @override
+  String get connectAgentOneTap => 'Isang Tap';
+
+  @override
+  String get connectAgentComputerAgents => 'Mga Agent na May Sariling Computer';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopyahin ang isang prompt. Gagawa ang Omi ng key para lang sa agent na iyon at ipapadala ito nang ligtas.';
+
+  @override
+  String get connectAgentOtherAgent => 'Ibang Agent';
+
+  @override
+  String get connectAgentKeyActive => 'Aktibo ang key';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Huling ginamit $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Mga MCP at API key para sa mga developer';
+
+  @override
+  String get connectAgentLoadFailed => 'Hindi ma-load ang iyong mga koneksyon.';
+
+  @override
+  String get connectAgentActionFailed => 'May nangyaring mali. Subukan muli.';
+
+  @override
+  String get connectChatGptTitle => 'Ikonekta ang ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Mga 30 segundo lang. Aaprubahan mo ito sa loob ng ChatGPT, at gagana ito sa iyong phone at computer.';
+
+  @override
+  String get connectChatGptStepOpen => 'Bubuksan namin ang Omi sa ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'Direktang magbubukas ang ChatGPT sa page ng Omi app.';
+
+  @override
+  String get connectChatGptStepApprove => 'I-tap ang \"Ikonekta\", pagkatapos ay mag-sign in sa Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Gamitin ang parehong account na ginagamit mo rito.';
+
+  @override
+  String get connectChatGptStepReturn => 'Bumalik sa Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Awtomatiko naming susuriin ang koneksyon.';
+
+  @override
+  String get openChatGpt => 'Buksan ang ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Nakakonekta sa phone at computer';
+
+  @override
+  String get tryAskingChatGpt => 'Subukang Tanungin ang ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'I-tap ang isa para buksan ang ChatGPT na nakasulat na ito.';
+
+  @override
+  String get chatGptExampleMeetings => 'Ano ang mga pinagkasunduan ko sa mga meeting kahapon?';
+
+  @override
+  String get chatGptExampleTasks => 'Gawing plano para sa linggong ito ang mga bukas kong gawain sa Omi.';
+
+  @override
+  String get chatGptExampleGoals => 'Ano ang alam ng Omi tungkol sa mga layunin ko?';
+
+  @override
+  String get disconnectChatGpt => 'Idiskonekta ang ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Idiskonekta ang ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'Hindi na mababasa ng ChatGPT ang iyong mga alaala, usapan, o gawain sa Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Ikonekta ang $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Mag-paste ng isang prompt. Ise-set up ng $name ang Omi sa sarili nitong computer.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Mag-paste ng isang prompt. Ise-set up ng iyong agent ang Omi sa sarili nitong computer.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Nagawa ang key na “$name”';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'May one-time link ang prompt, hindi ang mismong key. Isang beses lang itong mabubuksan at mag-e-expire sa loob ng 1 oras. Puwede mong i-revoke ang key dito anumang oras.';
+
+  @override
+  String get connectAgentPreparing => 'Gumagawa ng key at secure na link…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Hindi magawa ang key. Suriin ang iyong koneksyon at subukan muli.';
+
+  @override
+  String get copyPrompt => 'Kopyahin ang Prompt';
+
+  @override
+  String get connectAgentNewLink => 'Expired na ang Link? Gumawa ng Bago';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return 'Nakakonekta ang $name';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return 'May Omi key ang $name. I-revoke ito para putulin ang access. Puwede kang kumonekta ulit anumang oras.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'I-revoke ang Key ng $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return 'Agad na mawawalan ng access ang $name sa iyong Omi memory.';
+  }
+
+  @override
+  String get askAboutConversation => 'Magtanong Tungkol sa Usapang Ito';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Bubuksan ang ChatGPT na handa na ang tanong mo. Hahanapin nito ang usapan sa pamamagitan ng Omi, kaya hindi mo na kailangang i-paste ang transcript.';
+
+  @override
+  String get askYourQuestion => 'Ang iyong tanong';
+
+  @override
+  String get askSuggestFollowUp => 'Gumawa ng draft ng follow-up email mula sa usapang ito.';
+
+  @override
+  String get askSuggestCommitments => 'Ano ang mga ipinangako ko sa usapang ito?';
+
+  @override
+  String get askSuggestDoc => 'Gawing maikling dokumento ang usapang ito.';
+
+  @override
+  String get askInChatGpt => 'Tanungin ang ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopyahin para sa Kahit Anong App';
+
+  @override
+  String get askConnectChatGptFirst =>
+      'Ikonekta ang ChatGPT nang isang beses para matanong ito tungkol sa iyong mga usapan.';
+
+  @override
+  String get reconnect => 'Muling ikonekta';
+
+  @override
+  String get chatGptNeedsReconnect => 'Kailangan ng mas maraming access. Muling ikonekta para ayusin.';
+
+  @override
+  String get connectAgentWaiting => 'Hinihintay na gamitin ng agent ang key nito';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return 'Hindi pa nakakonekta ang $name';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Hindi pa naibubuod';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Kayang gawing overview, mga pangunahing punto at action item ng Omi ang usapang ito.';
+
+  @override
+  String get summaryWithOmi => 'I-summarize gamit ang Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'I-summarize gamit ang $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Gumamit ng ibang template';
+
+  @override
+  String get summaryFromTheTranscript => 'Mula sa transcript';
+
+  @override
+  String get summaryReadFullTranscript => 'Basahin ang buong transcript';
+
+  @override
+  String get summarySheetTitle => 'I-summarize gamit ang';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Overview, mga pangunahing punto at action item';
+
+  @override
+  String get summaryYourTemplates => 'Iyong mga template';
+
+  @override
+  String get summarySuggestedTemplates => 'Iminumungkahi para sa usapang ito';
+
+  @override
+  String get summaryBrowseTemplates => 'Mag-browse ng mga template';
+
+  @override
+  String get summaryCreateYourOwn => 'Gumawa ng sarili mo';
+
+  @override
+  String get summaryUseForNewConversations => 'Gawin itong default ko';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Hindi ma-load ang iyong mga template. Gumagana pa rin ang Omi.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Wala ka pang naidadagdag na template. Mag-browse ng ilan o gumawa ng sarili mo.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Ini-summarize gamit ang $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return 'Hindi natapos ng $name';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Hindi nagbalik ng buod ang template para sa usapang ito.';
+
+  @override
+  String get summaryWithOmiInstead => 'I-summarize na lang gamit ang Omi';
+
+  @override
+  String get summaryBusyTitle => 'Pinoproseso pa';
+
+  @override
+  String get summaryBusyBody => 'Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.';
+
+  @override
+  String get summaryCheckAgain => 'Suriin muli';
+
+  @override
+  String get summaryLimitTitle => 'Naabot na ang limitasyon ng buod';
+
+  @override
+  String get summaryLimitBody => 'Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.';
+
+  @override
+  String get summaryFailedTitle => 'Hindi ma-summarize';
+
+  @override
+  String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
 }

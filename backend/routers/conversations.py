@@ -22,7 +22,11 @@ from database.vector_db import (
     delete_transcript_chunk_vectors,
 )
 import database.vector_db as vector_db
-from utils.other.storage import delete_privacy_conversation_audio, delete_owner_prompt_embedding_cache
+from utils.other.storage import (
+    delete_privacy_conversation_audio,
+    delete_owner_prompt_embedding_cache,
+    get_app_thumbnail_url,
+)
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -51,6 +55,7 @@ from models.conversation import (
 from utils.conversations.fragment_visibility import is_completed_rule_discard
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.onopen_translation import translate_open_page
@@ -80,7 +85,6 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -753,7 +757,11 @@ def get_conversation_finalization_status(
         400: {'description': 'The selected app cannot summarize conversations'},
         403: {'description': 'The selected app is not available to this user'},
         404: {'description': 'The conversation or selected app does not exist'},
-        409: {'description': 'The selected app is disabled or not enabled by this user'},
+        409: {
+            'description': 'The selected app is disabled or not enabled by this user, or the conversation '
+            'is already being processed (detail code conversation_processing_in_progress)'
+        },
+        502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
     },
     tags=['conversations'],
 )
@@ -781,6 +789,9 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    from database import processing_attention as attention_db
+
+    input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
@@ -788,6 +799,63 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    # Reprocess is a new user intent once the prior writer finishes. Share the
+    # active writer across app selections to avoid racing summary writes.
+    try:
+        operation, owned = attention_db.claim(
+            uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
+        )
+    except attention_db.ClaimRejected as error:
+        raise HTTPException(status_code=404, detail='Conversation not found') from error
+    if not owned or not attention_db.owns_live_claim(uid, operation):
+        if reprocess_result_contract_enabled():
+            # Echoing the stale row as 200 made clients report "updated" with
+            # no new summary; another writer still owns this conversation.
+            raise HTTPException(status_code=409, detail=REPROCESS_IN_PROGRESS_ERROR_DETAIL)
+        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
+    try:
+        result = execute_reprocess(
+            uid,
+            conversation_id,
+            conversation,
+            language_code,
+            app_id,
+            explicit_app,
+            was_discarded,
+            background_tasks,
+            response,
+        )
+    except Exception:
+        attention_db.finish(uid, operation, 'failed')
+        raise
+    attention_db.finish(uid, operation, 'succeeded' if _reprocess_succeeded(result, app_id) else 'failed')
+    return result
+
+
+REPROCESS_IN_PROGRESS_ERROR_DETAIL = {
+    'code': 'conversation_processing_in_progress',
+    'message': 'Conversation is already being processed',
+}
+
+
+def _reprocess_succeeded(result: Any, app_id: Optional[str]) -> bool:
+    """Attention outcome for one user reprocess.
+
+    An explicit app selection succeeds on that app's non-empty result: it is the
+    summary the user asked for, and an empty notes overview must not mark it
+    failed. Otherwise the regenerated Omi notes overview decides.
+    """
+    if app_id:
+        return any(
+            getattr(item, 'app_id', None) == app_id and (getattr(item, 'content', None) or '').strip()
+            for item in getattr(result, 'apps_results', None) or []
+        )
+    return bool(getattr(getattr(result, 'structured', None), 'overview', None))
+
+
+def execute_reprocess(
+    uid, conversation_id, conversation, language_code, app_id, explicit_app, was_discarded, background_tasks, response
+):
     receipt_applied: list = []
 
     processed_conversation = process_conversation(
@@ -1215,16 +1283,8 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     ),
 )
 def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    group = conversation.get('capture_group') or {}
+    _get_valid_conversation_by_id(uid, conversation_id)
     changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
-    if changed:
-        record_capture_outcome(
-            uid,
-            'separate',
-            [m['id'] for m in group.get('members', []) if m.get('id')],
-            separated_id=conversation_id,
-        )
     return StatusResponse(status='ok' if changed else 'unchanged')
 
 
@@ -1915,7 +1975,12 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
 
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    try:
+        conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
@@ -2169,34 +2234,49 @@ async def search_conversations_endpoint(
     response_model=ConversationSuggestedAppsResponse,
     tags=['conversations'],
 )
-def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
-
-    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
+async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation_data = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
-    # Get suggested app models with full data (similar to /v1/apps endpoint)
-    suggested_apps = []
-    for app_id in conversation.suggested_summarization_apps:
-        app_data = get_available_app_by_id_with_reviews(app_id, uid)
-        if app_data:
-            app = App(**app_data)
-            # Add user-specific data
-            app.is_user_paid = get_is_user_paid_app(app.id, uid)
+    # Each app costs several independent Firestore/Redis round-trips (reviews,
+    # installs, enablement, paid status); hydrate the apps concurrently on the
+    # db pool instead of serially, preserving the suggestion order. The cap
+    # keeps one request from occupying a large share of the shared pool.
+    slots = asyncio.Semaphore(_SUGGESTED_APP_HYDRATION_CONCURRENCY)
 
-            # Add payment link with user reference
-            if app.payment_link:
-                app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+    async def hydrate(app_id: str) -> Optional[App]:
+        async with slots:
+            return await run_blocking(db_executor, _hydrate_suggested_app, app_id, uid)
 
-            # Generate thumbnail URLs if thumbnails exist
-            if app.thumbnails:
-                from utils.other.storage import get_app_thumbnail_url
-
-                app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
-
-            suggested_apps.append(app)
+    hydrated = await asyncio.gather(*(hydrate(app_id) for app_id in conversation.suggested_summarization_apps))
+    suggested_apps = [app for app in hydrated if app is not None]
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
+
+
+_SUGGESTED_APP_HYDRATION_CONCURRENCY = 3
+
+
+def _hydrate_suggested_app(app_id: str, uid: str) -> Optional[App]:
+    """One suggested app with full data (similar to /v1/apps), or None when unavailable."""
+    # Function-scope for the same isolation reason as _validate_reprocess_app_selection.
+    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
+
+    app_data = get_available_app_by_id_with_reviews(app_id, uid)
+    if not app_data:
+        return None
+    app = App(**app_data)
+    # Add user-specific data
+    app.is_user_paid = get_is_user_paid_app(app.id, uid)
+
+    # Add payment link with user reference
+    if app.payment_link:
+        app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+
+    # Generate thumbnail URLs if thumbnails exist
+    if app.thumbnails:
+        app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
+    return app
 
 
 @router.get(

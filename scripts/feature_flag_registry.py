@@ -36,6 +36,10 @@ DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
 # Static pages served into the mobile webview (web/paywall) read PostHog flags by a *_FLAG_KEY constant.
 WEB_PAGE_FLAG = re.compile(r"\b[A-Z_]*FLAG_KEY\s*=\s*['\"]([^'\"\n]+)['\"]")
+# Cataloged server-side Node switches are runtime env reads, not build defines.
+# Restrict discovery to known names so this does not re-inventory every legacy
+# private Node setting while registering a new runtime switch.
+NODE_RUNTIME_ENV = re.compile(r"\bprocess\.env\.((?!NEXT_PUBLIC_)[A-Z][A-Z0-9_]*)")
 CHART_KEY = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Z][A-Z0-9_]+)")
 MANIFEST_KEY = re.compile(r"^\s*([A-Z][A-Z0-9_]+):(?:\s|$)")
 
@@ -286,7 +290,7 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
                 if path.endswith(".swift")
                 else (DART_DEFINITION, DART_MASTER)
                 if path.endswith(".dart")
-                else (WEB_PAGE_FLAG,) if path.startswith("web/paywall/") else (BUILD_DEFINE,)
+                else (WEB_PAGE_FLAG,) if path.startswith("web/paywall/") else (BUILD_DEFINE, NODE_RUNTIME_ENV)
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):
@@ -298,6 +302,8 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
                         if pattern is BUILD_DEFINE
                         else match[1]
                     )
+                    if pattern is NODE_RUNTIME_ENV and key not in known:
+                        continue
                     if not key.startswith("--"):
                         matches.append((key, text.count("\n", 0, match.start()) + 1))
             if path.endswith("ContextBucketsFeature.swift"):

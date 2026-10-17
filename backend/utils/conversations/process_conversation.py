@@ -14,6 +14,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
+from utils.sync.repeat_work_metrics import conversation_scope, record_final, record_feature, bind_generation
+
 import database._client as db_client_module
 from database import redis_db
 from database.firestore_read_metrics import FirestoreReadSite
@@ -94,6 +96,7 @@ from utils.conversations.jev_shadow import (
     submit_owner_shadow,
     submit_relevance_shadow,
 )
+from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
 from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
@@ -311,6 +314,13 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     selection the user made, so the reprocess boundary must surface a real
     error instead of returning success with empty `apps_results` (SCA-359).
     """
+
+
+APP_RESULT_FAILED_CODE = 'app_result_failed'
+APP_RESULT_FAILED_ERROR_DETAIL = {
+    'code': APP_RESULT_FAILED_CODE,
+    'message': 'The selected app could not finish this summary. Please try again.',
+}
 
 
 def conversation_apps_opt_in_only() -> bool:
@@ -747,6 +757,7 @@ def trigger_conversation_apps(
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
     preserve_existing_results: bool = False,
+    replace_selected_result: bool = False,
     resumable_result_commit: Optional[Callable[[str, Mapping[str, Any]], bool]] = None,
     resumable_usage_commit: Optional[Callable[[str, UsageHistoryType], bool]] = None,
     resumable_effect_authorizer: Optional[Callable[[], None]] = None,
@@ -829,8 +840,16 @@ def trigger_conversation_apps(
     if not filtered_apps:
         logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
-    if not preserve_existing_results:
+    # ``replace_selected_result`` (user reprocess under the result contract):
+    # the run replaces only its own app's result and keeps every other app's
+    # result. Released clients display the first non-empty entry, so the fresh
+    # result is placed first. When no app runs (a plain "regenerate" with no
+    # preferred app) the user asked for the Omi summary; clearing keeps that
+    # summary on screen for released clients, exactly as before.
+    replace_mode = replace_selected_result and not preserve_existing_results
+    if not preserve_existing_results and not (replace_mode and filtered_apps):
         conversation.apps_results = []
+    produced_results: Dict[str, str] = {}
 
     def execute_app(app: App) -> None:
         if resumable_effect_authorizer is not None:
@@ -867,7 +886,15 @@ def trigger_conversation_apps(
                 language_code=language_code,
                 prompt_prefix=prompt_prefix,
             ).strip()
-        conversation.apps_results.append(AppResult(app_id=app.id, content=result))
+        if replace_mode:
+            # An empty answer must not evict the app's previous result.
+            if result:
+                produced_results[app.id] = result
+                conversation.apps_results = [AppResult(app_id=app.id, content=result)] + [
+                    item for item in conversation.apps_results if item.app_id != app.id
+                ]
+        else:
+            conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if preserve_existing_results:
             # Persist the generated app result before any later telemetry or
             # aggregate effect receipt. A process crash can then resume from
@@ -910,8 +937,14 @@ def trigger_conversation_apps(
         # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
         # missing result (execution failed above) or empty content must not masquerade as
         # success while first-party notes shadow the selection the user made (SCA-359).
-        selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
-        if selected_result is None or not selected_result.content.strip():
+        # In replace mode an older result for this app may still be present
+        # (kept on failure), so only a result produced by this run counts.
+        if replace_mode:
+            selected_content = produced_results.get(app_id, '')
+        else:
+            selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
+            selected_content = selected_result.content if selected_result is not None else ''
+        if not selected_content.strip():
             raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
     return succeeded
@@ -1012,6 +1045,7 @@ def _sweep_owned_writer_mode(uid: str) -> Optional[str]:
 
 
 @spelling_context_run
+@conversation_scope
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
@@ -1977,7 +2011,9 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
-    llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client)
+    if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
+        record_feature(uid, conversation, 'l1', 'durable')
+        conversation.l1_llm_input_hash = l1_digest
     capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
     owner_evidence = OwnerAttributionEvidence.from_segments(conversation.transcript_segments)
     for memory_db_obj, _, _, _ in parsed_memories:
@@ -2181,6 +2217,16 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
     )
     if identity.deliver_after_persist:  # a failed attempt above queues nothing for its retry to repeat
         submit_with_context(postprocess_executor, _run_auto_sync)
+
+
+def apply_settled_enrichment(uid: str, conversation: Conversation) -> None:
+    """Apply invisible effects using the same canonical and capture-policy writers."""
+    extract_memories(uid, conversation)
+    person_ids = list(set(conversation.get_person_ids()))
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
+    _save_action_items(uid, conversation, people, ProcessingTrigger.SYNC_UPDATE)
+    if save_structured_vector(uid, conversation) is False:
+        raise RuntimeError('conversation vector is not ready')
 
 
 def _save_action_items(
@@ -2742,6 +2788,7 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
 
 
 @spelling_context_run
+@conversation_scope
 def process_conversation(
     uid: str,
     language_code: str,
@@ -3047,6 +3094,7 @@ def process_conversation(
         people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
     structured, discarded = _get_structured(
@@ -3149,6 +3197,25 @@ def process_conversation(
         )
         return conversation
 
+    record_final(uid, conversation)
+    if llm_hashes:
+        record_feature(uid, conversation, 'notes', 'durable')
+        for field, value in llm_hashes.items():
+            setattr(conversation, field, value)
+
+    from utils.conversations.demand_processing import lazy_enrichment_enabled
+
+    lazy_effects = lazy_enrichment_enabled(uid) and not discarded
+    if lazy_effects and not defer_derived_effects:
+        from utils.sync.reprocess import mark_effects
+
+        mark_effects(
+            uid,
+            conversation.id,
+            language_code,
+            immediate=trigger in {ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.FIRST_OPEN},
+        )
+
     if relevance is not None:
         emit_recorded_decision(uid, conversation.id, relevance)
 
@@ -3183,6 +3250,7 @@ def process_conversation(
     # instead of stranding it mid-way. Only reachable when `app_id` was set; automatic
     # app selection stays fail-open (SCA-359).
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
+    result_contract = trigger is ProcessingTrigger.USER_REPROCESS and reprocess_result_contract_enabled()
 
     def _emit_derived_effects() -> None:
         # AI-based folder assignment
@@ -3252,6 +3320,7 @@ def process_conversation(
                         usage_attribution=app_usage_attribution,
                         language_code=language_code,
                         people=people,
+                        replace_selected_result=result_contract,
                     )
                 except ExplicitAppSelectionFailedError as error:
                     # Fail closed without stranding the bundle: the write-back below still
@@ -3272,14 +3341,16 @@ def process_conversation(
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             # Durable finalization writes its vector directly behind the fanout claim,
             # including completed replays and terminal intelligence suppression.
-            if not defer_derived_effects and not is_reprocess:
+            if not lazy_effects and not defer_derived_effects and not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-            if not defer_memory_extraction:
+            if not lazy_effects and not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            if is_reprocess:
+            if lazy_effects:
+                pass  # Coalesced memory, vector and task work is durably owned above.
+            elif is_reprocess:
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
@@ -3334,6 +3405,11 @@ def process_conversation(
         # processing step is a real error, never a 200 whose payload quietly
         # substitutes first-party notes for the selected app's summary (SCA-359).
         failure = explicit_selection_failures[0]
+        if result_contract:
+            # Distinguishable from a notes/structure failure so clients can say
+            # "<App> couldn't finish" while the regenerated notes stay persisted.
+            logger.error('Conversation processing failed: %s', type(failure).__name__)
+            raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
         raise conversation_processing_http_exception(failure) from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation

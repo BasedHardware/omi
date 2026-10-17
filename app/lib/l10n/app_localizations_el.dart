@@ -4407,6 +4407,16 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Το πρόγραμμα $plan λήγει στις $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Επανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις $date.\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
   }
@@ -4414,6 +4424,11 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Το ετήσιο πρόγραμμά σας θα ξεκινήσει αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Το πρόγραμμα $plan θα ανανεωθεί στις $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4446,6 +4461,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get continueText => 'Συνέχεια';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
   String get resubscribe => 'Επανεγγραφή';
@@ -5063,9 +5081,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get content => 'Περιεχόμενο';
-
-  @override
-  String get noContentToDisplay => 'Δεν υπάρχει περιεχόμενο για εμφάνιση';
 
   @override
   String get noSummary => 'Χωρίς σύνοψη';
@@ -9878,9 +9893,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η μετατροπή ομιλίας σε κείμενο δεν είναι διαθέσιμη αυτή τη στιγμή. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και τις ρυθμίσεις αναγνώρισης ομιλίας της συσκευής σας και δοκιμάστε ξανά.';
 
   @override
-  String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Για να ξέρει το Omi ποια φωνή είναι δική σας — μιλήστε για οτιδήποτε για περίπου 5 δευτερόλεπτα.';
 
@@ -13562,4 +13574,294 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Νέο';
+
+  @override
+  String get activityNeedsAttention => 'Χρειάζεται προσοχή';
+
+  @override
+  String get activityRetryAll => 'Επανάληψη όλων';
+
+  @override
+  String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
+
+  @override
+  String get connectAgentHeadline => 'Χρησιμοποιήστε τη μνήμη του Omi στο ChatGPT και στους πράκτορες AI σας';
+
+  @override
+  String get connectAgentIntro =>
+      'Συνδεθείτε μία φορά. Στη συνέχεια ρωτήστε τους για τις συνομιλίες, τις αναμνήσεις και τις εργασίες σας.';
+
+  @override
+  String get connectAgentOneTap => 'Με ένα πάτημα';
+
+  @override
+  String get connectAgentComputerAgents => 'Πράκτορες με δικό τους υπολογιστή';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Αντιγράψτε ένα prompt. Το Omi δημιουργεί ένα κλειδί μόνο για αυτόν τον πράκτορα και το στέλνει με ασφάλεια.';
+
+  @override
+  String get connectAgentOtherAgent => 'Άλλος πράκτορας';
+
+  @override
+  String get connectAgentKeyActive => 'Κλειδί ενεργό';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Τελευταία χρήση $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Κλειδιά MCP και API για προγραμματιστές';
+
+  @override
+  String get connectAgentLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των συνδέσεών σας.';
+
+  @override
+  String get connectAgentActionFailed => 'Κάτι πήγε στραβά. Δοκιμάστε ξανά.';
+
+  @override
+  String get connectChatGptTitle => 'Σύνδεση ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Διαρκεί περίπου 30 δευτερόλεπτα. Το εγκρίνετε μέσα στο ChatGPT και λειτουργεί στο τηλέφωνο και στον υπολογιστή σας.';
+
+  @override
+  String get connectChatGptStepOpen => 'Ανοίγουμε το Omi στο ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'Το ChatGPT ανοίγει απευθείας στη σελίδα της εφαρμογής Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Πατήστε «Σύνδεση» και μετά συνδεθείτε στο Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Χρησιμοποιήστε τον ίδιο λογαριασμό που χρησιμοποιείτε εδώ.';
+
+  @override
+  String get connectChatGptStepReturn => 'Επιστρέψτε στο Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Ελέγχουμε τη σύνδεση αυτόματα.';
+
+  @override
+  String get openChatGpt => 'Άνοιγμα ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Συνδεδεμένο σε τηλέφωνο και υπολογιστή';
+
+  @override
+  String get tryAskingChatGpt => 'Δοκιμάστε να ρωτήσετε το ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Πατήστε μία για να ανοίξει το ChatGPT με την ερώτηση συμπληρωμένη.';
+
+  @override
+  String get chatGptExampleMeetings => 'Σε τι συμφώνησα στις χθεσινές συναντήσεις;';
+
+  @override
+  String get chatGptExampleTasks => 'Μετάτρεψε τις ανοιχτές εργασίες μου στο Omi σε πλάνο για αυτή την εβδομάδα.';
+
+  @override
+  String get chatGptExampleGoals => 'Τι ξέρει το Omi για τους στόχους μου;';
+
+  @override
+  String get disconnectChatGpt => 'Αποσύνδεση ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Αποσύνδεση ChatGPT;';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'Το ChatGPT δεν θα μπορεί πλέον να διαβάζει τις αναμνήσεις, τις συνομιλίες ή τις εργασίες σας στο Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Σύνδεση $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Επικολλήστε ένα prompt. Το $name ρυθμίζει το Omi στον δικό του υπολογιστή.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Επικολλήστε ένα prompt. Ο πράκτοράς σας ρυθμίζει το Omi στον δικό του υπολογιστή.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Το κλειδί «$name» δημιουργήθηκε';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Το prompt περιέχει σύνδεσμο μίας χρήσης, όχι το ίδιο το κλειδί. Ανοίγει μία φορά και λήγει σε 1 ώρα. Μπορείτε να ανακαλέσετε το κλειδί εδώ ανά πάσα στιγμή.';
+
+  @override
+  String get connectAgentPreparing => 'Δημιουργία κλειδιού και ασφαλούς συνδέσμου…';
+
+  @override
+  String get connectAgentPrepareFailed =>
+      'Δεν ήταν δυνατή η δημιουργία του κλειδιού. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.';
+
+  @override
+  String get copyPrompt => 'Αντιγραφή prompt';
+
+  @override
+  String get connectAgentNewLink => 'Έληξε ο σύνδεσμος; Δημιουργήστε νέο';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return 'Το $name είναι συνδεδεμένο';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return 'Το $name έχει κλειδί Omi. Ανακαλέστε το για να διακόψετε την πρόσβαση. Μπορείτε να συνδεθείτε ξανά ανά πάσα στιγμή.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Ανάκληση του κλειδιού του $name;';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return 'Το $name χάνει αμέσως την πρόσβαση στη μνήμη σας στο Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Ερώτηση για αυτή τη συνομιλία';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Ανοίγει το ChatGPT με την ερώτησή σας έτοιμη. Βρίσκει τη συνομιλία μέσω του Omi, οπότε δεν χρειάζεται να επικολλήσετε την απομαγνητοφώνηση.';
+
+  @override
+  String get askYourQuestion => 'Η ερώτησή σας';
+
+  @override
+  String get askSuggestFollowUp => 'Γράψε ένα πρόχειρο email παρακολούθησης από αυτή τη συνομιλία.';
+
+  @override
+  String get askSuggestCommitments => 'Τι δεσμεύτηκα να κάνω σε αυτή τη συνομιλία;';
+
+  @override
+  String get askSuggestDoc => 'Μετάτρεψε αυτή τη συνομιλία σε ένα σύντομο έγγραφο.';
+
+  @override
+  String get askInChatGpt => 'Ρωτήστε το ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Αντιγραφή για οποιαδήποτε εφαρμογή';
+
+  @override
+  String get askConnectChatGptFirst => 'Συνδέστε το ChatGPT μία φορά για να το ρωτάτε για τις συνομιλίες σας.';
+
+  @override
+  String get reconnect => 'Επανασύνδεση';
+
+  @override
+  String get chatGptNeedsReconnect => 'Χρειάζεται περισσότερη πρόσβαση. Επανασυνδέστε για διόρθωση.';
+
+  @override
+  String get connectAgentWaiting => 'Αναμονή για να χρησιμοποιήσει ο πράκτορας το κλειδί του';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return 'Το $name δεν έχει συνδεθεί ακόμη';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Δεν έχει γίνει ακόμα σύνοψη';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Το Omi μπορεί να μετατρέψει αυτή τη συνομιλία σε επισκόπηση, βασικά σημεία και εργασίες.';
+
+  @override
+  String get summaryWithOmi => 'Σύνοψη με το Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Σύνοψη με $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Χρήση άλλου προτύπου';
+
+  @override
+  String get summaryFromTheTranscript => 'Από την απομαγνητοφώνηση';
+
+  @override
+  String get summaryReadFullTranscript => 'Ανάγνωση πλήρους απομαγνητοφώνησης';
+
+  @override
+  String get summarySheetTitle => 'Σύνοψη με';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Επισκόπηση, βασικά σημεία και εργασίες';
+
+  @override
+  String get summaryYourTemplates => 'Τα πρότυπά σας';
+
+  @override
+  String get summarySuggestedTemplates => 'Προτεινόμενα για αυτή τη συνομιλία';
+
+  @override
+  String get summaryBrowseTemplates => 'Περιήγηση στα πρότυπα';
+
+  @override
+  String get summaryCreateYourOwn => 'Δημιουργία δικού σας';
+
+  @override
+  String get summaryUseForNewConversations => 'Ορισμός ως προεπιλογής μου';
+
+  @override
+  String get summaryTemplatesLoadFailed =>
+      'Δεν ήταν δυνατή η φόρτωση των προτύπων σας. Το Omi εξακολουθεί να λειτουργεί.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Δεν έχετε προσθέσει ακόμα πρότυπα. Δείτε μερικά ή δημιουργήστε το δικό σας.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Σύνοψη με $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return 'Το $name δεν μπόρεσε να ολοκληρωθεί';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Το πρότυπο δεν επέστρεψε σύνοψη για αυτή τη συνομιλία.';
+
+  @override
+  String get summaryWithOmiInstead => 'Σύνοψη με το Omi αντί αυτού';
+
+  @override
+  String get summaryBusyTitle => 'Η επεξεργασία συνεχίζεται';
+
+  @override
+  String get summaryBusyBody =>
+      'Το Omi επεξεργάζεται ήδη αυτή τη συνομιλία. Η σύνοψη θα εμφανιστεί εδώ μόλις ολοκληρωθεί.';
+
+  @override
+  String get summaryCheckAgain => 'Νέος έλεγχος';
+
+  @override
+  String get summaryLimitTitle => 'Συμπληρώθηκε το όριο συνόψεων';
+
+  @override
+  String get summaryLimitBody => 'Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get summaryFailedTitle => 'Δεν ήταν δυνατή η σύνοψη';
+
+  @override
+  String get summaryFailedBody => 'Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.';
 }

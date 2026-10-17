@@ -111,6 +111,7 @@ class Turn:
     completion_tokens: int = 0
     cached_tokens: int | None = None
     accounted_tokens: int | None = None
+    price_weighted_tokens: int | None = None
     cache_unreported_tokens: int = 0
 
 
@@ -155,13 +156,14 @@ async def run_loop(
         raise ValueError("Invalid token budget")
     messages = mount.messages(evidence, explicit_cache=explicit_cache)
     used = 0
+    budget_used = 0
     tokens = 0
     accounted = 0
     value = None
     turns = 0
 
     async def execute():
-        nonlocal turns, used, tokens, value, accounted
+        nonlocal turns, used, budget_used, tokens, value, accounted
         previous_request: list[str] = []
         previous_tools = _cache_fingerprint(mount.tools)
         for index in range(budget.turns):
@@ -174,7 +176,7 @@ async def run_loop(
             active_mount = (
                 mount
                 if budget.tokens is None
-                else replace(mount, budget=replace(budget, tokens=budget.tokens - accounted))
+                else replace(mount, budget=replace(budget, tokens=budget.tokens - budget_used))
             )
             turn = await model_turn(active_mount, messages)
             if turn.tokens < 0:
@@ -185,14 +187,18 @@ async def run_loop(
             if charge < turn.tokens:
                 raise ValueError('Invalid accounted token usage')
             accounted += charge
+            budget_charge = turn.price_weighted_tokens if turn.price_weighted_tokens is not None else charge
+            if type(budget_charge) is not int or budget_charge < 0:
+                raise ValueError('Invalid price-weighted token usage')
+            budget_used += budget_charge
             if observe_turn is not None:
                 await observe_turn(turn)
-            if budget.tokens is not None and accounted > budget.tokens:
+            if budget.tokens is not None and budget_used > budget.tokens:
                 return LoopResult(turn.value, "token_budget", index + 1, used, tokens, accounted)
             value = turn.value
             if not turn.tool_calls:
                 return LoopResult(value, 'stopped', index + 1, used, tokens, accounted)
-            if budget.tokens is not None and accounted >= budget.tokens:
+            if budget.tokens is not None and budget_used >= budget.tokens:
                 return LoopResult(None, 'token_budget', index + 1, used, tokens, accounted)
             if index + 1 == budget.turns and not budget.graceful:
                 return LoopResult(value, 'turn_budget', index + 1, used, tokens, accounted)

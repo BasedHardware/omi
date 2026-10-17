@@ -37,6 +37,8 @@ actually present in the export at pull time, which is the empirical version of t
 | VAD-forwarded audio hours | Prometheus via the Grafana proxy on monitor.omi.me | Grafana token | modelled STT vendor volume |
 | OpenAI invoice | OpenAI admin costs API | org admin key | the LLM residual and the reconciliation |
 | Anthropic invoice | Anthropic admin cost API | org admin key | same |
+| Soniox invoice (optional) | Soniox usage summary | project key | measured company STT total |
+| Deepgram invoice (optional) | Deepgram billing breakdown | company project/key | measured company STT total |
 | Subscription book | Stripe (read-only key) | Stripe key | `plan_revenue_daily` |
 | DAU by platform | PostHog project 302298 | PostHog MCP | alternative denominators only |
 
@@ -218,19 +220,265 @@ fresher and the billing export continuing to settle. No allocation logic changed
 | `pull_users.py` | users projection snapshot |
 | `pull_hourly_usage.py` | transcription seconds per uid-day |
 | `pull_prometheus.py` | VAD-forwarded audio hours |
-| `pull_providers.py` | OpenAI and Anthropic invoices |
+| `pull_providers.py` + `pull_stt_costs.py` | OpenAI/Anthropic invoices and optional measured STT totals |
 | `pull_stripe.py` | subscription book → MRR/ARPU by plan |
 | `posthog_dau.py` | DAU by platform (denominators only) |
 | `fs.py` | dependency-free Firestore REST client |
 
 ## Known gaps
 
-* **STT vendor cost is modelled, not measured.** Modulate carries ~95% of live sessions and there
-  is no invoice feed or contract rate; `stt_vendor_low` uses a $0.0043/min placeholder and
-  `stt_vendor_high` is ×1.8. Replace `STT_VENDOR_RATE_PER_MIN` when the contract rates land.
+* **Per-user STT vendor cost remains modelled.** `stt_vendor_low` uses a $0.0043/min
+  placeholder and `stt_vendor_high` is ×1.8. Optional measured Soniox/Deepgram company
+  totals are separate lines (see below); Modulate has no measured feed here.
 * **SaaS with no feed** (PostHog, Sentry, Redis Cloud, ~$500–700/mo) is in no pool at all.
 * **Half of variable cost is shared overhead** split by headcount because no per-uid request or
   Firestore-read counter exists. `shared_activity` is the alternative, not a better truth.
 * **The ledger's `app_platform` header is written only by `desktop_proactivity`**, so request-level
   platform is unavailable; platform comes from the users cohort join.
 * **Stripe is a snapshot**, not history. `plan_revenue_daily.snapshot_date` says so on every row.
+
+## Measured STT invoices (optional, company totals)
+
+`pull_providers.py` also pulls Soniox `GET /v1/usage/summary` using whole UTC days,
+with a midnight-exclusive end. It sums `cost_usd` for `stt-*` models, including
+input/output and API/playground cost once. The summary has no pagination; windows
+larger than 366 days are split without overlap. No per-request identifiers reach disk.
+API contract: <https://soniox.com/docs/api-reference/other/get_usage_summary>.
+The hermetic JSON fixtures in `backend/tests/unit/fixtures/finops/` are reduced
+published response examples, not live account captures.
+
+`raw/stt_vendor_cost_daily.json` records daily decimal USD amounts and skipped
+providers. It is overwritten on every pull, so a missing key cannot reuse an older
+invoice from the same run directory. Missing/unreadable/empty secrets and usage API
+401/403 responses warn and skip only that provider; they do not publish zero cost.
+Other API/shape failures fail the pull to avoid publishing a false invoice.
+
+The existing assembler and `load_bigquery.py` publish the measured lines to:
+
+- `based-hardware.omi_finops.unit_cost_daily`: `date`, `usd`,
+  `segment_type='total'`, `segment='all'`, `method='measured'`,
+  `component='stt_soniox_measured'` (and `stt_deepgram_measured` when configured).
+- `based-hardware.omi_finops.unit_cost_reconciliation`: matching `pool`,
+  `pool_usd`, `allocated_usd`, `invoice_source='<provider>_usage_api'`.
+  Here `allocated_usd` means published company total, not user allocation.
+
+These are company-only rows (`users=0`, `usd_per_user_day=NULL`). They do not change
+plan/user allocation or the existing modelled `gross_total`. A TV reader must use
+these measured components instead of its hand-entered STT constant; do not add them
+to `gross_total` or `stt_vendor_low/high` (which already model vendor STT).
+Absence means unknown/unavailable; an explicit zero means a successful zero-cost
+summary. The loader replaces each requested date in its existing transaction:
+latest completed load wins, never appends the same invoice twice. A later skipped
+pull removes that date's measured line along with the normal date replacement.
+
+Soniox `client_reference_id` can support a later per-user/plan join via usage logs,
+but the current `utils/stt/soniox.py` config does not set it. Adding identity tagging
+and a historical plan join is outside this company-total pull.
+
+### Secret wiring and dark deployment
+
+Backend ExternalSecret values map `SONIOX_API_KEY` to Secret Manager
+`projects/based-hardware/secrets/SONIOX_API_KEY` (same name for Deepgram).
+`cloudrun.secret('soniox')` resolves either
+`$FINOPS_SECRETS_DIR/SONIOX_API_KEY` or
+`$FINOPS_SECRETS_DIR/SONIOX_API_KEY/SONIOX_API_KEY` (default directory
+`/run/secrets/finops`). It performs no Secret Manager API lookup. Local pulls use
+explicit `SONIOX_API_KEY` / `DEEPGRAM_API_KEY` environment variables only.
+
+The job runs as `finops-writer@based-hardware.iam.gserviceaccount.com`. Its existing
+deploy workflow does not mount either STT key. This change intentionally leaves
+that workflow untouched; the orchestrator must add the mount after IAM is ready:
+
+```text
+/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest
+```
+
+On 2026-10-17, `ro-prod` could read the job definition and project IAM policy, but
+`gcloud secrets get-iam-policy SONIOX_API_KEY --project=based-hardware` was denied
+`secretmanager.secrets.getIamPolicy`. Project-level grants for the job SA were
+BigQuery jobUser and Datastore viewer; secret-level access remains **unverified**.
+David can inspect the secret policy, and if no accessor grant exists, run:
+
+```bash
+gcloud secrets add-iam-policy-binding SONIOX_API_KEY --project=based-hardware --member=serviceAccount:finops-writer@based-hardware.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
+```
+
+No secret payload, IAM mutation or deployment is required to land this code.
+Do not add an inaccessible Cloud Run secret binding before granting access: Cloud
+Run may reject startup before the Python missing-secret skip can run.
+
+### Deepgram scope
+
+The runtime routing manifest currently prefers Parakeet/Modulate/Soniox and omits
+Deepgram from deployed model lists; policy still permits cloud Deepgram streaming,
+and `streaming._deepgram_client_for_request()` can use the company key as well as
+BYOK. Therefore source inspection alone cannot establish zero company spend.
+A dark Deepgram billing pull is included rather than treating it as zero. It
+requires both the optional mounted `DEEPGRAM_API_KEY` and an explicitly verified
+company `FINOPS_DEEPGRAM_PROJECT_ID` (no project discovery, no BYOK account reads).
+It pulls hosted `billing/breakdown` through the following date, selects each exact
+UTC daily bucket, and sums STT line items
+(Nova/base/enhanced/Whisper, streaming or sync); Aura TTS is excluded. The key also
+needs vendor-side billing-read permission; otherwise 401/403 skips it.
+API contract: <https://developers.deepgram.com/reference/manage/billing/breakdown/get>.
+Mount, IAM and project configuration belong to the orchestrator. No current
+Deepgram dollar amount was read in this task because secret payloads are excluded.
+
+### Backfill after access and mount are ready
+
+Run inside the deployed producer image under its existing writer/runtime identity,
+not under `ro-prod` (which cannot load BigQuery):
+
+```bash
+FINOPS_AUTH=cloudrun python /app/monorepo/backend/scripts/finops/run_unit_cost.py \
+  --backfill-from 2026-10-01 --date 2026-10-17 --allow-unsettled --load
+```
+
+The normal job's date-range flags are inclusive. `--allow-unsettled` is needed for
+Oct 16–17; those rows carry `inputs_settled=false` and must be rerun at D-2. For
+settled history only on Oct 17 use `--date 2026-10-15` and omit that flag. The normal
+Cloud Run entrypoint handles single-date runs via `FINOPS_DATE`; the range command
+above must be invoked as the job's Python command, not passed as arguments to
+`cloudrun_entry.py`. The orchestrator owns execution and deployment.
+
+Cross-check measured totals against the canonical KB console receipt dated
+2026-10-15: September $10,315.16; Oct 1–13 $2,657.96; Oct 13 UTC $143.00. These are
+comparison targets, not fixtures or substituted invoice data. No cross-check has
+been executed before access and backfill.
+
+## Mercury vendor spend (dark, Read Only)
+
+`pull_mercury.py` adds company bank-spend reconciliation without adding bank payments
+to the existing GCP/STT/LLM cost pools. It is **default off**:
+`FINOPS_MERCURY_ENABLED=true` and a mounted Mercury **Read Only** token are both
+required. David creates the token and stores it as Secret Manager
+`finops-mercury-readonly`. `cloudrun.secret('mercury')` reads a flat file or the
+usual nested mount at:
+
+```text
+/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest
+```
+
+Local execution accepts explicit `FINOPS_MERCURY_READONLY_TOKEN` only. Disabled,
+missing/empty/unreadable (including non-UTF-8) secrets and Mercury 401/403 responses warn and skip the
+Mercury line without failing other pulls; no Mercury table is read or written on
+a skip. Other API/shape errors fail the run. A previous ready file cannot be
+reused after a skipped/failed pull. Successful-child warnings reach Cloud Logging.
+
+[Mercury's current token policy](https://docs.mercury.com/docs/api-token-security-policies)
+says **Read Only tokens do not require an IP whitelist**. No static-egress/NAT
+change is required or included. Do not use a Read and Write token. If a future
+token policy requires an allowlist, the orchestrator would need a stable public
+egress IP (for example Cloud Run VPC egress routed through Cloud NAT with a reserved
+address) and whitelist that address before activation. That infrastructure is not
+part of this pull. Tokens unused for 45 days may be deleted by Mercury.
+
+The runtime SA is still `finops-writer@based-hardware.iam.gserviceaccount.com`.
+`ro-prod` cannot read this secret's IAM policy (`getIamPolicy` denied on 2026-10-17),
+so secret-level access is unverified. After David creates the secret, if needed:
+
+```bash
+gcloud secrets add-iam-policy-binding finops-mercury-readonly --project=based-hardware --member=serviceAccount:finops-writer@based-hardware.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
+```
+
+No payload was read and no IAM, mount, flag or deploy change was applied here.
+
+### Projection and classification
+
+The all-accounts [transactions endpoint](https://docs.mercury.com/reference/listtransactions)
+is GET-only. Each daily run refreshes the **90 posted UTC dates ending at the job's
+`--date`** (normally D-2). Requests use `postedStart/postedEnd`, not the API's
+created-date `start/end`. The projection accepts only `status='sent'`, non-null
+`postedAt`, and negative account-USD amounts. It buckets the timezone-aware posted
+timestamp into UTC and applies the half-open end locally. It never uses foreign
+merchant minor-unit amounts or the credit-statement endpoint's different signs.
+Pagination uses the last actual transaction ID as `start_after` (exclusive),
+matching the [official Go SDK](https://github.com/MercuryTechnologies/mercury-go/blob/166dc7d99d3f5fc59672f60deaf910f23ca62860/packages/pagination/pagination.go#L43-L54),
+dedupes IDs in memory, and fails on a non-advancing cursor. It does not infer a
+request cursor from the potentially different `page.nextPage` value.
+
+Raw responses never reach files, BigQuery or logs. The normalized artifact stores
+only date, checked-in canonical vendor, category, USD amount and aggregate count,
+plus window/status metadata. No account/card numbers or IDs, person names, memo,
+note, attachment or raw counterparty strings are persisted. Redirects are refused
+and HTTP/shape failures use bounded messages. Fixtures are synthetic API-shape
+examples containing privacy canaries; no bank API was called to record them.
+
+`mercury_vendor_map.json` uses normalized token-boundary aliases, with the longest
+matching alias winning. It seeds Soniox/Deepgram/Modulate, OpenAI/Anthropic/OpenRouter/
+Perplexity/Groq, Upstash/Vercel/PostHog/Grafana/Sentry/Redis/Pinecone/GitHub and others.
+Google Workspace has a separate alias from Google Cloud; ambiguous `Google` is
+unmapped. Annual cadence is deliberately not inferred from the merchant name:
+set `annual: true` only after confirming a vendor's actual billing cadence.
+
+| Category | Treatment |
+| --- | --- |
+| `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
+| `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs |
+| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
+| `gcp` | Excluded from TV addition; already covered by GCP billing |
+| `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and hardware COGS; collapsed to vendor `excluded` |
+| `unmapped` | All other outgoing spend, one total and count per UTC date, no counterparty detail |
+
+Incoming credits/refunds are outside this outgoing-spend feed and are not netted
+against bills. External ACH/wire transfers are **not** blanket-excluded: they may
+be vendor payments. Unknown recipients remain unmapped. Generic `Stripe`/`Stripe Inc` descriptors
+also remain unmapped; only explicit `Stripe Fee`/`Stripe Fees` aliases classify
+as outgoing fees. Stripe fees withheld from
+incoming payouts cannot be measured as outgoing transactions here; do not invent
+them from net deposits. The initial alias map needs human review against Mercury's
+own dashboard; extend it there, never by logging unknown counterparties. Mixed
+monthly/annual bills for one canonical vendor need separate verified aliases.
+
+### BigQuery and TV contract
+
+The existing `load_bigquery.py` path loads two new date-partitioned aggregate tables:
+
+- `based-hardware.omi_finops.mercury_vendor_spend_daily`: `date`, `vendor`, `category`,
+  `amount_usd` (NUMERIC, positive outgoing spend), `transaction_count`, `run_id`, `computed_at`.
+- `based-hardware.omi_finops.mercury_saas_daily`: `date`, `vendor='all'`, `category='saas'`,
+  **`amount_usd`** (daily TV line), `annual_monthly_usd`, `unmapped_usd`, `unmapped_count`,
+  `coverage_days`, `annual_history_complete`, `inputs_complete`, `run_id`, `computed_at`.
+
+Every successful refresh replaces **all 90 dates**, including zero-spend dates,
+through the existing per-table delete/insert transaction. The daily unmapped row
+exists even when zero and proves a successfully fetched date. Older aggregates
+are retained, not appended/reinserted into the refreshed range. A bounded 100 MiB
+BigQuery history read retrieves only older aggregates for annual amortization.
+Late corrections older than 90 days require an explicit backfill.
+
+TV `amount_usd` = `(non-annual SaaS paid over [date-29,date] + active annual bills/12) / 30.4375`.
+Annual bills remain active from posted day through the day before their 12-month
+anniversary (Feb 29 clamps to Feb 28). Known annual aggregates continue contributing
+after they age out of the 90-day API refresh. NUMERIC outputs round to nine decimal
+places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
+
+`inputs_complete` requires all 30 posted days, no unmapped transactions in that
+window, and a full preceding year's coverage with no unmapped payments if any
+annual vendor is configured.
+This prevents an initial 90-day pull from claiming to know older annual bills.
+The reader should require `inputs_complete=true` and fresh `computed_at` (for
+example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`, and
+use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
+Preserve an explicit measured zero. `wall-cost.ts` currently has the measured STT
+argument; add an analogous SaaS date-map hook in the admin lane and propagate a
+`saasMeasured` source label/snapshot override. That frontend wiring is separate
+from this producer PR.
+
+Bank posting dates and prepayments differ from provider usage days. Reconcile
+`mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the
+unmapped total, allowing timing, credits and prepaid-balance differences; do not
+replace daily usage invoices with same-day bank debits or sum both.
+
+To seed complete annual history, the orchestrator can pull at most 400 days into
+an existing complete FinOps run's raw directory, then invoke the existing loader:
+
+```bash
+# Inside the producer image, writer runtime identity, access/mount/flag already ready.
+python /app/monorepo/backend/scripts/finops/pull_mercury.py --end 2026-10-15 --backfill-from 2025-09-11 --raw /tmp/finops-runs/history/raw
+# Use load_bigquery.py with that run's normal --derived/--raw/--run-id arguments.
+```
+
+The raw directory must belong to a fully assembled FinOps run; do not invoke the
+normal loader with only Mercury inputs. No backfill, database write or deployment
+was run as part of this implementation.

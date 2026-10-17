@@ -50,7 +50,7 @@ fonttools==4.60.2
 frozenlist==1.4.1
 fsspec==2024.6.1
 gitdb==4.0.11
-GitPython==3.1.55
+GitPython==3.1.62
 google-ai-generativelanguage==0.11.0
 google-api-core==2.19.1
 google-api-python-client==2.139.0
@@ -166,7 +166,7 @@ pydantic_core==2.33.2
 pydeck==0.9.1
 pydub==0.25.1
 Pygments==2.20.0
-PyJWT==2.13.0
+PyJWT==2.15.1
 pyright==1.1.403
 pynndescent==0.5.13
 PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a ; sys_platform == "linux"
@@ -211,7 +211,7 @@ tenacity==8.2.3
 threadpoolctl==3.5.0
 tiktoken==0.7.0
 toml==0.10.2
-tornado==6.5.7
+tornado==6.5.9
 tqdm==4.66.5
 traitlets==5.14.3
 typer==0.12.3

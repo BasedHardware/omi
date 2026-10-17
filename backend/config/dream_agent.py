@@ -3,6 +3,7 @@
 import math
 import os
 from dataclasses import dataclass
+from datetime import timedelta
 from config.plan_catalog import PAID_PLAN_IDS
 
 from utils.agent_capabilities.registry import AUTO, KINDS
@@ -38,6 +39,24 @@ def allowlisted(uid):
 
 def _allowlisted(uid):
     return allowlisted(uid)
+
+
+def allowlist_uids():
+    """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
+    return sorted({item.strip() for item in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if item.strip()})
+
+
+def hunt_interval(size_bucket):
+    """Idle time before a pass with no dirty work hunts again; 24h (6h heavy) unless overridden."""
+    default = 6.0 if size_bucket == 'heavy' else 24.0
+    raw = os.getenv('DREAM_AGENT_HUNT_INTERVAL_HOURS', '').strip()
+    try:
+        hours = float(raw) if raw else default
+    except ValueError:
+        hours = default
+    if not math.isfinite(hours) or hours <= 0:
+        hours = default
+    return timedelta(hours=min(hours, default))
 
 
 def on_demand_enabled():
@@ -124,7 +143,9 @@ class Caps:
     undo_min_samples: int = 10
     anonymous_k: int = 20
     manual_runs: int = 3
-    completion_tokens: int = 4096
+    # Main-lane reply ceiling. Gemini 3.x counts thinking inside it, so 4096 truncated medium-effort turns.
+    completion_tokens: int = 32768
+    verifier_completion_tokens: int = 4096
 
     @classmethod
     def from_env(cls):

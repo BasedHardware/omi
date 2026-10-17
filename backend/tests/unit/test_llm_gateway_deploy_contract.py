@@ -8,6 +8,7 @@ import sys
 import tempfile
 from typing import Any, cast
 
+import pytest
 import yaml
 
 from testing.shell import bash_command, bash_path
@@ -149,6 +150,61 @@ def test_gateway_ingress_timeout_can_carry_the_flex_route_deadline():
 
     assert '  timeoutSec: 960\n' in backend_config
     assert '    timeoutSec: 5\n' in backend_config
+
+
+@pytest.fixture(scope='module')
+def gateway_reservation_redis_contract():
+    # Parse deployment inputs during fixture setup so the fast-unit call-phase
+    # budget measures the assertions, not repeated YAML decoding.
+    manifest = _load_yaml('deploy/runtime_env.yaml')
+    classification = _load_yaml('../config/deployment-setting-classification.json')
+    contracts = {}
+
+    for environment in ('dev', 'prod'):
+        gateway = _load_yaml(f'charts/llm-gateway/{environment}_omi_llm_gateway_values.yaml')
+        listen = _load_yaml(f'charts/backend-listen/{environment}_omi_backend_listen_values.yaml')
+        secrets = _load_yaml(f'charts/backend-secrets/{environment}_omi_backend_secrets_values.yaml')
+        gateway_env = _env_map(gateway)
+        listen_env = _env_map(listen)
+        namespace = manifest['environments'][environment]['llm_gateway']['namespace']
+        shared_config = f'{environment}-omi-backend-config'
+        shared_secret = f'{environment}-omi-backend-secrets'
+
+        expected_password_ref = {'name': shared_secret, 'key': 'REDIS_DB_PASSWORD'}
+        contracts[environment] = {
+            'namespace': namespace,
+            'listen_config': listen['envFrom'][0]['configMapRef']['name'],
+            'gateway_host': gateway_env['REDIS_DB_HOST']['valueFrom']['configMapKeyRef'],
+            'listen_port': listen_env['REDIS_DB_PORT']['value'],
+            'gateway_port': gateway_env['REDIS_DB_PORT']['value'],
+            'listen_password': listen_env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'],
+            'gateway_password': gateway_env['REDIS_DB_PASSWORD']['valueFrom']['secretKeyRef'],
+            'secret_keys': _secret_keys(secrets),
+            'expected_password': expected_password_ref,
+        }
+
+    # The gateway chart has no NetworkPolicy; egress is not narrowed there.
+    contracts['network_policy'] = list((BACKEND_ROOT / 'charts/llm-gateway' / 'templates').glob('*networkpolicy*'))
+    contracts['classification'] = classification
+    return contracts
+
+
+@pytest.mark.parametrize('environment', ('dev', 'prod'))
+def test_gateway_reservation_state_uses_the_shared_backend_redis(environment, gateway_reservation_redis_contract):
+    contract = gateway_reservation_redis_contract[environment]
+    shared_config = f'{environment}-omi-backend-config'
+
+    assert contract['namespace'] == f'{environment}-omi-backend'
+    assert contract['listen_config'] == shared_config
+    assert contract['gateway_host'] == {'name': shared_config, 'key': 'REDIS_DB_HOST'}
+    assert contract['listen_port'] == contract['gateway_port'] == '13151'
+    assert contract['listen_password'] == contract['gateway_password'] == contract['expected_password']
+    assert 'REDIS_DB_PASSWORD' in contract['secret_keys']
+    assert 'REDIS_DB_PASSWORD' in gateway_reservation_redis_contract['classification']['kinds']['secret']
+    assert {'REDIS_DB_HOST', 'REDIS_DB_PORT'} <= set(
+        gateway_reservation_redis_contract['classification']['kinds']['config']
+    )
+    assert not gateway_reservation_redis_contract['network_policy']
 
 
 def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():

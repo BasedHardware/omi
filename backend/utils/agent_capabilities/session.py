@@ -270,7 +270,8 @@ class Session:
     async def execute(self, calls):
         responses = []
         pending_finish = None
-        rejected = False
+        finish_response_index: int | None = None
+        unresolved_rejections: set[str | None] = set()
         calls = sorted(calls, key=lambda call: (call.get('function') or {}).get('name') == 'finish')
         for call in calls:
             if self.check_active is not None:
@@ -305,14 +306,16 @@ class Session:
                     result = await self.propose(parsed.term, value=parsed.value, why_it_matters=parsed.why_it_matters)
                 else:
                     pending_finish = parsed
-                    result = {'status': 'finish_ignored' if rejected else 'finished'}
+                    finish_response_index = len(responses)
+                    result = {'status': 'finish_pending'}
                 if result.get('errors') or result.get('complete') is False:
-                    rejected = True
+                    unresolved_rejections.add(identity)
+                else:
+                    unresolved_rejections.discard(identity)
                 if identity in self.failed_attempts and result.get('status') in {'staged', 'applied'}:
                     self.counters['resubmits_succeeded'] += 1
                     self.failed_attempts.discard(identity)
             except Exception as error:
-                rejected = True
                 result = rejection(error)
                 if isinstance(parsed, ProposeEdit):
                     result['field'] = result.get('field') or 'target'
@@ -320,6 +323,7 @@ class Session:
                 self.rejections[result['reason']] += 1
                 if identity:
                     self.failed_attempts.add(identity)
+                unresolved_rejections.add(identity)
             responses.append(
                 {
                     'role': 'tool',
@@ -327,9 +331,14 @@ class Session:
                     'content': 'UNTRUSTED TOOL DATA\n' + json.dumps(result, default=str, ensure_ascii=False),
                 }
             )
-        if pending_finish is not None and not rejected:
-            self.finish = pending_finish
-            return LoopStop(pending_finish.model_dump(), messages=tuple(responses))
+        if pending_finish is not None and finish_response_index is not None:
+            finished = not unresolved_rejections
+            responses[finish_response_index]['content'] = 'UNTRUSTED TOOL DATA\n' + json.dumps(
+                {'status': 'finished' if finished else 'finish_ignored'}, ensure_ascii=False
+            )
+            if finished:
+                self.finish = pending_finish
+                return LoopStop(pending_finish.model_dump(), messages=tuple(responses))
         return responses
 
     async def run(self, model_turn, *, deadline_seconds, observe_turn=None):

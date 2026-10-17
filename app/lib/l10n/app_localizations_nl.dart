@@ -4384,12 +4384,27 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Je $plan-abonnement eindigt op $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Abonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Uw plan wordt geannuleerd op $date.\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Uw jaarabonnement start automatisch wanneer uw maandabonnement eindigt.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Je $plan-abonnement wordt verlengd op $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4422,6 +4437,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get continueText => 'Doorgaan';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Abonneer je eerst opnieuw om van abonnement te wisselen.';
 
   @override
   String get resubscribe => 'Opnieuw abonneren';
@@ -5035,9 +5053,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get content => 'Inhoud';
-
-  @override
-  String get noContentToDisplay => 'Geen inhoud om weer te geven';
 
   @override
   String get noSummary => 'Geen samenvatting';
@@ -9832,9 +9847,6 @@ class AppLocalizationsNl extends AppLocalizations {
       'Spraak naar tekst is momenteel niet beschikbaar. Controleer je internetverbinding en de instellingen voor spraakherkenning op je apparaat en probeer het opnieuw.';
 
   @override
-  String get processingTakingLonger => 'Nog bezig — dit duurt langer dan normaal.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.';
 
@@ -13514,4 +13526,288 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nieuw';
+
+  @override
+  String get activityNeedsAttention => 'Vraagt aandacht';
+
+  @override
+  String get activityRetryAll => 'Alles opnieuw proberen';
+
+  @override
+  String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
+
+  @override
+  String get connectAgentHeadline => 'Gebruik je Omi-geheugen in ChatGPT en je AI-agents';
+
+  @override
+  String get connectAgentIntro => 'Eén keer verbinden. Vraag ze daarna naar je gesprekken, herinneringen en taken.';
+
+  @override
+  String get connectAgentOneTap => 'Met één tik';
+
+  @override
+  String get connectAgentComputerAgents => 'Agents met een eigen computer';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopieer één prompt. Omi maakt een sleutel speciaal voor die agent en verstuurt hem veilig.';
+
+  @override
+  String get connectAgentOtherAgent => 'Andere agent';
+
+  @override
+  String get connectAgentKeyActive => 'Sleutel actief';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Laatst gebruikt $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP- en API-sleutels voor ontwikkelaars';
+
+  @override
+  String get connectAgentLoadFailed => 'Kan je verbindingen niet laden.';
+
+  @override
+  String get connectAgentActionFailed => 'Er ging iets mis. Probeer het opnieuw.';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPT verbinden';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Duurt ongeveer 30 seconden. Je keurt het goed in ChatGPT en het werkt op je telefoon en computer.';
+
+  @override
+  String get connectChatGptStepOpen => 'We openen Omi in ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT opent direct op de pagina van de Omi-app.';
+
+  @override
+  String get connectChatGptStepApprove => 'Tik op \"Verbinden\" en log daarna in bij Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Gebruik hetzelfde account als hier.';
+
+  @override
+  String get connectChatGptStepReturn => 'Kom terug naar Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'We controleren de verbinding automatisch.';
+
+  @override
+  String get openChatGpt => 'ChatGPT openen';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Verbonden op telefoon en computer';
+
+  @override
+  String get tryAskingChatGpt => 'Vraag ChatGPT bijvoorbeeld';
+
+  @override
+  String get tryAskingChatGptFooter => 'Tik op een vraag om ChatGPT te openen met die vraag al ingevuld.';
+
+  @override
+  String get chatGptExampleMeetings => 'Waarmee heb ik ingestemd in de vergaderingen van gisteren?';
+
+  @override
+  String get chatGptExampleTasks => 'Maak van mijn openstaande Omi-taken een plan voor deze week.';
+
+  @override
+  String get chatGptExampleGoals => 'Wat weet Omi over mijn doelen?';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPT loskoppelen';
+
+  @override
+  String get disconnectChatGptQuestion => 'ChatGPT loskoppelen?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT kan je Omi-herinneringen, -gesprekken en -taken dan niet meer lezen.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$name verbinden';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Plak één prompt. $name stelt Omi in op zijn eigen computer.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Plak één prompt. Je agent stelt Omi in op zijn eigen computer.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Sleutel ‘$name’ aangemaakt';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'De prompt bevat een eenmalige link, niet de sleutel zelf. Die opent één keer en verloopt na 1 uur. Je kunt de sleutel hier altijd intrekken.';
+
+  @override
+  String get connectAgentPreparing => 'Sleutel en beveiligde link maken…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Kan de sleutel niet maken. Controleer je verbinding en probeer het opnieuw.';
+
+  @override
+  String get copyPrompt => 'Prompt kopiëren';
+
+  @override
+  String get connectAgentNewLink => 'Link verlopen? Maak een nieuwe';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name is verbonden';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name heeft een Omi-sleutel. Trek die in om de toegang te stoppen. Je kunt altijd opnieuw verbinden.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Sleutel van $name intrekken?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name verliest direct de toegang tot je Omi-geheugen.';
+  }
+
+  @override
+  String get askAboutConversation => 'Vragen over dit gesprek';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Opent ChatGPT met je vraag klaar. Het zoekt het gesprek op via Omi, dus je hoeft het transcript niet te plakken.';
+
+  @override
+  String get askYourQuestion => 'Je vraag';
+
+  @override
+  String get askSuggestFollowUp => 'Schrijf een concept voor een follow-upmail op basis van dit gesprek.';
+
+  @override
+  String get askSuggestCommitments => 'Wat heb ik in dit gesprek toegezegd?';
+
+  @override
+  String get askSuggestDoc => 'Maak van dit gesprek een kort document.';
+
+  @override
+  String get askInChatGpt => 'Vraag het ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopiëren voor elke app';
+
+  @override
+  String get askConnectChatGptFirst => 'Verbind ChatGPT één keer om het vragen te stellen over je gesprekken.';
+
+  @override
+  String get reconnect => 'Opnieuw verbinden';
+
+  @override
+  String get chatGptNeedsReconnect => 'Meer toegang nodig. Opnieuw verbinden om dit op te lossen.';
+
+  @override
+  String get connectAgentWaiting => 'Wachten tot de agent zijn sleutel gebruikt';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name is nog niet verbonden';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Nog niet samengevat';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi kan dit gesprek omzetten in een overzicht, kernpunten en actiepunten.';
+
+  @override
+  String get summaryWithOmi => 'Samenvatten met Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Samenvatten met $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Andere sjabloon gebruiken';
+
+  @override
+  String get summaryFromTheTranscript => 'Uit het transcript';
+
+  @override
+  String get summaryReadFullTranscript => 'Volledig transcript lezen';
+
+  @override
+  String get summarySheetTitle => 'Samenvatten met';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Overzicht, kernpunten en actiepunten';
+
+  @override
+  String get summaryYourTemplates => 'Jouw sjablonen';
+
+  @override
+  String get summarySuggestedTemplates => 'Voorgesteld voor dit gesprek';
+
+  @override
+  String get summaryBrowseTemplates => 'Sjablonen bekijken';
+
+  @override
+  String get summaryCreateYourOwn => 'Zelf maken';
+
+  @override
+  String get summaryUseForNewConversations => 'Als standaard instellen';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Je sjablonen konden niet worden geladen. Omi werkt nog steeds.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Je hebt nog geen sjablonen toegevoegd. Bekijk er een paar of maak er zelf een.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Samenvatten met $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name kon niet worden voltooid';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'De sjabloon heeft geen samenvatting voor dit gesprek opgeleverd.';
+
+  @override
+  String get summaryWithOmiInstead => 'In plaats daarvan samenvatten met Omi';
+
+  @override
+  String get summaryBusyTitle => 'Wordt nog verwerkt';
+
+  @override
+  String get summaryBusyBody => 'Omi is al met dit gesprek bezig. De samenvatting verschijnt hier zodra deze klaar is.';
+
+  @override
+  String get summaryCheckAgain => 'Opnieuw controleren';
+
+  @override
+  String get summaryLimitTitle => 'Limiet voor samenvattingen bereikt';
+
+  @override
+  String get summaryLimitBody =>
+      'Je hebt het afgelopen uur meerdere samenvattingen opnieuw gegenereerd. Probeer het later opnieuw.';
+
+  @override
+  String get summaryFailedTitle => 'Samenvatten mislukt';
+
+  @override
+  String get summaryFailedBody => 'Er ging iets mis bij het samenvatten van dit gesprek.';
 }

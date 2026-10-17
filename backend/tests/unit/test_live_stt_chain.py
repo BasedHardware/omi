@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
+from utils.observability import demand_cohort as telemetry, fallback
 from utils.stt import (
     connect_backoff as connect_backoff_module,
     live_failure,
@@ -686,6 +687,49 @@ def _soniox_then_modulate(**overrides):
         failed=overrides.get('failed', set()),
         models=['soniox', 'modulate-velma-2'],
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['labels', 'mutation'])
+@pytest.mark.parametrize('exhausted', [False, True])
+async def test_metric_failure_cannot_abort_selection_or_replace_typed_exhaustion(monkeypatch, failure, exhausted):
+    class RaisingMetric:
+        attempts = 0
+
+        def labels(self, **_labels):
+            if failure == 'labels':
+                self.attempts += 1
+                raise ValueError('synthetic label failure')
+            return self
+
+        def inc(self, *_args):
+            self.attempts += 1
+            raise ValueError('synthetic counter failure')
+
+    broken = RaisingMetric()
+    monkeypatch.setattr(fallback, 'FAILURE_DETAIL', broken)
+    monkeypatch.setattr(live_chain, 'CHAIN_EXHAUSTED', broken)
+    cohort = telemetry.DemandTelemetry('admitted')
+    token = telemetry.current_demand.set(cohort)
+    st._soniox_circuit.record_account_failure(600)
+    primary = AsyncMock(return_value=socket())
+    tail = AsyncMock(return_value=socket())
+    if exhausted:
+        tail.side_effect = RuntimeError('synthetic vendor dial failure')
+    try:
+        kwargs = _soniox_then_modulate(soniox=primary, modulate=tail)
+        if exhausted:
+            with pytest.raises(live_chain.LiveChainExhausted):
+                await live_chain.connect_configured_chain(**kwargs)
+        else:
+            _, selected = await live_chain.connect_configured_chain(**kwargs)
+            assert selected == st.STTService.modulate
+        primary.assert_not_awaited()
+        tail.assert_awaited_once()
+        assert broken.attempts > 0
+        assert cohort.exhausted == exhausted
+    finally:
+        telemetry.current_demand.reset(token)
 
 
 @pytest.mark.asyncio

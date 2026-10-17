@@ -4395,12 +4395,27 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Planul tău $plan se încheie pe $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Reabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Planul dvs. anual va începe automat când planul lunar se încheie.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Planul tău $plan se va reînnoi pe $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4433,6 +4448,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get continueText => 'Continuă';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
 
   @override
   String get resubscribe => 'Reabonează-te';
@@ -5048,9 +5066,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get content => 'Conținut';
-
-  @override
-  String get noContentToDisplay => 'Nu există conținut de afișat';
 
   @override
   String get noSummary => 'Fără rezumat';
@@ -9857,9 +9872,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
 
   @override
-  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 
@@ -13533,4 +13545,292 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get activityNeedsAttention => 'Necesită atenție';
+
+  @override
+  String get activityRetryAll => 'Reîncearcă tot';
+
+  @override
+  String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
+
+  @override
+  String get connectAgentHeadline => 'Folosește memoria Omi în ChatGPT și în agenții tăi AI';
+
+  @override
+  String get connectAgentIntro =>
+      'Conectează-te o singură dată. Apoi întreabă-i despre conversațiile, amintirile și sarcinile tale.';
+
+  @override
+  String get connectAgentOneTap => 'Cu o singură atingere';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenți cu propriul computer';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Copiază un singur prompt. Omi creează o cheie doar pentru acel agent și o trimite în siguranță.';
+
+  @override
+  String get connectAgentOtherAgent => 'Alt agent';
+
+  @override
+  String get connectAgentKeyActive => 'Cheie activă';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Folosită ultima dată: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Chei MCP și API pentru dezvoltatori';
+
+  @override
+  String get connectAgentLoadFailed => 'Conexiunile tale nu au putut fi încărcate.';
+
+  @override
+  String get connectAgentActionFailed => 'Ceva nu a funcționat. Încearcă din nou.';
+
+  @override
+  String get connectChatGptTitle => 'Conectează ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Durează aproximativ 30 de secunde. Aprobi în ChatGPT și funcționează pe telefon și pe computer.';
+
+  @override
+  String get connectChatGptStepOpen => 'Deschidem Omi în ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT se deschide direct pe pagina aplicației Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Atinge „Conectare”, apoi conectează-te la Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Folosește același cont pe care îl folosești aici.';
+
+  @override
+  String get connectChatGptStepReturn => 'Revino în Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Verificăm conexiunea automat.';
+
+  @override
+  String get openChatGpt => 'Deschide ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Conectat pe telefon și computer';
+
+  @override
+  String get tryAskingChatGpt => 'Încearcă să întrebi ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Atinge una ca să deschizi ChatGPT cu întrebarea deja completată.';
+
+  @override
+  String get chatGptExampleMeetings => 'Cu ce am fost de acord în ședințele de ieri?';
+
+  @override
+  String get chatGptExampleTasks => 'Transformă sarcinile mele deschise din Omi într-un plan pentru săptămâna asta.';
+
+  @override
+  String get chatGptExampleGoals => 'Ce știe Omi despre obiectivele mele?';
+
+  @override
+  String get disconnectChatGpt => 'Deconectează ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Deconectezi ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT nu va mai putea citi amintirile, conversațiile sau sarcinile tale din Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Conectează $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Lipește un singur prompt. $name configurează Omi pe propriul computer.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Lipește un singur prompt. Agentul tău configurează Omi pe propriul computer.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Cheia „$name” a fost creată';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Promptul conține un link de unică folosință, nu cheia propriu-zisă. Se deschide o singură dată și expiră într-o oră. Poți revoca cheia de aici oricând.';
+
+  @override
+  String get connectAgentPreparing => 'Se creează o cheie și un link securizat…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Cheia nu a putut fi creată. Verifică-ți conexiunea și încearcă din nou.';
+
+  @override
+  String get copyPrompt => 'Copiază promptul';
+
+  @override
+  String get connectAgentNewLink => 'Linkul a expirat? Creează unul nou';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name este conectat';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name deține o cheie Omi. Revoc-o pentru a opri accesul. Te poți conecta din nou oricând.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Revoci cheia pentru $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name pierde imediat accesul la memoria ta Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Întreabă despre această conversație';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Deschide ChatGPT cu întrebarea pregătită. Găsește conversația prin Omi, deci nu trebuie să lipești transcrierea.';
+
+  @override
+  String get askYourQuestion => 'Întrebarea ta';
+
+  @override
+  String get askSuggestFollowUp => 'Redactează un e-mail de follow-up pe baza acestei conversații.';
+
+  @override
+  String get askSuggestCommitments => 'La ce m-am angajat în această conversație?';
+
+  @override
+  String get askSuggestDoc => 'Transformă această conversație într-un document scurt.';
+
+  @override
+  String get askInChatGpt => 'Întreabă ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Copiază pentru orice aplicație';
+
+  @override
+  String get askConnectChatGptFirst => 'Conectează ChatGPT o singură dată ca să-l întrebi despre conversațiile tale.';
+
+  @override
+  String get reconnect => 'Reconectează';
+
+  @override
+  String get chatGptNeedsReconnect => 'Are nevoie de mai mult acces. Reconectează pentru a remedia.';
+
+  @override
+  String get connectAgentWaiting => 'Se așteaptă ca agentul să-și folosească cheia';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name nu s-a conectat încă';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Încă nu a fost rezumată';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi poate transforma această conversație într-o prezentare generală, puncte cheie și sarcini.';
+
+  @override
+  String get summaryWithOmi => 'Rezumă cu Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Rezumă cu $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Folosește alt șablon';
+
+  @override
+  String get summaryFromTheTranscript => 'Din transcriere';
+
+  @override
+  String get summaryReadFullTranscript => 'Citește transcrierea completă';
+
+  @override
+  String get summarySheetTitle => 'Rezumă cu';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Prezentare generală, puncte cheie și sarcini';
+
+  @override
+  String get summaryYourTemplates => 'Șabloanele tale';
+
+  @override
+  String get summarySuggestedTemplates => 'Sugerate pentru această conversație';
+
+  @override
+  String get summaryBrowseTemplates => 'Răsfoiește șabloanele';
+
+  @override
+  String get summaryCreateYourOwn => 'Creează-ți propriul șablon';
+
+  @override
+  String get summaryUseForNewConversations => 'Setează ca implicit';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Nu s-au putut încărca șabloanele tale. Omi funcționează în continuare.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Nu ai adăugat încă niciun șablon. Răsfoiește câteva sau creează-ți propriul șablon.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Se rezumă cu $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nu a putut finaliza';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Șablonul nu a returnat un rezumat pentru această conversație.';
+
+  @override
+  String get summaryWithOmiInstead => 'Rezumă cu Omi în schimb';
+
+  @override
+  String get summaryBusyTitle => 'Se procesează încă';
+
+  @override
+  String get summaryBusyBody => 'Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.';
+
+  @override
+  String get summaryCheckAgain => 'Verifică din nou';
+
+  @override
+  String get summaryLimitTitle => 'Limita de rezumate a fost atinsă';
+
+  @override
+  String get summaryLimitBody => 'Ai regenerat mai multe rezumate în ultima oră. Încearcă din nou mai târziu.';
+
+  @override
+  String get summaryFailedTitle => 'Nu s-a putut rezuma';
+
+  @override
+  String get summaryFailedBody => 'A apărut o problemă la rezumarea acestei conversații.';
 }

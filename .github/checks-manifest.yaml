@@ -873,7 +873,7 @@ checks:
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: web-app-checks
     command: ["bash", "web/app/test.sh"]
-    triggers: ["web/app/src/**", "web/app/package.json", "web/app/bun.lock", "web/app/tsconfig.json", "web/app/vitest.config.mts", "web/app/vitest.setup.ts", "web/app/scripts/moonshine-smoke.test.ts", "web/app/test.sh", ".github/checks-manifest.yaml"]
+    triggers: ["web/app/src/**", "web/packages/note-shared/**", "web/app/package.json", "web/app/bun.lock", "web/app/tsconfig.json", "web/app/vitest.config.mts", "web/app/vitest.setup.ts", "web/app/scripts/moonshine-smoke.test.ts", "web/app/test.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "web/app shipped with no typecheck or test lane at all, so desktop-parity work there had no runnable Definition-of-Done gate"
   - id: admin-deploy-scope
@@ -898,12 +898,12 @@ checks:
     reason: "SCA-118: production web LLM traffic must not regain direct provider SDKs, URLs, or credentials"
   - id: web-frontend-tests
     command: ["bash", "scripts/run-web-frontend-tests.sh"]
-    triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
+    triggers: ["web/frontend/**", "web/packages/note-shared/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml", "app/android/app/src/main/AndroidManifest.xml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
   - id: web-share-http-tests
     command: ["bash", "scripts/run-web-share-http-tests.sh"]
-    triggers: ["web/frontend/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
+    triggers: ["web/frontend/**", "web/packages/note-shared/**", "scripts/run-web-share-http-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-599: public share URLs returned HTML for Markdown and JSON requests and omitted public speaker/time/task facts; synthetic HTTP requests exercise the shared rendering primitives through actual Next routing"
   - id: web-admin-tests
@@ -991,6 +991,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
     lanes: ["local", "ci"]
     reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
+  - id: backend-logging-entrypoints
+    command: ["python3", "backend/scripts/check_logging_entrypoints.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/charts/**/*.yaml", "backend/charts/**/*.yml", "backend/runtime_images.json", "backend/logging_rollout_pending.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#21677/#21681: every backend launch surface must retain shared logging and correct severity; ordered migration exceptions only shrink"
   - id: backend-module-isolation
     command: ["python3", "backend/scripts/check_module_stub_pollution.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]

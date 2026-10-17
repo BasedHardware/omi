@@ -87,6 +87,10 @@ def _install_route_stubs(monkeypatch):
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=[])
     monkeypatch.setitem(sys.modules, 'database.vector_db', vector_db_mod)
 
+    notifications_mod = types.ModuleType('database.notifications')
+    notifications_mod.get_user_time_zone = MagicMock(return_value='UTC')
+    monkeypatch.setitem(sys.modules, 'database.notifications', notifications_mod)
+
     endpoints_mod = types.ModuleType('utils.other.endpoints')
     endpoints_mod.get_current_user_uid = MagicMock(return_value='uid-route')
     endpoints_mod.with_rate_limit = lambda dependency, policy: dependency

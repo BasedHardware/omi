@@ -1096,8 +1096,9 @@ async def test_disconnect_cancels_in_flight_provider_call():
     cancelled = asyncio.Event()
 
     class DisconnectingRequest:
-        async def is_disconnected(self):
-            return disconnected.is_set()
+        async def receive(self):
+            await disconnected.wait()
+            return {'type': 'http.disconnect'}
 
     async def provider_call():
         try:
@@ -1120,8 +1121,8 @@ async def test_outer_cancellation_cleans_up_in_flight_provider_call():
     cancelled = asyncio.Event()
 
     class ConnectedRequest:
-        async def is_disconnected(self):
-            return False
+        async def receive(self):
+            await asyncio.Event().wait()
 
     async def provider_call():
         started.set()

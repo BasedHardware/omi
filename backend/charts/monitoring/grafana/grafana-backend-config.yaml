@@ -1,0 +1,12 @@
+# URL login contains a short-lived bearer. Disable request-URL logging on this
+# backend only; no project logging retention/exclusion settings are changed.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: grafana-private-embed
+  namespace: prod-omi-monitoring
+spec:
+  # Isolated Infinity can wait420s; keep the external path above that budget.
+  timeoutSec: 480
+  logging:
+    enable: false

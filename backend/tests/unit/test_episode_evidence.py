@@ -134,6 +134,7 @@ def test_episode_prompt_replaces_speech_only_rules_and_binds_images():
 def test_sdk_and_backend_fallback_keep_claims_optional():
     import ast
     from pydantic import BaseModel, Field, field_validator, model_serializer
+    from pydantic.json_schema import SkipJsonSchema
     from typing import List, Literal, Optional
 
     source = Path('models/structured.py').read_text()
@@ -143,6 +144,7 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
         Field=Field,
         field_validator=field_validator,
         model_serializer=model_serializer,
+        SkipJsonSchema=SkipJsonSchema,
         datetime=datetime,
         List=List,
         Literal=Literal,
@@ -150,6 +152,7 @@ def test_sdk_and_backend_fallback_keep_claims_optional():
     )
     exec(compile(ast.Module(body=fallback, type_ignores=[]), 'structured_fallback', 'exec'), namespace)
     for model in (Structured, namespace['Structured']):
+        assert 'title_provenance' not in model.model_json_schema()['properties']
         assert 'note_claims' not in model().model_dump()
         value = model.model_validate(valid_note().model_dump(mode='json'))
         assert value.model_dump()['note_claims'][0]['provenance'] == 'written'
