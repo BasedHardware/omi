@@ -223,21 +223,26 @@ def test_batch_contention_control_retries_projection_transactions(monkeypatch, f
 
 
 @pytest.fixture
-def claim_redis():
+def claim_redis(monkeypatch):
     import fakeredis
+    from database import batch_pipeline_projection_claim as claims
 
     redis = fakeredis.FakeRedis()
     redis.eval('return 1', 0)  # Load the Lua emulator in harness setup.
-    return redis
+    claims._redis_client.cache_clear()
+    factory = Mock(return_value=redis)
+    monkeypatch.setattr(claims.redis_db, 'create_bounded_redis_client', factory)
+    try:
+        yield redis
+        factory.assert_called_once_with(1.0)
+    finally:
+        claims._redis_client.cache_clear()
 
 
 def test_owner_claim_is_shared_token_fenced_with_bounded_ttl(monkeypatch, claim_redis):
     from database import batch_pipeline_projection_claim as claims
 
     redis = claim_redis
-    monkeypatch.setattr(claims.redis_db, 'r', redis)
-    script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
-    monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
     with claims.projection_claim('synthetic', 'owner') as first:
         assert first
         assert 0 < redis.ttl('batch_projection:synthetic:owner') <= claims.LEASE_SECONDS
@@ -259,7 +264,7 @@ def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
 
     redis = Mock()
     redis.set.side_effect = ConnectionError('synthetic')
-    monkeypatch.setattr(claims.redis_db, 'r', redis)
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     with claims.projection_claim('synthetic', 'owner') as acquired:
         assert acquired
 

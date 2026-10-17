@@ -5215,7 +5215,7 @@ flags does not remove persisted label authority or reset paid recovery intents.
 
 `BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
 Enable it on integration to coalesce concurrent projection per owner using an advisory Redis
-NX/300-second token lease. Token-checked release cannot remove a replacement lease; expiry
+NX/300-second token lease with one-second connect/read timeouts. Token-checked release cannot remove a replacement lease; expiry
 or Redis unavailability can allow overlap, so Firestore privacy, predecessor ordering and
 assignment receipts remain authoritative. No Firestore lookup is added. Both projection and
 batch assignment then use the existing bounded five-attempt fresh-transaction contention

@@ -1179,9 +1179,7 @@ def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatc
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
     monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
     redis = fakeredis.FakeRedis()
-    monkeypatch.setattr(claims.redis_db, 'r', redis)
-    script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
-    monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     batch = lane.seed()
     lane.finish(batch)
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
@@ -1223,7 +1221,7 @@ def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkey
     # safe without it; all Firestore transaction races below are real.
     redis = Mock()
     redis.set.side_effect = ConnectionError('synthetic Redis unavailable')
-    monkeypatch.setattr(claims.redis_db, 'r', redis)
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     batch = lane.seed()
     lane.finish(batch, outcome='silence')
     barrier = threading.Barrier(3)
@@ -1262,9 +1260,7 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
     from database import batch_pipeline_projection_claim as claims
 
     redis = fakeredis.FakeRedis()
-    monkeypatch.setattr(claims.redis_db, 'r', redis)
-    script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
-    monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     batch = lane.seed()
     lane.finish(batch)
     transport = lane.client._firestore_api._transport
