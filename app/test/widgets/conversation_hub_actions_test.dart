@@ -213,17 +213,18 @@ void main() {
     expect(separated, ['b'], reason: 'the other recording, never the row itself');
   });
 
-  testWidgets('Share on a private row asks before making it public', (tester) async {
+  testWidgets('Share on a private row asks nothing first', (tester) async {
     final a = _conversation('a');
     provider.conversations = [a];
     await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
     await tester.longPress(find.byType(ConversationListItem));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('conversation_action_share')));
+    await tester.pump();
+    expect(find.text('Anyone with the link can view'), findsNothing);
+    expect(find.text('Share Conversation?'), findsNothing);
     await tester.pumpAndSettle();
-    expect(find.text('Anyone with the link can view'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    // No server in a hermetic test, so the link is never made and the row stays private.
     expect(a.visibility, isNot(ConversationVisibility.shared));
   });
 
