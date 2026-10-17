@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from config import stt_cap_dispatch as flag
+from models.message_event import SttCapLiveHeldEvent
 from utils import stt_cap_dispatch as cap
 from routers.listen.receiver import _RecordingSTTSocket
 from utils.stt.live_session import LiveLegSocket
@@ -372,3 +373,31 @@ async def test_ladder_only_legacy_profile_keeps_long_read_cadence_and_invalidate
     await state.refresh(force=True)
     assert resolver.call_count == 3
     assert state.remaining_units == 10000
+
+
+def test_first_suppression_emits_one_pcm_offset(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    state = cap.LiveAdmission('synthetic')
+    state.managed, state.remaining = True, 1
+    state.reason = 'plan_within_allowance'
+    raw = Mock(send=Mock(return_value=True))
+    socket = cap.CapSocket(state, 'soniox', 16000, AsyncMock(), raw)
+    assert socket.send(b'\0' * 3200)
+    assert socket.send(b'\0' * 28800)
+    assert state.pending_held_notice() is None
+    assert socket.send(b'\0' * 3200)
+    assert state.pending_held_notice() == 32000
+    assert socket.send(b'\0' * 1000)
+    assert state.pending_held_notice() == 32000
+    event = SttCapLiveHeldEvent(pcm_byte_offset=state.pending_held_notice())
+    assert event.to_json() == {'type': 'stt_cap_live_held', 'pcm_byte_offset': 32000}
+    state.consume_held_notice()
+    assert state.pending_held_notice() is None
+    assert raw.send.call_count == 2
+
+
+def test_flag_off_suppression_does_not_arm_a_notice(monkeypatch):
+    monkeypatch.delenv('STT_CAP_DISPATCH_ENFORCEMENT', raising=False)
+    state = cap.LiveAdmission('synthetic')
+    state.note_suppressed()
+    assert state.pending_held_notice() is None

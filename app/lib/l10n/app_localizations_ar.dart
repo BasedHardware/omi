@@ -13995,12 +13995,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'لقد بلغت حد هذا الشهر. تسجيلاتك محفوظة وسيتم تفريغها في $date.';
+    return 'لقد بلغت حد هذا الشهر. تسجيلاتك محفوظة وسيتم تفريغها بعد إعادة تعيين حدك في $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'التسجيلات الجديدة ستُفرغ على هذا الهاتف. التسجيلات المنتظرة تُفرغ في $date.';
+    return 'التسجيلات الجديدة ستُفرغ على هذا الهاتف. التسجيلات المنتظرة ستُفرغ بعد إعادة تعيين حدك في $date.';
   }
 
   @override
@@ -14026,7 +14026,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'تُفرغ في $date';
+    return 'تُفرغ بعد إعادة تعيين حدك في $date';
   }
 
   @override
@@ -14036,11 +14036,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'تُفرغ تلقائيا في $date';
+    return 'تُفرغ بعد إعادة تعيين حدك في $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration بانتظار النسخ';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'و$count أخرى',
+      one: 'و1 أخرى',
+    );
+    return '$_temp0';
   }
 }

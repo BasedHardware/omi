@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% folosit · au rămas aproximativ {hours} ore de înregistrare · {reset}",
     "onDeviceGetMoreUsage": "Obțineți mai multă utilizare",
     "onDeviceGettingSpeechReady": "Se pregătește vorbirea · {percent}%",
-    "heldAudioSavedBody": "Ai atins limita acestei luni. Înregistrările tale sunt salvate și vor fi transcrise pe {date}.",
-    "heldAudioPhoneChosenBody": "Înregistrările noi vor fi transcrise pe acest telefon. Înregistrările în așteptare sunt transcrise pe {date}.",
+    "heldAudioSavedBody": "Ai atins limita acestei luni. Înregistrările tale sunt salvate și vor fi transcrise după resetarea limitei pe {date}.",
+    "heldAudioPhoneChosenBody": "Înregistrările noi vor fi transcrise pe acest telefon. Înregistrările în așteptare vor fi transcrise după resetarea limitei pe {date}.",
     "heldAudioRecordingTitle": "Înregistrare, {time}",
     "heldAudioRecordingSubtitle": "{duration} · În așteptarea transcrierii",
     "heldAudioLiveTitle": "Transcrierea în cloud este întreruptă",
     "heldAudioLiveBody": "Ai atins limita acestei luni. Omi continuă să înregistreze.",
     "heldAudioRecordedSinceLimit": "{minutes} min înregistrate de la limită",
-    "heldAudioTranscribesOn": "Se transcrie pe {date}",
+    "heldAudioTranscribesOn": "Se transcrie după resetarea limitei pe {date}",
     "heldAudioWaiting": "{duration} în așteptare",
-    "heldAudioWaitingOn": "Transcris automat pe {date}",
-    "heldAudioCardTitle": "{duration} în așteptarea transcrierii"
+    "heldAudioWaitingOn": "Transcris după resetarea limitei pe {date}",
+    "heldAudioCardTitle": "{duration} în așteptarea transcrierii",
+    "heldAudioAndMore": "{count, plural, =1{și încă 1} other{și încă {count}}}"
 }

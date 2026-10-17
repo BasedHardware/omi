@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% porabljeno · ostane približno {hours} ur snemanja · {reset}",
     "onDeviceGetMoreUsage": "Pridobite več uporabe",
     "onDeviceGettingSpeechReady": "Priprava govora · {percent} %",
-    "heldAudioSavedBody": "Dosegli ste omejitev za ta mesec. Vaši posnetki so shranjeni in bodo prepisani {date}.",
-    "heldAudioPhoneChosenBody": "Novi posnetki bodo prepisani na tem telefonu. Čakajoči posnetki se prepišejo {date}.",
+    "heldAudioSavedBody": "Dosegli ste omejitev za ta mesec. Vaši posnetki so shranjeni in bodo prepisani po ponastavitvi omejitve {date}.",
+    "heldAudioPhoneChosenBody": "Novi posnetki bodo prepisani na tem telefonu. Čakajoči posnetki bodo prepisani po ponastavitvi omejitve {date}.",
     "heldAudioRecordingTitle": "Posnetek, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Čaka na prepis",
     "heldAudioLiveTitle": "Prepis v oblaku je zaustavljen",
     "heldAudioLiveBody": "Dosegli ste omejitev za ta mesec. Omi še naprej snema.",
     "heldAudioRecordedSinceLimit": "{minutes} min posneto po omejitvi",
-    "heldAudioTranscribesOn": "Prepis {date}",
+    "heldAudioTranscribesOn": "Prepis po ponastavitvi omejitve {date}",
     "heldAudioWaiting": "{duration} čaka",
-    "heldAudioWaitingOn": "Samodejno prepisano {date}",
-    "heldAudioCardTitle": "{duration} čaka na prepis"
+    "heldAudioWaitingOn": "Prepisano po ponastavitvi omejitve {date}",
+    "heldAudioCardTitle": "{duration} čaka na prepis",
+    "heldAudioAndMore": "{count, plural, =1{in še 1} other{in še {count}}}"
 }

@@ -14170,12 +14170,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். உங்கள் பதிவுகள் சேமிக்கப்பட்டு $date அன்று எழுதப்படும்.';
+    return 'இந்த மாத வரம்பை அடைந்துவிட்டீர்கள். உங்கள் பதிவுகள் சேமிக்கப்பட்டு, வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'புதிய பதிவுகள் இந்த தொலைபேசியில் எழுதப்படும். காத்திருக்கும் பதிவுகள் $date அன்று எழுதப்படும்.';
+    return 'புதிய பதிவுகள் இந்த தொலைபேசியில் எழுதப்படும். காத்திருக்கும் பதிவுகள் வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்.';
   }
 
   @override
@@ -14201,7 +14201,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return '$date அன்று எழுதப்படும்';
+    return 'வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்';
   }
 
   @override
@@ -14211,11 +14211,22 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return '$date அன்று தானாக எழுதப்படும்';
+    return 'வரம்பு $date அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration உரையாக்கக் காத்திருக்கிறது';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'மேலும் $count',
+      one: 'மேலும் 1',
+    );
+    return '$_temp0';
   }
 }

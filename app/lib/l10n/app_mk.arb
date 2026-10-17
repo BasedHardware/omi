@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% искористено · преостануваат околу {hours} часа снимање · {reset}",
     "onDeviceGetMoreUsage": "Добијте повеќе употреба",
     "onDeviceGettingSpeechReady": "Се подготвува говорот · {percent}%",
-    "heldAudioSavedBody": "Ја достигнавте границата за овој месец. Вашите снимки се зачувани и ќе бидат транскрибирани на {date}.",
-    "heldAudioPhoneChosenBody": "Новите снимки ќе се транскрибираат на овој телефон. Снимките што чекаат се транскрибираат на {date}.",
+    "heldAudioSavedBody": "Ја достигнавте границата за овој месец. Вашите снимки се зачувани и ќе бидат транскрибирани откако границата ќе се ресетира на {date}.",
+    "heldAudioPhoneChosenBody": "Новите снимки ќе се транскрибираат на овој телефон. Снимките што чекаат ќе се транскрибираат откако границата ќе се ресетира на {date}.",
     "heldAudioRecordingTitle": "Снимка, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Чека транскрипција",
     "heldAudioLiveTitle": "Транскрипцијата во облак е паузирана",
     "heldAudioLiveBody": "Ја достигнавте границата за овој месец. Omi продолжува да снима.",
     "heldAudioRecordedSinceLimit": "{minutes} мин снимени по границата",
-    "heldAudioTranscribesOn": "Се транскрибира на {date}",
+    "heldAudioTranscribesOn": "Се транскрибира откако границата ќе се ресетира на {date}",
     "heldAudioWaiting": "{duration} на чекање",
-    "heldAudioWaitingOn": "Се транскрибира автоматски на {date}",
-    "heldAudioCardTitle": "{duration} чека транскрипција"
+    "heldAudioWaitingOn": "Се транскрибира откако границата ќе се ресетира на {date}",
+    "heldAudioCardTitle": "{duration} чека транскрипција",
+    "heldAudioAndMore": "{count, plural, =1{и уште 1} other{и уште {count}}}"
 }

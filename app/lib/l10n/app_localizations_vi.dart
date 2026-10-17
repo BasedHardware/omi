@@ -14073,12 +14073,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Bạn đã đạt giới hạn tháng này. Bản ghi của bạn được lưu và sẽ được chuyển thành chữ vào $date.';
+    return 'Bạn đã đạt giới hạn tháng này. Bản ghi của bạn được lưu và sẽ được chuyển thành chữ sau khi giới hạn đặt lại vào $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Bản ghi mới sẽ được chuyển thành chữ trên điện thoại này. Bản ghi đang chờ được chuyển thành chữ vào $date.';
+    return 'Bản ghi mới sẽ được chuyển thành chữ trên điện thoại này. Bản ghi đang chờ sẽ được chuyển thành chữ sau khi giới hạn đặt lại vào $date.';
   }
 
   @override
@@ -14104,7 +14104,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Chuyển thành chữ vào $date';
+    return 'Chuyển thành chữ sau khi giới hạn đặt lại vào $date';
   }
 
   @override
@@ -14114,11 +14114,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Tự động chuyển thành chữ vào $date';
+    return 'Chuyển thành chữ sau khi giới hạn đặt lại vào $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration đang chờ phiên âm';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'và $count bản nữa',
+      one: 'và 1 bản nữa',
+    );
+    return '$_temp0';
   }
 }

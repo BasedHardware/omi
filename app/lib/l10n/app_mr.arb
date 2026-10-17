@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% वापरले · सुमारे {hours} तास रेकॉर्डिंग शिल्लक · {reset}",
     "onDeviceGetMoreUsage": "अधिक वापर मिळवा",
     "onDeviceGettingSpeechReady": "बोलणे तयार होत आहे · {percent}%",
-    "heldAudioSavedBody": "तुम्ही या महिन्याची मर्यादा गाठली आहे. तुमच्या रेकॉर्डिंग जतन केल्या आहेत आणि {date} रोजी लिहिल्या जातील.",
-    "heldAudioPhoneChosenBody": "नवीन रेकॉर्डिंग या फोनवर लिहिल्या जातील. प्रतीक्षेतील रेकॉर्डिंग {date} रोजी लिहिल्या जातात.",
+    "heldAudioSavedBody": "तुम्ही या महिन्याची मर्यादा गाठली आहे. तुमच्या रेकॉर्डिंग जतन केल्या आहेत आणि मर्यादा {date} रोजी रीसेट झाल्यानंतर लिहिल्या जातील.",
+    "heldAudioPhoneChosenBody": "नवीन रेकॉर्डिंग या फोनवर लिहिल्या जातील. प्रतीक्षेतील रेकॉर्डिंग मर्यादा {date} रोजी रीसेट झाल्यानंतर लिहिल्या जातील.",
     "heldAudioRecordingTitle": "रेकॉर्डिंग, {time}",
     "heldAudioRecordingSubtitle": "{duration} · लिहिण्याच्या प्रतीक्षेत",
     "heldAudioLiveTitle": "क्लाउड ट्रान्सक्रिप्शन थांबवले आहे",
     "heldAudioLiveBody": "तुम्ही या महिन्याची मर्यादा गाठली आहे. Omi रेकॉर्ड करत राहतो.",
     "heldAudioRecordedSinceLimit": "मर्यादेनंतर {minutes} मिनिटे रेकॉर्ड झाली",
-    "heldAudioTranscribesOn": "{date} रोजी लिहिले जाईल",
+    "heldAudioTranscribesOn": "मर्यादा {date} रोजी रीसेट झाल्यानंतर लिहिले जाईल",
     "heldAudioWaiting": "{duration} प्रतीक्षेत",
-    "heldAudioWaitingOn": "{date} रोजी आपोआप लिहिले जाईल",
-    "heldAudioCardTitle": "{duration} ट्रान्सक्रिप्शनच्या प्रतीक्षेत"
+    "heldAudioWaitingOn": "मर्यादा {date} रोजी रीसेट झाल्यानंतर लिहिले जाईल",
+    "heldAudioCardTitle": "{duration} ट्रान्सक्रिप्शनच्या प्रतीक्षेत",
+    "heldAudioAndMore": "{count, plural, =1{आणि आणखी 1} other{आणि आणखी {count}}}"
 }

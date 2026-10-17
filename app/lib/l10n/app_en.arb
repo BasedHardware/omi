@@ -17092,7 +17092,7 @@
             }
         }
     },
-    "heldAudioSavedBody": "You've reached this month's limit. Your recordings are saved and will be transcribed on {date}.",
+    "heldAudioSavedBody": "You've reached this month's limit. Your recordings are saved and will be transcribed after your limit resets on {date}.",
     "@heldAudioSavedBody": {
         "description": "Body of the home card when recordings are saved and waiting for cloud transcription. date is a formatted date.",
         "placeholders": {
@@ -17101,7 +17101,7 @@
             }
         }
     },
-    "heldAudioPhoneChosenBody": "New recordings will transcribe on this phone. Waiting recordings transcribe on {date}.",
+    "heldAudioPhoneChosenBody": "New recordings will transcribe on this phone. Waiting recordings will be transcribed after your limit resets on {date}.",
     "@heldAudioPhoneChosenBody": {
         "description": "Body after the user chooses on-phone transcription. date is when recordings already waiting will be transcribed.",
         "placeholders": {
@@ -17145,7 +17145,7 @@
             }
         }
     },
-    "heldAudioTranscribesOn": "Transcribes on {date}",
+    "heldAudioTranscribesOn": "Transcribes after your limit resets on {date}",
     "@heldAudioTranscribesOn": {
         "description": "Second line of the live transcript placeholder. date is a formatted date.",
         "placeholders": {
@@ -17163,7 +17163,7 @@
             }
         }
     },
-    "heldAudioWaitingOn": "Transcribed automatically on {date}",
+    "heldAudioWaitingOn": "Transcribed after your limit resets on {date}",
     "@heldAudioWaitingOn": {
         "description": "Settings usage row subtitle. date is when waiting audio is transcribed automatically.",
         "placeholders": {
@@ -17178,6 +17178,15 @@
         "placeholders": {
             "duration": {
                 "type": "String"
+            }
+        }
+    },
+    "heldAudioAndMore": "{count, plural, =1{and 1 more} other{and {count} more}}",
+    "@heldAudioAndMore": {
+        "description": "How many held recordings are past the newest page",
+        "placeholders": {
+            "count": {
+                "type": "int"
             }
         }
     }

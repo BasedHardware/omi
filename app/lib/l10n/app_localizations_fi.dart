@@ -14078,12 +14078,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Olet saavuttanut tämän kuun rajan. Tallenteesi on tallennettu ja ne litteroidaan $date.';
+    return 'Olet saavuttanut tämän kuun rajan. Tallenteesi on tallennettu ja ne litteroidaan, kun rajasi nollautuu $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Uudet tallenteet litteroidaan tällä puhelimella. Odottavat tallenteet litteroidaan $date.';
+    return 'Uudet tallenteet litteroidaan tällä puhelimella. Odottavat tallenteet litteroidaan, kun rajasi nollautuu $date.';
   }
 
   @override
@@ -14109,7 +14109,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Litteroidaan $date';
+    return 'Litteroidaan, kun rajasi nollautuu $date';
   }
 
   @override
@@ -14119,11 +14119,22 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Litteroidaan automaattisesti $date';
+    return 'Litteroidaan, kun rajasi nollautuu $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration odottaa litterointia';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ja $count muuta',
+      one: 'ja 1 muu',
+    );
+    return '$_temp0';
   }
 }

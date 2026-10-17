@@ -14137,12 +14137,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Ја достигнавте границата за овој месец. Вашите снимки се зачувани и ќе бидат транскрибирани на $date.';
+    return 'Ја достигнавте границата за овој месец. Вашите снимки се зачувани и ќе бидат транскрибирани откако границата ќе се ресетира на $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Новите снимки ќе се транскрибираат на овој телефон. Снимките што чекаат се транскрибираат на $date.';
+    return 'Новите снимки ќе се транскрибираат на овој телефон. Снимките што чекаат ќе се транскрибираат откако границата ќе се ресетира на $date.';
   }
 
   @override
@@ -14168,7 +14168,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Се транскрибира на $date';
+    return 'Се транскрибира откако границата ќе се ресетира на $date';
   }
 
   @override
@@ -14178,11 +14178,22 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Се транскрибира автоматски на $date';
+    return 'Се транскрибира откако границата ќе се ресетира на $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration чека транскрипција';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'и уште $count',
+      one: 'и уште 1',
+    );
+    return '$_temp0';
   }
 }

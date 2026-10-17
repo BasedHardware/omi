@@ -24,11 +24,17 @@ void main() {
 
   final resetAt = DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000;
 
-  HeldAudioSummary summary({int seconds = 120, bool retainLive = true, List<HeldAudioRecording>? recordings}) {
+  HeldAudioSummary summary({
+    int seconds = 120,
+    bool retainLive = true,
+    int count = 0,
+    List<HeldAudioRecording>? recordings,
+  }) {
     return HeldAudioSummary(
       seconds: seconds,
       resetAt: resetAt,
       retainLive: retainLive,
+      count: count,
       recordings: recordings ??
           [
             const HeldAudioRecording(id: 'newer', startedAt: 200, seconds: 90),
@@ -75,16 +81,26 @@ void main() {
 
     expect(find.byKey(const Key('held_audio_card')), findsOneWidget);
     expect(find.text('2m waiting to transcribe'), findsOneWidget);
-    expect(find.textContaining('Your recordings are saved and will be transcribed on Nov 1, 2026'), findsOneWidget);
+    expect(
+      find.textContaining('Your recordings are saved and will be transcribed after your limit resets on Nov 1, 2026'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('held_audio_row_newer')), findsOneWidget);
     expect(find.byKey(const Key('held_audio_row_older')), findsOneWidget);
     expect(find.text('1m 30s · Waiting to transcribe'), findsOneWidget);
     expect(find.text('30s · Waiting to transcribe'), findsOneWidget);
+    expect(find.byKey(const Key('held_audio_more')), findsNothing);
 
     await tester.tap(find.byKey(const Key('held_audio_upgrade')));
     await tester.tap(find.byKey(const Key('held_audio_on_phone')));
     expect(upgrades, 1);
     expect(phones, 1);
+  });
+
+  testWidgets('a truncated hold page says how many more exist', (tester) async {
+    await pump(tester, HeldAudioHomeSection(controller: phone(), gate: true, summary: summary(count: 22)));
+    expect(find.text('and 20 more'), findsOneWidget);
+    expect(find.byKey(const Key('held_audio_more')), findsOneWidget);
   });
 
   testWidgets('choosing the phone switches new recordings and says the backlog stays waiting', (tester) async {
@@ -97,7 +113,10 @@ void main() {
 
     expect(controller.settings.enabled, isTrue);
     expect(find.textContaining('New recordings will transcribe on this phone'), findsOneWidget);
-    expect(find.textContaining('Waiting recordings transcribe on Nov 1, 2026'), findsOneWidget);
+    expect(
+      find.textContaining('Waiting recordings will be transcribed after your limit resets on Nov 1, 2026'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('held_audio_on_phone')), findsNothing);
     expect(find.byKey(const Key('held_audio_upgrade')), findsOneWidget);
   });
@@ -145,7 +164,7 @@ void main() {
     expect(find.textContaining('Omi keeps recording'), findsOneWidget);
     expect(find.byKey(const Key('held_audio_live_on_phone')), findsOneWidget);
     expect(find.text('2 min recorded since the limit'), findsOneWidget);
-    expect(find.text('Transcribes on Nov 1, 2026'), findsOneWidget);
+    expect(find.text('Transcribes after your limit resets on Nov 1, 2026'), findsOneWidget);
     await tester.tap(find.byKey(const Key('held_audio_live_upgrade')));
     expect(upgrades, 1);
   });
@@ -199,7 +218,7 @@ void main() {
     );
     expect(find.byKey(const Key('held_audio_usage_waiting')), findsOneWidget);
     expect(find.text('2m waiting'), findsOneWidget);
-    expect(find.text('Transcribed automatically on Nov 1, 2026'), findsOneWidget);
+    expect(find.text('Transcribed after your limit resets on Nov 1, 2026'), findsOneWidget);
     expect(find.text('Always transcribe on this phone'), findsOneWidget);
     expect(find.text('See plans'), findsOneWidget);
     await tester.tap(find.byKey(const Key('held_audio_usage_plans')));

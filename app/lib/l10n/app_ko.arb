@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% 사용 · 녹음이 약 {hours}시간 남음 · {reset}",
     "onDeviceGetMoreUsage": "사용량을 더 받기",
     "onDeviceGettingSpeechReady": "음성을 준비하는 중 · {percent}%",
-    "heldAudioSavedBody": "이번 달 한도에 도달했습니다. 녹음은 저장되어 있으며 {date}에 받아적습니다.",
-    "heldAudioPhoneChosenBody": "새 녹음은 이 휴대폰에서 받아적습니다. 대기 중인 녹음은 {date}에 받아적습니다.",
+    "heldAudioSavedBody": "이번 달 한도에 도달했습니다. 녹음은 저장되어 있으며 한도가 {date}에 초기화된 뒤 받아적습니다.",
+    "heldAudioPhoneChosenBody": "새 녹음은 이 휴대폰에서 받아적습니다. 대기 중인 녹음은 한도가 {date}에 초기화된 뒤 받아적습니다.",
     "heldAudioRecordingTitle": "녹음, {time}",
     "heldAudioRecordingSubtitle": "{duration} · 받아쓰기 대기",
     "heldAudioLiveTitle": "클라우드 받아쓰기가 일시중지됨",
     "heldAudioLiveBody": "이번 달 한도에 도달했습니다. Omi는 계속 녹음합니다.",
     "heldAudioRecordedSinceLimit": "한도 이후 {minutes}분 녹음됨",
-    "heldAudioTranscribesOn": "{date}에 받아쓰기",
+    "heldAudioTranscribesOn": "한도가 {date}에 초기화된 뒤 받아쓰기",
     "heldAudioWaiting": "{duration} 대기 중",
-    "heldAudioWaitingOn": "{date}에 자동으로 받아쓰기",
-    "heldAudioCardTitle": "{duration} 분량이 변환 대기 중"
+    "heldAudioWaitingOn": "한도가 {date}에 초기화된 뒤 받아쓰기",
+    "heldAudioCardTitle": "{duration} 분량이 변환 대기 중",
+    "heldAudioAndMore": "{count, plural, =1{외 1개} other{외 {count}개}}"
 }

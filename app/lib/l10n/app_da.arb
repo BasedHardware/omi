@@ -4350,15 +4350,16 @@
     "onDeviceMeterLineHours": "{percent}% brugt · cirka {hours} timers optagelse tilbage · {reset}",
     "onDeviceGetMoreUsage": "Få mere forbrug",
     "onDeviceGettingSpeechReady": "Gør tale klar · {percent} %",
-    "heldAudioSavedBody": "Du har nået denne måneds grænse. Dine optagelser er gemt og bliver transskriberet {date}.",
-    "heldAudioPhoneChosenBody": "Nye optagelser transskriberes på denne telefon. Ventende optagelser transskriberes {date}.",
+    "heldAudioSavedBody": "Du har nået denne måneds grænse. Dine optagelser er gemt og bliver transskriberet, efter din grænse nulstilles {date}.",
+    "heldAudioPhoneChosenBody": "Nye optagelser transskriberes på denne telefon. Ventende optagelser transskriberes, efter din grænse nulstilles {date}.",
     "heldAudioRecordingTitle": "Optagelse, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Venter på transskription",
     "heldAudioLiveTitle": "Cloud-transskription er sat på pause",
     "heldAudioLiveBody": "Du har nået denne måneds grænse. Omi bliver ved med at optage.",
     "heldAudioRecordedSinceLimit": "{minutes} min optaget siden grænsen",
-    "heldAudioTranscribesOn": "Transskriberes {date}",
+    "heldAudioTranscribesOn": "Transskriberes, efter din grænse nulstilles {date}",
     "heldAudioWaiting": "{duration} venter",
-    "heldAudioWaitingOn": "Transskriberes automatisk {date}",
-    "heldAudioCardTitle": "{duration} venter på transskription"
+    "heldAudioWaitingOn": "Transskriberes, efter din grænse nulstilles {date}",
+    "heldAudioCardTitle": "{duration} venter på transskription",
+    "heldAudioAndMore": "{count, plural, =1{og 1 mere} other{og {count} mere}}"
 }

@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "Đã dùng {percent}% · còn khoảng {hours} giờ ghi âm · {reset}",
     "onDeviceGetMoreUsage": "Nhận thêm mức sử dụng",
     "onDeviceGettingSpeechReady": "Đang chuẩn bị giọng nói · {percent}%",
-    "heldAudioSavedBody": "Bạn đã đạt giới hạn tháng này. Bản ghi của bạn được lưu và sẽ được chuyển thành chữ vào {date}.",
-    "heldAudioPhoneChosenBody": "Bản ghi mới sẽ được chuyển thành chữ trên điện thoại này. Bản ghi đang chờ được chuyển thành chữ vào {date}.",
+    "heldAudioSavedBody": "Bạn đã đạt giới hạn tháng này. Bản ghi của bạn được lưu và sẽ được chuyển thành chữ sau khi giới hạn đặt lại vào {date}.",
+    "heldAudioPhoneChosenBody": "Bản ghi mới sẽ được chuyển thành chữ trên điện thoại này. Bản ghi đang chờ sẽ được chuyển thành chữ sau khi giới hạn đặt lại vào {date}.",
     "heldAudioRecordingTitle": "Bản ghi, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Đang chờ chuyển thành chữ",
     "heldAudioLiveTitle": "Tạm dừng chuyển giọng nói trên đám mây",
     "heldAudioLiveBody": "Bạn đã đạt giới hạn tháng này. Omi vẫn tiếp tục ghi.",
     "heldAudioRecordedSinceLimit": "{minutes} phút đã ghi kể từ khi đạt giới hạn",
-    "heldAudioTranscribesOn": "Chuyển thành chữ vào {date}",
+    "heldAudioTranscribesOn": "Chuyển thành chữ sau khi giới hạn đặt lại vào {date}",
     "heldAudioWaiting": "{duration} đang chờ",
-    "heldAudioWaitingOn": "Tự động chuyển thành chữ vào {date}",
-    "heldAudioCardTitle": "{duration} đang chờ phiên âm"
+    "heldAudioWaitingOn": "Chuyển thành chữ sau khi giới hạn đặt lại vào {date}",
+    "heldAudioCardTitle": "{duration} đang chờ phiên âm",
+    "heldAudioAndMore": "{count, plural, =1{và 1 bản nữa} other{và {count} bản nữa}}"
 }

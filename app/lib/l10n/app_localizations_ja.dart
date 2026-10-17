@@ -13872,12 +13872,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return '今月の上限に達しました。録音は保存され、$dateに文字起こしされます。';
+    return '今月の上限に達しました。録音は保存され、上限が$dateにリセットされた後に文字起こしされます。';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return '新しい録音はこの端末で文字起こしされます。待機中の録音は$dateに文字起こしされます。';
+    return '新しい録音はこの端末で文字起こしされます。待機中の録音は、上限が$dateにリセットされた後に文字起こしされます。';
   }
 
   @override
@@ -13903,7 +13903,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return '$dateに文字起こし';
+    return '上限が$dateにリセットされた後に文字起こし';
   }
 
   @override
@@ -13913,11 +13913,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return '$dateに自動で文字起こし';
+    return '上限が$dateにリセットされた後に文字起こし';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$durationが文字起こし待ち';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ほか$count件',
+      one: 'ほか1件',
+    );
+    return '$_temp0';
   }
 }

@@ -13878,12 +13878,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return '이번 달 한도에 도달했습니다. 녹음은 저장되어 있으며 $date에 받아적습니다.';
+    return '이번 달 한도에 도달했습니다. 녹음은 저장되어 있으며 한도가 $date에 초기화된 뒤 받아적습니다.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return '새 녹음은 이 휴대폰에서 받아적습니다. 대기 중인 녹음은 $date에 받아적습니다.';
+    return '새 녹음은 이 휴대폰에서 받아적습니다. 대기 중인 녹음은 한도가 $date에 초기화된 뒤 받아적습니다.';
   }
 
   @override
@@ -13909,7 +13909,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return '$date에 받아쓰기';
+    return '한도가 $date에 초기화된 뒤 받아쓰기';
   }
 
   @override
@@ -13919,11 +13919,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return '$date에 자동으로 받아쓰기';
+    return '한도가 $date에 초기화된 뒤 받아쓰기';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration 분량이 변환 대기 중';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '외 $count개',
+      one: '외 1개',
+    );
+    return '$_temp0';
   }
 }

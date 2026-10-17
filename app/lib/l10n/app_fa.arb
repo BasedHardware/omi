@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% استفاده شده · حدود {hours} ساعت ضبط باقی مانده · {reset}",
     "onDeviceGetMoreUsage": "استفادهٔ بیشتر بگیرید",
     "onDeviceGettingSpeechReady": "آماده‌سازی گفتار · {percent}%",
-    "heldAudioSavedBody": "به سقف این ماه رسیده اید. ضبط های شما ذخیره شده و در {date} پیاده می شوند.",
-    "heldAudioPhoneChosenBody": "ضبط های جدید روی این گوشی پیاده می شوند. ضبط های در انتظار در {date} پیاده می شوند.",
+    "heldAudioSavedBody": "به سقف این ماه رسیده اید. ضبط های شما ذخیره شده و پس از بازنشانی سقف در {date} پیاده می شوند.",
+    "heldAudioPhoneChosenBody": "ضبط های جدید روی این گوشی پیاده می شوند. ضبط های در انتظار پس از بازنشانی سقف در {date} پیاده می شوند.",
     "heldAudioRecordingTitle": "ضبط، {time}",
     "heldAudioRecordingSubtitle": "{duration} · در انتظار پیاده سازی",
     "heldAudioLiveTitle": "پیاده سازی ابری متوقف شد",
     "heldAudioLiveBody": "به سقف این ماه رسیده اید. Omi به ضبط ادامه می دهد.",
     "heldAudioRecordedSinceLimit": "{minutes} دقیقه از زمان رسیدن به سقف ضبط شده",
-    "heldAudioTranscribesOn": "در {date} پیاده می شود",
+    "heldAudioTranscribesOn": "پس از بازنشانی سقف در {date} پیاده می شود",
     "heldAudioWaiting": "{duration} در انتظار",
-    "heldAudioWaitingOn": "به طور خودکار در {date} پیاده می شود",
-    "heldAudioCardTitle": "{duration} در انتظار رونویسی"
+    "heldAudioWaitingOn": "پس از بازنشانی سقف در {date} پیاده می شود",
+    "heldAudioCardTitle": "{duration} در انتظار رونویسی",
+    "heldAudioAndMore": "{count, plural, =1{و 1 مورد دیگر} other{و {count} مورد دیگر}}"
 }

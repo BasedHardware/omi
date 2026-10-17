@@ -345,12 +345,14 @@ class HeldAudioSummary {
   final int seconds;
   final int resetAt;
   final bool retainLive;
+  final int count;
   final List<HeldAudioRecording> recordings;
 
   const HeldAudioSummary({
     required this.seconds,
     required this.resetAt,
     required this.retainLive,
+    this.count = 0,
     this.recordings = const [],
   });
 
@@ -359,6 +361,7 @@ class HeldAudioSummary {
       seconds: generated.seconds,
       resetAt: generated.resetAt,
       retainLive: generated.retainLive,
+      count: generated.count,
       recordings: generated.recordings.map(HeldAudioRecording.fromGenerated).toList(),
     );
   }
@@ -463,6 +466,7 @@ class UserSubscriptionResponse {
               resetAt: heldAudio!.resetAt,
               retainLive: heldAudio!.retainLive,
               seconds: heldAudio!.seconds,
+              count: heldAudio!.count,
             ),
     );
   }

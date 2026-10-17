@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% käytetty · noin {hours} tuntia tallennusta jäljellä · {reset}",
     "onDeviceGetMoreUsage": "Hanki lisää käyttöä",
     "onDeviceGettingSpeechReady": "Puhe valmistellaan · {percent} %",
-    "heldAudioSavedBody": "Olet saavuttanut tämän kuun rajan. Tallenteesi on tallennettu ja ne litteroidaan {date}.",
-    "heldAudioPhoneChosenBody": "Uudet tallenteet litteroidaan tällä puhelimella. Odottavat tallenteet litteroidaan {date}.",
+    "heldAudioSavedBody": "Olet saavuttanut tämän kuun rajan. Tallenteesi on tallennettu ja ne litteroidaan, kun rajasi nollautuu {date}.",
+    "heldAudioPhoneChosenBody": "Uudet tallenteet litteroidaan tällä puhelimella. Odottavat tallenteet litteroidaan, kun rajasi nollautuu {date}.",
     "heldAudioRecordingTitle": "Tallenne, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Odottaa litterointia",
     "heldAudioLiveTitle": "Pilvilitterointi on keskeytetty",
     "heldAudioLiveBody": "Olet saavuttanut tämän kuun rajan. Omi jatkaa tallentamista.",
     "heldAudioRecordedSinceLimit": "{minutes} min tallennettu rajan jälkeen",
-    "heldAudioTranscribesOn": "Litteroidaan {date}",
+    "heldAudioTranscribesOn": "Litteroidaan, kun rajasi nollautuu {date}",
     "heldAudioWaiting": "{duration} odottaa",
-    "heldAudioWaitingOn": "Litteroidaan automaattisesti {date}",
-    "heldAudioCardTitle": "{duration} odottaa litterointia"
+    "heldAudioWaitingOn": "Litteroidaan, kun rajasi nollautuu {date}",
+    "heldAudioCardTitle": "{duration} odottaa litterointia",
+    "heldAudioAndMore": "{count, plural, =1{ja 1 muu} other{ja {count} muuta}}"
 }

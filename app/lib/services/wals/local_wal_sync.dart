@@ -154,6 +154,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// Frames stay in the WAL and upload through the existing sync path, which holds them.
   bool _retainSuppressedLiveAudio = false;
   int _retainedLiveFrames = 0;
+  int _sessionPcmBytes = 0;
   List<WalFrame> _frames = [];
   String? _captureEvidenceRoot;
   int _captureEvidenceGeneration = 0;
@@ -289,6 +290,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frameSynced = [];
     _retainSuppressedLiveAudio = false;
     _retainedLiveFrames = 0;
+    _sessionPcmBytes = 0;
     _captureEvidenceRoot = null;
     _captureEvidenceGeneration++;
     _nextSourceFramePosition = 0;
@@ -612,6 +614,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames = [];
     _pendingPhoneOnly = false;
     _frameSynced = [];
+    _sessionPcmBytes = 0;
   }
 
   @override
@@ -627,6 +630,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _pendingPhoneOnly = false;
     _frameSynced = [];
     _retainedLiveFrames = 0;
+    _sessionPcmBytes = 0;
 
     _framesPerSecond = codec.getFramesPerSecond();
     _codec = codec;
@@ -719,6 +723,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
+            sessionPcmStart: evidenceFrames.first.sessionPcmStart,
             ownerUid: _currentWalOwnerUid(),
             captureRoot: evidence.root,
             sourceFrameStart: evidence.start,
@@ -834,6 +839,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           seconds: frameCount ~/ _framesPerSecond,
           totalFrames: frameCount,
           syncedFrameOffset: syncedOffset,
+          sessionPcmStart: first.sessionPcmStart,
           ownerUid: _currentWalOwnerUid(),
           captureRoot: run.claimable ? first.captureRoot : null,
           sourceFrameStart: run.claimable ? first.sourceFramePosition : null,
@@ -941,6 +947,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             seconds: frameCount ~/ _framesPerSecond,
             totalFrames: frameCount,
             syncedFrameOffset: syncedOffset,
+            sessionPcmStart: frames.first.sessionPcmStart,
             ownerUid: _currentWalOwnerUid(),
             captureRoot: evidence.root,
             sourceFrameStart: evidence.start,
@@ -1597,6 +1604,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
+          sessionPcmStart: evidenceFrames.first.sessionPcmStart,
           ownerUid: _currentWalOwnerUid(),
           captureRoot: evidence.root,
           sourceFrameStart: evidence.start,
@@ -1884,6 +1892,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
       }
     }
+    final pcmStart = _sessionPcmBytes;
+    _sessionPcmBytes += _pcmBytes(frame.payload);
     final positioned = WalFrame(
       payload: frame.payload,
       syncKey: frame.syncKey,
@@ -1895,6 +1905,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       liveFragmentIndex: liveOrdinal != null ? _fragmentIndexOf(frame) : null,
       liveOrdinal: liveOrdinal,
       liveRingId: liveRingId,
+      sessionPcmStart: pcmStart,
     );
     _frames.add(positioned);
     _frameSynced.add(false);
@@ -1944,26 +1955,69 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return _retainedLiveFrames ~/ _framesPerSecond;
   }
 
-  /// [retain] keeps new socket-acked frames for the sync hold path. Frames the
-  /// socket already accepted are dropped: they were transcribed before the pause,
-  /// and uploading them again would transcribe them twice.
+  /// PCM16 bytes the server would see for [payload]. Phone PCM matches the
+  /// payload. Compressed frames use one decoded frame at 16 kHz.
+  int _pcmBytes(List<int> payload, {int sampleRate = 16000}) {
+    if (payload.isNotEmpty && _codec == BleAudioCodec.pcm16) return payload.length;
+    if (payload.isNotEmpty && _codec == BleAudioCodec.pcm8) return payload.length * 2;
+    final fps = _framesPerSecond <= 0 ? 100 : _framesPerSecond;
+    final estimated = (2 * sampleRate) ~/ fps;
+    return estimated <= 0 ? 1 : estimated;
+  }
+
+  /// [retain] keeps new socket-acked frames for the sync hold path. Frames
+  /// already marked synced stay synced so the transcribed prefix is not
+  /// uploaded again. The cap notice unmarks only the suppressed tail.
   void setRetainSuppressedLiveAudio(bool retain) {
     if (_retainSuppressedLiveAudio == retain) return;
     _retainSuppressedLiveAudio = retain;
-    if (!retain) {
-      _retainedLiveFrames = 0;
-      return;
+    if (!retain) _retainedLiveFrames = 0;
+  }
+
+  /// Turn retention on at the server's first suppressed PCM byte and unmark
+  /// every still-buffered frame from that byte, including frames already
+  /// copied into a WAL. Frames before the offset stay synced.
+  void retainSuppressedFromPcmOffset(int pcmByteOffset) {
+    if (pcmByteOffset < 0) return;
+    _retainSuppressedLiveAudio = true;
+    var frames = 0;
+    for (final wal in _wals) {
+      frames += _rewindWalFromOffset(wal, pcmByteOffset);
     }
-    var kept = 0;
-    for (var i = _frames.length - 1; i >= 0; i--) {
-      if (_frameSynced[i]) {
-        _frames.removeAt(i);
-        _frameSynced.removeAt(i);
-      } else {
-        kept++;
+    for (var i = 0; i < _frames.length; i++) {
+      final fromCap = _frames[i].sessionPcmStart >= pcmByteOffset;
+      if (fromCap) _frameSynced[i] = false;
+      if (fromCap || !_frameSynced[i]) frames++;
+    }
+    _retainedLiveFrames = frames;
+  }
+
+  int _rewindWalFromOffset(Wal wal, int pcmByteOffset) {
+    if (wal.sessionPcmStart == null || wal.totalFrames <= 0) return 0;
+    var cursor = wal.sessionPcmStart!;
+    var firstSuppressed = wal.totalFrames;
+    var counted = 0;
+    for (var i = 0; i < wal.totalFrames; i++) {
+      final payload = i < wal.data.length ? wal.data[i] : const <int>[];
+      final suppressed = cursor >= pcmByteOffset;
+      final alreadyUnsynced = i >= wal.syncedFrameOffset;
+      if (suppressed && i < firstSuppressed) firstSuppressed = i;
+      if (suppressed || alreadyUnsynced) counted++;
+      cursor += _pcmBytes(payload, sampleRate: wal.sampleRate);
+    }
+    if (firstSuppressed < wal.syncedFrameOffset) {
+      wal.syncedFrameOffset = firstSuppressed;
+      if (wal.status == WalStatus.synced || wal.status == WalStatus.uploaded) {
+        wal.status = WalStatus.miss;
+        wal.syncedAt = 0;
       }
     }
-    _retainedLiveFrames = kept;
+    return counted;
+  }
+
+  @visibleForTesting
+  void stageWalForTesting(Wal wal) {
+    _wals.add(wal);
   }
 
   @override

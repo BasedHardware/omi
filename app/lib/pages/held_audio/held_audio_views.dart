@@ -14,7 +14,8 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The UTC calendar day of [resetAtSeconds], shown as that day in every time zone.
+/// The UTC calendar day of the server-supplied reset instant, shown as that day
+/// in every time zone. The client does not choose the month boundary.
 DateTime heldAudioCalendarDate(int resetAtSeconds) {
   final utc = DateTime.fromMillisecondsSinceEpoch(resetAtSeconds * 1000, isUtc: true);
   return DateTime(utc.year, utc.month, utc.day);
@@ -194,6 +195,15 @@ class HeldAudioHomeSection extends StatelessWidget {
               onTranscribeOnPhone: onPhone ?? () => unawaited(chooseHeldAudioOnPhone(context, resolved)),
             ),
             for (final recording in held.recordings) HeldAudioRecordingRow(recording: recording),
+            if (held.count > held.recordings.length)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
+                child: Text(
+                  context.l10n.heldAudioAndMore(held.count - held.recordings.length),
+                  key: const Key('held_audio_more'),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
           ],
         );
       },

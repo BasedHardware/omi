@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "已用 {percent}% · 大约还可录音 {hours} 小时 · {reset}",
     "onDeviceGetMoreUsage": "获取更多用量",
     "onDeviceGettingSpeechReady": "正在准备语音 · {percent}%",
-    "heldAudioSavedBody": "你已达到本月的用量上限。录音已保存，将在 {date} 转写。",
-    "heldAudioPhoneChosenBody": "新的录音将在这台手机上转写。等待中的录音将在 {date} 转写。",
+    "heldAudioSavedBody": "你已达到本月的用量上限。录音已保存，将在你的用量于 {date} 重置后转写。",
+    "heldAudioPhoneChosenBody": "新的录音将在这台手机上转写。等待中的录音将在你的用量于 {date} 重置后转写。",
     "heldAudioRecordingTitle": "录音，{time}",
     "heldAudioRecordingSubtitle": "{duration} · 等待转写",
     "heldAudioLiveTitle": "云端转写已暂停",
     "heldAudioLiveBody": "你已达到本月的用量上限。Omi 会继续录音。",
     "heldAudioRecordedSinceLimit": "达到上限后已录制 {minutes} 分钟",
-    "heldAudioTranscribesOn": "将在 {date} 转写",
+    "heldAudioTranscribesOn": "将在用量于 {date} 重置后转写",
     "heldAudioWaiting": "{duration} 等待中",
-    "heldAudioWaitingOn": "将在 {date} 自动转写",
-    "heldAudioCardTitle": "{duration} 等待转录"
+    "heldAudioWaitingOn": "将在用量于 {date} 重置后转写",
+    "heldAudioCardTitle": "{duration} 等待转录",
+    "heldAudioAndMore": "{count, plural, =1{另有 1 条} other{另有 {count} 条}}"
 }

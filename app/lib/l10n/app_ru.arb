@@ -4343,15 +4343,16 @@
     "onDeviceMeterLineHours": "{percent}% использовано · осталось около {hours} часов записи · {reset}",
     "onDeviceGetMoreUsage": "Получить больше использования",
     "onDeviceGettingSpeechReady": "Подготовка речи · {percent}%",
-    "heldAudioSavedBody": "Вы достигли лимита этого месяца. Записи сохранены и будут расшифрованы {date}.",
-    "heldAudioPhoneChosenBody": "Новые записи будут расшифрованы на этом телефоне. Ожидающие записи расшифровываются {date}.",
+    "heldAudioSavedBody": "Вы достигли лимита этого месяца. Записи сохранены и будут расшифрованы после сброса лимита {date}.",
+    "heldAudioPhoneChosenBody": "Новые записи будут расшифрованы на этом телефоне. Ожидающие записи будут расшифрованы после сброса лимита {date}.",
     "heldAudioRecordingTitle": "Запись, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Ожидает расшифровки",
     "heldAudioLiveTitle": "Облачная расшифровка приостановлена",
     "heldAudioLiveBody": "Вы достигли лимита этого месяца. Omi продолжает запись.",
     "heldAudioRecordedSinceLimit": "{minutes} мин записано после лимита",
-    "heldAudioTranscribesOn": "Расшифровка {date}",
+    "heldAudioTranscribesOn": "Расшифровка после сброса лимита {date}",
     "heldAudioWaiting": "{duration} в ожидании",
-    "heldAudioWaitingOn": "Расшифровывается автоматически {date}",
-    "heldAudioCardTitle": "Ожидает расшифровки: {duration}"
+    "heldAudioWaitingOn": "Расшифровывается после сброса лимита {date}",
+    "heldAudioCardTitle": "Ожидает расшифровки: {duration}",
+    "heldAudioAndMore": "{count, plural, =1{и ещё 1} other{и ещё {count}}}"
 }

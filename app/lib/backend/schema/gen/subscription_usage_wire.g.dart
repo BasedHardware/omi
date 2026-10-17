@@ -284,12 +284,14 @@ class GeneratedHeldAudioRecording {
 }
 
 class GeneratedHeldAudioSummary {
+  final int count;
   final List<GeneratedHeldAudioRecording> recordings;
   final int resetAt;
   final bool retainLive;
   final int seconds;
 
   const GeneratedHeldAudioSummary({
+    this.count = 0,
     this.recordings = const [],
     required this.resetAt,
     required this.retainLive,
@@ -298,6 +300,7 @@ class GeneratedHeldAudioSummary {
 
   factory GeneratedHeldAudioSummary.fromJson(Map<String, dynamic> json) {
     return GeneratedHeldAudioSummary(
+      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "count"),
       recordings: _required(_readFieldValue<List<GeneratedHeldAudioRecording>>(_readField(json, const ["recordings"]), "recordings", (value) => _readObjectList(value, GeneratedHeldAudioRecording.fromJson), requiredField: false, nullable: false, defaultValue: const []), "recordings"),
       resetAt: _required(_readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt, requiredField: true, nullable: false), "reset_at"),
       retainLive: _required(_readFieldValue<bool>(_readField(json, const ["retain_live"]), "retain_live", _readBool, requiredField: true, nullable: false), "retain_live"),
@@ -307,6 +310,7 @@ class GeneratedHeldAudioSummary {
 
   Map<String, dynamic> toJson() {
     return {
+      'count': count,
       'recordings': recordings.map((value) => value.toJson()).toList(),
       'reset_at': resetAt,
       'retain_live': retainLive,

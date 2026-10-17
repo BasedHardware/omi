@@ -14097,12 +14097,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Pasiekėte šio mėnesio limitą. Jūsų įrašai išsaugoti ir bus transkribuoti $date.';
+    return 'Pasiekėte šio mėnesio limitą. Jūsų įrašai išsaugoti ir bus transkribuoti po limito atstatymo $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Nauji įrašai bus transkribuojami šiame telefone. Laukiantys įrašai transkribuojami $date.';
+    return 'Nauji įrašai bus transkribuojami šiame telefone. Laukiantys įrašai bus transkribuoti po limito atstatymo $date.';
   }
 
   @override
@@ -14128,7 +14128,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Transkribuojama $date';
+    return 'Transkribuojama po limito atstatymo $date';
   }
 
   @override
@@ -14138,11 +14138,22 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Automatiškai transkribuojama $date';
+    return 'Transkribuojama po limito atstatymo $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration laukia transkripcijos';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ir dar $count',
+      one: 'ir dar 1',
+    );
+    return '$_temp0';
   }
 }

@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% בשימוש · נותרו כ-{hours} שעות הקלטה · {reset}",
     "onDeviceGetMoreUsage": "קבלו עוד שימוש",
     "onDeviceGettingSpeechReady": "מכין את הדיבור · {percent}%",
-    "heldAudioSavedBody": "הגעת למכסה של החודש. ההקלטות שלך נשמרו ויתומללו ב-{date}.",
-    "heldAudioPhoneChosenBody": "הקלטות חדשות יתומללו בטלפון הזה. הקלטות ממתינות יתומללו ב-{date}.",
+    "heldAudioSavedBody": "הגעת למכסה של החודש. ההקלטות שלך נשמרו ויתומללו אחרי שהמכסה תתאפס ב-{date}.",
+    "heldAudioPhoneChosenBody": "הקלטות חדשות יתומללו בטלפון הזה. הקלטות ממתינות יתומללו אחרי שהמכסה תתאפס ב-{date}.",
     "heldAudioRecordingTitle": "הקלטה, {time}",
     "heldAudioRecordingSubtitle": "{duration} · ממתין לתמלול",
     "heldAudioLiveTitle": "התמלול בענן מושהה",
     "heldAudioLiveBody": "הגעת למכסה של החודש. Omi ממשיך להקליט.",
     "heldAudioRecordedSinceLimit": "{minutes} דק הוקלטו מאז המכסה",
-    "heldAudioTranscribesOn": "מתומלל ב-{date}",
+    "heldAudioTranscribesOn": "מתומלל אחרי שהמכסה תתאפס ב-{date}",
     "heldAudioWaiting": "{duration} בהמתנה",
-    "heldAudioWaitingOn": "מתומלל אוטומטית ב-{date}",
-    "heldAudioCardTitle": "{duration} של הקלטות ממתינות לתמלול"
+    "heldAudioWaitingOn": "מתומלל אחרי שהמכסה תתאפס ב-{date}",
+    "heldAudioCardTitle": "{duration} של הקלטות ממתינות לתמלול",
+    "heldAudioAndMore": "{count, plural, =1{ועוד 1} other{ועוד {count}}}"
 }

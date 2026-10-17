@@ -13852,12 +13852,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return '你已达到本月的用量上限。录音已保存，将在 $date 转写。';
+    return '你已达到本月的用量上限。录音已保存，将在你的用量于 $date 重置后转写。';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return '新的录音将在这台手机上转写。等待中的录音将在 $date 转写。';
+    return '新的录音将在这台手机上转写。等待中的录音将在你的用量于 $date 重置后转写。';
   }
 
   @override
@@ -13883,7 +13883,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return '将在 $date 转写';
+    return '将在用量于 $date 重置后转写';
   }
 
   @override
@@ -13893,11 +13893,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return '将在 $date 自动转写';
+    return '将在用量于 $date 重置后转写';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration 等待转录';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '另有 $count 条',
+      one: '另有 1 条',
+    );
+    return '$_temp0';
   }
 }

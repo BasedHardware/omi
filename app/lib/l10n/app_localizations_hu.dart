@@ -14131,12 +14131,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Elérte a havi keretet. A felvételek mentve vannak, és $date napon kerülnek átírásra.';
+    return 'Elérte a havi keretet. A felvételek mentve vannak, és a keret $date napi visszaállása után kerülnek átírásra.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Az új felvételek ezen a telefonon kerülnek átírásra. A várakozó felvételek átírása: $date.';
+    return 'Az új felvételek ezen a telefonon kerülnek átírásra. A várakozó felvételek a keret $date napi visszaállása után kerülnek átírásra.';
   }
 
   @override
@@ -14162,7 +14162,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Átírás: $date';
+    return 'Átírás a keret $date napi visszaállása után';
   }
 
   @override
@@ -14172,11 +14172,22 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Automatikus átírás: $date';
+    return 'Átírás a keret $date napi visszaállása után';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration vár átírásra';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'és még $count',
+      one: 'és még 1',
+    );
+    return '$_temp0';
   }
 }

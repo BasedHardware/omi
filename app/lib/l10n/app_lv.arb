@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% izmantots · atlikušas aptuveni {hours} ieraksta stundas · {reset}",
     "onDeviceGetMoreUsage": "Iegūstiet vairāk lietojuma",
     "onDeviceGettingSpeechReady": "Runa tiek sagatavota · {percent}%",
-    "heldAudioSavedBody": "Esat sasniedzis šī mēneša limitu. Jūsu ieraksti ir saglabāti un tiks transkribēti {date}.",
-    "heldAudioPhoneChosenBody": "Jaunie ieraksti tiks transkribēti šajā tālrunī. Gaidošie ieraksti tiek transkribēti {date}.",
+    "heldAudioSavedBody": "Esat sasniedzis šī mēneša limitu. Jūsu ieraksti ir saglabāti un tiks transkribēti pēc limita atiestatīšanas {date}.",
+    "heldAudioPhoneChosenBody": "Jaunie ieraksti tiks transkribēti šajā tālrunī. Gaidošie ieraksti tiks transkribēti pēc limita atiestatīšanas {date}.",
     "heldAudioRecordingTitle": "Ieraksts, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Gaida transkripciju",
     "heldAudioLiveTitle": "Mākoņa transkripcija ir apturēta",
     "heldAudioLiveBody": "Esat sasniedzis šī mēneša limitu. Omi turpina ierakstīt.",
     "heldAudioRecordedSinceLimit": "{minutes} min ierakstītas pēc limita",
-    "heldAudioTranscribesOn": "Transkribē {date}",
+    "heldAudioTranscribesOn": "Transkribē pēc limita atiestatīšanas {date}",
     "heldAudioWaiting": "{duration} gaida",
-    "heldAudioWaitingOn": "Automātiski transkribē {date}",
-    "heldAudioCardTitle": "{duration} gaida transkribēšanu"
+    "heldAudioWaitingOn": "Transkribē pēc limita atiestatīšanas {date}",
+    "heldAudioCardTitle": "{duration} gaida transkribēšanu",
+    "heldAudioAndMore": "{count, plural, =1{un vēl 1} other{un vēl {count}}}"
 }

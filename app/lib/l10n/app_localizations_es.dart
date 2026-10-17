@@ -14117,12 +14117,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Has alcanzado el límite de este mes. Tus grabaciones están guardadas y se transcribirán el $date.';
+    return 'Has alcanzado el límite de este mes. Tus grabaciones están guardadas y se transcribirán después de que tu límite se restablezca el $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Las grabaciones nuevas se transcribirán en este teléfono. Las grabaciones en espera se transcriben el $date.';
+    return 'Las grabaciones nuevas se transcribirán en este teléfono. Las grabaciones en espera se transcribirán después de que tu límite se restablezca el $date.';
   }
 
   @override
@@ -14148,7 +14148,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Se transcribe el $date';
+    return 'Se transcribe después de que tu límite se restablezca el $date';
   }
 
   @override
@@ -14158,11 +14158,22 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Se transcribe automáticamente el $date';
+    return 'Se transcribe después de que tu límite se restablezca el $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration pendiente de transcribir';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'y $count más',
+      one: 'y 1 más',
+    );
+    return '$_temp0';
   }
 }

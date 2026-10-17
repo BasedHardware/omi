@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from config.plan_catalog import PLAN_TYPE_VALUES
-from models.users import PlanType, Subscription, UserSubscriptionResponse
+from models.users import HeldAudioSummary, PlanType, Subscription, UserSubscriptionResponse
 from routers.payment import PaymentSubscriptionResponse
 
 
@@ -29,6 +29,19 @@ def test_subscription_response_accepts_every_catalog_plan_value(plan: PlanType):
 def test_subscription_response_rejects_values_outside_catalog(plan: str):
     with pytest.raises(ValidationError):
         _response(plan)
+
+
+def test_flag_off_subscription_json_omits_held_audio():
+    payload = _response(PlanType.basic).model_dump(mode='json')
+    assert 'held_audio' not in payload
+
+
+def test_held_audio_is_present_when_the_server_sets_it():
+    response = _response(PlanType.basic)
+    response.held_audio = HeldAudioSummary(seconds=12, reset_at=1, retain_live=True, count=3)
+    payload = response.model_dump(mode='json')
+    assert payload['held_audio']['seconds'] == 12
+    assert payload['held_audio']['count'] == 3
 
 
 def test_subscription_schema_uses_the_catalog_enum():

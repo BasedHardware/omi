@@ -13974,12 +13974,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'הגעת למכסה של החודש. ההקלטות שלך נשמרו ויתומללו ב-$date.';
+    return 'הגעת למכסה של החודש. ההקלטות שלך נשמרו ויתומללו אחרי שהמכסה תתאפס ב-$date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'הקלטות חדשות יתומללו בטלפון הזה. הקלטות ממתינות יתומללו ב-$date.';
+    return 'הקלטות חדשות יתומללו בטלפון הזה. הקלטות ממתינות יתומללו אחרי שהמכסה תתאפס ב-$date.';
   }
 
   @override
@@ -14005,7 +14005,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'מתומלל ב-$date';
+    return 'מתומלל אחרי שהמכסה תתאפס ב-$date';
   }
 
   @override
@@ -14015,11 +14015,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'מתומלל אוטומטית ב-$date';
+    return 'מתומלל אחרי שהמכסה תתאפס ב-$date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration של הקלטות ממתינות לתמלול';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ועוד $count',
+      one: 'ועוד 1',
+    );
+    return '$_temp0';
   }
 }

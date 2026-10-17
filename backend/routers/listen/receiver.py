@@ -58,7 +58,12 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
-from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent, MessageServiceStatusEvent
+from models.message_event import (
+    PhotoDescribedEvent,
+    PhotoProcessingEvent,
+    MessageServiceStatusEvent,
+    SttCapLiveHeldEvent,
+)
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
@@ -1859,6 +1864,25 @@ class ListenReceiver(ReplayFilterMixin):
             del self.image_chunks[chunk.id]
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
+    async def _emit_stt_cap_live_held(self) -> None:
+        """Send the one-shot cap notice on the listen message channel, if it is armed."""
+        admission = getattr(self, 'cap_admission', None)
+        if admission is None:
+            return
+        offset = admission.pending_held_notice()
+        if offset is None:
+            return
+        websocket = getattr(getattr(self.host, 'request', None), 'websocket', None)
+        send = getattr(websocket, 'send_json', None)
+        if send is None:
+            return
+        try:
+            await send(SttCapLiveHeldEvent(pcm_byte_offset=offset).to_json())
+        except Exception:
+            logger.warning('event=stt_cap_live_held outcome=notify_deferred')
+            return
+        admission.consume_held_notice()
+
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
         admission = getattr(self, 'cap_admission', None)
         if admission is not None and not admission.allowed(self.host.stt_service):
@@ -1869,8 +1893,10 @@ class ListenReceiver(ReplayFilterMixin):
                 len(buffer) / (2 * self.host.request.sample_rate),
                 admission.reason == 'plan_allowance_exhausted',
             )
+            admission.note_suppressed()
             buffer.clear()
             self._stt_buffer_start_sample = None
+            await self._emit_stt_cap_live_held()
             return
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.flush_stt_buffer(self, buffer, force=force)
@@ -1996,6 +2022,7 @@ class ListenReceiver(ReplayFilterMixin):
                 attempt_failover=self._failover_stt_socket,
                 start_sample=self._stt_buffer_start_sample,
             )
+            await self._emit_stt_cap_live_held()
             if sent:
                 if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
@@ -2089,7 +2116,10 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm_len=len(pcm),
                 fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
             )
-            if should_send and not suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm):
+            suppressed = should_send and suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm)
+            if suppressed:
+                await self._emit_stt_cap_live_held()
+            if should_send and not suppressed:
                 sent = await send_live_stt_audio(
                     request.websocket,
                     self.host.state,

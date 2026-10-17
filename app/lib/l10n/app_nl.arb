@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% gebruikt · nog ongeveer {hours} uur opname · {reset}",
     "onDeviceGetMoreUsage": "Krijg meer gebruik",
     "onDeviceGettingSpeechReady": "Spraak voorbereiden · {percent}%",
-    "heldAudioSavedBody": "Je hebt de limiet van deze maand bereikt. Je opnamen zijn bewaard en worden getranscribeerd op {date}.",
-    "heldAudioPhoneChosenBody": "Nieuwe opnamen worden op deze telefoon getranscribeerd. Wachtende opnamen worden getranscribeerd op {date}.",
+    "heldAudioSavedBody": "Je hebt de limiet van deze maand bereikt. Je opnamen zijn bewaard en worden getranscribeerd nadat je limiet op {date} wordt gereset.",
+    "heldAudioPhoneChosenBody": "Nieuwe opnamen worden op deze telefoon getranscribeerd. Wachtende opnamen worden getranscribeerd nadat je limiet op {date} wordt gereset.",
     "heldAudioRecordingTitle": "Opname, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Wacht op transcriptie",
     "heldAudioLiveTitle": "Cloudtranscriptie gepauzeerd",
     "heldAudioLiveBody": "Je hebt de limiet van deze maand bereikt. Omi blijft opnemen.",
     "heldAudioRecordedSinceLimit": "{minutes} min opgenomen sinds de limiet",
-    "heldAudioTranscribesOn": "Transcriptie op {date}",
+    "heldAudioTranscribesOn": "Transcriptie nadat je limiet op {date} wordt gereset",
     "heldAudioWaiting": "{duration} in de wacht",
-    "heldAudioWaitingOn": "Automatisch getranscribeerd op {date}",
-    "heldAudioCardTitle": "{duration} wacht op transcriptie"
+    "heldAudioWaitingOn": "Getranscribeerd nadat je limiet op {date} wordt gereset",
+    "heldAudioCardTitle": "{duration} wacht op transcriptie",
+    "heldAudioAndMore": "{count, plural, =1{en nog 1} other{en nog {count}}}"
 }

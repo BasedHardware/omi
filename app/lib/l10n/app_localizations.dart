@@ -25038,13 +25038,13 @@ abstract class AppLocalizations {
   /// Body of the home card when recordings are saved and waiting for cloud transcription. date is a formatted date.
   ///
   /// In en, this message translates to:
-  /// **'You\'ve reached this month\'s limit. Your recordings are saved and will be transcribed on {date}.'**
+  /// **'You\'ve reached this month\'s limit. Your recordings are saved and will be transcribed after your limit resets on {date}.'**
   String heldAudioSavedBody(String date);
 
   /// Body after the user chooses on-phone transcription. date is when recordings already waiting will be transcribed.
   ///
   /// In en, this message translates to:
-  /// **'New recordings will transcribe on this phone. Waiting recordings transcribe on {date}.'**
+  /// **'New recordings will transcribe on this phone. Waiting recordings will be transcribed after your limit resets on {date}.'**
   String heldAudioPhoneChosenBody(String date);
 
   /// Title of one held recording in the conversations list. time is a formatted clock time.
@@ -25080,7 +25080,7 @@ abstract class AppLocalizations {
   /// Second line of the live transcript placeholder. date is a formatted date.
   ///
   /// In en, this message translates to:
-  /// **'Transcribes on {date}'**
+  /// **'Transcribes after your limit resets on {date}'**
   String heldAudioTranscribesOn(String date);
 
   /// Settings usage row title. duration is a compact length of audio waiting to be transcribed.
@@ -25092,7 +25092,7 @@ abstract class AppLocalizations {
   /// Settings usage row subtitle. date is when waiting audio is transcribed automatically.
   ///
   /// In en, this message translates to:
-  /// **'Transcribed automatically on {date}'**
+  /// **'Transcribed after your limit resets on {date}'**
   String heldAudioWaitingOn(String date);
 
   /// Title of the held-audio card. duration is a compact length such as 2m 30s, already including its unit.
@@ -25100,6 +25100,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} waiting to transcribe'**
   String heldAudioCardTitle(String duration);
+
+  /// How many held recordings are past the newest page
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{and 1 more} other{and {count} more}}'**
+  String heldAudioAndMore(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

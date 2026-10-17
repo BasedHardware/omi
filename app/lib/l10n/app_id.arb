@@ -4343,15 +4343,16 @@
     "onDeviceMeterLineHours": "{percent}% terpakai · sekitar {hours} jam rekaman tersisa · {reset}",
     "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
     "onDeviceGettingSpeechReady": "Menyiapkan ucapan · {percent}%",
-    "heldAudioSavedBody": "Anda mencapai batas bulan ini. Rekaman Anda tersimpan dan akan ditranskripsi pada {date}.",
-    "heldAudioPhoneChosenBody": "Rekaman baru akan ditranskripsi di ponsel ini. Rekaman yang menunggu ditranskripsi pada {date}.",
+    "heldAudioSavedBody": "Anda mencapai batas bulan ini. Rekaman Anda tersimpan dan akan ditranskripsi setelah batas Anda direset pada {date}.",
+    "heldAudioPhoneChosenBody": "Rekaman baru akan ditranskripsi di ponsel ini. Rekaman yang menunggu akan ditranskripsi setelah batas Anda direset pada {date}.",
     "heldAudioRecordingTitle": "Rekaman, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Menunggu transkripsi",
     "heldAudioLiveTitle": "Transkripsi cloud dijeda",
     "heldAudioLiveBody": "Anda mencapai batas bulan ini. Omi tetap merekam.",
     "heldAudioRecordedSinceLimit": "{minutes} mnt terekam sejak batas",
-    "heldAudioTranscribesOn": "Ditranskripsi pada {date}",
+    "heldAudioTranscribesOn": "Ditranskripsi setelah batas direset pada {date}",
     "heldAudioWaiting": "{duration} menunggu",
-    "heldAudioWaitingOn": "Ditranskripsi otomatis pada {date}",
-    "heldAudioCardTitle": "{duration} menunggu ditranskripsi"
+    "heldAudioWaitingOn": "Ditranskripsi setelah batas direset pada {date}",
+    "heldAudioCardTitle": "{duration} menunggu ditranskripsi",
+    "heldAudioAndMore": "{count, plural, =1{dan 1 lainnya} other{dan {count} lainnya}}"
 }

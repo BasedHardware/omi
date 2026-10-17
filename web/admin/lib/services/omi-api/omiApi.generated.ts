@@ -2927,6 +2927,7 @@ export interface HeldAudioRecording {
 }
 
 export interface HeldAudioSummary {
+  count?: number;
   recordings?: Array<HeldAudioRecording>;
   reset_at: number;
   retain_live: boolean;

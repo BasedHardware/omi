@@ -14112,12 +14112,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Je hebt de limiet van deze maand bereikt. Je opnamen zijn bewaard en worden getranscribeerd op $date.';
+    return 'Je hebt de limiet van deze maand bereikt. Je opnamen zijn bewaard en worden getranscribeerd nadat je limiet op $date wordt gereset.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Nieuwe opnamen worden op deze telefoon getranscribeerd. Wachtende opnamen worden getranscribeerd op $date.';
+    return 'Nieuwe opnamen worden op deze telefoon getranscribeerd. Wachtende opnamen worden getranscribeerd nadat je limiet op $date wordt gereset.';
   }
 
   @override
@@ -14143,7 +14143,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Transcriptie op $date';
+    return 'Transcriptie nadat je limiet op $date wordt gereset';
   }
 
   @override
@@ -14153,11 +14153,22 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Automatisch getranscribeerd op $date';
+    return 'Getranscribeerd nadat je limiet op $date wordt gereset';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration wacht op transcriptie';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'en nog $count',
+      one: 'en nog 1',
+    );
+    return '$_temp0';
   }
 }

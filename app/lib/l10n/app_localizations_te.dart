@@ -14131,12 +14131,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. మీ రికార్డింగ్‌లు సేవ్ అయ్యాయి మరియు $date న లిప్యంతరం చేయబడతాయి.';
+    return 'మీరు ఈ నెల పరిమితిని చేరుకున్నారు. మీ రికార్డింగ్‌లు సేవ్ అయ్యాయి మరియు పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం చేయబడతాయి.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'కొత్త రికార్డింగ్‌లు ఈ ఫోన్‌లో లిప్యంతరం చేయబడతాయి. వేచి ఉన్న రికార్డింగ్‌లు $date న లిప్యంతరం చేయబడతాయి.';
+    return 'కొత్త రికార్డింగ్‌లు ఈ ఫోన్‌లో లిప్యంతరం చేయబడతాయి. వేచి ఉన్న రికార్డింగ్‌లు పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం చేయబడతాయి.';
   }
 
   @override
@@ -14162,7 +14162,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return '$date న లిప్యంతరం';
+    return 'పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం';
   }
 
   @override
@@ -14172,11 +14172,22 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return '$date న స్వయంచాలకంగా లిప్యంతరం';
+    return 'పరిమితి $date న రీసెట్ అయిన తర్వాత లిప్యంతరం';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration ట్రాన్‌స్క్రైబ్ కోసం వేచి ఉంది';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'మరో $count',
+      one: 'మరో 1',
+    );
+    return '$_temp0';
   }
 }

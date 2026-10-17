@@ -4404,15 +4404,16 @@
     "onDeviceMeterLineHours": "{percent}% felhasználva · körülbelül {hours} óra felvétel maradt · {reset}",
     "onDeviceGetMoreUsage": "Szerezzen több használatot",
     "onDeviceGettingSpeechReady": "A beszéd előkészítése · {percent}%",
-    "heldAudioSavedBody": "Elérte a havi keretet. A felvételek mentve vannak, és {date} napon kerülnek átírásra.",
-    "heldAudioPhoneChosenBody": "Az új felvételek ezen a telefonon kerülnek átírásra. A várakozó felvételek átírása: {date}.",
+    "heldAudioSavedBody": "Elérte a havi keretet. A felvételek mentve vannak, és a keret {date} napi visszaállása után kerülnek átírásra.",
+    "heldAudioPhoneChosenBody": "Az új felvételek ezen a telefonon kerülnek átírásra. A várakozó felvételek a keret {date} napi visszaállása után kerülnek átírásra.",
     "heldAudioRecordingTitle": "Felvétel, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Átírásra vár",
     "heldAudioLiveTitle": "A felhős átírás szünetel",
     "heldAudioLiveBody": "Elérte a havi keretet. Az Omi továbbra is rögzít.",
     "heldAudioRecordedSinceLimit": "{minutes} perc rögzítve a keret elérése óta",
-    "heldAudioTranscribesOn": "Átírás: {date}",
+    "heldAudioTranscribesOn": "Átírás a keret {date} napi visszaállása után",
     "heldAudioWaiting": "{duration} várakozik",
-    "heldAudioWaitingOn": "Automatikus átírás: {date}",
-    "heldAudioCardTitle": "{duration} vár átírásra"
+    "heldAudioWaitingOn": "Átírás a keret {date} napi visszaállása után",
+    "heldAudioCardTitle": "{duration} vár átírásra",
+    "heldAudioAndMore": "{count, plural, =1{és még 1} other{és még {count}}}"
 }

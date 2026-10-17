@@ -14086,12 +14086,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Anda mencapai batas bulan ini. Rekaman Anda tersimpan dan akan ditranskripsi pada $date.';
+    return 'Anda mencapai batas bulan ini. Rekaman Anda tersimpan dan akan ditranskripsi setelah batas Anda direset pada $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Rekaman baru akan ditranskripsi di ponsel ini. Rekaman yang menunggu ditranskripsi pada $date.';
+    return 'Rekaman baru akan ditranskripsi di ponsel ini. Rekaman yang menunggu akan ditranskripsi setelah batas Anda direset pada $date.';
   }
 
   @override
@@ -14117,7 +14117,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Ditranskripsi pada $date';
+    return 'Ditranskripsi setelah batas direset pada $date';
   }
 
   @override
@@ -14127,11 +14127,22 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Ditranskripsi otomatis pada $date';
+    return 'Ditranskripsi setelah batas direset pada $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration menunggu ditranskripsi';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'dan $count lainnya',
+      one: 'dan 1 lainnya',
+    );
+    return '$_temp0';
   }
 }

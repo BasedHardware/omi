@@ -14077,12 +14077,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Du har nådd grensen for denne måneden. Opptakene dine er lagret og blir transkribert $date.';
+    return 'Du har nådd grensen for denne måneden. Opptakene dine er lagret og blir transkribert etter at grensen nullstilles $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Nye opptak transkriberes på denne telefonen. Ventende opptak transkriberes $date.';
+    return 'Nye opptak transkriberes på denne telefonen. Ventende opptak transkriberes etter at grensen nullstilles $date.';
   }
 
   @override
@@ -14108,7 +14108,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Transkriberes $date';
+    return 'Transkriberes etter at grensen nullstilles $date';
   }
 
   @override
@@ -14118,11 +14118,22 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Transkriberes automatisk $date';
+    return 'Transkriberes etter at grensen nullstilles $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration venter på transkribering';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'og $count til',
+      one: 'og 1 til',
+    );
+    return '$_temp0';
   }
 }

@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% använt · ungefär {hours} timmars inspelning kvar · {reset}",
     "onDeviceGetMoreUsage": "Få mer användning",
     "onDeviceGettingSpeechReady": "Förbereder tal · {percent} %",
-    "heldAudioSavedBody": "Du har nått den här månadens gräns. Dina inspelningar är sparade och transkriberas {date}.",
-    "heldAudioPhoneChosenBody": "Nya inspelningar transkriberas på den här telefonen. Väntande inspelningar transkriberas {date}.",
+    "heldAudioSavedBody": "Du har nått den här månadens gräns. Dina inspelningar är sparade och transkriberas efter att din gräns återställs {date}.",
+    "heldAudioPhoneChosenBody": "Nya inspelningar transkriberas på den här telefonen. Väntande inspelningar transkriberas efter att din gräns återställs {date}.",
     "heldAudioRecordingTitle": "Inspelning, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Väntar på transkription",
     "heldAudioLiveTitle": "Molntranskription pausad",
     "heldAudioLiveBody": "Du har nått den här månadens gräns. Omi fortsätter att spela in.",
     "heldAudioRecordedSinceLimit": "{minutes} min inspelat sedan gränsen",
-    "heldAudioTranscribesOn": "Transkriberas {date}",
+    "heldAudioTranscribesOn": "Transkriberas efter att din gräns återställs {date}",
     "heldAudioWaiting": "{duration} väntar",
-    "heldAudioWaitingOn": "Transkriberas automatiskt {date}",
-    "heldAudioCardTitle": "{duration} väntar på transkribering"
+    "heldAudioWaitingOn": "Transkriberas efter att din gräns återställs {date}",
+    "heldAudioCardTitle": "{duration} väntar på transkribering",
+    "heldAudioAndMore": "{count, plural, =1{och 1 till} other{och {count} till}}"
 }

@@ -213,6 +213,10 @@ class Wal {
   int totalFrames = 0;
   int syncedFrameOffset = 0;
 
+  /// PCM16 byte offset of this WAL's first frame in the live session that
+  /// produced it. Null on recordings that predate the cap notice.
+  int? sessionPcmStart;
+
   WalStorage? originalStorage;
 
   /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
@@ -367,6 +371,7 @@ class Wal {
     List<List<int>>? data,
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
+    this.sessionPcmStart,
     this.originalStorage,
     this.conversationId,
     this.recordingSessionId,
@@ -409,6 +414,7 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
+      sessionPcmStart: json['session_pcm_start'],
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
@@ -452,6 +458,7 @@ class Wal {
       'file_num': fileNum,
       'total_frames': totalFrames,
       'synced_frame_offset': syncedFrameOffset,
+      if (sessionPcmStart != null) 'session_pcm_start': sessionPcmStart,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
       'recording_session_id': recordingSessionId,

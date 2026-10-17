@@ -14067,12 +14067,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'به سقف این ماه رسیده اید. ضبط های شما ذخیره شده و در $date پیاده می شوند.';
+    return 'به سقف این ماه رسیده اید. ضبط های شما ذخیره شده و پس از بازنشانی سقف در $date پیاده می شوند.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'ضبط های جدید روی این گوشی پیاده می شوند. ضبط های در انتظار در $date پیاده می شوند.';
+    return 'ضبط های جدید روی این گوشی پیاده می شوند. ضبط های در انتظار پس از بازنشانی سقف در $date پیاده می شوند.';
   }
 
   @override
@@ -14098,7 +14098,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'در $date پیاده می شود';
+    return 'پس از بازنشانی سقف در $date پیاده می شود';
   }
 
   @override
@@ -14108,11 +14108,22 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'به طور خودکار در $date پیاده می شود';
+    return 'پس از بازنشانی سقف در $date پیاده می شود';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration در انتظار رونویسی';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'و $count مورد دیگر',
+      one: 'و 1 مورد دیگر',
+    );
+    return '$_temp0';
   }
 }

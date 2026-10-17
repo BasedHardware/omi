@@ -14102,12 +14102,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Ви досягли ліміту цього місяця. Записи збережено, і їх буде розшифровано $date.';
+    return 'Ви досягли ліміту цього місяця. Записи збережено, і їх буде розшифровано після скидання ліміту $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Нові записи буде розшифровано на цьому телефоні. Записи в очікуванні розшифровуються $date.';
+    return 'Нові записи буде розшифровано на цьому телефоні. Записи в очікуванні буде розшифровано після скидання ліміту $date.';
   }
 
   @override
@@ -14133,7 +14133,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Розшифрування $date';
+    return 'Розшифрування після скидання ліміту $date';
   }
 
   @override
@@ -14143,11 +14143,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Розшифровується автоматично $date';
+    return 'Розшифровується після скидання ліміту $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration очікує на транскрипцію';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'і ще $count',
+      one: 'і ще 1',
+    );
+    return '$_temp0';
   }
 }

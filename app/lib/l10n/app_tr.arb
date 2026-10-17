@@ -4343,15 +4343,16 @@
     "onDeviceMeterLineHours": "{percent}% kullanıldı · yaklaşık {hours} saat kayıt kaldı · {reset}",
     "onDeviceGetMoreUsage": "Daha fazla kullanım alın",
     "onDeviceGettingSpeechReady": "Konuşma hazırlanıyor · %{percent}",
-    "heldAudioSavedBody": "Bu ayın sınırına ulaştınız. Kayıtlarınız saklandı ve {date} tarihinde yazıya dökülecek.",
-    "heldAudioPhoneChosenBody": "Yeni kayıtlar bu telefonda yazıya dökülecek. Bekleyen kayıtlar {date} tarihinde yazıya dökülür.",
+    "heldAudioSavedBody": "Bu ayın sınırına ulaştınız. Kayıtlarınız saklandı ve limitiniz {date} tarihinde sıfırlandıktan sonra yazıya dökülecek.",
+    "heldAudioPhoneChosenBody": "Yeni kayıtlar bu telefonda yazıya dökülecek. Bekleyen kayıtlar, limitiniz {date} tarihinde sıfırlandıktan sonra yazıya dökülecek.",
     "heldAudioRecordingTitle": "Kayıt, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Yazıya dökülmeyi bekliyor",
     "heldAudioLiveTitle": "Bulut transkripsiyonu duraklatıldı",
     "heldAudioLiveBody": "Bu ayın sınırına ulaştınız. Omi kaydetmeye devam ediyor.",
     "heldAudioRecordedSinceLimit": "Sınırdan beri {minutes} dk kaydedildi",
-    "heldAudioTranscribesOn": "{date} tarihinde yazıya dökülür",
+    "heldAudioTranscribesOn": "Limit {date} tarihinde sıfırlandıktan sonra yazıya dökülür",
     "heldAudioWaiting": "{duration} bekliyor",
-    "heldAudioWaitingOn": "{date} tarihinde otomatik yazıya dökülür",
-    "heldAudioCardTitle": "{duration} yazıya dökülmeyi bekliyor"
+    "heldAudioWaitingOn": "Limit {date} tarihinde sıfırlandıktan sonra yazıya dökülür",
+    "heldAudioCardTitle": "{duration} yazıya dökülmeyi bekliyor",
+    "heldAudioAndMore": "{count, plural, =1{ve 1 tane daha} other{ve {count} tane daha}}"
 }

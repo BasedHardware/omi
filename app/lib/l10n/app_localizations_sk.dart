@@ -14068,12 +14068,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Dosiahli ste limit na tento mesiac. Vaše nahrávky sú uložené a budú prepísané $date.';
+    return 'Dosiahli ste limit na tento mesiac. Vaše nahrávky sú uložené a budú prepísané po obnovení limitu $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Nové nahrávky sa prepíšu v tomto telefóne. Čakajúce nahrávky sa prepíšu $date.';
+    return 'Nové nahrávky sa prepíšu v tomto telefóne. Čakajúce nahrávky budú prepísané po obnovení limitu $date.';
   }
 
   @override
@@ -14099,7 +14099,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Prepis $date';
+    return 'Prepis po obnovení limitu $date';
   }
 
   @override
@@ -14109,11 +14109,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Automaticky prepísané $date';
+    return 'Prepísané po obnovení limitu $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return 'Na prepis čaká $duration';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'a $count ďalších',
+      one: 'a 1 ďalšia',
+    );
+    return '$_temp0';
   }
 }

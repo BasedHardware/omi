@@ -14166,12 +14166,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Φτάσατε το όριο αυτού του μήνα. Οι εγγραφές σας έχουν αποθηκευτεί και θα απομαγνητοφωνηθούν στις $date.';
+    return 'Φτάσατε το όριο αυτού του μήνα. Οι εγγραφές σας έχουν αποθηκευτεί και θα απομαγνητοφωνηθούν αφού το όριό σας μηδενιστεί στις $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Οι νέες εγγραφές θα απομαγνητοφωνηθούν σε αυτό το τηλέφωνο. Οι εγγραφές σε αναμονή απομαγνητοφωνούνται στις $date.';
+    return 'Οι νέες εγγραφές θα απομαγνητοφωνηθούν σε αυτό το τηλέφωνο. Οι εγγραφές σε αναμονή θα απομαγνητοφωνηθούν αφού το όριό σας μηδενιστεί στις $date.';
   }
 
   @override
@@ -14197,7 +14197,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Απομαγνητοφώνηση στις $date';
+    return 'Απομαγνητοφώνηση αφού το όριο μηδενιστεί στις $date';
   }
 
   @override
@@ -14207,11 +14207,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Απομαγνητοφωνείται αυτόματα στις $date';
+    return 'Απομαγνητοφωνείται αφού το όριο μηδενιστεί στις $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration σε αναμονή για μεταγραφή';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'και $count ακόμη',
+      one: 'και 1 ακόμη',
+    );
+    return '$_temp0';
   }
 }

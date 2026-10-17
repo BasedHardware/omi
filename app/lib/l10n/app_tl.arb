@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% nagamit · mga {hours} oras ng recording ang natitira · {reset}",
     "onDeviceGetMoreUsage": "Kumuha ng higit pang paggamit",
     "onDeviceGettingSpeechReady": "Inihahanda ang pananalita · {percent}%",
-    "heldAudioSavedBody": "Naabot mo na ang limitasyon ngayong buwan. Naka-save ang mga recording mo at ita-transcribe sa {date}.",
-    "heldAudioPhoneChosenBody": "Ang mga bagong recording ay ita-transcribe sa teleponong ito. Ang naghihintay na recording ay ita-transcribe sa {date}.",
+    "heldAudioSavedBody": "Naabot mo na ang limitasyon ngayong buwan. Naka-save ang mga recording mo at ita-transcribe pagkatapos i-reset ang limitasyon sa {date}.",
+    "heldAudioPhoneChosenBody": "Ang mga bagong recording ay ita-transcribe sa teleponong ito. Ang naghihintay na recording ay ita-transcribe pagkatapos i-reset ang limitasyon sa {date}.",
     "heldAudioRecordingTitle": "Recording, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Naghihintay na i-transcribe",
     "heldAudioLiveTitle": "Naka-pause ang cloud transcription",
     "heldAudioLiveBody": "Naabot mo na ang limitasyon ngayong buwan. Patuloy na nagre-record ang Omi.",
     "heldAudioRecordedSinceLimit": "{minutes} min na naitala mula nang maabot ang limitasyon",
-    "heldAudioTranscribesOn": "Ita-transcribe sa {date}",
+    "heldAudioTranscribesOn": "Ita-transcribe pagkatapos i-reset ang limitasyon sa {date}",
     "heldAudioWaiting": "{duration} naghihintay",
-    "heldAudioWaitingOn": "Awtomatikong ita-transcribe sa {date}",
-    "heldAudioCardTitle": "{duration} na naghihintay ma-transcribe"
+    "heldAudioWaitingOn": "Ita-transcribe pagkatapos i-reset ang limitasyon sa {date}",
+    "heldAudioCardTitle": "{duration} na naghihintay ma-transcribe",
+    "heldAudioAndMore": "{count, plural, =1{at 1 pa} other{at {count} pa}}"
 }

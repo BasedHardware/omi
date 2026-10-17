@@ -99,6 +99,9 @@ class LiveAdmission:
         self.refreshed_at = None
         self.failures = 0
         self.usage_cache = None
+        self.accepted_pcm_bytes = 0
+        self._held_pcm_offset: int | None = None
+        self._held_notice_sent = False
         if budget_enforcement_enabled():
             from database.usage_units_session import UsageUnitsSession
 
@@ -181,10 +184,13 @@ class LiveAdmission:
             record_audio(
                 'live', 'suppressed', provider, len(data) / (2 * rate), self.reason == 'plan_allowance_exhausted'
             )
+            self.note_suppressed()
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
             return True
         accepted = raw.send(data, *args, **kwargs)
+        if accepted is not False:
+            self.note_forwarded(data)
         if accepted is not False and not customer_funded(provider):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
@@ -200,6 +206,29 @@ class LiveAdmission:
                 if self.remaining == 0:
                     self.reason = 'plan_allowance_exhausted'
         return accepted
+
+    def note_forwarded(self, data: bytes) -> None:
+        self.accepted_pcm_bytes += len(data)
+
+    def note_suppressed(self) -> None:
+        """Arm one listen notice at the first funded packet this session does not send.
+
+        The offset is the PCM16 byte count already forwarded to the provider.
+        Audio before it was transcribed; audio from it was not, so the client
+        can re-upload only that tail. Later suppressions do not move it.
+        """
+        if not enabled() or self._held_pcm_offset is not None:
+            return
+        self._held_pcm_offset = self.accepted_pcm_bytes
+
+    def pending_held_notice(self) -> int | None:
+        if self._held_pcm_offset is None or self._held_notice_sent:
+            return None
+        return self._held_pcm_offset
+
+    def consume_held_notice(self) -> None:
+        if self._held_pcm_offset is not None:
+            self._held_notice_sent = True
 
 
 current_live_admission = ContextVar('stt_cap_live_admission', default=None)
@@ -286,6 +315,7 @@ class CapSocket(STTSocket):
                 len(data) / (2 * self.rate),
                 self.admission.reason == 'plan_allowance_exhausted',
             )
+            self.admission.note_suppressed()
             return True
         return False
 
@@ -298,6 +328,7 @@ class CapSocket(STTSocket):
                 len(data) / (2 * self.rate),
                 self.admission.reason == 'plan_allowance_exhausted',
             )
+            self.admission.note_suppressed()
             return True
         return self.admission.send(self.raw, data, self.provider, self.rate, *args, **kwargs)
 

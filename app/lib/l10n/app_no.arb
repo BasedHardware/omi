@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% brukt · omtrent {hours} timer opptak igjen · {reset}",
     "onDeviceGetMoreUsage": "Få mer bruk",
     "onDeviceGettingSpeechReady": "Gjør tale klar · {percent}%",
-    "heldAudioSavedBody": "Du har nådd grensen for denne måneden. Opptakene dine er lagret og blir transkribert {date}.",
-    "heldAudioPhoneChosenBody": "Nye opptak transkriberes på denne telefonen. Ventende opptak transkriberes {date}.",
+    "heldAudioSavedBody": "Du har nådd grensen for denne måneden. Opptakene dine er lagret og blir transkribert etter at grensen nullstilles {date}.",
+    "heldAudioPhoneChosenBody": "Nye opptak transkriberes på denne telefonen. Ventende opptak transkriberes etter at grensen nullstilles {date}.",
     "heldAudioRecordingTitle": "Opptak, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Venter på transkripsjon",
     "heldAudioLiveTitle": "Skytranskripsjon er satt på pause",
     "heldAudioLiveBody": "Du har nådd grensen for denne måneden. Omi fortsetter å ta opp.",
     "heldAudioRecordedSinceLimit": "{minutes} min tatt opp siden grensen",
-    "heldAudioTranscribesOn": "Transkriberes {date}",
+    "heldAudioTranscribesOn": "Transkriberes etter at grensen nullstilles {date}",
     "heldAudioWaiting": "{duration} venter",
-    "heldAudioWaitingOn": "Transkriberes automatisk {date}",
-    "heldAudioCardTitle": "{duration} venter på transkribering"
+    "heldAudioWaitingOn": "Transkriberes etter at grensen nullstilles {date}",
+    "heldAudioCardTitle": "{duration} venter på transkribering",
+    "heldAudioAndMore": "{count, plural, =1{og 1 til} other{og {count} til}}"
 }

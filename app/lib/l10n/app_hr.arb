@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% iskorišteno · preostalo je oko {hours} sati snimanja · {reset}",
     "onDeviceGetMoreUsage": "Nabavite još korištenja",
     "onDeviceGettingSpeechReady": "Priprema govora · {percent} %",
-    "heldAudioSavedBody": "Dosegli ste ograničenje za ovaj mjesec. Vaše snimke su spremljene i bit će transkribirane {date}.",
-    "heldAudioPhoneChosenBody": "Nove snimke transkribirat će se na ovom telefonu. Snimke na čekanju transkribiraju se {date}.",
+    "heldAudioSavedBody": "Dosegli ste ograničenje za ovaj mjesec. Vaše snimke su spremljene i bit će transkribirane nakon što se ograničenje resetira {date}.",
+    "heldAudioPhoneChosenBody": "Nove snimke transkribirat će se na ovom telefonu. Snimke na čekanju bit će transkribirane nakon što se ograničenje resetira {date}.",
     "heldAudioRecordingTitle": "Snimka, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Čeka transkripciju",
     "heldAudioLiveTitle": "Transkripcija u oblaku je pauzirana",
     "heldAudioLiveBody": "Dosegli ste ograničenje za ovaj mjesec. Omi nastavlja snimanje.",
     "heldAudioRecordedSinceLimit": "{minutes} min snimljeno nakon ograničenja",
-    "heldAudioTranscribesOn": "Transkribira se {date}",
+    "heldAudioTranscribesOn": "Transkribira se nakon što se ograničenje resetira {date}",
     "heldAudioWaiting": "{duration} na čekanju",
-    "heldAudioWaitingOn": "Automatski se transkribira {date}",
-    "heldAudioCardTitle": "{duration} čeka transkripciju"
+    "heldAudioWaitingOn": "Transkribira se nakon što se ograničenje resetira {date}",
+    "heldAudioCardTitle": "{duration} čeka transkripciju",
+    "heldAudioAndMore": "{count, plural, =1{i još 1} other{i još {count}}}"
 }

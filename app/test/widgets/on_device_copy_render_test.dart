@@ -441,6 +441,7 @@ void main() {
 
   HeldAudioSummary heldSummary({bool retainLive = true}) => HeldAudioSummary(
         seconds: 150,
+        count: 22,
         resetAt: DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000,
         retainLive: retainLive,
         recordings: [
@@ -488,6 +489,10 @@ void main() {
     final value = controller(settings: const OnDeviceSettings(enabled: true));
     await shoot(tester, 'held-audio-a-phone-en-dark.png', home: heldHome(value));
     expect(find.textContaining('New recordings will transcribe on this phone'), findsOneWidget);
+    expect(
+      find.textContaining('Waiting recordings will be transcribed after your limit resets'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('held_audio_on_phone')), findsNothing);
   });
 

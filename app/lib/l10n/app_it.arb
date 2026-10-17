@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% usato · restano circa {hours} ore di registrazione · {reset}",
     "onDeviceGetMoreUsage": "Ottieni più utilizzo",
     "onDeviceGettingSpeechReady": "Preparazione del parlato · {percent}%",
-    "heldAudioSavedBody": "Hai raggiunto il limite di questo mese. Le registrazioni sono salvate e verranno trascritte il {date}.",
-    "heldAudioPhoneChosenBody": "Le nuove registrazioni verranno trascritte su questo telefono. Le registrazioni in attesa vengono trascritte il {date}.",
+    "heldAudioSavedBody": "Hai raggiunto il limite di questo mese. Le registrazioni sono salvate e verranno trascritte dopo il ripristino del limite il {date}.",
+    "heldAudioPhoneChosenBody": "Le nuove registrazioni verranno trascritte su questo telefono. Le registrazioni in attesa verranno trascritte dopo il ripristino del limite il {date}.",
     "heldAudioRecordingTitle": "Registrazione, {time}",
     "heldAudioRecordingSubtitle": "{duration} · In attesa di trascrizione",
     "heldAudioLiveTitle": "Trascrizione cloud in pausa",
     "heldAudioLiveBody": "Hai raggiunto il limite di questo mese. Omi continua a registrare.",
     "heldAudioRecordedSinceLimit": "{minutes} min registrati dal limite",
-    "heldAudioTranscribesOn": "Trascrizione il {date}",
+    "heldAudioTranscribesOn": "Trascrizione dopo il ripristino del limite il {date}",
     "heldAudioWaiting": "{duration} in attesa",
-    "heldAudioWaitingOn": "Trascritto automaticamente il {date}",
-    "heldAudioCardTitle": "{duration} in attesa di trascrizione"
+    "heldAudioWaitingOn": "Trascritto dopo il ripristino del limite il {date}",
+    "heldAudioCardTitle": "{duration} in attesa di trascrizione",
+    "heldAudioAndMore": "{count, plural, =1{e 1 altra} other{e altre {count}}}"
 }

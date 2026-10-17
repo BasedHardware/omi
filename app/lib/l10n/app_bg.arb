@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% използвани · остават около {hours} часа запис · {reset}",
     "onDeviceGetMoreUsage": "Вземете още потребление",
     "onDeviceGettingSpeechReady": "Подготовка на речта · {percent}%",
-    "heldAudioSavedBody": "Достигнахте лимита за този месец. Записите ви са запазени и ще бъдат транскрибирани на {date}.",
-    "heldAudioPhoneChosenBody": "Новите записи ще се транскрибират на този телефон. Чакащите записи се транскрибират на {date}.",
+    "heldAudioSavedBody": "Достигнахте лимита за този месец. Записите ви са запазени и ще бъдат транскрибирани, след като лимитът се нулира на {date}.",
+    "heldAudioPhoneChosenBody": "Новите записи ще се транскрибират на този телефон. Чакащите записи ще се транскрибират, след като лимитът се нулира на {date}.",
     "heldAudioRecordingTitle": "Запис, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Чака транскрипция",
     "heldAudioLiveTitle": "Облачната транскрипция е на пауза",
     "heldAudioLiveBody": "Достигнахте лимита за този месец. Omi продължава да записва.",
     "heldAudioRecordedSinceLimit": "{minutes} мин записани след лимита",
-    "heldAudioTranscribesOn": "Транскрибира се на {date}",
+    "heldAudioTranscribesOn": "Транскрибира се, след като лимитът се нулира на {date}",
     "heldAudioWaiting": "{duration} в изчакване",
-    "heldAudioWaitingOn": "Транскрибира се автоматично на {date}",
-    "heldAudioCardTitle": "{duration} чакат транскрибиране"
+    "heldAudioWaitingOn": "Транскрибира се, след като лимитът се нулира на {date}",
+    "heldAudioCardTitle": "{duration} чакат транскрибиране",
+    "heldAudioAndMore": "{count, plural, =1{и още 1} other{и още {count}}}"
 }

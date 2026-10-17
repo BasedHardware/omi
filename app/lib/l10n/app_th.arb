@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "ใช้ไป {percent}% · เหลือการบันทึกอีกประมาณ {hours} ชั่วโมง · {reset}",
     "onDeviceGetMoreUsage": "รับการใช้งานเพิ่ม",
     "onDeviceGettingSpeechReady": "กำลังเตรียมเสียงพูด · {percent}%",
-    "heldAudioSavedBody": "คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว การบันทึกของคุณถูกเก็บไว้และจะถูกถอดความเป็นข้อความในวันที่ {date}",
-    "heldAudioPhoneChosenBody": "การบันทึกใหม่จะถูกถอดความเป็นข้อความบนโทรศัพท์นี้ การบันทึกที่รออยู่จะถูกถอดความในวันที่ {date}",
+    "heldAudioSavedBody": "คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว การบันทึกของคุณถูกเก็บไว้และจะถูกถอดความหลังจากขีดจำกัดรีเซ็ตในวันที่ {date}",
+    "heldAudioPhoneChosenBody": "การบันทึกใหม่จะถูกถอดความเป็นข้อความบนโทรศัพท์นี้ การบันทึกที่รออยู่จะถูกถอดความหลังจากขีดจำกัดรีเซ็ตในวันที่ {date}",
     "heldAudioRecordingTitle": "การบันทึก, {time}",
     "heldAudioRecordingSubtitle": "{duration} · รอถอดความเป็นข้อความ",
     "heldAudioLiveTitle": "การถอดความบนคลาวด์หยุดชั่วคราว",
     "heldAudioLiveBody": "คุณใช้ถึงขีดจำกัดของเดือนนี้แล้ว Omi ยังบันทึกต่อไป",
     "heldAudioRecordedSinceLimit": "บันทึกไป {minutes} นาทีตั้งแต่ถึงขีดจำกัด",
-    "heldAudioTranscribesOn": "ถอดความในวันที่ {date}",
+    "heldAudioTranscribesOn": "ถอดความหลังจากขีดจำกัดรีเซ็ตในวันที่ {date}",
     "heldAudioWaiting": "{duration} กำลังรอ",
-    "heldAudioWaitingOn": "ถอดความอัตโนมัติในวันที่ {date}",
-    "heldAudioCardTitle": "{duration} รอการถอดเสียง"
+    "heldAudioWaitingOn": "ถอดความหลังจากขีดจำกัดรีเซ็ตในวันที่ {date}",
+    "heldAudioCardTitle": "{duration} รอการถอดเสียง",
+    "heldAudioAndMore": "{count, plural, =1{และอีก 1 รายการ} other{และอีก {count} รายการ}}"
 }

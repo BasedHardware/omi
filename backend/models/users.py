@@ -1,7 +1,7 @@
 from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from pydantic import BaseModel, Field, model_serializer
 
@@ -214,11 +214,16 @@ class HeldAudioRecording(BaseModel):
 
 
 class HeldAudioSummary(BaseModel):
-    """Additive held-audio totals. Absent until funded-STT admission is holding audio."""
+    """Additive held-audio totals. Absent until funded-STT dispatch enforcement is holding audio.
+
+    ``count`` is the exact number of holds, including ones past the newest page.
+    ``recordings`` is that page, newest first.
+    """
 
     seconds: int
     reset_at: int
     retain_live: bool
+    count: int = 0
     recordings: List[HeldAudioRecording] = []
 
 
@@ -249,9 +254,16 @@ class UserSubscriptionResponse(BaseModel):
     # Resolved once per request by `resolve_transcription_allowance`; the same
     # answer the listen socket enforces. Null only on servers that predate it.
     transcription_allowance: Optional[TranscriptionAllowanceSnapshot] = None
-    # Present only while funded-STT admission is on and audio is held or live
-    # capture must be retained. Older clients ignore the field.
+    # Present only while STT cap dispatch enforcement is on and audio is held
+    # or live capture must be retained. Omitted entirely when unset, not null.
+    # Older clients ignore the field.
     held_audio: Optional[HeldAudioSummary] = None
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        data = super().model_dump(**kwargs)
+        if isinstance(data, dict) and data.get('held_audio') is None:
+            data.pop('held_audio', None)
+        return data
 
 
 class AvailableLanguage(BaseModel):

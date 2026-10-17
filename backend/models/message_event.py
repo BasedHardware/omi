@@ -207,6 +207,24 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
         return j
 
 
+class SttCapLiveHeldEvent(MessageEvent):
+    """First live packet this session that was not sent to the funded provider.
+
+    Additive on the existing listen message channel. Older clients parse it as
+    an unknown event and keep their previous behavior. ``pcm_byte_offset`` is
+    the PCM16 byte count already transcribed before this packet.
+    """
+
+    event_type: str = "stt_cap_live_held"
+    pcm_byte_offset: int
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
 class FreemiumThresholdReachedEvent(MessageEvent):
     event_type: str = "freemium_threshold_reached"
     remaining_seconds: int

@@ -81,7 +81,9 @@ content ledger. Holds that were never acknowledged await the source job's retry.
 
 The existing `locked_content_recovery` authenticated-request path kicks an async
 recovery pass independently of its once-per-month unlock receipt and legacy reset
-flag. The flagged API sync router registers the recovery callback; auth-only and
+flag. `GET /v1/users/me/subscription` also kicks that same recovery, without
+waiting for it, while dispatch enforcement is on, so opening the app after a
+reset starts transcription of held audio. The flagged API sync router registers the recovery callback; auth-only and
 pusher images do not load the sync pipeline. A distributed 60-second cooldown
 bounds requests; token-fenced renewable leases prevent concurrent processing of
 a hold. At reset or upgrade, current
@@ -173,15 +175,24 @@ cross-process admission race.
 - **Mobile, on-device overflow flag on:** the conversations list shows held uploads
   with Upgrade and, when this phone can run the on-device engine, Transcribe on
   this phone. That action switches new recordings to the existing on-device mode.
-  It does not download or transcribe audio the server already holds: the phone
-  deletes its copy after a successful hold acknowledgement, and there is no owner
-  download. Waiting recordings still transcribe on the reset date. Live capture
-  keeps recording while cloud transcription pauses. A socket send is not a
-  transcript, and live audio is not archived unless private-cloud sync is already
-  on, so the client stops treating those frames as delivered and uploads them
-  through the existing sync path, where they become held audio. Settings usage
+  It does not download or transcribe audio the server already holds. A successful
+  upload marks the local WAL synced, but the phone can keep that copy: new installs
+  auto-remove synced copies after 30 days, and existing installs keep the setting
+  off unless the user opts in. The on-device runner does not transcribe those
+  synced copies. Transcribing the waiting backlog on the phone is a follow-up.
+  Waiting recordings are transcribed after the account's limit resets, when the
+  user opens the app: the subscription response kicks the existing fenced recovery.
+  The date is the server's transcription-meter reset (00:00 UTC on the 1st, including
+  legacy Plus, whose Stripe period end is not the minute counter). Live capture
+  keeps recording while cloud transcription pauses. The first suppressed live
+  packet emits one `stt_cap_live_held` listen event with the PCM byte offset of
+  audio already sent to the provider. The client retains audio from that offset
+  and uploads it through the existing sync path, where it becomes held audio.
+  Audio before the offset stays synced and is not charged again. Settings usage
   adds the waiting row beside the existing meter, the existing paid on-phone
-  toggle when this phone can run the engine, and See plans.
+  toggle when this phone can run the engine, and See plans. The held total is one
+  summary document, not a scan of every hold. The newest 20 rows are listed, with
+  a count of the rest.
 - **macOS:** the existing threshold handler can stop capture, as it does today.
   The backend also refuses new funded sends if the client continues; accepted work
   drains. There is no new macOS on-device overflow flow in this PR.

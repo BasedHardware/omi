@@ -11734,15 +11734,16 @@
     "onDeviceMeterLineHours": "{percent}% استعمال ہوا · تقریباً {hours} گھنٹے ریکارڈنگ باقی · {reset}",
     "onDeviceGetMoreUsage": "مزید استعمال حاصل کریں",
     "onDeviceGettingSpeechReady": "تقریر تیار ہو رہی ہے · {percent}%",
-    "heldAudioSavedBody": "آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ آپ کی ریکارڈنگز محفوظ ہیں اور {date} کو نقل کی جائیں گی۔",
-    "heldAudioPhoneChosenBody": "نئی ریکارڈنگز اس فون پر نقل کی جائیں گی۔ انتظار میں ریکارڈنگز {date} کو نقل ہوتی ہیں۔",
+    "heldAudioSavedBody": "آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ آپ کی ریکارڈنگز محفوظ ہیں اور حد {date} کو ری سیٹ ہونے کے بعد نقل کی جائیں گی۔",
+    "heldAudioPhoneChosenBody": "نئی ریکارڈنگز اس فون پر نقل کی جائیں گی۔ انتظار میں ریکارڈنگز حد {date} کو ری سیٹ ہونے کے بعد نقل کی جائیں گی۔",
     "heldAudioRecordingTitle": "ریکارڈنگ، {time}",
     "heldAudioRecordingSubtitle": "{duration} · نقل کے انتظار میں",
     "heldAudioLiveTitle": "کلاؤڈ نقل نویسی رکی ہوئی ہے",
     "heldAudioLiveBody": "آپ اس مہینے کی حد تک پہنچ گئے ہیں۔ Omi ریکارڈنگ جاری رکھتا ہے۔",
     "heldAudioRecordedSinceLimit": "حد کے بعد {minutes} منٹ ریکارڈ ہوئے",
-    "heldAudioTranscribesOn": "{date} کو نقل ہوگی",
+    "heldAudioTranscribesOn": "حد {date} کو ری سیٹ ہونے کے بعد نقل ہوگی",
     "heldAudioWaiting": "{duration} انتظار میں",
-    "heldAudioWaitingOn": "{date} کو خود بخود نقل ہوگی",
-    "heldAudioCardTitle": "{duration} ٹرانسکرپشن کے انتظار میں"
+    "heldAudioWaitingOn": "حد {date} کو ری سیٹ ہونے کے بعد نقل ہوگی",
+    "heldAudioCardTitle": "{duration} ٹرانسکرپشن کے انتظار میں",
+    "heldAudioAndMore": "{count, plural, =1{اور 1 مزید} other{اور {count} مزید}}"
 }

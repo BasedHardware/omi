@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% digunakan · kira-kira {hours} jam rakaman lagi · {reset}",
     "onDeviceGetMoreUsage": "Dapatkan lebih banyak penggunaan",
     "onDeviceGettingSpeechReady": "Menyediakan pertuturan · {percent}%",
-    "heldAudioSavedBody": "Anda telah mencapai had bulan ini. Rakaman anda disimpan dan akan ditranskripsi pada {date}.",
-    "heldAudioPhoneChosenBody": "Rakaman baharu akan ditranskripsi pada telefon ini. Rakaman yang menunggu ditranskripsi pada {date}.",
+    "heldAudioSavedBody": "Anda telah mencapai had bulan ini. Rakaman anda disimpan dan akan ditranskripsi selepas had anda ditetapkan semula pada {date}.",
+    "heldAudioPhoneChosenBody": "Rakaman baharu akan ditranskripsi pada telefon ini. Rakaman yang menunggu akan ditranskripsi selepas had anda ditetapkan semula pada {date}.",
     "heldAudioRecordingTitle": "Rakaman, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Menunggu transkripsi",
     "heldAudioLiveTitle": "Transkripsi awan dijeda",
     "heldAudioLiveBody": "Anda telah mencapai had bulan ini. Omi terus merakam.",
     "heldAudioRecordedSinceLimit": "{minutes} min dirakam sejak had",
-    "heldAudioTranscribesOn": "Ditranskripsi pada {date}",
+    "heldAudioTranscribesOn": "Ditranskripsi selepas had ditetapkan semula pada {date}",
     "heldAudioWaiting": "{duration} menunggu",
-    "heldAudioWaitingOn": "Ditranskripsi secara automatik pada {date}",
-    "heldAudioCardTitle": "{duration} menunggu transkripsi"
+    "heldAudioWaitingOn": "Ditranskripsi selepas had ditetapkan semula pada {date}",
+    "heldAudioCardTitle": "{duration} menunggu transkripsi",
+    "heldAudioAndMore": "{count, plural, =1{dan 1 lagi} other{dan {count} lagi}}"
 }

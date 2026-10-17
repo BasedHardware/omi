@@ -177,7 +177,34 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
         order.append('upload')
 
     blob.upload_from_file.side_effect = upload
-    ref.create.side_effect = lambda *args, **kwargs: order.append('manifest')
+
+    class _Batch:
+        def create(self, document, data):
+            document.create(data)
+            order.append('manifest')
+
+        def set(self, document, data, merge=False):
+            order.append('summary')
+
+        def commit(self):
+            return None
+
+    class _Ref:
+        def collection(self, name):
+            return self
+
+        def document(self, name):
+            return self
+
+    class _Client:
+        def batch(self):
+            return _Batch()
+
+        def collection(self, name):
+            return _Ref()
+
+    ref.create.side_effect = lambda *args, **kwargs: None
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: _Client())
     monkeypatch.setattr(cap_hold, 'holds', lambda _: SimpleNamespace(document=lambda _: ref))
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
     bucket.blob.return_value = blob
@@ -186,7 +213,7 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
     monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
     meta = {'timestamp': 1792152000, 'source': 'omi', 'full_capture': True}
     assert cap_hold.hold_segment('synthetic', str(path), meta) == 1
-    assert order == ['upload', 'manifest']
+    assert order == ['upload', 'manifest', 'summary']
     assert decrypt_audio_file(uploaded[0], 'synthetic') == path.read_bytes()
     manifest = ref.create.call_args.args[0]
     assert manifest['audio_path'].startswith('chunks/synthetic/cap-held/')
@@ -215,6 +242,32 @@ def test_large_hold_streams_bounded_authenticated_chunks(tmp_path, monkeypatch, 
     uploaded = []
     blob.upload_from_file.side_effect = lambda stream, **kw: uploaded.append(stream.read())
     bucket.blob.return_value = blob
+
+    class _Batch:
+        def create(self, document, data):
+            document.create(data)
+
+        def set(self, document, data, merge=False):
+            return None
+
+        def commit(self):
+            return None
+
+    class _Ref:
+        def collection(self, name):
+            return self
+
+        def document(self, name):
+            return self
+
+    class _Client:
+        def batch(self):
+            return _Batch()
+
+        def collection(self, name):
+            return _Ref()
+
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: _Client())
     monkeypatch.setattr(cap_hold, 'holds', lambda _: SimpleNamespace(document=lambda _: ref))
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
     monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())

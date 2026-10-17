@@ -18203,8 +18203,13 @@
         "type": "object"
       },
       "HeldAudioSummary": {
-        "description": "Additive held-audio totals. Absent until funded-STT admission is holding audio.",
+        "description": "Additive held-audio totals. Absent until funded-STT dispatch enforcement is holding audio.\n\n``count`` is the exact number of holds, including ones past the newest page.\n``recordings`` is that page, newest first.",
         "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
           "recordings": {
             "default": [],
             "items": {

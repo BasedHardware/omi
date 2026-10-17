@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% panaudota · liko apie {hours} val. įrašo · {reset}",
     "onDeviceGetMoreUsage": "Gaukite daugiau naudojimo",
     "onDeviceGettingSpeechReady": "Ruošiama kalba · {percent}%",
-    "heldAudioSavedBody": "Pasiekėte šio mėnesio limitą. Jūsų įrašai išsaugoti ir bus transkribuoti {date}.",
-    "heldAudioPhoneChosenBody": "Nauji įrašai bus transkribuojami šiame telefone. Laukiantys įrašai transkribuojami {date}.",
+    "heldAudioSavedBody": "Pasiekėte šio mėnesio limitą. Jūsų įrašai išsaugoti ir bus transkribuoti po limito atstatymo {date}.",
+    "heldAudioPhoneChosenBody": "Nauji įrašai bus transkribuojami šiame telefone. Laukiantys įrašai bus transkribuoti po limito atstatymo {date}.",
     "heldAudioRecordingTitle": "Įrašas, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Laukia transkripcijos",
     "heldAudioLiveTitle": "Debesijos transkripcija pristabdyta",
     "heldAudioLiveBody": "Pasiekėte šio mėnesio limitą. Omi toliau įrašinėja.",
     "heldAudioRecordedSinceLimit": "{minutes} min įrašyta nuo limito",
-    "heldAudioTranscribesOn": "Transkribuojama {date}",
+    "heldAudioTranscribesOn": "Transkribuojama po limito atstatymo {date}",
     "heldAudioWaiting": "{duration} laukia",
-    "heldAudioWaitingOn": "Automatiškai transkribuojama {date}",
-    "heldAudioCardTitle": "{duration} laukia transkripcijos"
+    "heldAudioWaitingOn": "Transkribuojama po limito atstatymo {date}",
+    "heldAudioCardTitle": "{duration} laukia transkripcijos",
+    "heldAudioAndMore": "{count, plural, =1{ir dar 1} other{ir dar {count}}}"
 }

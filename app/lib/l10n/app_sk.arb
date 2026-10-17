@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% využité · zostáva asi {hours} hodín nahrávania · {reset}",
     "onDeviceGetMoreUsage": "Získajte viac využitia",
     "onDeviceGettingSpeechReady": "Príprava reči · {percent}%",
-    "heldAudioSavedBody": "Dosiahli ste limit na tento mesiac. Vaše nahrávky sú uložené a budú prepísané {date}.",
-    "heldAudioPhoneChosenBody": "Nové nahrávky sa prepíšu v tomto telefóne. Čakajúce nahrávky sa prepíšu {date}.",
+    "heldAudioSavedBody": "Dosiahli ste limit na tento mesiac. Vaše nahrávky sú uložené a budú prepísané po obnovení limitu {date}.",
+    "heldAudioPhoneChosenBody": "Nové nahrávky sa prepíšu v tomto telefóne. Čakajúce nahrávky budú prepísané po obnovení limitu {date}.",
     "heldAudioRecordingTitle": "Nahrávka, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Čaká na prepis",
     "heldAudioLiveTitle": "Prepis v cloude je pozastavený",
     "heldAudioLiveBody": "Dosiahli ste limit na tento mesiac. Omi ďalej nahráva.",
     "heldAudioRecordedSinceLimit": "{minutes} min nahraté od limitu",
-    "heldAudioTranscribesOn": "Prepis {date}",
+    "heldAudioTranscribesOn": "Prepis po obnovení limitu {date}",
     "heldAudioWaiting": "{duration} čaká",
-    "heldAudioWaitingOn": "Automaticky prepísané {date}",
-    "heldAudioCardTitle": "Na prepis čaká {duration}"
+    "heldAudioWaitingOn": "Prepísané po obnovení limitu {date}",
+    "heldAudioCardTitle": "Na prepis čaká {duration}",
+    "heldAudioAndMore": "{count, plural, =1{a 1 ďalšia} other{a {count} ďalších}}"
 }

@@ -14102,12 +14102,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Dostigli ste limit za ovaj mjesec. Vaše snimke su sačuvane i biće transkribovane $date.';
+    return 'Dostigli ste limit za ovaj mjesec. Vaše snimke su sačuvane i biće transkribovane nakon što se limit resetuje $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Nove snimke će se transkribovati na ovom telefonu. Snimke na čekanju se transkribuju $date.';
+    return 'Nove snimke će se transkribovati na ovom telefonu. Snimke na čekanju biće transkribovane nakon što se limit resetuje $date.';
   }
 
   @override
@@ -14133,7 +14133,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Transkribuje se $date';
+    return 'Transkribuje se nakon što se limit resetuje $date';
   }
 
   @override
@@ -14143,11 +14143,22 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Automatski se transkribuje $date';
+    return 'Transkribuje se nakon što se limit resetuje $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration čeka na prepis';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'i još $count',
+      one: 'i još 1',
+    );
+    return '$_temp0';
   }
 }

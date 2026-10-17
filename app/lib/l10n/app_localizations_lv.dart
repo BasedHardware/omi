@@ -14103,12 +14103,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'Esat sasniedzis šī mēneša limitu. Jūsu ieraksti ir saglabāti un tiks transkribēti $date.';
+    return 'Esat sasniedzis šī mēneša limitu. Jūsu ieraksti ir saglabāti un tiks transkribēti pēc limita atiestatīšanas $date.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'Jaunie ieraksti tiks transkribēti šajā tālrunī. Gaidošie ieraksti tiek transkribēti $date.';
+    return 'Jaunie ieraksti tiks transkribēti šajā tālrunī. Gaidošie ieraksti tiks transkribēti pēc limita atiestatīšanas $date.';
   }
 
   @override
@@ -14134,7 +14134,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return 'Transkribē $date';
+    return 'Transkribē pēc limita atiestatīšanas $date';
   }
 
   @override
@@ -14144,11 +14144,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return 'Automātiski transkribē $date';
+    return 'Transkribē pēc limita atiestatīšanas $date';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration gaida transkribēšanu';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'un vēl $count',
+      one: 'un vēl 1',
+    );
+    return '$_temp0';
   }
 }

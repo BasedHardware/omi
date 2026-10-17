@@ -32,6 +32,8 @@ abstract class MessageEvent {
         return OnboardingCompleteEvent.fromJson(json);
       case 'freemium_threshold_reached':
         return FreemiumThresholdReachedEvent.fromJson(json);
+      case 'stt_cap_live_held':
+        return SttCapLiveHeldEvent.fromJson(json);
       case 'segments_deleted':
         return SegmentsDeletedEvent.fromJson(json);
       default:
@@ -280,6 +282,17 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
       remainingSeconds: json['remaining_seconds'] ?? 0,
       action: FreemiumAction.fromString(json['action']),
     );
+  }
+}
+
+class SttCapLiveHeldEvent extends MessageEvent {
+  final int pcmByteOffset;
+
+  SttCapLiveHeldEvent({required this.pcmByteOffset}) : super(eventType: 'stt_cap_live_held');
+
+  factory SttCapLiveHeldEvent.fromJson(Map<String, dynamic> json) {
+    final offset = json['pcm_byte_offset'];
+    return SttCapLiveHeldEvent(pcmByteOffset: offset is int ? offset : 0);
   }
 }
 

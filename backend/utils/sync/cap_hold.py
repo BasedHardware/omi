@@ -31,12 +31,24 @@ from utils.other.storage import get_private_cloud_sync_bucket, owner_storage_wri
 
 logger = logging.getLogger(__name__)
 COLLECTION = 'stt_cap_holds'
+SUMMARY_COLLECTION = 'stt_cap_hold_summary'
 AUDIO_CHUNK_BYTES = 1024 * 1024
 RETAINED_NEXT_ATTEMPT_AT = 253402300799  # Terminal rows sort after actionable work, without a new query/index.
 
 
 def holds(uid: str) -> Any:
     return get_firestore_client().collection('users').document(uid).collection(COLLECTION)
+
+
+def summary_ref(uid: str) -> Any:
+    """One running total of audio still in ``held``. Card and settings read this doc."""
+    return get_firestore_client().collection('users').document(uid).collection(SUMMARY_COLLECTION).document('current')
+
+
+def whole_seconds(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return max(0, int(round(value)))
 
 
 def pending_holds(uid: str, *, limit: int = 10) -> list[Any]:
@@ -111,15 +123,38 @@ def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | No
     }
     if started_at is not None:
         body['started_at'] = started_at
+    # Newest-first listing. Recording start when we have it, otherwise the
+    # manifest write. Every new hold carries the field the ordered query uses.
+    body['listed_at'] = started_at if started_at is not None else now
     return body
+
+
+def _summary_after(current: dict | None, delta_seconds: int, delta_count: int) -> dict:
+    data = current or {}
+    return {
+        'seconds': max(0, whole_seconds(data.get('seconds')) + int(delta_seconds)),
+        'count': max(0, int(data.get('count') or 0) + int(delta_count)),
+    }
 
 
 def _publish(uid: str, identity: str, seconds: float, fields: dict, started_at: int | None = None) -> bool:
     # Reacquire the account fence after upload: deletion may have started while
     # the async coordinator switched pools. Never acknowledge a refused manifest.
+    manifest = hold_manifest(fields, seconds, time.time(), started_at)
+    whole = whole_seconds(seconds)
     with external_write_fence(uid):
+        client = get_firestore_client()
+        batch = client.batch()
         try:
-            holds(uid).document(identity).create(hold_manifest(fields, seconds, time.time(), started_at))
+            # One commit: the hold and the running total appear together.
+            # AlreadyExists fails the batch, so a retried create does not add twice.
+            batch.create(holds(uid).document(identity), manifest)
+            batch.set(
+                summary_ref(uid),
+                {'seconds': firestore.Increment(whole), 'count': firestore.Increment(1)},
+                merge=True,
+            )
+            batch.commit()
         except AlreadyExists:
             return False  # Preserve the winner's immutable progress checkpoint.
     return True
@@ -280,10 +315,19 @@ def checkpoint(uid: str, ref: Any, token: str, updates: dict) -> bool:
 
     @firestore.transactional
     def commit(tx: Any) -> bool:
-        row = ref.get(transaction=tx).to_dict() or {}
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() if snapshot.exists else {}
         if row.get('lease_token') != token or row.get('lease_until', 0) <= time.time():
             return False
+        new_state = updates.get('state', row.get('state'))
+        leaving = row.get('state') == 'held' and new_state != 'held'
+        # Read the running total before any write. Leaving `held` decrements
+        # the same transaction that changes the manifest.
+        summary_snapshot = summary_ref(uid).get(transaction=tx) if leaving else None
         tx.update(ref, updates)
+        if leaving and summary_snapshot is not None:
+            current = summary_snapshot.to_dict() if summary_snapshot.exists else None
+            tx.set(summary_ref(uid), _summary_after(current, -whole_seconds(row.get('seconds')), -1))
         return True
 
     with external_write_fence(uid):

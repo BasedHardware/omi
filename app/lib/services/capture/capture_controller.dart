@@ -91,7 +91,8 @@ import 'package:omi/backend/schema/message_event.dart'
         PhotoProcessingEvent,
         PhotoDescribedEvent,
         FreemiumThresholdReachedEvent,
-        SegmentsDeletedEvent;
+        SegmentsDeletedEvent,
+        SttCapLiveHeldEvent;
 
 part 'capture_uplink_policy.dart';
 
@@ -3722,6 +3723,13 @@ class CaptureController extends ChangeNotifier
 
     if (event is FreemiumThresholdReachedEvent) {
       _handleFreemiumThresholdReached(event);
+      return;
+    }
+
+    if (event is SttCapLiveHeldEvent) {
+      final phone = _wal.getSyncs().phone;
+      if (phone is LocalWalSyncImpl) phone.retainSuppressedFromPcmOffset(event.pcmByteOffset);
+      notifyListeners();
       return;
     }
 

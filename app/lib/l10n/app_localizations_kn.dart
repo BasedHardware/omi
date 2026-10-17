@@ -14119,12 +14119,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String heldAudioSavedBody(String date) {
-    return 'ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ ಮತ್ತು $date ರಂದು ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ.';
+    return 'ನೀವು ಈ ತಿಂಗಳ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ ಮತ್ತು ಮಿತಿ $date ರಂದು ಮರುಹೊಂದಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ.';
   }
 
   @override
   String heldAudioPhoneChosenBody(String date) {
-    return 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ. ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು $date ರಂದು ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ.';
+    return 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ. ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಮಿತಿ $date ರಂದು ಮರುಹೊಂದಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗುತ್ತದೆ.';
   }
 
   @override
@@ -14150,7 +14150,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String heldAudioTranscribesOn(String date) {
-    return '$date ರಂದು ಲಿಪ್ಯಂತರ';
+    return 'ಮಿತಿ $date ರಂದು ಮರುಹೊಂದಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರ';
   }
 
   @override
@@ -14160,11 +14160,22 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String heldAudioWaitingOn(String date) {
-    return '$date ರಂದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಲಿಪ್ಯಂತರ';
+    return 'ಮಿತಿ $date ರಂದು ಮರುಹೊಂದಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರ';
   }
 
   @override
   String heldAudioCardTitle(String duration) {
     return '$duration ಪ್ರತಿಲೇಖನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಮತ್ತು ಇನ್ನೂ $count',
+      one: 'ಮತ್ತು ಇನ್ನೂ 1',
+    );
+    return '$_temp0';
   }
 }

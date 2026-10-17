@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% kasutatud · salvestamist on jäänud umbes {hours} tundi · {reset}",
     "onDeviceGetMoreUsage": "Hangi rohkem kasutust",
     "onDeviceGettingSpeechReady": "Kõne ettevalmistamine · {percent}%",
-    "heldAudioSavedBody": "Oled jõudnud selle kuu limiidini. Sinu salvestused on alles ja transkribeeritakse {date}.",
-    "heldAudioPhoneChosenBody": "Uued salvestused transkribeeritakse selles telefonis. Ootel salvestused transkribeeritakse {date}.",
+    "heldAudioSavedBody": "Oled jõudnud selle kuu limiidini. Sinu salvestused on alles ja transkribeeritakse pärast limiidi lähtestamist {date}.",
+    "heldAudioPhoneChosenBody": "Uued salvestused transkribeeritakse selles telefonis. Ootel salvestused transkribeeritakse pärast limiidi lähtestamist {date}.",
     "heldAudioRecordingTitle": "Salvestus, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Ootab transkribeerimist",
     "heldAudioLiveTitle": "Pilvetranskriptsioon on peatatud",
     "heldAudioLiveBody": "Oled jõudnud selle kuu limiidini. Omi jätkab salvestamist.",
     "heldAudioRecordedSinceLimit": "{minutes} min salvestatud pärast limiiti",
-    "heldAudioTranscribesOn": "Transkribeeritakse {date}",
+    "heldAudioTranscribesOn": "Transkribeeritakse pärast limiidi lähtestamist {date}",
     "heldAudioWaiting": "{duration} ootel",
-    "heldAudioWaitingOn": "Transkribeeritakse automaatselt {date}",
-    "heldAudioCardTitle": "{duration} ootab transkribeerimist"
+    "heldAudioWaitingOn": "Transkribeeritakse pärast limiidi lähtestamist {date}",
+    "heldAudioCardTitle": "{duration} ootab transkribeerimist",
+    "heldAudioAndMore": "{count, plural, =1{ja veel 1} other{ja veel {count}}}"
 }

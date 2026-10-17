@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% використано · залишилося близько {hours} годин запису · {reset}",
     "onDeviceGetMoreUsage": "Отримати більше використання",
     "onDeviceGettingSpeechReady": "Підготовка мовлення · {percent}%",
-    "heldAudioSavedBody": "Ви досягли ліміту цього місяця. Записи збережено, і їх буде розшифровано {date}.",
-    "heldAudioPhoneChosenBody": "Нові записи буде розшифровано на цьому телефоні. Записи в очікуванні розшифровуються {date}.",
+    "heldAudioSavedBody": "Ви досягли ліміту цього місяця. Записи збережено, і їх буде розшифровано після скидання ліміту {date}.",
+    "heldAudioPhoneChosenBody": "Нові записи буде розшифровано на цьому телефоні. Записи в очікуванні буде розшифровано після скидання ліміту {date}.",
     "heldAudioRecordingTitle": "Запис, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Очікує розшифрування",
     "heldAudioLiveTitle": "Хмарне розшифрування призупинено",
     "heldAudioLiveBody": "Ви досягли ліміту цього місяця. Omi продовжує запис.",
     "heldAudioRecordedSinceLimit": "{minutes} хв записано після ліміту",
-    "heldAudioTranscribesOn": "Розшифрування {date}",
+    "heldAudioTranscribesOn": "Розшифрування після скидання ліміту {date}",
     "heldAudioWaiting": "{duration} в очікуванні",
-    "heldAudioWaitingOn": "Розшифровується автоматично {date}",
-    "heldAudioCardTitle": "{duration} очікує на транскрипцію"
+    "heldAudioWaitingOn": "Розшифровується після скидання ліміту {date}",
+    "heldAudioCardTitle": "{duration} очікує на транскрипцію",
+    "heldAudioAndMore": "{count, plural, =1{і ще 1} other{і ще {count}}}"
 }

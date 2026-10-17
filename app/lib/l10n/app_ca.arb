@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% utilitzat · queden unes {hours} hores de gravació · {reset}",
     "onDeviceGetMoreUsage": "Aconsegueix més ús",
     "onDeviceGettingSpeechReady": "Preparant la parla · {percent}%",
-    "heldAudioSavedBody": "Has arribat al límit d'aquest mes. Les teves gravacions estan desades i es transcriuran el {date}.",
-    "heldAudioPhoneChosenBody": "Les gravacions noves es transcriuran en aquest telèfon. Les gravacions en espera es transcriuen el {date}.",
+    "heldAudioSavedBody": "Has arribat al límit d'aquest mes. Les teves gravacions estan desades i es transcriuran després que el límit es restableixi el {date}.",
+    "heldAudioPhoneChosenBody": "Les gravacions noves es transcriuran en aquest telèfon. Les gravacions en espera es transcriuran després que el límit es restableixi el {date}.",
     "heldAudioRecordingTitle": "Gravació, {time}",
     "heldAudioRecordingSubtitle": "{duration} · En espera de transcripció",
     "heldAudioLiveTitle": "Transcripció al núvol en pausa",
     "heldAudioLiveBody": "Has arribat al límit d'aquest mes. Omi continua gravant.",
     "heldAudioRecordedSinceLimit": "{minutes} min gravats des del límit",
-    "heldAudioTranscribesOn": "Es transcriu el {date}",
+    "heldAudioTranscribesOn": "Es transcriu després que el límit es restableixi el {date}",
     "heldAudioWaiting": "{duration} en espera",
-    "heldAudioWaitingOn": "Es transcriu automàticament el {date}",
-    "heldAudioCardTitle": "{duration} pendents de transcriure"
+    "heldAudioWaitingOn": "Es transcriu després que el límit es restableixi el {date}",
+    "heldAudioCardTitle": "{duration} pendents de transcriure",
+    "heldAudioAndMore": "{count, plural, =1{i 1 més} other{i {count} més}}"
 }

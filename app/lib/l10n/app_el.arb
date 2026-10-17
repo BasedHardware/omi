@@ -4308,15 +4308,16 @@
     "onDeviceMeterLineHours": "{percent}% χρησιμοποιήθηκε · απομένουν περίπου {hours} ώρες εγγραφής · {reset}",
     "onDeviceGetMoreUsage": "Αποκτήστε περισσότερη χρήση",
     "onDeviceGettingSpeechReady": "Προετοιμασία ομιλίας · {percent}%",
-    "heldAudioSavedBody": "Φτάσατε το όριο αυτού του μήνα. Οι εγγραφές σας έχουν αποθηκευτεί και θα απομαγνητοφωνηθούν στις {date}.",
-    "heldAudioPhoneChosenBody": "Οι νέες εγγραφές θα απομαγνητοφωνηθούν σε αυτό το τηλέφωνο. Οι εγγραφές σε αναμονή απομαγνητοφωνούνται στις {date}.",
+    "heldAudioSavedBody": "Φτάσατε το όριο αυτού του μήνα. Οι εγγραφές σας έχουν αποθηκευτεί και θα απομαγνητοφωνηθούν αφού το όριό σας μηδενιστεί στις {date}.",
+    "heldAudioPhoneChosenBody": "Οι νέες εγγραφές θα απομαγνητοφωνηθούν σε αυτό το τηλέφωνο. Οι εγγραφές σε αναμονή θα απομαγνητοφωνηθούν αφού το όριό σας μηδενιστεί στις {date}.",
     "heldAudioRecordingTitle": "Εγγραφή, {time}",
     "heldAudioRecordingSubtitle": "{duration} · Σε αναμονή απομαγνητοφώνησης",
     "heldAudioLiveTitle": "Η απομαγνητοφώνηση στο cloud σταμάτησε",
     "heldAudioLiveBody": "Φτάσατε το όριο αυτού του μήνα. Το Omi συνεχίζει την εγγραφή.",
     "heldAudioRecordedSinceLimit": "{minutes} λεπ. ηχογραφήθηκαν μετά το όριο",
-    "heldAudioTranscribesOn": "Απομαγνητοφώνηση στις {date}",
+    "heldAudioTranscribesOn": "Απομαγνητοφώνηση αφού το όριο μηδενιστεί στις {date}",
     "heldAudioWaiting": "{duration} σε αναμονή",
-    "heldAudioWaitingOn": "Απομαγνητοφωνείται αυτόματα στις {date}",
-    "heldAudioCardTitle": "{duration} σε αναμονή για μεταγραφή"
+    "heldAudioWaitingOn": "Απομαγνητοφωνείται αφού το όριο μηδενιστεί στις {date}",
+    "heldAudioCardTitle": "{duration} σε αναμονή για μεταγραφή",
+    "heldAudioAndMore": "{count, plural, =1{και 1 ακόμη} other{και {count} ακόμη}}"
 }
