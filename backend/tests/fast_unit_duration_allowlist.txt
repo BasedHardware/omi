@@ -163,6 +163,12 @@ tests/unit/test_daily_notification_timezone_selection.py::test_sub_hour_offset_t
 tests/unit/test_desktop_message_quota_router.py::test_desktop_ai_message_does_not_record_quota
 # File-isolation import of routers.chat + multipart/STT stubs amortizes into
 # whichever test in this file runs first; CPU sits on the 0.30s fail line.
+# Pre-existing upstream flakes observed on shared runners: this test's CPU
+# sits right on the 1.00s fail line under load (seen on PR #21949 shard runs);
+# the sibling quota test above is already allowlisted for the same reason.
+tests/unit/test_desktop_message_quota_router.py::test_desktop_duplicate_human_message_retries_idempotent_quota_record
+# Same: desktop_migration's import-heavy first test rides the fail line.
+tests/unit/test_desktop_migration.py
 tests/unit/test_desktop_transcribe.py
 tests/unit/test_desktop_transcribe.py::TestDurationBudgetEnforcement::test_multipart_budget_exhausted_429
 tests/unit/test_desktop_transcribe.py::TestDurationBudgetEnforcement::test_octet_stream_budget_exhausted_429
