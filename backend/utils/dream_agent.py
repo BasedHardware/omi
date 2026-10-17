@@ -514,6 +514,8 @@ async def run_session(
                                     verified=True,
                                     records=item.records,
                                 )
+                        except (review_store.ReviewConflict, review_store.ReviewNotFound):
+                            status = 'invalid_evidence'
                         except ValueError as exc:
                             if str(exc) == 'dream_gate_contention':
                                 raise
@@ -546,6 +548,8 @@ async def run_session(
                             status = await effect_with_gate_retry(
                                 dream_review_policy.suggest_vocabulary, item.operation, item.records
                             )
+                    except (review_store.ReviewConflict, review_store.ReviewNotFound):
+                        status = 'invalid_evidence'
                     except ValueError as exc:
                         if str(exc) == 'dream_gate_contention':
                             raise
