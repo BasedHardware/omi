@@ -92,7 +92,8 @@ final class WatchRecordingStore: @unchecked Sendable {
             var length = UInt32(Self.frameBytes).littleEndian
             var encoded = withUnsafeBytes(of: &length) { Data($0) }
             encoded.append(remainder.prefix(Self.frameBytes))
-            try writer!.write(contentsOf: encoded)
+            guard let writer else { throw WatchRecordingError.storageFull }
+            try writer.write(contentsOf: encoded)
             remainder.removeFirst(Self.frameBytes)
             frames += 1
             totalFrames += 1
@@ -117,7 +118,8 @@ final class WatchRecordingStore: @unchecked Sendable {
             var frame = withUnsafeBytes(of: &length) { Data($0) }
             frame.append(remainder)
             frame.append(Data(count: Self.frameBytes - remainder.count))
-            try writer!.write(contentsOf: frame)
+            guard let writer else { throw WatchRecordingError.storageFull }
+            try writer.write(contentsOf: frame)
             frames += 1
             totalFrames += 1
             remainder = Data()

@@ -90,13 +90,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recording stopped. Audio could not be saved. Keep Omi installed to preserve saved audio."
+            "value" : "Recording stopped. Keep Omi installed; check storage."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声を保存できなかったため録音を停止しました。保存済みの音声を保持するためOmiを削除しないでください。"
+            "value" : "録音を停止しました。Omiを削除せず、空き容量を確認してください。"
           }
         }
       }

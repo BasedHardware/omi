@@ -77,7 +77,7 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
                 }
                 do {
                     guard let archive = self.archive else { throw WatchRecordingError.storageFull }
-                    self.archiveSessionID = try archive.begin(ownerUID: owner, startedAt: Int64(now.timeIntervalSince1970))
+                    self.archiveSessionID = try archive.begin(ownerUID: owner, startedAt: CheckedIntegerConversion.epochMs(now) / 1000)
                     guard self.setupAudioStreaming() else {
                         try archive.finish()
                         self.recoveryError = String(localized: "watch.recovery.captureError")
@@ -437,13 +437,16 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     func retryRecoveryTransfers() {
         checkCaptureHealth()
         lastTransferAttempt.removeAll()
+        if session.activationState == .notActivated { session.activate() }
         drainRecoveryTransfers()
     }
 
     private func drainRecoveryTransfers() {
-        guard session.activationState == .activated, let archive else { return }
-        let inFlight = Set(session.outstandingFileTransfers.map { $0.file.fileURL.lastPathComponent })
+        guard let archive else { return }
         do {
+            pendingRecoverySegments = try archive.pending().count
+            guard session.activationState == .activated else { return }
+            let inFlight = Set(session.outstandingFileTransfers.map { $0.file.fileURL.lastPathComponent })
             try archive.pruneAcknowledged(excluding: inFlight)
             let files = try archive.pending()
             pendingRecoverySegments = files.count
@@ -491,7 +494,7 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         Task { @MainActor in
             if let owner = applicationContext["omiOwnerUID"] as? String {
-                UserDefaults.standard.set(owner, forKey: "omiOwnerUID")
+                try? SafeDefaults.store(.string(owner), forKey: "omiOwnerUID")
             }
             if let method = applicationContext["method"] as? String {
                 if method == "stopRecording" { stopRecording() }
@@ -509,7 +512,7 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
                 self.receiveRecoveryReceipt(message)
             case "startRecording":
                 if let owner = message["omiOwnerUID"] as? String {
-                    UserDefaults.standard.set(owner, forKey: "omiOwnerUID")
+                    try? SafeDefaults.store(.string(owner), forKey: "omiOwnerUID")
                 }
                 self.startRecording()
             case "stopRecording":
