@@ -4371,6 +4371,16 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Jūsų $plan planas baigiasi $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Persiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Jūsų planas nustatytas atšaukti $date.\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
   }
@@ -4378,6 +4388,11 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Jūsų metinis planas automatiškai prasidės, kai baigsis mėnesinis planas.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Jūsų $plan planas bus atnaujintas $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4410,6 +4425,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get continueText => 'Tęsti';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
 
   @override
   String get resubscribe => 'Persiregistruoti';
@@ -5024,9 +5042,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get content => 'Turinys';
-
-  @override
-  String get noContentToDisplay => 'Nėra turinio rodyti';
 
   @override
   String get noSummary => 'Nėra santraukos';
@@ -9828,9 +9843,6 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
 
   @override
-  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
 
@@ -12451,6 +12463,59 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewNoChangesBody => 'Kai Omi sutvarkys jūsų užrašus, pakeitimai atsiras čia.';
 
   @override
+  String get reviewChangesSectionTerms => 'Vardai ir terminai';
+
+  @override
+  String get reviewChangesSectionTitles => 'Pavadinimai ir santraukos';
+
+  @override
+  String get reviewChangesSectionOther => 'Kiti pakeitimai';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pokalbių: $count',
+      one: '1 pokalbis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vietų: $count',
+      one: '1 vieta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Rodyti visus ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Atšaukti viską';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Žiūrėti įrodymus';
+
+  @override
+  String get reviewChangeViewConversation => 'Peržiūrėti pokalbį';
+
+  @override
+  String get reviewChangeViewTask => 'Peržiūrėti užduotį';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nepavyko atšaukti $failed iš $total. Bandykite dar kartą.';
+  }
+
+  @override
   String get reviewShowMore => 'Rodyti daugiau';
 
   @override
@@ -13449,4 +13514,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nauja';
+
+  @override
+  String get activityNeedsAttention => 'Reikia dėmesio';
+
+  @override
+  String get activityRetryAll => 'Bandyti visus iš naujo';
+
+  @override
+  String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
 }

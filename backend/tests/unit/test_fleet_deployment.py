@@ -107,7 +107,7 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
             )
         exporter = (
             ROOT
-            / f'backend/charts/monitoring/prometheus-stackdriver-exporter/{env}_omi_cloud_run_metrics_exporter.yaml'
+            / f'backend/charts/monitoring/prometheus-stackdriver-exporter/{env}_sync_omi_cloud_run_metrics_exporter.yaml'
         ).read_text()
         assert '"backend-integration"' in exporter
 

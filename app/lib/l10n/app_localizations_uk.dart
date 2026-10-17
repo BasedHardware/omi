@@ -4377,6 +4377,16 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Ваш план $plan закінчується $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Підпишіться знову, щоб зберегти переваги - без оплати до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ваш план налаштовано на скасування $date.\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
   }
@@ -4384,6 +4394,11 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ваш річний план розпочнеться автоматично, коли закінчиться ваш місячний план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Ваш план $plan поновиться $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4416,6 +4431,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get continueText => 'Продовжити';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Спочатку підпишіться знову, щоб змінити план.';
 
   @override
   String get resubscribe => 'Підписатися знову';
@@ -5030,9 +5048,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get content => 'Вміст';
-
-  @override
-  String get noContentToDisplay => 'Немає вмісту для відображення';
 
   @override
   String get noSummary => 'Немає підсумку';
@@ -9832,9 +9847,6 @@ class AppLocalizationsUk extends AppLocalizations {
       'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
 
   @override
-  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
-
-  @override
   String get speechProfileEnrollmentPrompt => 'Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.';
 
   @override
@@ -12455,6 +12467,59 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reviewNoChangesBody => 'Коли Omi наведе лад у ваших нотатках, зміни з’являться тут.';
 
   @override
+  String get reviewChangesSectionTerms => 'Імена й терміни';
+
+  @override
+  String get reviewChangesSectionTitles => 'Назви й підсумки';
+
+  @override
+  String get reviewChangesSectionOther => 'Інші зміни';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Розмов: $count',
+      one: '1 розмова',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Місць: $count',
+      one: '1 місце',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Показати всі ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Скасувати все';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Переглянути докази';
+
+  @override
+  String get reviewChangeViewConversation => 'Переглянути розмову';
+
+  @override
+  String get reviewChangeViewTask => 'Переглянути завдання';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не вдалося скасувати $failed з $total. Спробуйте ще раз.';
+  }
+
+  @override
   String get reviewShowMore => 'Показати більше';
 
   @override
@@ -13455,4 +13520,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Нове';
+
+  @override
+  String get activityNeedsAttention => 'Потребує уваги';
+
+  @override
+  String get activityRetryAll => 'Повторити все';
+
+  @override
+  String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
 }

@@ -4397,12 +4397,27 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'A $plan csomagod $date-án lejár.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Iratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'A csomagja $date-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Az éves csomagja automatikusan elindul, amikor a havi csomagja lejár.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'A $plan csomagod $date-án megújul.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4435,6 +4450,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get continueText => 'Folytatás';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Csomagváltáshoz először fizess elő újra.';
 
   @override
   String get resubscribe => 'Újra feliratkozás';
@@ -5050,9 +5068,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get content => 'Tartalom';
-
-  @override
-  String get noContentToDisplay => 'Nincs megjeleníthető tartalom';
 
   @override
   String get noSummary => 'Nincs összefoglaló';
@@ -9851,9 +9866,6 @@ class AppLocalizationsHu extends AppLocalizations {
       'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
 
   @override
-  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Hogy az Omi tudja, melyik hang a tiéd — beszélj bármiről körülbelül 5 másodpercig.';
 
@@ -12478,6 +12490,59 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewNoChangesBody => 'Amikor az Omi rendezi a jegyzeteidet, a módosítások itt jelennek meg.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nevek és kifejezések';
+
+  @override
+  String get reviewChangesSectionTitles => 'Címek és összefoglalók';
+
+  @override
+  String get reviewChangesSectionOther => 'Egyéb módosítások';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés',
+      one: '1 beszélgetés',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count helyen',
+      one: '1 helyen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Mind a(z) $count megjelenítése';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Összes visszavonása';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Bizonyíték megtekintése';
+
+  @override
+  String get reviewChangeViewConversation => 'Beszélgetés megtekintése';
+
+  @override
+  String get reviewChangeViewTask => 'Feladat megtekintése';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nem sikerült visszavonni: $failed/$total. Próbáld újra.';
+  }
+
+  @override
   String get reviewShowMore => 'Továbbiak';
 
   @override
@@ -13477,4 +13542,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Új';
+
+  @override
+  String get activityNeedsAttention => 'Figyelmet igényel';
+
+  @override
+  String get activityRetryAll => 'Összes újrapróbálása';
+
+  @override
+  String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
 }

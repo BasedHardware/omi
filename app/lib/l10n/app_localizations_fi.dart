@@ -4376,12 +4376,27 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '$plan-pakettisi päättyy $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Tilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Tilauksesi on asetettu peruuntumaan $date.\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Vuositilauksesi alkaa automaattisesti, kun kuukausitilauksesi päättyy.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '$plan-pakettisi uusiutuu $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4414,6 +4429,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get continueText => 'Jatka';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.';
 
   @override
   String get resubscribe => 'Tilaa uudelleen';
@@ -5025,9 +5043,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get content => 'Sisältö';
-
-  @override
-  String get noContentToDisplay => 'Ei sisältöä näytettäväksi';
 
   @override
   String get noSummary => 'Ei yhteenvetoa';
@@ -9812,9 +9827,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
 
   @override
-  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
 
@@ -12433,6 +12445,59 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reviewNoChangesBody => 'Kun Omi siistii muistiinpanojasi, muutokset näkyvät täällä.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nimet ja termit';
+
+  @override
+  String get reviewChangesSectionTitles => 'Otsikot ja yhteenvedot';
+
+  @override
+  String get reviewChangesSectionOther => 'Muut muutokset';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua',
+      one: '1 keskustelu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohtaa',
+      one: '1 kohta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Näytä kaikki $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Kumoa kaikki';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Näytä perusteet';
+
+  @override
+  String get reviewChangeViewConversation => 'Näytä keskustelu';
+
+  @override
+  String get reviewChangeViewTask => 'Näytä tehtävä';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed/$total kumoaminen epäonnistui. Yritä uudelleen.';
+  }
+
+  @override
   String get reviewShowMore => 'Näytä lisää';
 
   @override
@@ -13430,4 +13495,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uusi';
+
+  @override
+  String get activityNeedsAttention => 'Vaatii huomiota';
+
+  @override
+  String get activityRetryAll => 'Yritä kaikkia uudelleen';
+
+  @override
+  String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
 }

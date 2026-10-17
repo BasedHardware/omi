@@ -289,17 +289,15 @@ extension SettingsContentView {
               ProgressView()
                 .controlSize(.small)
             } else if hasPaidSubscription {
-              Button(action: openCustomerPortal) {
-                if isOpeningCustomerPortal {
-                  ProgressView()
-                    .controlSize(.small)
-                } else {
-                  Text("Manage")
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                }
-              }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-              .disabled(isOpeningCustomerPortal)
+              CurrentPlanCardActions(
+                cancelAtPeriodEnd: userSubscription?.subscription.cancelAtPeriodEnd == true,
+                currentPriceId: userSubscription?.subscription.currentPriceId,
+                checkoutBusy: activeCheckoutPriceId != nil
+                  && activeCheckoutPriceId == userSubscription?.subscription.currentPriceId,
+                portalBusy: isOpeningCustomerPortal,
+                onResubscribe: { startCheckout(for: $0) },
+                onManage: openCustomerPortal
+              )
             } else {
               Button("Refresh") {
                 loadSubscriptionInfo()
@@ -315,6 +313,12 @@ extension SettingsContentView {
             Text(periodText)
               .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
+          }
+
+          if let confirmation = subscriptionConfirmation {
+            Text(confirmation)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(Ink.listeningGreen)
           }
 
           if let userSubscription {

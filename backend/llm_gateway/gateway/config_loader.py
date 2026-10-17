@@ -9,7 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 
 from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL, JEV_PROVIDER
-from llm_gateway.gateway.dream_lanes import dream_lane_items
+from llm_gateway.gateway.dream_lanes import DREAM_LANES, dream_lane_items, validate_dream_route
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -52,7 +52,7 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
         generated_route_overrides
     )
     desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
-    dream_lanes, dream_artifacts = dream_lane_items(desktop_lane_items, desktop_artifact_items)
+    dream_lanes, dream_artifacts = dream_lane_items()
     embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
     systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
@@ -318,8 +318,9 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
 
     One lane per desktop-requested anchor model: the desktop BFF maps the
     requested model to `vertex_pt_routing.DESKTOP_TEXT_LANES`, and the Vertex
-    provider applies pin/overflow to the anchor at request time — so this
-    table and the policy stay derived from the same module, never forked.
+    provider consumes the declarative INACTIVE destinations at request time.
+    A luna destination skips Vertex and enters this existing Luna fallback;
+    after the move only Dream uses Gemini. No generated route permits PayGo.
     """
     lanes: list[ConfigItem] = []
     artifacts: list[ConfigItem] = []
@@ -384,14 +385,14 @@ def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem
         )
     luna_lane = {
         **lanes[0],
-        'lane_id': 'omi:auto:desktop-luna',
+        'lane_id': ptr.DESKTOP_LUNA_LANE_ID,
         'active_route': 'route.desktop-luna.001',
         'last_known_good': 'route.desktop-luna.001',
     }
     luna_artifact = {
         **artifacts[0],
         'route_artifact_id': 'route.desktop-luna.001',
-        'lane_id': 'omi:auto:desktop-luna',
+        'lane_id': ptr.DESKTOP_LUNA_LANE_ID,
         'primary': ptr.LUNA_FALLBACK,
         'fallbacks': [],
         'provider_options': {'reasoning_effort': 'none'},
@@ -596,6 +597,9 @@ def _validate_reserved_generation_routes(artifacts: dict[str, RouteArtifact]) ->
     from llm_gateway.gateway.schemas import CredentialMode, Surface, FailureClass
 
     for artifact in artifacts.values():
+        if artifact.lane_id in DREAM_LANES:
+            validate_dream_route(artifact)
+            continue
         if artifact.credential_policy.mode == CredentialMode.BYOK or artifact.surface == Surface.OPENAI_EMBEDDINGS:
             continue
         refs = [artifact.primary, *artifact.fallbacks]

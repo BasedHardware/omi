@@ -32,6 +32,7 @@ from utils.byok import (
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from database.fsr_read_cache import request_read_scope
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
@@ -60,12 +61,12 @@ async def run_critical_ws(fn: Callable[..., Any], *args: Any) -> Any:
 
 
 def get_user_deletion_wipe_status(uid: str) -> str | None:
-    """Read the durable deletion authority without a cache or fail-open shim."""
+    """Read deletion state; Redis faults always fall back to the durable authority."""
     return cast(Callable[[str], str | None], users_db.get_user_deletion_wipe_status)(uid)
 
 
 def _account_deletion_status(uid: str) -> str | None:
-    """Read the uncached deletion authority, failing closed if it is unavailable."""
+    """Read deletion state, failing closed if the durable authority is unavailable."""
     try:
         return get_user_deletion_wipe_status(uid)
     except Exception as error:
@@ -203,6 +204,7 @@ def get_current_user_uid(
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    _read_scope: Any = Depends(request_read_scope),
 ) -> str:
     """Authenticate, enforce account fences and BYOK, then optional registration/recovery."""
     if not authorization:
@@ -230,9 +232,9 @@ def get_current_user_uid(
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
 
-    # The content-free fleet sink must reject hot callers without customer-store
+    # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
-    if getattr(getattr(request, 'url', None), 'path', None) == '/v1/telemetry/fleet':
+    if getattr(getattr(request, 'url', None), 'path', None) in {'/v1/telemetry/fleet', '/v1/users/client-state'}:
         validate_byok_request(uid)
         return uid
 
@@ -270,6 +272,7 @@ def get_current_user_uid_no_byok_validation(
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    _read_scope: Any = Depends(request_read_scope),
 ) -> str:
     """Auth dependency that skips BYOK fingerprint validation.
 

@@ -4410,6 +4410,16 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Magtatapos ang iyong $plan plan sa $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
   }
@@ -4417,6 +4427,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Ang iyong annual plan ay awtomatikong magsisimula kapag nagtatapos ang iyong monthly plan.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Mare-renew ang iyong $plan plan sa $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4449,6 +4464,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get continueText => 'Magpatuloy';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Mag-subscribe muna ulit para magpalit ng plan.';
 
   @override
   String get resubscribe => 'Mag-subscribe Muli';
@@ -5065,9 +5083,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get content => 'Content';
-
-  @override
-  String get noContentToDisplay => 'Walang content na ipapakita';
 
   @override
   String get noSummary => 'Walang summary';
@@ -9896,9 +9911,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.';
 
   @override
-  String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.';
 
@@ -12530,6 +12542,59 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewNoChangesBody => 'Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.';
 
   @override
+  String get reviewChangesSectionTerms => 'Mga pangalan at termino';
+
+  @override
+  String get reviewChangesSectionTitles => 'Mga pamagat at buod';
+
+  @override
+  String get reviewChangesSectionOther => 'Iba pang pagbabago';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pag-uusap',
+      one: '1 pag-uusap',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugar',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Ipakita lahat ng $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'I-undo lahat';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Tingnan ang ebidensya';
+
+  @override
+  String get reviewChangeViewConversation => 'Tingnan ang pag-uusap';
+
+  @override
+  String get reviewChangeViewTask => 'Tingnan ang gawain';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Hindi ma-undo ang $failed sa $total. Subukang muli.';
+  }
+
+  @override
   String get reviewShowMore => 'Magpakita Pa';
 
   @override
@@ -13530,4 +13595,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Bago';
+
+  @override
+  String get activityNeedsAttention => 'Kailangang tingnan';
+
+  @override
+  String get activityRetryAll => 'Subukan muli lahat';
+
+  @override
+  String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
 }

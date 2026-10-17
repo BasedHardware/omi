@@ -9,6 +9,9 @@ import logging
 import time
 import uuid
 
+from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
+from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
 from utils.other.live_audio_archive import LiveAudioArchive
 from collections import OrderedDict, deque
@@ -24,12 +27,14 @@ from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
+from utils.observability.demand_cohort import host_cohort, telemetry_call
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
+from utils.executors import db_executor, run_blocking
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -201,6 +206,8 @@ class _RecordingSTTSocket:
         return getattr(self._conn, name)
 
     def send(self, data: bytes, start_sample: Optional[int] = None) -> bool:
+        if suppress_socket_audio(self._conn, data):
+            return True
         try:
             accepted = (
                 self._conn.send(data, start_sample=start_sample) if start_sample is not None else self._conn.send(data)
@@ -249,8 +256,20 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
+        self.cap_admission = (
+            LiveAdmission(host.request.uid, host.request.source)
+            if stt_cap_dispatch_enabled() and not host.use_custom_stt
+            else None
+        )
+        self.cap_paused = False
+        if self.cap_admission is not None:
+            host.state.stt_cap_admission = self.cap_admission
         self.raw_archive = LiveAudioArchive(host)
-        self.lane_meter = LiveLaneMeter()
+        try:
+            self.lane_meter = LiveLaneMeter()
+            self.lane_meter.demand_cohort = host_cohort(host)
+        except Exception:
+            self.lane_meter = None
         self.live_demand = None
         self.translation_demand = TranslationDemand()
         self._translation_expiry_task: asyncio.Task[Any] | None = None
@@ -903,6 +922,10 @@ class ListenReceiver(ReplayFilterMixin):
     ) -> Any:
         if not isinstance(getattr(self, 'recovery_enabled', None), bool):
             self.recovery_enabled = session_recovery_enabled(self)
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.reason == 'allowance_unavailable':
+            await admission.refresh()
+        cap_token = current_live_admission.set(admission)
         enabled_token = current_recovery_enabled.set(self.recovery_enabled)
         token = current_recovery.set(getattr(self, 'recovery', None) if self.recovery_enabled else None)
         try:
@@ -918,6 +941,7 @@ class ListenReceiver(ReplayFilterMixin):
         finally:
             current_recovery.reset(token)
             current_recovery_enabled.reset(enabled_token)
+            current_live_admission.reset(cap_token)
 
     async def _connect_stt_socket(
         self,
@@ -1192,11 +1216,13 @@ class ListenReceiver(ReplayFilterMixin):
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
         demand = getattr(self, 'live_demand', None)
-        meter = getattr(self, 'lane_meter', None)
-        if meter is not None:
-            meter.transition(
-                self._serving_provider(), reason=demand.policy.reason if demand and demand.eligible else 'baseline'
-            )
+        telemetry_call(
+            self,
+            'lane_meter',
+            'transition',
+            self._serving_provider(),
+            reason=demand.policy.reason if demand and demand.eligible else 'baseline',
+        )
         if epoch is None:
             return
         if getattr(socket, 'manages_vad', False):
@@ -1219,6 +1245,14 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None:
+            await admission.refresh()
+            if not admission.allowed(self.host.stt_service):
+                admission.omi_selected = True
+                self.cap_paused = True
+                return True  # Receive/persist without consulting provider routing.
+            self.cap_paused = False
         self.live_demand = attach_live_demand(self)
         if self.live_demand is not None:
             await self.live_demand.publish()
@@ -1254,7 +1288,7 @@ class ListenReceiver(ReplayFilterMixin):
                         )
                         return False
                     self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
-                    self.lane_meter.transition(self._serving_provider())
+                    telemetry_call(self, 'lane_meter', 'transition', self._serving_provider())
                     record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
@@ -1302,6 +1336,9 @@ class ListenReceiver(ReplayFilterMixin):
 
             return True
         except ProviderChainUnavailable as error:
+            if admission is not None and admission.funded_paused is True:
+                self.cap_paused = True
+                return True
             await self._drain_stt_sockets()
             await terminate_live_stt_backoff(
                 request.websocket,
@@ -1311,6 +1348,9 @@ class ListenReceiver(ReplayFilterMixin):
             )
             return False
         except Exception as error:
+            if admission is not None and admission.funded_paused is True:
+                self.cap_paused = True
+                return True
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
                 request.websocket,
@@ -1737,12 +1777,19 @@ class ListenReceiver(ReplayFilterMixin):
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.monitor_stt_death(self)
         while self.host.state.active and not self.host.state.stt_terminal_failure:
+            admission = getattr(self, 'cap_admission', None)
+            if admission is not None and admission.funded_paused is True:
+                if await self.host.wait(STT_DEATH_POLL_INTERVAL_SECONDS):
+                    return
+                continue
             socket = self.stt_socket
             outcome = getattr(socket, 'leg_outcome', None)
             if outcome is not None and outcome.owner_closing:
                 return
             if socket is not None and live_stt_socket_is_dead(socket):
                 if await self._failover_stt_socket():
+                    continue
+                if admission is not None and admission.funded_paused is True:
                     continue
                 recovery = getattr(self, 'recovery', None)
                 if recovery is not None:
@@ -1813,6 +1860,18 @@ class ListenReceiver(ReplayFilterMixin):
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and not admission.allowed(self.host.stt_service):
+            record_cap_audio(
+                'live',
+                'suppressed',
+                self.host.stt_service,
+                len(buffer) / (2 * self.host.request.sample_rate),
+                admission.reason == 'plan_allowance_exhausted',
+            )
+            buffer.clear()
+            self._stt_buffer_start_sample = None
+            return
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.flush_stt_buffer(self, buffer, force=force)
         request = self.host.request
@@ -1950,6 +2009,9 @@ class ListenReceiver(ReplayFilterMixin):
                 return
 
     async def _recover_ingested_audio(self) -> None:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.funded_paused is True:
+            return
         if (
             not await self._failover_stt_socket()
             and self.host.state.active
@@ -2027,7 +2089,7 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm_len=len(pcm),
                 fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
             )
-            if should_send:
+            if should_send and not suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm):
                 sent = await send_live_stt_audio(
                     request.websocket,
                     self.host.state,
@@ -2090,6 +2152,20 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
+            from config.demand_processing import enabled as demand_enabled, surface_reporting_enabled
+
+            if (
+                demand_enabled()
+                and surface_reporting_enabled()
+                and demand_enabled(self.host.request.uid)
+                and isinstance(payload.get('surface_open'), bool)
+            ):
+                from utils.conversations.demand_processing import observe_surface
+
+                await run_blocking(
+                    db_executor, observe_surface, self.host.request.uid, str(self.host.session_id), payload
+                )
+            telemetry_call(self.host, 'demand_telemetry', 'observe_visibility', payload)
             demand = getattr(self, 'live_demand', None)
             if demand is not None:
                 demand.observe(payload)
@@ -2275,6 +2351,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self._note_audio_activity()
                     self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
+                    telemetry_call(self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate))
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
                         # The decoded frame occupies an exact capture sample

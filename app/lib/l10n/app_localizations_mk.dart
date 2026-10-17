@@ -4393,12 +4393,27 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Вашиот план $plan завршува на $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Претплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Вашиот план е поставен да се откаже на $date.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Вашиот годишен план ќе почне автоматски кога ќе заврши месечниот план.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Вашиот план $plan ќе се обнови на $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4431,6 +4446,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get continueText => 'Продолжи';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Прво претплатете се повторно за да го смените планот.';
 
   @override
   String get resubscribe => 'Претплати се повторно';
@@ -5047,9 +5065,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get content => 'Содржина';
-
-  @override
-  String get noContentToDisplay => 'Нема содржина за приказ';
 
   @override
   String get noSummary => 'Нема резиме';
@@ -9858,9 +9873,6 @@ class AppLocalizationsMk extends AppLocalizations {
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
 
   @override
-  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.';
 
@@ -12489,6 +12501,59 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reviewNoChangesBody => 'Кога Omi ќе ги среди вашите белешки, промените ќе се појават овде.';
 
   @override
+  String get reviewChangesSectionTerms => 'Имиња и поими';
+
+  @override
+  String get reviewChangesSectionTitles => 'Наслови и резимеа';
+
+  @override
+  String get reviewChangesSectionOther => 'Други промени';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговори',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count места',
+      one: '1 место',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Прикажи ги сите ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Поништи ги сите';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Види докази';
+
+  @override
+  String get reviewChangeViewConversation => 'Види разговор';
+
+  @override
+  String get reviewChangeViewTask => 'Види задача';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не успеа поништувањето на $failed од $total. Обидете се повторно.';
+  }
+
+  @override
   String get reviewShowMore => 'Прикажи повеќе';
 
   @override
@@ -13486,4 +13551,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ново';
+
+  @override
+  String get activityNeedsAttention => 'Потребно е внимание';
+
+  @override
+  String get activityRetryAll => 'Обиди ги сите повторно';
+
+  @override
+  String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
 }

@@ -4381,12 +4381,27 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'तुमची $plan योजना $date रोजी संपेल.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'आपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - $date पर्यंत कोणतीही शुल्क नाही.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'आपली योजना $date ला रद्द होण्यासाठी सेट केली आहे.\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - $date पर्यंत कोणतीही शुल्क नाही.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'आपली वार्षिक योजना आपली मासिक योजना संपल्यावर स्वयंचलितपणे सुरू होईल.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'तुमची $plan योजना $date रोजी नूतनीकरण होईल.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4419,6 +4434,9 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get continueText => 'पुढे जा';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'योजना बदलण्यासाठी आधी पुन्हा सदस्यता घ्या.';
 
   @override
   String get resubscribe => 'पुन्हा सदस्यता घ्या';
@@ -5034,9 +5052,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get content => 'सामग्री';
-
-  @override
-  String get noContentToDisplay => 'प्रदर्शन करण्यासाठी कोणतीही सामग्री नाही';
 
   @override
   String get noSummary => 'कोणतेही सारांश नाही';
@@ -9818,9 +9833,6 @@ class AppLocalizationsMr extends AppLocalizations {
       'सध्या बोलण्याचे मजकुरात रूपांतर उपलब्ध नाही. तुमचे इंटरनेट कनेक्शन आणि डिव्हाइसवरील वाणी ओळख सेटिंग्ज तपासा, नंतर पुन्हा प्रयत्न करा.';
 
   @override
-  String get processingTakingLonger => 'अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.';
 
@@ -12437,6 +12449,59 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi ने तुमच्या नोट्स नीट लावल्या की बदल येथे दिसतील.';
 
   @override
+  String get reviewChangesSectionTerms => 'नावे आणि संज्ञा';
+
+  @override
+  String get reviewChangesSectionTitles => 'शीर्षके आणि सारांश';
+
+  @override
+  String get reviewChangesSectionOther => 'इतर बदल';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count संभाषणे',
+      one: '1 संभाषण',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ठिकाणे',
+      one: '1 ठिकाण',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'सर्व $count दाखवा';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'सर्व पूर्ववत करा';
+
+  @override
+  String get reviewChangeSeeEvidence => 'पुरावा पहा';
+
+  @override
+  String get reviewChangeViewConversation => 'संभाषण पहा';
+
+  @override
+  String get reviewChangeViewTask => 'कार्य पहा';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'पूर्ववत करता आले नाहीत: $failed/$total. पुन्हा प्रयत्न करा.';
+  }
+
+  @override
   String get reviewShowMore => 'आणखी दाखवा';
 
   @override
@@ -13431,4 +13496,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'नवीन';
+
+  @override
+  String get activityNeedsAttention => 'लक्ष देणे आवश्यक';
+
+  @override
+  String get activityRetryAll => 'सर्व पुन्हा प्रयत्न करा';
+
+  @override
+  String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
 }

@@ -283,9 +283,8 @@ class MirrorTests(unittest.TestCase):
             self.assertIn("viral-metrics", target["url"])
             self.assertEqual(target["columns"][0]["selector"], "allTimeUsers")
 
-
 class ApplyScopeTests(unittest.TestCase):
-    def test_apply_publishes_legacy_and_v2_boards(self) -> None:
+    def test_apply_publishes_only_legacy_boards(self) -> None:
         import apply_omi_tv_dashboard as apply_mod
 
         found = {
@@ -293,7 +292,7 @@ class ApplyScopeTests(unittest.TestCase):
             for path in (HERE / "dashboards").glob("*.json")
         }
         self.assertEqual(found, set(BOARDS) | {"omi-tv-v2"})
-        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS) | {"omi-tv-v2"})
+        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS))
 
     def test_apply_rejects_foreign_uids(self) -> None:
         import tempfile
@@ -525,6 +524,10 @@ class CanonicalProfitabilityKeyTests(unittest.TestCase):
                 self.assertNotIn("mobile_cost", haystack, f"{uid} {where}")
 
 
+def is_strip(panel):
+    return panel["type"] == "stat" and panel["targets"][0]["root_selector"].startswith("frames.strip_")
+
+
 class WallV2Contract(unittest.TestCase):
     def test_checked_in_wall_matches_builder(self):
         from build_wall_dashboard import build_wall_board
@@ -540,43 +543,122 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(path.read_bytes(), before)
 
     def test_wall_columns_plugins_and_utc(self):
-        from build_wall_dashboard import COLUMNS
+        from build_wall_dashboard import BASE, COLUMNS, GEOMETRY
         board = load("omi-tv-v2")
+        self.assertEqual(board["uid"], "omi-tv-v2")  # provisioning + embed links
         self.assertEqual(board["timezone"], "utc")
-        self.assertEqual([c[0] for c in COLUMNS], ["Growth", "Activation", "Retention", "Revenue", "Health"])
-        self.assertTrue(all(p["type"] in {"text", "canvas", "table"} for p in board["panels"]))
+        self.assertEqual(COLUMNS, ["Growth", "Activation", "Retention", "Revenue", "Health"])
+        self.assertTrue(all(p["type"] in {"stat", "timeseries", "barchart", "trend", "table"} for p in board["panels"]))
+        names = {"headline", "growth", "activation", "retention", "revenue", "health"}
         for panel in board["panels"]:
             self.assertLessEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], 24)
-            for target in panel.get("targets", []):
-                self.assertEqual(target["url"], "http://127.0.0.1:8899/api/omi/stats/wall")
+            for target in panel["targets"]:
+                self.assertTrue(target["url"].startswith(BASE + "/"))
+                self.assertIn(target["url"].rsplit("/", 1)[1], names)
                 self.assertEqual(target["datasource"]["uid"], "omi-admin-api")
                 self.assertEqual(target["url_options"]["method"], "GET")
-        self.assertEqual(board["panels"][-1]["type"], "table")
+                self.assertTrue(target["root_selector"].startswith("frames."))
+        self.assertEqual(sum(w for _, w in GEOMETRY.values()), 24)
 
-    def test_each_metric_is_one_framed_canvas_card(self):
-        from build_wall_dashboard import COLUMNS, geometry
+    def test_story_columns_stat_above_charts_on_one_screen(self):
+        from build_wall_dashboard import COLUMNS, GEOMETRY, WALL_H
         board = load("omi-tv-v2")
-        cards = [p for p in board["panels"] if p["type"] == "canvas"]
-        self.assertEqual(len(cards), sum(len(ids) for _, ids in COLUMNS))
-        for card in cards:
-            self.assertEqual(card["title"], "")
-            self.assertFalse(card["options"]["inlineEditing"])
-            self.assertEqual(len(card["options"]["root"]["elements"]), 1)
-            element = card["options"]["root"]["elements"][0]
-            self.assertEqual(element["type"], "icon")
-            self.assertEqual(element["config"]["path"], {"mode":"field","field":"Card"})
-            self.assertEqual(card["targets"][0]["columns"][0]["selector"], "cardSvg")
-        spacer = board["panels"][-2]
-        self.assertTrue(spacer["transparent"])
-        self.assertGreaterEqual(spacer["gridPos"]["h"], 4)
-        self.assertEqual(board["panels"][-1]["gridPos"]["y"], spacer["gridPos"]["y"] + spacer["gridPos"]["h"])
-        self.assertGreater(geometry("growth.wau")[0], geometry("engagement.dau")[0])
-        self.assertLess(geometry("revenue.plan_prepay_usd_week")[0], geometry("revenue.arpmau")[0])
+        for name in COLUMNS:
+            x, w = GEOMETRY[name]
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            self.assertEqual(column[0]["type"], "stat")
+            self.assertEqual(column[0]["title"], name)
+            self.assertEqual(column[0]["gridPos"]["y"], 0)
+            y = 0
+            for panel in column:
+                self.assertEqual(panel["gridPos"]["y"], y)
+                self.assertEqual(panel["gridPos"]["w"], w)
+                y += panel["gridPos"]["h"]
+            self.assertLessEqual(y, WALL_H)  # no scroll at 1920×1080 kiosk
+        self.assertTrue(board["timepicker"]["hidden"])
 
-    def test_apply_accepts_new_uid_without_changing_legacy_layout_policy(self):
+    def test_charts_are_labelled_in_plain_english(self):
+        board = load("omi-tv-v2")
+        for panel in board["panels"]:
+            self.assertTrue(panel["description"])
+            if is_strip(panel):
+                continue
+            self.assertTrue(panel["title"])
+            self.assertLessEqual(len(panel["title"]), 32, panel["title"])  # no truncation at 1440
+            for word in ("qualified", "interim", "people", "cohort P"):
+                self.assertNotIn(word, panel["title"].lower() if word != "cohort P" else panel["title"])
+            if panel["type"] in {"timeseries", "barchart", "trend"}:
+                defaults = panel["fieldConfig"]["defaults"]
+                self.assertTrue(defaults.get("unit"), panel["title"])
+                self.assertIn("axisLabel", defaults["custom"], panel["title"])
+        stats = {p["title"]: p for p in board["panels"] if p["type"] == "stat" and not is_strip(p)}
+        self.assertEqual(len(stats), 5)
+        names = [o["properties"][0]["value"] for p in stats.values() for o in p["fieldConfig"]["overrides"]]
+        self.assertIn("Stickiness (DAU/WAU)", {p["title"] for p in board["panels"]})
+        self.assertTrue(all("people" not in n.lower() for n in names), names)
+        headline = [t["root_selector"] for p in stats.values() for t in p["targets"]]
+        for key in ["wau", "dau", "mau", "activation", "capture", "retained", "established",
+                    "mrr", "arpmau", "hardware", "netCost", "costPerMau"]:
+            self.assertIn(f"frames.{key}", headline)
+
+    def test_each_stat_has_an_api_delta_strip_in_field_order(self):
+        import re
+        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H
+        board = load("omi-tv-v2")
+        source = (HERE.parent / "lib/wall-series.ts").read_text()
+        block = re.search(r"DELTA_STRIPS[^=]*= \{(.*?)\};", source, re.S).group(1)
+        api = {k: re.findall(r'"(\w+)"', v) for k, v in re.findall(r"(\w+): \[([^\]]*)\]", block)}
+        self.assertIn('GOOD_MARK = "\\u200b"', source)
+        self.assertIn('BAD_MARK = "\\u2060"', source)
+        for name in COLUMNS:
+            x, _ = GEOMETRY[name]
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            head, strip = column[0], column[1]
+            self.assertTrue(is_strip(strip))
+            self.assertFalse(head["options"]["showPercentChange"])  # native change is relative only
+            self.assertEqual(strip["gridPos"]["y"], STAT_H)
+            keys = [t["root_selector"].split(".")[-1] for t in head["targets"]]
+            self.assertEqual(keys, api[name.lower()])
+            self.assertEqual([c["selector"] for c in strip["targets"][0]["columns"]], keys)
+            colors = {m["options"]["pattern"]: m["options"]["result"]["color"]
+                      for m in strip["fieldConfig"]["defaults"]["mappings"]}
+            self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
+
+    def test_cost_stack_counts_every_line_and_marks_estimates(self):
+        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY
+        board = load("omi-tv-v2")
+        cost = next(p for p in board["panels"] if p["title"] == "All-in cost vs revenue")
+        fields = [c["selector"] for c in cost["targets"][0]["columns"]]
+        for line in ["gcp", "vertexLlm", "openai", "anthropic", "stt", "saas", "revenuePerDay"]:
+            self.assertIn(line, fields)
+        styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
+                  for o in cost["fieldConfig"]["overrides"]}
+        for name in ESTIMATE:
+            self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
+            self.assertNotIn("custom.stacking", styled[name])  # still in the stack
+        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est."})
+        self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
+        self.assertIn("Soniox console", cost["description"])
+        self.assertNotIn("FinOps modelled", cost["description"])
+
+    def test_status_colors_curve_placeholder_and_data_through(self):
+        from build_wall_dashboard import STATUS_BAD, STATUS_GOOD
+        board = load("omi-tv-v2")
+        strips = [p for p in board["panels"] if is_strip(p)]
+        colors = {m["options"]["result"]["color"] for p in strips for m in p["fieldConfig"]["defaults"]["mappings"]}
+        self.assertEqual(colors, {STATUS_GOOD, STATUS_BAD})  # dataviz status steps
+        curve = next(p for p in board["panels"] if p["title"].startswith("Weekly cohort retention"))
+        self.assertEqual(curve["fieldConfig"]["defaults"]["noValue"], "Cohorts still filling")
+        table = next(p for p in board["panels"] if p["type"] == "table")
+        self.assertEqual(table["title"], "Data & coverage")
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        names = [o["properties"][0]["value"] for o in health["fieldConfig"]["overrides"]]
+        self.assertTrue(all(len(n) <= 12 for n in names), names)  # no wrap at 1440
+
+    def test_legacy_apply_rejects_private_uid_without_changing_layout_policy(self):
         import apply_omi_tv_dashboard as apply_module
-        from build_wall_dashboard import HERE
-        self.assertEqual(apply_module.load_dashboard(HERE / "dashboards/omi-tv-v2.json")["uid"], "omi-tv-v2")
+        with self.assertRaises(SystemExit):
+            apply_module.load_dashboard(HERE / "dashboards/omi-tv-v2.json")
         incoming=[{"id":1,"gridPos":{"x":0}}]
         apply_module.preserve_live_layout(incoming,[{"id":1,"gridPos":{"x":5}}])
         self.assertEqual(incoming[0]["gridPos"],{"x":5})

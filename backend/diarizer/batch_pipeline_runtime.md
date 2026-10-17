@@ -1,0 +1,224 @@
+# Dedicated batch worker process
+
+`python -m diarizer.batch_pipeline_runtime` is the sole GPU chain owner. It
+constructs A's `Pump` with `Scheduler(pool='batch')`, one `PipelineWorker`, a
+fresh per-pull `PoolCapacity`, and the configured conversation-unit ceiling.
+The model microbatch size is distinct from the admitted conversation duration.
+No live Parakeet endpoint or shared-live arbiter is used.
+
+The default `BATCH_PIPELINE_WORKER_ENABLED=false` exits before clients or models
+are constructed. Enabling the process drains accepted work, including after
+admission rollback. It does not enable admission: the lead separately controls
+`BATCH_PIPELINE_ENABLED`, its owner cohort, and the rollout gates in the design.
+The Helm chart also defaults `enabled:false` and renders no resources.
+
+Startup requires exactly one visible CUDA GPU with BF16 support. ASR uses
+Parakeet v3 revision `541d1f99c6b0c3cd0b11a95167540bb8edefd82b` in BF16;
+community-1 revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee` stays FP32.
+VAD reuses that pipeline's FP32 segmentation model. There is no FP8 or Nemotron
+routing. The model factory sets `compute_timestamps=true` and
+`greedy.use_cuda_graph_decoder=false` **before** constructing decoding; it also
+disables the runtime graph and asserts actual eager state before and after
+transcription. This closes the timestamp-initialization graph reset found by
+the GPU quality lane. A graph-policy violation quarantines and restarts the
+process. The prior ASR-only benchmark is not joint-image qualification.
+
+SIGTERM stops new pulls; the bounded current chain drains with A's 20-second
+lease renewals. Lost leases cannot complete. CUDA synchronizes before any result
+returns to the pump. Fatal CUDA state exits for Kubernetes replacement. The
+chart grants 1500 seconds for shutdown; lease expiry remains the recovery path
+if a process is forcibly lost. `/ready` opens only after model startup and
+closes on stop. `/health` requires the event loop to keep ticking. Queue metrics
+are served at `/metrics`. C's legacy result projection and D's deletion outbox
+maintenance run separately on the backend, with durable restart sweeps; importing
+legacy provider clients into the GPU image is unnecessary.
+
+## Encrypted staging and results
+
+`utils.batch_pipeline.artifact_policy.create_artifact_store(store, storage_client,
+bucket, master_secret)` composes B's object adapter with D's transactional privacy
+callbacks. A decodes the original bundle to canonical 16kHz mono PCM16 WAV,
+sets its actual capture/duration/source conversation and privacy generation,
+then calls `stage_audio(item, wav)` before atomic enqueue. Replace the seed
+`audio_uri` with the returned URI. Audio AAD excludes that self-reference.
+`fetch_audio(item)` authenticates/decrypts in memory; the worker decodes once.
+`persist_result(item, payload)` encrypts words, turns and provenance, then returns
+an immutable generation-pinned URI. C calls `load_result(original_item, uri)`.
+The original admitted WorkItem is required; payload identity is never trusted.
+The encrypted payload includes `speech_spans`, an ordered nonoverlapping list of
+`{start, end}` seconds on the original capture-relative timeline, sample-rounded
+from the unpadded VAD union (silence `[]`). `speech_seconds` is the duration of that
+same union (silence zero). C validates both against `audio_seconds`, then applies
+the legacy VAD grouping policy for multipart projection and content-idempotent
+accounting. ASR padding, window-local clocks and transcript gaps never define
+these boundaries. The chain reuses its single VAD invocation for both fields.
+
+Both standard and enhanced accounts receive per-owner AES-256-GCM encryption
+for temporary artifacts. E2EE, unknown protection, missing pinned generation,
+account deletion, source tombstones, migration and generation changes refuse
+processing. The envelope authenticates namespace, owner, segment, capture time,
+duration, source conversation, kind, protection and privacy generation; results
+also bind the exact staged audio URI. No plaintext temporary files are used.
+
+Only the configured `BUCKET_BATCH_PIPELINE` and hashed-owner/segment object path
+are accepted; arbitrary HTTPS URLs and unversioned reads are rejected. WAV and
+result payloads have size ceilings; GCS metadata is checked before download.
+Writes reserve a random create-only object name in D's durable deletion outbox
+**before** uploading. The adapter reauthorizes immediately before and after IO,
+uses bounded SDK retries under the same registered object name, and refuses
+starting uploads if registration took
+more than 30 seconds. Post-upload revocation deletes the exact generation and
+returns no URI. An ambiguous upload retains its reserved deletion reference.
+D's delayed erasure sweep covers deletion while an upload is still in flight;
+completion-only retention must never remove the last reference first.
+
+## Packaging and scaling
+
+Build from repository root:
+
+```sh
+docker build -f backend/diarizer/Dockerfile.batch-pipeline -t batch-pipeline-worker:qualification .
+```
+
+The separate Python 3.11 image consumes `diarizer/pylock.batch-pipeline.toml`;
+it does not alter the backend service or live Parakeet image. Recreate the lock
+with its header command when changing `requirements-batch-pipeline.txt`.
+A build is not a GPU qualification: before any cohort, verify joint startup,
+actual graph/precision state, full-chain peak memory, lease loss, synthetic
+end-to-end projection/deletion, and AMI quality in the built digest.
+
+The chart `charts/batch-pipeline-worker` pins a qualified image digest, existing
+Workload Identity service account, explicit data-plane project, secrets and
+staging bucket. It selects the dedicated `batch-pipeline-pool` with
+`service=batch-pipeline` and `env=<env>` labels, requests one GPU, and prevents
+surge GPUs. **An NVIDIA L4 on `g2-standard-8` is required**: the joint chain was
+qualified on L4 and ASR requires native BF16; T4 (`sm75`) is unsupported. The
+live `diarizer-batch-pool` is separate and must not host this worker.
+
+An operator creates the pool out-of-band, not through IaC or this chart, with
+labels `env=<env>,service=batch-pipeline` (`env=dev` or `env=prod`), taints
+`nvidia.com/gpu=present:NoSchedule` and `omi.ai/batch-pipeline=true:NoSchedule`,
+node autoscaling `0..N`, and location policy `ANY`. The chart tolerates exactly
+those two taints. Node autoscaling to zero is separate from the minimum-one
+worker requirement below. The image puts GKE's `/usr/local/nvidia/bin` on
+`PATH` and `/usr/local/nvidia/lib:/usr/local/nvidia/lib64` on `LD_LIBRARY_PATH`,
+retaining `/usr/lib/x86_64-linux-gnu` for system libraries. The pinned torch
+wheels supply CUDA userspace; the host mount supplies `libcuda.so.1`.
+
+The worker cannot be installed over the live
+embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
+accepted work; D arms cleanup only after successful projection.
+
+HPA uses A's **ready** age, separately targeting fresh 30s, recent 300s and deep
+3600s, with 300s downscale stabilization. Minimum one worker keeps the queue
+sampler alive; zero is rejected until an independent sampler exists. Enable
+PodMonitoring only where its CRD is installed (it defaults on). The worker exports
+`worker_release`; a different collector must preserve the same label plus
+namespace and pod. Merge `prometheus-adapter-rules.yaml` into the existing
+adapter's external rules. That query excludes samples older than 60s without
+coercing unavailable data to zero. Missing/stale external metrics retain HPA
+capacity; alert on adapter errors and missing sampler freshness. No chart or
+adapter change has been deployed by this PR's implementation lane.
+
+For local synthetic end-to-end work, use loopback Firestore and a version-aware
+GCS emulator (or an injected fake object client). The older filesystem
+`local_storage` harness has no generation preconditions and cannot substitute
+for the versioned artifact adapter. Never remove generation checks to make a
+local run pass, and never fall back from an emulator namespace to cloud data.
+
+### Fatal GPU recovery and memory qualification
+
+CUDA OOM (including torch `OutOfMemoryError` and cuBLAS allocation failure) fences
+the process just like illegal access. `FatalGpuError` must reach the pump's
+no-failure lease recovery path; never publish partial results from that flight.
+Restart under a retry lease without charging an attempt.
+
+Each synchronized full-chain flight logs `event=batch_chain_memory`: admitted
+audio seconds, CUDA allocated/reserved baselines and peaks in bytes, process
+lifetime host peak, and cgroup lifetime peak when the kernel exports it. CUDA
+peaks reset after models load and before decode/VAD/ASR/diarization/persistence;
+the receipt is emitted after CUDA synchronization. Host peaks include startup.
+This receipt also runs when individual items fail; it is not an item-success
+receipt. Nonfatal item failures log `event=batch_worker_failed` with only
+`error_class`, a bounded `stage` and `segment_id`, once per item per flight,
+even without an `on_failure` callback. Repository validation raises
+`BatchValidationError` (a `ValueError`) with a closed `reason`: `word_shape`,
+`word_clock`, `word_sequence`, `vad_nonfinite`, `vad_order`, `vad_bounds`,
+`empty_asr`, or `no_owned_words`. Other exceptions use `unclassified`; never
+classify provider messages by printing them. Numeric `samples`, `vad_spans`,
+`windows`, `asr_words` and `owned_words` describe the failed shape; -1 means
+the operation did not return that count. ASR counts include validated records
+and context repeats; an invalid hypothesis fails before contributing its count.
+Buffer only those strings/integers and emit after
+the item exception handlers exit, so handler diagnostics cannot chain the worker
+exception. Logging failures are swallowed without another log attempt; healthy
+sibling results still return. Never add exception messages, traceback
+locals, transcript/audio, object URIs or lease/admission tokens to this event.
+Pyannote uses frame-centered VAD intervals: crop their end to the actual input
+duration, reject malformed or wholly outside intervals, and keep every in-buffer
+speech interval. Rebase ASR windows from the integer sample index used to slice
+them. Before failing empty ASR on VAD speech or an ownership-empty hypothesis,
+the Parakeet adapter makes one single-item ASR call over the full captured unit,
+with 2s synthetic silence on each edge and an 8s minimum padded length. The
+padded input must fit both 120s and the configured padded budget; otherwise it
+remains held whole for fenced legacy recovery. No real samples are discarded.
+Validated retry clocks are rebased by 2s and intersected with the real capture;
+words whose midpoint is in synthetic padding are excluded. Original VAD speech
+accounting, diarization input, privacy checks and persistence are unchanged.
+`event=batch_asr_recovery` contains only segment ID, original closed empty reason,
+sample count, original ASR count, recovered word count, original window count,
+minimum/maximum window sample lengths, speech sample count and recovered/empty
+outcome. It and the shared
+fallback metric emit outside exception handlers; observability failure never
+discards healthy results. A retry exception is labeled `stage=asr_recovery` and
+fatal CUDA still fences the entire chain. Remaining empties never become silence
+or bypass accepted content claims. The scheduler's attempt ceiling and the
+separate default-off, owner-allowlisted legacy path are documented in
+[serving settings](../docs/batch-pipeline-serving.md).
+For qualification run a synthetic one-hour unit with the intended model batch
+size and retain the GPU model/VRAM, exact image digest/config and receipt.
+Set the chart **host RAM** limit from the larger measured process/container peak
+with explicit headroom; CUDA peaks qualify device capacity separately.
+
+The October 16 dev L4 compute qualification used the deployed image
+`sha256:e2ae6e672c07d6532e58ad0f7aa55eda52d1959bad3d65f4c88dc714adc5b619`,
+BF16 ASR, FP32 segmentation/VAD, eager decoding and effective batch 8 for ASR,
+segmentation, embedding and VAD. A 20-minute public AMI montage followed by its
+threefold 3600-second repetition ran in one model process with in-memory audio
+and result adapters. The synchronized one-hour receipt recorded CUDA allocated /
+reserved peaks of 2,238,839,808 / 7,184,842,752 bytes, process peak 5,910,188,032
+bytes and cgroup lifetime peak **10,517,725,184 bytes (9.795GiB)**, including
+startup. The chart requests **12Gi** and limits **14Gi**: round the host peak plus
+`max(1GiB, 20%)` / `max(2GiB, 40%)` up to whole GiB, respectively. This provides
+2.205GiB / 4.205GiB headroom. The qualification Job had a 24Gi cap; the proposed
+14Gi cap and multi-unit decoded-group envelope were not separately exercised.
+These are compute-chain measurements; deployed intake, lease-loss recovery,
+projection, encrypted artifact IO and deletion remain separate qualification
+gates. Admission stays off.
+
+The worker Deployment and its workflow rollout wait both allow **1800 seconds**.
+The first dev cold rollout took at least 718.6 seconds from pod creation to ASR
+restore, exceeding the old 600-second deadline before joint readiness. The new
+budget adds about 1081 seconds beyond that observed lower bound for node/image
+startup and model loading. The existing diarizer workflow wait remains 600s.
+
+PodMonitoring defaults on when the release is enabled. Queue age and freshness
+export the Kubernetes namespace and `worker_release` from the deployment.
+Autoscaling defaults off; verify fresh series and the external adapter before
+turning it on. Both fixed replicas and the HPA minimum must remain at least one.
+
+Staging uses resumable GCS uploads (including short captures), 8MiB chunks,
+10s connect/120s read timeout per request and a 120s retry budget per request.
+The stream refuses new chunks after 15 minutes. The deletion outbox keeps the
+unique object name for 30 minutes, covering the last request/retry plus margin.
+Retries retain the registered create-only object name and encrypted stream.
+
+
+## Per-item quarantine
+
+Explicit failed items stop retrying at `BATCH_PIPELINE_MAX_ATTEMPTS` (default 5).
+The scheduler records a terminal failure and removes it from ordered pending
+work; it never reports successful silence. Successful siblings retain their
+assignment receipts, while later uploads may advance. Legacy recovery is held,
+not dispatched: see [terminal quarantine and the visible gap](../docs/batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap)
+for client status, retained audio/usage obligations and the fenced recovery design.

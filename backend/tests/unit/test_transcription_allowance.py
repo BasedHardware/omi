@@ -471,3 +471,30 @@ def test_closed_result_keeps_known_catalog_total(monkeypatch, sub, plan, cap, fa
     assert result.remaining_seconds == 0
     assert result.limit_seconds == cap
     assert result.reason == ('usage_invalid' if failure == 'invalid_usage' else 'allowance_unavailable')
+
+
+@pytest.mark.parametrize('launch', [None, 'not-a-date', '2026-99-99'])
+@pytest.mark.parametrize('enforce', [False, True])
+def test_launch_config_does_not_manufacture_zero_usage_when_enforcing(sub, monkeypatch, launch, enforce):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    if launch is None:
+        monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
+    else:
+        monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', launch)
+    if enforce:
+        with pytest.raises(ValueError):
+            sub.get_monthly_usage_for_subscription('synthetic')
+    else:
+        assert sub.get_monthly_usage_for_subscription('synthetic') == {}
+
+
+def test_explicit_future_launch_is_intentionally_unlaunched(sub, monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', '2099-01-01')
+    assert sub.get_monthly_usage_for_subscription('synthetic') == {}
+
+
+def test_funded_request_cannot_use_deepgram_key_for_another_provider(sub, monkeypatch):
+    _situate(monkeypatch, sub, plan=PlanType.plus, used_seconds=PLUS_CAP, byok_enrolled=True, byok_header=True)
+    assert sub.resolve_transcription_allowance('uid').reason == 'byok'
+    assert sub.resolve_transcription_allowance('uid', omi_funded=True).reason == 'plan_allowance_exhausted'

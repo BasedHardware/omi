@@ -21,6 +21,7 @@ from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
+from database import sync_cap_recovery
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
@@ -134,15 +135,21 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
 
 
 @sync_phase('firestore')
-def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
+def ingest_sync_conversation(
+    uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None, recovery_checkpoint: dict | None = None
+):
     """Admit a retained deterministic sync row and atomically append later chunks.
 
     Enrichment follows persistence; filler remains recoverable under Show discarded.
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
+    checkpoint_hooks: dict[str, Any] = {}
+    if recovery_checkpoint is not None:
+        before, after = sync_cap_recovery.ingest_hooks(uid, recovery_checkpoint, incoming)
+        checkpoint_hooks = {'before_assign': before, 'after_assign': after}
     assigned, created, survivors = conversations_db.assign_sync_conversation(
-        uid, incoming, candidate_id=candidate_id, target_id=target_id
+        uid, incoming, candidate_id=candidate_id, target_id=target_id, **checkpoint_hooks
     )
     record_sync_intake_outcome(created=created)
     if created:
@@ -931,7 +938,19 @@ def request_finalization(
         return dict(intent) | {'route': 'pusher'}
 
     try:
-        enqueue_listen_finalization_job(intent['job_id'], int(intent['dispatch_generation'] or 1))
+        from utils.conversations.demand_processing import schedule
+        from utils.cloud_tasks import listen_finalization_binding
+
+        generation = int(intent['dispatch_generation'] or 1)
+        if schedule(
+            uid,
+            intent['job_id'],
+            {'job_id': intent['job_id'], 'dispatch_generation': generation},
+            listen_finalization_binding(),
+            f"listen-finalization-{intent['job_id']}-{generation}",
+        ):
+            return dict(intent) | {'route': 'cloud_tasks'}
+        enqueue_listen_finalization_job(intent['job_id'], generation)
     except Exception:
         record_fallback(
             component='pusher',

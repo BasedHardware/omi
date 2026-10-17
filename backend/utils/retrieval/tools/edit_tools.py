@@ -68,7 +68,8 @@ def update_conversation(
     observed = conversations.prepare_conversation_for_read(cast(Dict[str, Any], chat_edits.decode(before)), uid) or {}
     structured = dict(observed.get('structured') or {})
     notes = list(observed.get('user_corrections') or [])
-    notes.append({'note': correction.strip(), 'at': datetime.now(timezone.utc).isoformat()})
+    corrected_at = datetime.now(timezone.utc).isoformat()  # not-model-facing: persisted edit metadata
+    notes.append({'note': correction.strip(), 'at': corrected_at})
     if len(notes) > 100:
         return tool_error('correction_limit_reached', 'Conversation correction note limit reached (100).')
     patch: Dict[str, Any] = {'user_corrections': notes}

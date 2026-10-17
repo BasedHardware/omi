@@ -878,6 +878,37 @@
         "canaries are installed, read back and queried before KeepLast business updates",
         "shadow comparison rejects missingness, nonfinite values and redirected credentials; it never authorizes cutover"
       ]
+    },
+    {
+      "id": "monitoring_log_and_route_migration",
+      "risk": "high",
+      "sources": [
+        "backend/charts/monitoring/dashboards/omi-services/omi-services-overview.json",
+        "backend/charts/monitoring/alert-rules.json",
+        "backend/charts/monitoring/alerts/**",
+        "backend/charts/monitoring/metric-inventory.prod.json",
+        "backend/charts/monitoring/retired-loki-alerts.json",
+        "backend/charts/monitoring/route-errors/**",
+        "backend/scripts/retire_paused_loki_alerts.py",
+        "backend/scripts/check_route_error_preparation.py",
+        "backend/scripts/check_edge_storm_preparation.py"
+      ],
+      "tests": [
+        "tests/unit/test_monitoring_log_plane_migration.py",
+        "tests/unit/test_retire_paused_loki_alerts.py",
+        "tests/unit/test_route_error_preparation.py",
+        "tests/unit/test_edge_storm_preparation.py",
+        "tests/unit/test_monitoring_alert_rule_contract.py",
+        "tests/unit/test_monitoring_gmp_shadow.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "Cloud Logging panels use scoped supported log queries and do not claim numeric LogQL parity",
+        "manual deletion requires exact still-paused Loki identities and an exclusive private backup",
+        "route labels remain finite; metrics and alerts stay held until source coverage and replay acceptance",
+        "same-LB-stream storm and nonstorm partitions preserve unrelated errors without a blanket mute",
+        "collector or datastore retirement never happens through these preparation sources"
+      ]
     }
   ]
 }

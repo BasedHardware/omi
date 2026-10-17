@@ -7,6 +7,8 @@ of memories or person records. Entity merges retain a redirect node.
 """
 
 import copy
+import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
@@ -26,8 +28,9 @@ from database import review_exact_undo
 from database.review_field_states import read_field_state, write_field_state
 from utils.dream_metrics import record_undo
 from utils.review_projection import sync_conversations
+from config.dream_agent import dream_journal_key, eligible
 from database.read_boundary import parse_payload_strict
-from models.review import ReviewChange, ReviewChangesResponse
+from models.review import ReviewChange, ReviewChangeDiff, ReviewChangesResponse
 
 WINDOW = timedelta(days=30)
 
@@ -432,6 +435,13 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     return tracked(_wire(result))
 
 
+_DIFF_CONTEXT = 120
+_DIFF_SPAN = 240
+_DIFF_TEXT = 500
+_DIFF_LABEL = 180
+_TEXT_FIELDS = ('structured.title', 'user_title', 'description', 'name', 'summary', 'language', 'content')
+
+
 def list_changes(uid: str, cursor: str | None = None, *, now: datetime | None = None) -> ReviewChangesResponse:
     now = now or datetime.now(timezone.utc)
     query = review_queries.CHANGES.build(
@@ -444,7 +454,441 @@ def list_changes(uid: str, cursor: str | None = None, *, now: datetime | None = 
             raise store.ReviewConflict('Invalid change cursor')
         query = query.start_after(snap)
     rows = [store.require_doc(uid, s.to_dict()) for s in query.limit(31).stream()]
+    user = store.user(uid).get().to_dict() or {}
+    show_dream = eligible(uid, user)
+    changes = []
+    for row in rows[:30]:
+        if row.get('phase', 'applied') != 'applied':
+            continue
+        if not show_dream and dream_journal_key(row.get('edit_key')):
+            continue
+        change = _wire(row)
+        diff = extract_change_diff(row)
+        if diff is not None:
+            change = change.model_copy(update={'diff': diff})
+        changes.append(change)
     return ReviewChangesResponse(
-        changes=[_wire(row) for row in rows[:30] if row.get('phase', 'applied') == 'applied'],
+        changes=changes,
         next_cursor=rows[29]['change']['change_id'] if len(rows) > 30 else None,
     )
+
+
+def extract_change_diff(row: object) -> ReviewChangeDiff | None:
+    """Read-time excerpt from an already decrypted, owner-scoped journal row.
+
+    Old rows that do not store the before/after text return no diff. This does
+    not read another document and never returns a whole transcript.
+    """
+    try:
+        return _extract_change_diff(row)
+    except Exception:
+        return None
+
+
+def _extract_change_diff(row: object) -> ReviewChangeDiff | None:
+    if not isinstance(row, dict):
+        return None
+    change = row.get('change')
+    if not isinstance(change, dict):
+        return None
+    if _is_merge(row, change):
+        found = _merge_diff(row, change)
+        if found is not None:
+            return found
+    found = _spelling_or_transcript(row, change)
+    if found is not None:
+        return found
+    found = _memory_diff(row, change)
+    if found is not None:
+        return found
+    return _edit_diff(row, change)
+
+
+def _is_merge(row: dict, change: dict) -> bool:
+    kind = change.get('edit_kind') or change.get('kind') or ''
+    if isinstance(kind, str) and kind.startswith('merge'):
+        return True
+    return bool(row.get('memory_merge') or row.get('entity_merge'))
+
+
+def _as_dict(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: object) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _spelling_or_transcript(row: dict, change: dict) -> ReviewChangeDiff | None:
+    overlay = _as_dict(row.get('transcript_overlay'))
+    corrections = _as_list(overlay.get('corrections'))
+    active = [item for item in corrections if isinstance(item, dict) and not item.get('undone')]
+    transcript_rows = [
+        item
+        for item in active
+        if item.get('kind') == 'transcript'
+        and isinstance(item.get('before'), str)
+        and isinstance(item.get('after'), str)
+    ]
+    if transcript_rows:
+        return _transcript_diff(transcript_rows, change)
+    terms = _spelling_terms(change, active)
+    if terms is None:
+        return None
+    before, after = terms
+    texts = _context_texts(change)
+    if not any(_count_term(text, before) for text in texts):
+        return None
+    main = _main_text(change, texts, before) or next(text for text in texts if _count_term(text, before))
+    located = _locate(main, before)
+    if located is None:
+        return None
+    _span, context_before, context_after = _window(main, *located)
+    visible = sum(_count_term(text, before) for text in texts)
+    segment_hits = len([item for item in active if item.get('kind') == 'spelling'])
+    return _finish(
+        change,
+        field='transcript',
+        before=before,
+        after=after,
+        context_before=context_before,
+        context_after=context_after,
+        occurrences=max(visible, segment_hits, 1),
+    )
+
+
+def _transcript_diff(rows: list[dict], change: dict) -> ReviewChangeDiff | None:
+    spans = []
+    for item in rows:
+        spans.extend(_changed_spans(item['before'], item['after']))
+    if not spans:
+        return None
+    source, dest, start, end, after_start, after_end = spans[0]
+    span, context_before, context_after = _window(source, start, end)
+    return _finish(
+        change,
+        field='transcript',
+        before=span,
+        after=dest[after_start:after_end],
+        context_before=context_before,
+        context_after=context_after,
+        occurrences=len(spans),
+    )
+
+
+def _spelling_terms(change: dict, corrections: list[dict]):
+    edit_kind = change.get('edit_kind')
+    spelling_rows = [item for item in corrections if item.get('kind') == 'spelling']
+    if edit_kind != 'spelling' and not spelling_rows:
+        return None
+    before = change.get('before') if isinstance(change.get('before'), str) else ''
+    after = change.get('after') if isinstance(change.get('after'), str) else ''
+    if spelling_rows:
+        sample = spelling_rows[0]
+        if isinstance(sample.get('before'), str) and not before:
+            before = sample['before']
+        if isinstance(sample.get('after'), str) and not after:
+            after = sample['after']
+    if not before or not after or before == after or len(before) > 50 or len(after) > 50:
+        return None
+    return before, after
+
+
+def _memory_diff(row: dict, change: dict) -> ReviewChangeDiff | None:
+    edit_kind = change.get('edit_kind')
+    has_memory = isinstance(row.get('memory_edit'), dict) or isinstance(row.get('memory_hygiene'), dict)
+    if not has_memory and edit_kind not in {'memory', 'retire_memory', 'supersede_memory'}:
+        return None
+    before_text = _memory_text(row.get('before'))
+    after_text = None
+    edit = row.get('memory_edit')
+    if isinstance(edit, dict) and isinstance(edit.get('content'), str):
+        after_text = edit['content']
+    hygiene = row.get('memory_hygiene')
+    if isinstance(hygiene, dict):
+        if before_text is None:
+            before_text = _memory_text(hygiene.get('before'))
+        if after_text is None:
+            after_text = _memory_text(hygiene.get('after'), prefer_new=True)
+    if before_text is None and isinstance(change.get('before'), str):
+        before_text = change['before']
+    if after_text is None and isinstance(change.get('after'), str):
+        after_text = change['after']
+    if before_text is None or after_text is None or before_text == after_text:
+        return None
+    return _text_field_diff('content', before_text, after_text, change)
+
+
+def _memory_text(value, prefer_new: bool = False):
+    if isinstance(value, dict) and isinstance(value.get('content'), str):
+        return value['content']
+    if isinstance(value, dict):
+        contents = []
+        for key, row in value.items():
+            if isinstance(row, dict) and isinstance(row.get('content'), str):
+                contents.append((str(key), row['content']))
+        if not contents:
+            return None
+        if prefer_new:
+            return contents[-1][1]
+        return contents[0][1]
+    if isinstance(value, list):
+        for row in value:
+            if isinstance(row, dict) and isinstance(row.get('content'), str):
+                return row['content']
+    return None
+
+
+def _edit_diff(row: dict, change: dict) -> ReviewChangeDiff | None:
+    edits = row.get('edits')
+    if not isinstance(edits, list):
+        return _change_text_diff(change)
+    for edit in edits:
+        if not isinstance(edit, dict):
+            continue
+        before_map = _as_dict(edit.get('before'))
+        after_map = _as_dict(edit.get('after'))
+        for name in _TEXT_FIELDS:
+            before = _state_text(before_map.get(name))
+            after = _state_text(after_map.get(name))
+            if before is None and after is None:
+                continue
+            if before == after:
+                continue
+            field = 'title' if name in {'structured.title', 'user_title'} else name
+            return _text_field_diff(field, before or '', after or '', change)
+        before_status = _state_text(before_map.get('status'))
+        after_status = _state_text(after_map.get('status'))
+        if before_status and after_status and before_status != after_status:
+            return _text_field_diff('status', before_status, after_status, change)
+    return _change_text_diff(change)
+
+
+def _change_text_diff(change: dict) -> ReviewChangeDiff | None:
+    edit_kind = change.get('edit_kind')
+    if not isinstance(edit_kind, str) or edit_kind not in {
+        'title',
+        'overview',
+        'close_task',
+        'memory',
+        'retire_task',
+        'set_language',
+    }:
+        return None
+    raw_before = change.get('before')
+    raw_after = change.get('after')
+    before = raw_before if isinstance(raw_before, str) else ''
+    after = raw_after if isinstance(raw_after, str) else ''
+    if (not before and not after) or before == after:
+        return None
+    field = {'title': 'title', 'set_language': 'language', 'close_task': 'status'}.get(edit_kind, edit_kind)
+    return _text_field_diff(field, before, after, change)
+
+
+def _merge_diff(row: dict, change: dict) -> ReviewChangeDiff | None:
+    labels = _ref_labels(change)
+    if len(labels) < 2:
+        labels = _content_labels(row.get('before'))
+    if len(labels) < 2 and isinstance(change.get('before'), str) and ' + ' in change['before']:
+        labels = [part.strip() for part in change['before'].split(' + ') if part.strip()]
+    if len(labels) < 2:
+        return None
+    after = change.get('after') if isinstance(change.get('after'), str) else ''
+    edit = row.get('memory_edit')
+    if not after and isinstance(edit, dict) and isinstance(edit.get('content'), str):
+        after = edit['content']
+    if not after:
+        after = labels[0]
+    return _finish(
+        change,
+        field='merge',
+        before=' + '.join(_flat(label, _DIFF_LABEL) for label in labels[:8]),
+        after=after,
+        occurrences=len(labels),
+        target_label=labels[0],
+    )
+
+
+def _text_field_diff(field: str, before: str, after: str, change: dict) -> ReviewChangeDiff | None:
+    if len(before) <= _DIFF_TEXT and len(after) <= _DIFF_TEXT:
+        return _finish(change, field=field, before=before, after=after, occurrences=1)
+    spans = _changed_spans(before, after)
+    if not spans:
+        return None
+    source, dest, start, end, after_start, after_end = spans[0]
+    span, context_before, context_after = _window(source, start, end)
+    return _finish(
+        change,
+        field=field,
+        before=span,
+        after=dest[after_start:after_end],
+        context_before=context_before,
+        context_after=context_after,
+        occurrences=len(spans),
+    )
+
+
+def _finish(change: dict, **payload) -> ReviewChangeDiff | None:
+    before = _clip(
+        payload.get('before') or '',
+        _DIFF_SPAN if payload.get('context_before') or payload.get('context_after') else _DIFF_TEXT,
+    )
+    after = _clip(
+        payload.get('after') or '',
+        _DIFF_SPAN if payload.get('context_before') or payload.get('context_after') else _DIFF_TEXT,
+    )
+    if not before and not after:
+        return None
+    body: dict[str, Any] = {
+        'field': _flat(str(payload.get('field') or 'change'), 64),
+        'before': before,
+        'after': after,
+        'context_before': _clip(payload.get('context_before') or '', _DIFF_CONTEXT),
+        'context_after': _clip(payload.get('context_after') or '', _DIFF_CONTEXT),
+        'occurrences': max(1, min(int(payload.get('occurrences') or 1), 10000)),
+        'target_label': _flat(payload.get('target_label') or _target_label(change), _DIFF_LABEL),
+        'source_title': _flat(_source_title(change), 200),
+        'group_key': _group_key(str(payload.get('field') or 'change'), before, after),
+    }
+    started = _source_started(change)
+    if started is not None:
+        body['source_started_at'] = started
+    body = {key: value for key, value in body.items() if value not in (None, '')}
+    return parse_payload_strict(ReviewChangeDiff, body, document_path='review_changes/diff')
+
+
+def _changed_spans(before: str, after: str):
+    """One linear edit span. Sequence matching is quadratic and splits tokens."""
+    if before == after:
+        return []
+    prefix = 0
+    limit = min(len(before), len(after))
+    while prefix < limit and before[prefix] == after[prefix]:
+        prefix += 1
+    suffix = 0
+    while suffix < len(before) - prefix and suffix < len(after) - prefix and before[-1 - suffix] == after[-1 - suffix]:
+        suffix += 1
+    return [(before, after, prefix, len(before) - suffix, prefix, len(after) - suffix)]
+
+
+def _window(text: str, start: int, end: int):
+    end = min(len(text), max(start, end))
+    start = max(0, min(start, end))
+    if end - start > _DIFF_SPAN:
+        end = start + _DIFF_SPAN
+    return text[start:end], text[max(0, start - _DIFF_CONTEXT) : start], text[end : end + _DIFF_CONTEXT]
+
+
+def _context_texts(change: dict) -> list[str]:
+    context = change.get('context')
+    if not isinstance(context, dict) or not isinstance(context.get('segments'), list):
+        return []
+    texts = []
+    for segment in context['segments']:
+        if isinstance(segment, dict) and isinstance(segment.get('text'), str):
+            texts.append(segment['text'])
+    return texts
+
+
+def _main_text(change: dict, texts: list[str], term: str):
+    context = _as_dict(change.get('context'))
+    index = context.get('main_index')
+    if isinstance(index, int) and 0 <= index < len(texts) and _count_term(texts[index], term):
+        return texts[index]
+    return None
+
+
+def _term_pattern(term: str):
+    return re.compile(r'(?<!\w)' + re.escape(term) + r'(?!\w)')
+
+
+def _count_term(text: str, term: str) -> int:
+    if not text or not term:
+        return 0
+    return len(_term_pattern(term).findall(text))
+
+
+def _locate(text: str, term: str):
+    match = _term_pattern(term).search(text)
+    if match is None:
+        return None
+    return match.start(), match.end()
+
+
+def _state_text(state):
+    if not isinstance(state, dict) or state.get('present') is not True:
+        return None
+    value = state.get('value')
+    return value if isinstance(value, str) else None
+
+
+def _ref_labels(change: dict) -> list[str]:
+    refs = change.get('refs')
+    if not isinstance(refs, list):
+        return []
+    labels = []
+    for ref in refs:
+        if isinstance(ref, dict) and isinstance(ref.get('label'), str) and ref['label'].strip():
+            labels.append(ref['label'].strip())
+    return labels
+
+
+def _content_labels(value) -> list[str]:
+    rows = value if isinstance(value, list) else []
+    if isinstance(value, dict):
+        rows = [row for row in value.values() if isinstance(row, dict)]
+    labels = []
+    for row in rows:
+        if isinstance(row, dict) and isinstance(row.get('content'), str) and row['content'].strip():
+            labels.append(row['content'].strip())
+    return labels
+
+
+def _target_label(change: dict) -> str:
+    labels = _ref_labels(change)
+    if labels:
+        return labels[0]
+    return _source_title(change)
+
+
+def _source_title(change: dict) -> str:
+    context = change.get('context')
+    if isinstance(context, dict) and isinstance(context.get('conversation_title'), str):
+        return context['conversation_title']
+    return ''
+
+
+def _source_started(change: dict):
+    context = change.get('context')
+    if not isinstance(context, dict):
+        return None
+    value = context.get('conversation_date')
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _group_key(field: str, before: str, after: str) -> str:
+    token = '|'.join([_flat(field, 32), _flat(before, 80).casefold(), _flat(after, 80).casefold()])
+    if len(token) <= 128:
+        return token
+    return _flat(field, 32) + '|' + hashlib.sha256(token.encode()).hexdigest()[:32]
+
+
+def _clip(value: object, limit: int) -> str:
+    if not isinstance(value, str):
+        return ''
+    text = value.replace('\x00', '')
+    return text if len(text) <= limit else text[:limit]
+
+
+def _flat(value: object, limit: int) -> str:
+    if not isinstance(value, str):
+        return ''
+    return _clip(' '.join(value.split()), limit)

@@ -2337,11 +2337,11 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "histogram_quantile(0.95, sum by (le, platform, build_channel) (rate(omi_client_app_startup_duration_seconds_bucket[30m])))",
+      "expression": "histogram_quantile(0.95, sum by (le, platform, build_channel) (rate(omi_client_app_startup_duration_seconds_bucket_total[30m])))",
       "file": "dashboards/omi-services/fleet-telemetry.json",
       "issues": [],
       "metrics": [
-        "omi_client_app_startup_duration_seconds_bucket"
+        "omi_client_app_startup_duration_seconds_bucket_total"
       ],
       "owner_title": "Fleet telemetry",
       "owner_uid": "omi-fleet-telemetry",

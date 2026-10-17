@@ -140,7 +140,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, platform, build_channel) (rate(omi_client_app_startup_duration_seconds_bucket[30m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, platform, build_channel) (rate(omi_client_app_startup_duration_seconds_bucket_total[30m])))",
           "legendFormat": "{{platform}} {{build_channel}}"
         }
       ],

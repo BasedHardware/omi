@@ -56,6 +56,8 @@ class MemoryStore:
                 return None
             payload = asdict(message)
             payload['received_at'] = message.received_at.isoformat()
+            album_path = None
+            sequence = total = 0
             if message.media_group_id:
                 from utils.messaging.albums import merge_album, album_ready_at
 
@@ -66,24 +68,45 @@ class MemoryStore:
                     message.external_chat_id,
                     'album:' + message.media_group_id,
                 )
-                row = self.jobs.get(album_path)
-                if row is None or row['status'] == 'pending':
-                    self.album_parts.add(path)
-                    path = album_path
-                    payload = merge_album(row['payload'] if row else None, payload)
-                    ready = album_ready_at(row, datetime.now(timezone.utc))
-                else:
-                    ready = None
+                root = self.jobs.get(album_path)
+                sequence = (root or {}).get('album_tail', 0)
+                path = album_path if sequence == 0 else key(album_path, str(sequence))
+                row = self.jobs.get(path)
+                if row and (
+                    row['status'] not in ('pending', 'running')
+                    or (row['status'] == 'running' and not row.get('album_appendable'))
+                    or row.get('generation_started_at')
+                    or row.get('fifo_settled_at')
+                ):
+                    sequence += 1
+                    path = key(album_path, str(sequence))
+                    row = None
+                total = (root or {}).get('album_part_count', 0) + len(payload['attachments'])
+                if total > 10:
+                    raise ValueError('Album contains too many attachments')
+                self.album_parts.add(
+                    key(
+                        message.channel,
+                        message.provider,
+                        message.external_user_id,
+                        message.external_chat_id,
+                        message.provider_message_id,
+                    )
+                )
+                payload = merge_album(row['payload'] if row else None, payload)
+                ready = album_ready_at(row, datetime.now(timezone.utc))
             else:
-                ready = None
-            created_at = self.jobs[path]['created_at'] if path in self.jobs else datetime.now(timezone.utc)
-            self.jobs[path] = dict(
+                row, ready = None, None
+            created_at = row['created_at'] if row else datetime.now(timezone.utc)
+            self.jobs.setdefault(path, {}).update(
                 payload=payload,
-                status='pending',
+                status=row['status'] if row else 'pending',
                 created_at=created_at,
                 album_ready_at=ready,
                 identity=(message.channel, message.provider, message.external_user_id),
             )
+            if album_path is not None:
+                self.jobs[album_path].update(album_tail=sequence, album_part_count=total)
             chat = (message.channel, message.provider, message.external_user_id, message.external_chat_id)
             prior = self.chat_heads.get(chat)
             previous = (
@@ -135,9 +158,20 @@ class MemoryStore:
                     return None
                 if row.get('album_ready_at') and row['album_ready_at'] > now:
                     return None
-                row.update(status='running', started_at=now)
+                row.update(
+                    status='running', started_at=now, album_appendable=bool(row['payload'].get('media_group_id'))
+                )
                 return candidate, copy.deepcopy(row['payload'])
         return None
+
+    def seal_album(self, path, attachment_count):
+        with self.lock:
+            self.assert_running(path)
+            row = self.jobs[path]
+            if len(row['payload']['attachments']) != attachment_count:
+                return copy.deepcopy(row['payload'])
+            row['generation_started_at'] = datetime.now(timezone.utc)
+            return None
 
     def assert_running(self, path):
         row = self.jobs[path]
@@ -150,6 +184,7 @@ class MemoryStore:
 
     def retry(self, path):
         self.jobs[path]['status'] = 'pending'
+        self.jobs[path].pop('album_appendable', None)
 
     def complete(self, path):
         self.jobs[path].update(status='done')

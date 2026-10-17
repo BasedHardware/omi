@@ -23,15 +23,17 @@ class ChatContextStore:
             row = ref.get(transaction=tx).to_dict()
             if not row:
                 raise PermissionError('Session removed')
-            self.messaging.assert_session_link(tx, uid, row)
+            user = self.messaging.assert_session_link(tx, uid, row)
+            return row, user
 
-        run_with_transaction_contention_retry(self.messaging.db.transaction, check, operation_name='context_read_guard')
+        return run_with_transaction_contention_retry(
+            self.messaging.db.transaction, check, operation_name='context_read_guard'
+        )
 
     def load(self, uid, session_id):
-        self.assert_access(uid, session_id)
-        ref = self.messaging.user(uid).collection('chat_sessions').document(session_id)
-        row = ref.get().to_dict() or {}
-        user = self.messaging.user(uid).get().to_dict() or {}
+        # Reuse the guarded transaction's snapshots: the old path reread both
+        # documents serially and could observe a session removed after its guard.
+        row, user = self.assert_access(uid, session_id)
         version = user.get('chat_context_generation', 0)
         state = json.loads(encryption.decrypt(row['shaped_context'], uid)) if row.get('shaped_context') else {}
         if state.get('generation', 0) != version:
@@ -60,7 +62,13 @@ class ChatContextStore:
     def source_page(self, uid, session_id, before_id, cursor=None, limit=40):
         self.assert_access(uid, session_id)
         collection = self.messaging.user(uid).collection('messages')
-        boundary = collection.document(before_id).get()
+        # App add_message uses Firestore .add(): its document ID is independent
+        # of Message.id. Channels happen to use matching IDs. Resolve the wire
+        # identity in the owner's collection, then use the actual snapshot cursor.
+        boundaries = list(collection.where(filter=FieldFilter('id', '==', before_id)).limit(2).stream())
+        if len(boundaries) != 1:
+            raise PermissionError('Context boundary missing or ambiguous')
+        boundary = boundaries[0]
         row = boundary.to_dict() or {}
         if row.get('chat_session_id') != session_id:
             raise PermissionError('Context boundary outside session')

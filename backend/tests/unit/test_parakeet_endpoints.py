@@ -267,6 +267,41 @@ def test_live_window_marker_excludes_request_from_prerecorded_error_metric():
     assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before + 1
 
 
+@pytest.mark.parametrize('packing,expected', [(False, 'backfill'), (True, 'live')])
+def test_legacy_stream_marker_promoted_only_with_packing(monkeypatch, packing, expected):
+    app, mod, _, engine = _make_app_with_mocks()
+    monkeypatch.setattr(mod, '_packing_enabled', packing)
+    submitted = AsyncMock(return_value={'text': 'ok', 'timestamp': {}})
+    monkeypatch.setattr(mod, 'submit_audio', submitted)
+    response = TestClient(app).post(
+        '/v1/transcribe', files={'file': ('audio.wav', _make_wav_bytes())}, headers={'X-Omi-STT-Surface': 'live-stream'}
+    )
+    assert response.status_code == 200
+    assert submitted.await_args.kwargs['lane'] == expected
+
+
+@pytest.mark.asyncio
+async def test_queue_gauges_refresh_without_batch_metrics_poll():
+    _, mod, _, engine = _make_app_with_mocks()
+    engine.pressure_snapshot.return_value = {
+        'pending_requests': 3,
+        'live_pending_requests': 1,
+        'backfill_pending_requests': 2,
+        'live_oldest_pending_seconds': 0.5,
+        'backfill_oldest_pending_seconds': 12,
+    }
+    task = asyncio.create_task(mod._refresh_pressure_metrics())
+    try:
+        await asyncio.sleep(0)
+        assert mod.LANE_OLDEST.labels(lane='backfill')._value.get() == 12
+        assert mod.LANE_PENDING.labels(lane='live')._value.get() == 1
+        assert mod.PENDING_REQUESTS._value.get() == 3
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
 class TestStreamAdmissionEndpoint:
     def test_unhealthy_gpu_rejects_stream_before_admission(self):
         app, mod, _, _ = _make_app_with_mocks(gpu_ready=False, fatal_cuda_reason="stream_capture")

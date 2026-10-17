@@ -91,6 +91,7 @@ from models.users import (
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
+from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
     DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,
@@ -1220,9 +1221,12 @@ def get_user_subscription_endpoint(
 ):
     """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
     already_read: dict[str, Any] = {}
-    response = _user_subscription_response(
-        uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
-    )
+    # Both released mobile and desktop clients use this route to unlock after checkout.
+    # They send no payment-refresh marker, so every entitlement refresh must be fresh.
+    with fresh_cache_reads(uid, 'subscription_cache'):
+        response = _user_subscription_response(
+            uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
+        )
     allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
     # A closed result with no resolved total is not an unlimited allowance.
@@ -2570,3 +2574,25 @@ def record_llm_usage_bucket(
 def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}
+
+
+class SurfaceStateRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    session_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9-]+$')
+    surface_open: bool
+    foreground: bool
+    transcript_visible: bool
+
+
+@router.post(
+    '/v1/users/client-state', tags=['users'], response_model=UserStatusResponse, response_model_exclude_none=True
+)
+async def report_surface_state(
+    body: SurfaceStateRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'users:surface_state', fail_closed=True)),
+):
+    """Explicit expiring human-surface intent; no user-document lookup."""
+    from utils.conversations.demand_processing import observe_surface
+
+    await run_blocking(db_executor, observe_surface, uid, body.session_id, body.model_dump())
+    return {'status': 'ok'}

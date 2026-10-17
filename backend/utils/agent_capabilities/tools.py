@@ -139,7 +139,17 @@ def target_authority_protected(edit, records):
     )
 
 
-def apply_verified_edit(uid, edit, records, *, expected_records, authority):
+def apply_verified_edit(
+    uid,
+    edit,
+    records,
+    *,
+    expected_records,
+    authority,
+    gate_retry=False,
+    run_started_at=None,
+    run_id=None,
+):
     """The harness alone selects this boundary after independent verification.
 
     User acceptance retains apply_edit. Verification never relaxes schema,
@@ -148,6 +158,44 @@ def apply_verified_edit(uid, edit, records, *, expected_records, authority):
     if authority == 'dream' and target_authority_protected(edit, records):
         raise ValueError('agent_user_memory_requires_review')
     validate_edit(edit, records, authority=authority)
+    if authority == 'dream' and gate_retry:
+        key = edit_key(edit, records)
+        change_id = dream_change_view.change_id_for_key(uid, key)
+        prior = review_store.decode_doc(
+            uid,
+            review_store.user(uid)
+            .collection('review_changes')
+            .document(review_store.safe_id(change_id))
+            .get()
+            .to_dict(),
+        )
+        created_at = prior.get('created_at') if prior else None
+        same_run = (
+            bool(run_id)
+            and prior is not None
+            and run_id
+            in {
+                prior.get('run_id'),
+                prior.get('dream_run_id'),
+            }
+        )
+        same_pass = (
+            isinstance(run_started_at, datetime)
+            and isinstance(created_at, datetime)
+            and created_at.tzinfo is not None
+            and run_started_at.tzinfo is not None
+            and created_at >= run_started_at
+        )
+        change = prior.get('change') if prior else None
+        if (
+            prior
+            and prior.get('edit_key') == key
+            and prior.get('phase') in {None, 'applied'}
+            and (same_pass or same_run)
+            and isinstance(change, dict)
+            and change.get('undone', False) is False
+        ):
+            return 'applied'
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
     revalidate_proposal(uid, {'records': sources})

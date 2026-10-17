@@ -25,7 +25,7 @@ LOGGER_LEVELS = {
     'nemo_logger': logging.INFO,
 }
 LB_LOGGED_SERVICES = frozenset({'diarizer', 'nllb', 'parakeet', 'pusher', 'vad'})
-PROBE_PATHS = frozenset({'/health', '/v1/health', '/ready', '/metrics', '/batch/metrics'})
+PROBE_PATHS = frozenset({'/health', '/v1/health', '/live', '/ready', '/metrics', '/batch/metrics'})
 NEMO_REPEATS = (
     'Timestamps requested, setting decoding timestamps to True',
     'are ignored by Lhotse dataloader',

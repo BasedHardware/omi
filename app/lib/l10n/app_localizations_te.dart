@@ -4396,6 +4396,16 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'మీ $plan ప్లాన్ $dateన ముగుస్తుంది.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'మీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - $date వరకు ఛార్జ్ లేదు.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'మీ ప్లాన్ $date న రద్దు చేయడానికి సెట్ చేయబడింది.\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - $date వరకు ఛార్జ్ లేదు.';
   }
@@ -4403,6 +4413,11 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'మీ నెలవారీ ప్లాన్ ముగిసినప్పుడు మీ వార్షిక ప్లాన్ స్వయంచాలకంగా ప్రారంభమవుతుంది.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'మీ $plan ప్లాన్ $dateన పునరుద్ధరించబడుతుంది.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4435,6 +4450,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get continueText => 'కొనసాగండి';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.';
 
   @override
   String get resubscribe => 'మళ్లీ సబ్‌స్క్రిప్ట్ చేయండి';
@@ -5052,9 +5070,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get content => 'సামగ్రి';
-
-  @override
-  String get noContentToDisplay => 'చూపించడానికి సామగ్రి లేదు';
 
   @override
   String get noSummary => 'సారాంశం లేదు';
@@ -9858,9 +9873,6 @@ class AppLocalizationsTe extends AppLocalizations {
       'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
 
   @override
-  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.';
 
@@ -12480,6 +12492,59 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi మీ నోట్స్‌ను చక్కబెట్టినప్పుడు, మార్పులు ఇక్కడ కనిపిస్తాయి.';
 
   @override
+  String get reviewChangesSectionTerms => 'పేర్లు మరియు పదాలు';
+
+  @override
+  String get reviewChangesSectionTitles => 'శీర్షికలు మరియు సారాంశాలు';
+
+  @override
+  String get reviewChangesSectionOther => 'ఇతర మార్పులు';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count సంభాషణలు',
+      one: '1 సంభాషణ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చోట్ల',
+      one: '1 చోటు',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'మొత్తం $count చూపించు';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'అన్నీ రద్దు చేయి';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ఆధారం చూడండి';
+
+  @override
+  String get reviewChangeViewConversation => 'సంభాషణ చూడండి';
+
+  @override
+  String get reviewChangeViewTask => 'పనిని చూడండి';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'రద్దు చేయలేకపోయాం: $failed/$total. మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
   String get reviewShowMore => 'మరిన్ని చూపండి';
 
   @override
@@ -13477,4 +13542,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'కొత్తది';
+
+  @override
+  String get activityNeedsAttention => 'శ్రద్ధ అవసరం';
+
+  @override
+  String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
 }

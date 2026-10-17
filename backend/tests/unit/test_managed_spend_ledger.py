@@ -138,7 +138,7 @@ def test_reported_usage_is_priced_on_the_gateway_rate_card() -> None:
 
     assert event.usage_status == UsageStatus.CONFIRMED
     assert event.cost_status == CostStatus.ESTIMATED
-    assert event.rate_card_id == 'vertex.gemini-2.5-flash.2026-07-17'
+    assert event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
     assert event.estimated_cost_micro_usd and event.estimated_cost_micro_usd > 0
 
 

@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "Magtatapos ang iyong {plan} plan sa {date}.",
+    "resubscribeNowNoChargeUntil": "Mag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
     "planSetToCancelOn": "Ang iyong plano ay nakatakda na kanselahin sa {date}.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "Mare-renew ang iyong {plan} plan sa {date}.",
     "planRenewsOn": "Ang iyong plano ay nag-renew sa {date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "Mag-subscribe muna ulit para magpalit ng plan.",
     "resubscribe": "Mag-subscribe Muli",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "Content",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "Walang content na ipapakita",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "Walang summary",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "I-tap ang record button para magsimulang mag-record",
-    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
     "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
     "home": "Home",
     "failedToUpdateBaselineStatus": "Hindi ma-update ang alaalang ito. Subukan ulit.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "Hindi na-load ang mga kamakailang pagbabago.",
     "reviewNoChangesTitle": "Wala pang pagbabago",
     "reviewNoChangesBody": "Kapag inayos ng Omi ang mga tala mo, lalabas dito ang mga pagbabago.",
+    "reviewChangesSectionTerms": "Mga pangalan at termino",
+    "reviewChangesSectionTitles": "Mga pamagat at buod",
+    "reviewChangesSectionOther": "Iba pang pagbabago",
+    "reviewChangeConversationCount": "{count, plural, =1{1 pag-uusap} other{{count} pag-uusap}}",
+    "reviewChangePlaceCount": "{count, plural, =1{1 lugar} other{{count} lugar}}",
+    "reviewChangeShowAll": "Ipakita lahat ng {count}",
+    "reviewChangeUndoAll": "I-undo lahat",
+    "reviewChangeSeeEvidence": "Tingnan ang ebidensya",
+    "reviewChangeViewConversation": "Tingnan ang pag-uusap",
+    "reviewChangeViewTask": "Tingnan ang gawain",
+    "reviewChangesUndoPartial": "Hindi ma-undo ang {failed} sa {total}. Subukang muli.",
     "reviewShowMore": "Magpakita Pa",
     "entityKeptCurrent": "Pinananatiling napapanahon ng Omi",
     "entityNotRight": "Mali ba?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "Wala pang aktibidad",
     "activityNewSemantics": "Aktibidad, mga bagong item",
     "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
-    "activityNewItem": "Bago"
+    "activityNewItem": "Bago",
+    "activityNeedsAttention": "Kailangang tingnan",
+    "activityRetryAll": "Subukan muli lahat",
+    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito"
 }

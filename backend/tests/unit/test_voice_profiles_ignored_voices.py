@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+from google.cloud.firestore_v1.field_path import FieldPath
+
 from database import conversations as conversations_db
 from database import voice_profiles as db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.speaker_tag_prompts.keys import ignored_voice_key
+from utils.speaker_tag_prompts.selection import select_prompts
 
 NOW = datetime(2026, 9, 30, 12, tzinfo=timezone.utc)
 STATE = ('users', 'u', db._STATE_COLLECTION, db._STATE_DOCUMENT)
@@ -26,6 +31,73 @@ def test_ignored_voices_are_bounded(monkeypatch):
     assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:0', 'c2:0'}
 
 
+@pytest.mark.parametrize('conversation_id', ['x' * 1460, 'x' * 1500, 'é' * 750, '\\' * 750, '`' * 750])
+def test_maximum_document_ids_keep_bounded_marker_keys_and_restore(conversation_id):
+    store = StrictFirestore()
+    db.record_ignored_voice('u', conversation_id, 3, NOW, firestore_client=store)
+    db.record_ignored_voice('u', conversation_id, 3, NOW + timedelta(minutes=1), firestore_client=store)
+    markers = store.rows[STATE]['ignored_voices']
+    assert len(markers) == 1
+    key, entry = next(iter(markers.items()))
+    assert len(key.encode('utf-8')) <= 1500
+    assert len(FieldPath('ignored_voices', key, 'assignment_generation').to_api_repr().encode('utf-8')) <= 1500
+    assert key == ignored_voice_key(conversation_id, 3)
+    assert entry['conversation_id'] == conversation_id
+    assert entry['speaker_id'] == 3
+    assert db.ignored_voice_keys(store.rows[STATE]) == {key}
+    assert db.remove_ignored_voice('u', conversation_id, 3, [], firestore_client=store)
+    assert store.rows[STATE]['ignored_voices'] == {}
+
+
+def test_ignored_voice_key_preserves_existing_keys_at_field_byte_limit():
+    conversation_id = 'x' * 1459
+    assert ignored_voice_key(conversation_id, 3) == f'{conversation_id}:3'
+
+
+def test_restore_matches_original_entry_when_legacy_key_needs_new_encoding():
+    conversation_id = 'x' * 1465
+    legacy_key = f'{conversation_id}:3'
+    assert len(FieldPath('ignored_voices', legacy_key, 'conversation_id').to_api_repr().encode('utf-8')) == 1500
+    assert ignored_voice_key(conversation_id, 3) != legacy_key
+    store = StrictFirestore()
+    store.rows[STATE] = {
+        'ignored_voices': {legacy_key: {'conversation_id': conversation_id, 'speaker_id': 3, 'ignored_at': NOW}}
+    }
+    assert db.remove_ignored_voice('u', conversation_id, 3, [], firestore_client=store)
+    assert store.rows[STATE]['ignored_voices'] == {}
+
+
+@pytest.mark.parametrize('owner_has_voice', [False, True])
+def test_legacy_long_marker_suppresses_naming_and_owner_prompts_without_receipt(owner_has_voice):
+    conversation_id = 'x' * 1465
+    state = {
+        'ignored_voices': {
+            f'{conversation_id}:1': {'conversation_id': conversation_id, 'speaker_id': 1, 'ignored_at': NOW}
+        }
+    }
+    conversation = {
+        'id': conversation_id,
+        'status': 'completed',
+        'started_at': NOW,
+        'audio_files': [{'chunk_timestamps': [NOW.timestamp()], 'duration': 10}],
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 1, 'is_user': False, 'start': 0, 'end': 6, 'text': 'Synthetic speech'}
+        ],
+    }
+    options = {
+        'now': NOW,
+        'owner_has_voice': owner_has_voice,
+        'named_allowed': not owner_has_voice,
+        'answered': set(),
+        'people': {},
+        'owner_evidence': lambda current, runs: (runs[0], 0.5) if runs else None,
+    }
+    baseline = select_prompts([conversation], **options)
+    assert len(baseline) == 1
+    assert baseline[0].kind == ('owner_check' if owner_has_voice else 'identify')
+    assert not select_prompts([conversation], ignored=db.ignored_voice_keys(state), **options)
+
+
 def test_remove_ignored_voice_forgets_its_answers_only():
     store = StrictFirestore()
     db.record_ignored_voice('u', 'c1', 1, NOW, firestore_client=store)
@@ -36,8 +108,6 @@ def test_remove_ignored_voice_forgets_its_answers_only():
 
 
 def test_restore_removes_only_the_ignored_decision_so_prompts_can_return():
-    from utils.speaker_tag_prompts.selection import select_prompts
-
     store = StrictFirestore()
     path = ('users', 'u', 'conversations', 'c1')
     store.rows[path] = {

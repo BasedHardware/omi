@@ -6,7 +6,12 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
 
 import httpx
 import numpy as np
-import onnxruntime as ort  # onnxruntime is untyped
+
+try:
+    import onnxruntime as ort  # onnxruntime is untyped
+except ImportError:  # pragma: no cover - pusher image ships without onnxruntime
+    ort = None
+
 import requests
 from pydub import AudioSegment  # pydub is untyped
 
@@ -20,10 +25,14 @@ logger = logging.getLogger(__name__)
 
 HOSTED_VAD_CONNECT_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS'
 HOSTED_VAD_READ_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_READ_TIMEOUT_SECONDS'
+VAD_CACHE_TTL_SECONDS_ENV = 'VAD_CACHE_TTL_SECONDS'
 DEFAULT_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 3.0
 DEFAULT_HOSTED_VAD_READ_TIMEOUT_SECONDS = 30.0
 MAX_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 30.0
 MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS = 60.0
+DEFAULT_VAD_CACHE_TTL_SECONDS = 86400
+MIN_VAD_CACHE_TTL_SECONDS = 300
+MAX_VAD_CACHE_TTL_SECONDS = 86400
 
 
 class VADAudioDecodeError(RuntimeError):
@@ -75,6 +84,20 @@ def _hosted_vad_timeout_seconds() -> Tuple[float, float]:
     )
 
 
+def _vad_cache_ttl_seconds() -> int:
+    """Return the current bounded sync-VAD cache TTL, preserving the 24h default."""
+    raw_value = os.getenv(VAD_CACHE_TTL_SECONDS_ENV)
+    if raw_value is None:
+        return DEFAULT_VAD_CACHE_TTL_SECONDS
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return DEFAULT_VAD_CACHE_TTL_SECONDS
+    if MIN_VAD_CACHE_TTL_SECONDS <= value <= MAX_VAD_CACHE_TTL_SECONDS:
+        return value
+    return DEFAULT_VAD_CACHE_TTL_SECONDS
+
+
 def _hosted_vad_httpx_timeout() -> httpx.Timeout:
     connect_timeout, read_timeout = _hosted_vad_timeout_seconds()
     return httpx.Timeout(
@@ -115,7 +138,7 @@ def _record_hosted_vad_fallback(exc: BaseException) -> None:
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), 'assets')
 _MODEL_PATH = os.path.join(_ASSETS_DIR, 'silero_vad.onnx')
 
-_ort_session: Optional[ort.InferenceSession] = None
+_ort_session: Optional[Any] = None
 _ort_init_lock = threading.Lock()
 
 # ONNX model constants — Silero VAD v6 (full model, opset 16)
@@ -129,7 +152,7 @@ VAD_CONTEXT_SAMPLES = 64  # prepended to each window
 _STATE_SHAPE = (2, 1, 128)
 
 
-def _get_ort_session() -> ort.InferenceSession:
+def _get_ort_session() -> Any:
     """Lazy-init the shared ONNX InferenceSession (singleton, thread-safe).
 
     ORT InferenceSession.run() is thread-safe for different input data.
@@ -138,6 +161,8 @@ def _get_ort_session() -> ort.InferenceSession:
     global _ort_session
     if _ort_session is not None:
         return _ort_session
+    if ort is None:
+        raise RuntimeError('onnxruntime is unavailable; local Silero VAD cannot run')
     with _ort_init_lock:
         if _ort_session is not None:
             return _ort_session
@@ -230,7 +255,7 @@ def vad_is_empty(
         segments = _run_file_vad(file_path)
 
     if cache:
-        redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
+        redis_db.set_generic_cache(caching_key, segments, ttl=_vad_cache_ttl_seconds())
     if return_segments:
         return segments
     logger.info(f'vad_is_empty {len(segments) == 0}')
@@ -427,3 +452,24 @@ def apply_vad_for_speech_profile(file_path: str) -> None:
         # Explicitly free memory
         del full_audio
         del trimmed_aseg
+
+
+def offline_pcm_speech_segments(pcm: bytes) -> List[Dict[str, Any]]:
+    """Strict, local-only VAD for canonical stored 16kHz mono PCM16.
+
+    Include the final partial window; VAD failure propagates to the compaction
+    caller, which retains uncompressed behavior. No hosted request or cache.
+    """
+    if not pcm or len(pcm) % 2 or len(pcm) > 7200 * 32000:
+        raise VADAudioDecodeError('invalid stored PCM shape')
+    samples = np.frombuffer(pcm, dtype='<i2').astype(np.float32) / 32768
+    duration = len(samples) / VAD_SAMPLE_RATE
+    remainder = len(samples) % VAD_WINDOW_SAMPLES
+    if remainder:
+        samples = np.pad(samples, (0, VAD_WINDOW_SAMPLES - remainder))
+    result = _segments_from_16khz_samples(samples)
+    return [
+        {**span, 'end': min(duration, span['end']), 'duration': min(duration, span['end']) - span['start']}
+        for span in result
+        if span['start'] < duration
+    ]

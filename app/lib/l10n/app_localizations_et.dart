@@ -4369,12 +4369,27 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Teie $plan pakett lõpeb $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Tellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Teie plaan on seatud tühistuma $date.\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Teie $plan pakett uueneb $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4407,6 +4422,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get continueText => 'Jätka';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Paketi muutmiseks tellige esmalt uuesti.';
 
   @override
   String get resubscribe => 'Telli uuesti';
@@ -5020,9 +5038,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get content => 'Sisu';
-
-  @override
-  String get noContentToDisplay => 'Sisu pole kuvamiseks';
 
   @override
   String get noSummary => 'Kokkuvõte puudub';
@@ -9800,9 +9815,6 @@ class AppLocalizationsEt extends AppLocalizations {
       'Kõne tekstiks teisendamine pole praegu saadaval. Kontrolli internetiühendust ja seadme kõnetuvastuse seadeid ning proovi uuesti.';
 
   @override
-  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'Et Omi teaks, milline hääl on sinu oma — räägi ükskõik millest umbes 5 sekundit.';
 
@@ -12423,6 +12435,59 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reviewNoChangesBody => 'Kui Omi su märkmeid korrastab, ilmuvad muudatused siia.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nimed ja terminid';
+
+  @override
+  String get reviewChangesSectionTitles => 'Pealkirjad ja kokkuvõtted';
+
+  @override
+  String get reviewChangesSectionOther => 'Muud muudatused';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust',
+      one: '1 vestlus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohta',
+      one: '1 koht',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Näita kõiki ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Võta kõik tagasi';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Vaata tõendeid';
+
+  @override
+  String get reviewChangeViewConversation => 'Vaata vestlust';
+
+  @override
+  String get reviewChangeViewTask => 'Vaata ülesannet';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed/$total tagasivõtmine ebaõnnestus. Proovi uuesti.';
+  }
+
+  @override
   String get reviewShowMore => 'Näita rohkem';
 
   @override
@@ -13419,4 +13484,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uus';
+
+  @override
+  String get activityNeedsAttention => 'Vajab tähelepanu';
+
+  @override
+  String get activityRetryAll => 'Proovi kõiki uuesti';
+
+  @override
+  String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
 }

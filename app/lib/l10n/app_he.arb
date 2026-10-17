@@ -5065,6 +5065,8 @@
             }
         }
     },
+    "yourPlanEndsOn": "תוכנית {plan} שלך מסתיימת ב-{date}.",
+    "resubscribeNowNoChargeUntil": "הירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
     "planSetToCancelOn": "התוכנית שלך מוגדרת להיות מבוטלת ב-{date}.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
@@ -5079,6 +5081,7 @@
     "@annualPlanStartsAutomatically": {
         "description": "Info that annual plan starts automatically"
     },
+    "yourPlanWillRenewOn": "תוכנית {plan} שלך תתחדש ב-{date}.",
     "planRenewsOn": "התוכנית שלך מתחדשת ב-{date}.",
     "@planRenewsOn": {
         "description": "Message showing plan renewal date",
@@ -5125,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "resubscribeFirstToChangePlans": "הירשמו מחדש קודם כדי לשנות תוכנית.",
     "resubscribe": "הירשם מחדש",
     "@resubscribe": {
         "description": "Button to resubscribe"
@@ -5967,10 +5971,6 @@
     "content": "תוכן",
     "@content": {
         "description": "Tab label for content"
-    },
-    "noContentToDisplay": "אין תוכן להצגה",
-    "@noContentToDisplay": {
-        "description": "Message when there is no content available"
     },
     "noSummary": "אין סיכום",
     "@noSummary": {
@@ -10593,7 +10593,6 @@
         "description": "Filter option for retained memory history"
     },
     "tapPlusToStartRecording": "הקישו על כפתור ההקלטה כדי להתחיל להקליט",
-    "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
     "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.",
     "home": "בית",
     "failedToUpdateBaselineStatus": "לא ניתן לעדכן את הזיכרון הזה. נסה שוב.",
@@ -11268,6 +11267,17 @@
     "reviewChangesLoadFailed": "לא ניתן היה לטעון את השינויים האחרונים.",
     "reviewNoChangesTitle": "עדיין אין שינויים",
     "reviewNoChangesBody": "כש-Omi מסדר את ההערות שלך, השינויים יופיעו כאן.",
+    "reviewChangesSectionTerms": "שמות ומונחים",
+    "reviewChangesSectionTitles": "כותרות וסיכומים",
+    "reviewChangesSectionOther": "שינויים אחרים",
+    "reviewChangeConversationCount": "{count, plural, =1{שיחה אחת} other{{count} שיחות}}",
+    "reviewChangePlaceCount": "{count, plural, =1{מקום אחד} other{{count} מקומות}}",
+    "reviewChangeShowAll": "הצג את כל {count}",
+    "reviewChangeUndoAll": "בטל הכול",
+    "reviewChangeSeeEvidence": "הצג ראיות",
+    "reviewChangeViewConversation": "הצג שיחה",
+    "reviewChangeViewTask": "הצג משימה",
+    "reviewChangesUndoPartial": "לא ניתן לבטל {failed} מתוך {total}. נסו שוב.",
     "reviewShowMore": "הצג עוד",
     "entityKeptCurrent": "מעודכן על ידי Omi",
     "entityNotRight": "לא נכון?",
@@ -11549,5 +11559,8 @@
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
-    "activityNewItem": "חדש"
+    "activityNewItem": "חדש",
+    "activityNeedsAttention": "דורש תשומת לב",
+    "activityRetryAll": "נסה הכול שוב",
+    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו"
 }

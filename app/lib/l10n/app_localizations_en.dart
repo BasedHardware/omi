@@ -4373,12 +4373,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Your $plan plan ends $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Resubscribe now to keep your plan. No charge until $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Your plan is set to cancel on $date.\nResubscribe now to keep your benefits - no charge until $date.';
   }
 
   @override
   String get annualPlanStartsAutomatically => 'Your annual plan will start automatically when your monthly plan ends.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Your $plan plan will renew on $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4411,6 +4426,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get continueText => 'Continue';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Resubscribe first to change plans.';
 
   @override
   String get resubscribe => 'Resubscribe';
@@ -5022,9 +5040,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get content => 'Content';
-
-  @override
-  String get noContentToDisplay => 'No content to display';
 
   @override
   String get noSummary => 'No summary';
@@ -9798,9 +9813,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
 
   @override
-  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
-
-  @override
   String get speechProfileEnrollmentPrompt =>
       'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
 
@@ -12415,6 +12427,59 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewNoChangesBody => 'When Omi tidies your notes, the changes appear here.';
 
   @override
+  String get reviewChangesSectionTerms => 'Names and terms';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titles and summaries';
+
+  @override
+  String get reviewChangesSectionOther => 'Other changes';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations',
+      one: '1 conversation',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count places',
+      one: '1 place',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Show all $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Undo all';
+
+  @override
+  String get reviewChangeSeeEvidence => 'See evidence';
+
+  @override
+  String get reviewChangeViewConversation => 'View conversation';
+
+  @override
+  String get reviewChangeViewTask => 'View task';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Couldn’t undo $failed of $total. Try again.';
+  }
+
+  @override
   String get reviewShowMore => 'Show More';
 
   @override
@@ -13410,4 +13475,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get activityNewItem => 'New';
+
+  @override
+  String get activityNeedsAttention => 'Needs attention';
+
+  @override
+  String get activityRetryAll => 'Retry all';
+
+  @override
+  String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
 }

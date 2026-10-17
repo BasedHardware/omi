@@ -259,6 +259,11 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
     return actual
 
 
+_BACKFILL_SYNC_HANDLER_RE = re.compile(
+    r'https://backend-sync-backfill-[a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+(?:-[a-z0-9]+)*\.run\.app/v2/sync-jobs/run'
+)
+
+
 def _validate_expected_literal_env(
     service: Mapping[str, Any],
     *,
@@ -270,6 +275,18 @@ def _validate_expected_literal_env(
     for name, expected_value in expected.items():
         actual_value = actual.get(name)
         if actual_value != expected_value:
+            # sync-backfill-lifecycle's ENV_OVERLAY replaces the cloned sync
+            # handler and audience with the backfill worker's own endpoint
+            # (also documented in utils/cloud_tasks.py). Rendered env state
+            # still carries backend-sync's URL. Accept only that named
+            # service's Cloud Run handler overlay, in both validation phases.
+            if (
+                service.get('metadata', {}).get('name') == 'backend-sync-backfill'
+                and name in {'SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'}
+                and actual_value is not None
+                and _BACKFILL_SYNC_HANDLER_RE.fullmatch(actual_value)
+            ):
+                continue
             found = '<missing>' if actual_value is None else actual_value
             raise ValueError(
                 f'{phase} env {name} mismatch before GMP sidecar replace: '

@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 import database.action_items as action_items_db
 import database.candidates as candidates_db
+from database.s5_candidates_cache import load_compatibility_candidates
 import database.staged_tasks as staged_tasks_db
 import database.task_intelligence_control as task_control_db
 from models.candidate import CandidateRecord, CandidateStatus
@@ -149,7 +150,11 @@ def _staged_sort_key(item: dict) -> tuple:
 def _merged_staged_projection(uid: str, *, account_generation: int) -> list[dict]:
     """Pure read projection with canonical precedence and deterministic order."""
 
-    candidates = _all_staged_compatibility_candidates(uid, account_generation=account_generation)
+    candidates = load_compatibility_candidates(
+        uid,
+        account_generation,
+        lambda: _all_staged_compatibility_candidates(uid, account_generation=account_generation),
+    )
     represented_legacy_ids: set[str] = set()
     candidate_items: list[dict] = []
     for candidate in candidates:
