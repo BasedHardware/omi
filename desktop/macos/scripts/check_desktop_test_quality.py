@@ -62,7 +62,8 @@ WALL_CLOCK_WAIT_BASELINE = 16
 # (chatBridgeMode, local base URL/model, cloud-assist mode) that production code
 # reads straight from UserDefaults.standard, so they cannot inject an isolated
 # suite until those readers take a defaults seam.
-SHARED_DEFAULTS_MUTATION_BASELINE = 416
+# +3 (416->419): the PTT-gate and bridgeMode-rollback regression tests, same readers.
+SHARED_DEFAULTS_MUTATION_BASELINE = 419
 
 MIN_REASON_LENGTH = 12
 
