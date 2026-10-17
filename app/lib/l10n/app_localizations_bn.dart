@@ -13120,7 +13120,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paywallOtherPlans => 'সব প্ল্যান দেখুন';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'প্ল্যান দেখুন';
 
   @override
   String get paywallYourPlan => 'আপনার প্ল্যান';
@@ -14127,4 +14127,7 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'আপনার অপেক্ষমাণ রেকর্ডিংগুলো প্রতিলিপি করা হচ্ছে';
 }

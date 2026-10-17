@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/services/capture/live_held_audio_state.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -12,6 +17,32 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 
 import '../support/on_device_fakes.dart';
+
+class _HeldCaptureProvider extends ChangeNotifier implements CaptureProvider {
+  @override
+  final liveHeldAudio = LiveHeldAudioState();
+
+  void receipt(int seconds, int resetAt, {bool paused = true}) {
+    liveHeldAudio.apply(SttCapLiveHeldEvent(
+      sessionId: 'socket-1',
+      heldSeconds: seconds,
+      paused: paused,
+      resetAt: resetAt,
+    ));
+    notifyListeners();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _EmptyHeldUsageProvider extends ChangeNotifier implements UsageProvider {
+  @override
+  UserSubscriptionResponse? get subscription => null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   setUp(() async {
@@ -25,12 +56,14 @@ void main() {
   final resetAt = DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000;
 
   HeldAudioSummary summary({
+    String state = 'paused',
     int seconds = 120,
     bool retainLive = true,
     int count = 0,
     List<HeldAudioRecording>? recordings,
   }) {
     return HeldAudioSummary(
+      state: state,
       seconds: seconds,
       resetAt: resetAt,
       retainLive: retainLive,
@@ -64,6 +97,56 @@ void main() {
     ));
     await tester.pump();
   }
+
+  testWidgets('live receipt appears without subscription summary and updates server counter', (tester) async {
+    final capture = _HeldCaptureProvider();
+    final usage = _EmptyHeldUsageProvider();
+    addTearDown(capture.dispose);
+    addTearDown(usage.dispose);
+    await pump(
+        tester,
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+            ChangeNotifierProvider<UsageProvider>.value(value: usage),
+          ],
+          child: HeldAudioLiveBanner(controller: phone(), gate: true),
+        ));
+    expect(find.byKey(const Key('held_audio_live_banner')), findsNothing);
+    capture.receipt(61, resetAt);
+    await tester.pump();
+    expect(find.text('Cloud transcription paused'), findsOneWidget);
+    expect(find.text('2 min recorded since the limit'), findsOneWidget);
+    expect(find.text('Transcribes after your limit resets on Nov 1, 2026'), findsOneWidget);
+    capture.receipt(181, resetAt);
+    await tester.pump();
+    expect(find.text('4 min recorded since the limit'), findsOneWidget);
+    capture.receipt(181, resetAt, paused: false);
+    await tester.pump();
+    expect(find.byKey(const Key('held_audio_live_banner')), findsNothing);
+    expect(find.byKey(const Key('held_audio_live_placeholder')), findsNothing);
+  });
+
+  testWidgets('paused receipt overrides stale recovering summary and uses event reset date', (tester) async {
+    final capture = _HeldCaptureProvider();
+    addTearDown(capture.dispose);
+    final eventReset = DateTime.utc(2026, 12, 1).millisecondsSinceEpoch ~/ 1000;
+    capture.receipt(61, eventReset);
+    await pump(
+        tester,
+        ChangeNotifierProvider<CaptureProvider>.value(
+          value: capture,
+          child: HeldAudioLiveBanner(
+              controller: phone(), gate: true, summary: summary(state: 'recovering', retainLive: false)),
+        ));
+    expect(find.text('Cloud transcription paused'), findsOneWidget);
+    expect(find.text('Transcribing your waiting recordings'), findsNothing);
+    expect(find.text('Transcribes after your limit resets on Dec 1, 2026'), findsOneWidget);
+    capture.receipt(61, eventReset, paused: false);
+    await tester.pump();
+    expect(find.text('Cloud transcription paused'), findsNothing);
+    expect(find.text('Transcribing your waiting recordings'), findsOneWidget);
+  });
 
   testWidgets('home card lists waiting recordings and both actions', (tester) async {
     var upgrades = 0;
@@ -250,5 +333,19 @@ void main() {
     );
     expect(find.byKey(const Key('held_audio_usage_waiting')), findsNothing);
     expect(find.text('See plans'), findsNothing);
+  });
+  testWidgets('recovering holds remove reset promises on home live and settings', (tester) async {
+    final held = summary(state: 'recovering', retainLive: false);
+    await pump(tester, HeldAudioHomeSection(controller: phone(), gate: true, summary: held));
+    expect(find.text('Transcribing your waiting recordings'), findsWidgets);
+    expect(find.textContaining('resets'), findsNothing);
+    expect(find.byKey(const Key('held_audio_upgrade')), findsNothing);
+    await pump(tester, HeldAudioLiveBanner(controller: phone(), gate: true, summary: held, recordedSeconds: 61));
+    expect(find.text('Transcribing your waiting recordings'), findsOneWidget);
+    expect(find.text('Cloud transcription paused'), findsNothing);
+    expect(find.textContaining('resets'), findsNothing);
+    await pump(tester, HeldAudioUsageSection(controller: phone(), gate: true, summary: held, paid: true));
+    expect(find.text('Transcribing your waiting recordings'), findsOneWidget);
+    expect(find.textContaining('resets'), findsNothing);
   });
 }

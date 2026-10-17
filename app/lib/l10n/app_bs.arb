@@ -11446,7 +11446,7 @@
     "paywallRecommended": "Preporučeno",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Pogledaj sve planove",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Pogledaj planove",
     "paywallYourPlan": "Vaš plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} na čekanju",
     "heldAudioWaitingOn": "Transkribuje se nakon što se limit resetuje {date}",
     "heldAudioCardTitle": "{duration} čeka na prepis",
-    "heldAudioAndMore": "{count, plural, =1{i još 1} other{i još {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{i još 1} other{i još {count}}}",
+    "heldAudioRecovering": "Transkribujemo vaše snimke na čekanju"
 }

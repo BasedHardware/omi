@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Disyorkan",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Lihat semua pelan",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Lihat pelan",
     "paywallYourPlan": "Pelan anda",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} menunggu",
     "heldAudioWaitingOn": "Ditranskripsi selepas had ditetapkan semula pada {date}",
     "heldAudioCardTitle": "{duration} menunggu transkripsi",
-    "heldAudioAndMore": "{count, plural, =1{dan 1 lagi} other{dan {count} lagi}}"
+    "heldAudioAndMore": "{count, plural, =1{dan 1 lagi} other{dan {count} lagi}}",
+    "heldAudioRecovering": "Mentranskripsikan rakaman anda yang menunggu"
 }

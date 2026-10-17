@@ -11446,7 +11446,7 @@
     "paywallRecommended": "Inirerekomenda",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Tingnan ang lahat ng plan",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Tingnan ang mga plano",
     "paywallYourPlan": "Ang plan mo",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} naghihintay",
     "heldAudioWaitingOn": "Ita-transcribe pagkatapos i-reset ang limitasyon sa {date}",
     "heldAudioCardTitle": "{duration} na naghihintay ma-transcribe",
-    "heldAudioAndMore": "{count, plural, =1{at 1 pa} other{at {count} pa}}"
+    "heldAudioAndMore": "{count, plural, =1{at 1 pa} other{at {count} pa}}",
+    "heldAudioRecovering": "Isinasalin sa teksto ang mga naghihintay mong recording"
 }

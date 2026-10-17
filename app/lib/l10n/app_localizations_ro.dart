@@ -13178,7 +13178,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallOtherPlans => 'Vezi toate planurile';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Vezi planurile';
 
   @override
   String get paywallYourPlan => 'Planul tău';
@@ -14193,4 +14193,7 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Se transcriu înregistrările tale în așteptare';
 }

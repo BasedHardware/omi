@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Recomandat",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Vezi toate planurile",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Vezi planurile",
     "paywallYourPlan": "Planul tău",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} în așteptare",
     "heldAudioWaitingOn": "Transcris după resetarea limitei pe {date}",
     "heldAudioCardTitle": "{duration} în așteptarea transcrierii",
-    "heldAudioAndMore": "{count, plural, =1{și încă 1} other{și încă {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{și încă 1} other{și încă {count}}}",
+    "heldAudioRecovering": "Se transcriu înregistrările tale în așteptare"
 }

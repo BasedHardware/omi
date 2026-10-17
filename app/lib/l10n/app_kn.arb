@@ -11446,7 +11446,7 @@
     "paywallRecommended": "ಶಿಫಾರಸು",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "ಎಲ್ಲಾ ಯೋಜನೆಗಳನ್ನು ನೋಡಿ",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "ಯೋಜನೆಗಳನ್ನು ನೋಡಿ",
     "paywallYourPlan": "ನಿಮ್ಮ ಯೋಜನೆ",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} ಕಾಯುತ್ತಿದೆ",
     "heldAudioWaitingOn": "ಮಿತಿ {date} ರಂದು ಮರುಹೊಂದಿಸಿದ ನಂತರ ಲಿಪ್ಯಂತರ",
     "heldAudioCardTitle": "{duration} ಪ್ರತಿಲೇಖನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ",
-    "heldAudioAndMore": "{count, plural, =1{ಮತ್ತು ಇನ್ನೂ 1} other{ಮತ್ತು ಇನ್ನೂ {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{ಮತ್ತು ಇನ್ನೂ 1} other{ಮತ್ತು ಇನ್ನೂ {count}}}",
+    "heldAudioRecovering": "ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ"
 }

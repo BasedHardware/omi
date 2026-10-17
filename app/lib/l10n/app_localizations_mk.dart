@@ -13184,7 +13184,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paywallOtherPlans => 'Погледнете ги сите планови';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Види планови';
 
   @override
   String get paywallYourPlan => 'Вашиот план';
@@ -14196,4 +14196,7 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Се транскрибираат вашите снимки на чекање';
 }

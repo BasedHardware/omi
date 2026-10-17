@@ -13206,7 +13206,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paywallOtherPlans => 'Δείτε όλα τα προγράμματα';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Δείτε τα προγράμματα';
 
   @override
   String get paywallYourPlan => 'Το πρόγραμμά σας';
@@ -14225,4 +14225,7 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Γίνεται απομαγνητοφώνηση των εγγραφών σας σε αναμονή';
 }

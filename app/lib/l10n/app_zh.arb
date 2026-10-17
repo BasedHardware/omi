@@ -4023,7 +4023,7 @@
     "paywallRecommended": "推荐",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "查看所有套餐",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "查看方案",
     "paywallYourPlan": "你的套餐",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} 等待中",
     "heldAudioWaitingOn": "将在用量于 {date} 重置后转写",
     "heldAudioCardTitle": "{duration} 等待转录",
-    "heldAudioAndMore": "{count, plural, =1{另有 1 条} other{另有 {count} 条}}"
+    "heldAudioAndMore": "{count, plural, =1{另有 1 条} other{另有 {count} 条}}",
+    "heldAudioRecovering": "正在转写等待中的录音"
 }

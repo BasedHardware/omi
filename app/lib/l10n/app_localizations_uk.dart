@@ -13153,7 +13153,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get paywallOtherPlans => 'Усі плани';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Переглянути плани';
 
   @override
   String get paywallYourPlan => 'Ваш план';
@@ -14161,4 +14161,7 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Транскрибуємо ваші записи в очікуванні';
 }

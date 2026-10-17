@@ -13133,7 +13133,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get paywallOtherPlans => 'Lihat semua paket';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Lihat paket';
 
   @override
   String get paywallYourPlan => 'Paket Anda';
@@ -14145,4 +14145,7 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Mentranskripsikan rekaman Anda yang menunggu';
 }

@@ -309,64 +309,6 @@ void main() {
       expect(sync.testFrameSynced[0], true);
     });
 
-    test('paused cloud transcription keeps sent frames synced and new frames unsynced', () {
-      final sent = FrameSyncKey([0x01]);
-      final waiting = FrameSyncKey([0x02]);
-      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: sent));
-      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: waiting));
-      sync.markFrameSynced(sent);
-
-      sync.setRetainSuppressedLiveAudio(true);
-
-      expect(sync.testFrames.map((frame) => frame.payload), [
-        [1],
-        [2],
-      ]);
-      expect(sync.testFrameSynced, [true, false]);
-      sync.markFrameSynced(waiting);
-      expect(sync.testFrameSynced, [true, false]);
-      sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([0x03])));
-      expect(sync.testFrameSynced, [true, false, false]);
-
-      sync.setRetainSuppressedLiveAudio(false);
-      sync.markFrameSynced(waiting);
-      expect(sync.testFrameSynced[1], true);
-    });
-
-    test('cap notice restores frames from the suppressed offset and counts only those', () async {
-      await sync.onAudioCodecChanged(BleAudioCodec.pcm16);
-      for (var i = 0; i < 150; i++) {
-        final key = FrameSyncKey([i & 0xFF, i >> 8]);
-        sync.onFrameCaptured(WalFrame(payload: List<int>.filled(100, i & 0xFF), syncKey: key));
-        sync.markFrameSynced(key);
-      }
-      sync.retainSuppressedFromPcmOffset(5000);
-      expect(sync.testFrameSynced.take(50), everyElement(true));
-      expect(sync.testFrameSynced.skip(50), everyElement(false));
-      expect(sync.retainedLiveSeconds, 1);
-      sync.markFrameSynced(FrameSyncKey([50 & 0xFF, 50 >> 8]));
-      expect(sync.testFrameSynced[50], false);
-    });
-
-    test('cap notice rewinds a synced WAL from the suppressed offset', () async {
-      await sync.onAudioCodecChanged(BleAudioCodec.pcm16);
-      final wal = Wal(
-        codec: BleAudioCodec.pcm16,
-        timerStart: 1,
-        seconds: 2,
-        data: List<List<int>>.generate(200, (i) => List<int>.filled(100, i & 0xFF)),
-        totalFrames: 200,
-        syncedFrameOffset: 200,
-        status: WalStatus.synced,
-        sessionPcmStart: 0,
-      );
-      sync.stageWalForTesting(wal);
-      sync.retainSuppressedFromPcmOffset(10000);
-      expect(wal.syncedFrameOffset, 100);
-      expect(wal.status, WalStatus.miss);
-      expect(sync.retainedLiveSeconds, 1);
-    });
-
     test('marks only the last matching frame when duplicate keys exist', () {
       final key = FrameSyncKey([0x10]);
 

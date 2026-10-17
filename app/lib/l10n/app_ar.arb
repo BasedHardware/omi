@@ -4023,7 +4023,7 @@
     "paywallRecommended": "موصى به",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "عرض كل الخطط",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "عرض الخطط",
     "paywallYourPlan": "خطتك",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} في الانتظار",
     "heldAudioWaitingOn": "تُفرغ بعد إعادة تعيين حدك في {date}",
     "heldAudioCardTitle": "{duration} بانتظار النسخ",
-    "heldAudioAndMore": "{count, plural, =1{و1 أخرى} other{و{count} أخرى}}"
+    "heldAudioAndMore": "{count, plural, =1{و1 أخرى} other{و{count} أخرى}}",
+    "heldAudioRecovering": "جارٍ تحويل تسجيلاتك المنتظرة إلى نص"
 }

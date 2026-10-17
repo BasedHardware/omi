@@ -13104,7 +13104,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paywallOtherPlans => 'सभी योजनाएं देखें';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'प्लान देखें';
 
   @override
   String get paywallYourPlan => 'आपकी योजना';
@@ -14115,4 +14115,7 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'आपकी प्रतीक्षारत रिकॉर्डिंग का लिप्यंतरण हो रहा है';
 }

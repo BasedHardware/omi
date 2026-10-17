@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Đề xuất",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Xem tất cả các gói",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Xem các gói",
     "paywallYourPlan": "Gói của bạn",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} đang chờ",
     "heldAudioWaitingOn": "Chuyển thành chữ sau khi giới hạn đặt lại vào {date}",
     "heldAudioCardTitle": "{duration} đang chờ phiên âm",
-    "heldAudioAndMore": "{count, plural, =1{và 1 bản nữa} other{và {count} bản nữa}}"
+    "heldAudioAndMore": "{count, plural, =1{và 1 bản nữa} other{và {count} bản nữa}}",
+    "heldAudioRecovering": "Đang chuyển các bản ghi đang chờ của bạn thành văn bản"
 }

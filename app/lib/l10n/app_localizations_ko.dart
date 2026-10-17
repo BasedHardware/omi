@@ -12942,7 +12942,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallOtherPlans => '모든 플랜 보기';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => '요금제 보기';
 
   @override
   String get paywallYourPlan => '내 플랜';
@@ -13937,4 +13937,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => '대기 중인 녹음을 텍스트로 변환하고 있어요';
 }

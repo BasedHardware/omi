@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Recomanat",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Veure tots els plans",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Veure plans",
     "paywallYourPlan": "El teu pla",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} en espera",
     "heldAudioWaitingOn": "Es transcriu després que el límit es restableixi el {date}",
     "heldAudioCardTitle": "{duration} pendents de transcriure",
-    "heldAudioAndMore": "{count, plural, =1{i 1 més} other{i {count} més}}"
+    "heldAudioAndMore": "{count, plural, =1{i 1 més} other{i {count} més}}",
+    "heldAudioRecovering": "S’estan transcrivint les gravacions pendents"
 }

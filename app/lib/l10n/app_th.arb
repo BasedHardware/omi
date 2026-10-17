@@ -4023,7 +4023,7 @@
     "paywallRecommended": "แนะนำ",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "ดูแผนทั้งหมด",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "ดูแผน",
     "paywallYourPlan": "แผนของคุณ",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} กำลังรอ",
     "heldAudioWaitingOn": "ถอดความหลังจากขีดจำกัดรีเซ็ตในวันที่ {date}",
     "heldAudioCardTitle": "{duration} รอการถอดเสียง",
-    "heldAudioAndMore": "{count, plural, =1{และอีก 1 รายการ} other{และอีก {count} รายการ}}"
+    "heldAudioAndMore": "{count, plural, =1{และอีก 1 รายการ} other{และอีก {count} รายการ}}",
+    "heldAudioRecovering": "กำลังถอดเสียงการบันทึกที่รออยู่ของคุณ"
 }

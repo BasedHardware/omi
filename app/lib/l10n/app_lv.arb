@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Ieteicams",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Skatīt visus plānus",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Skatīt plānus",
     "paywallYourPlan": "Jūsu plāns",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} gaida",
     "heldAudioWaitingOn": "Transkribē pēc limita atiestatīšanas {date}",
     "heldAudioCardTitle": "{duration} gaida transkribēšanu",
-    "heldAudioAndMore": "{count, plural, =1{un vēl 1} other{un vēl {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{un vēl 1} other{un vēl {count}}}",
+    "heldAudioRecovering": "Tiek transkribēti jūsu gaidošie ieraksti"
 }

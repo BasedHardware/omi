@@ -13137,7 +13137,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallOtherPlans => 'تمام پلان دیکھیں';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'پلان دیکھیں';
 
   @override
   String get paywallYourPlan => 'آپ کا پلان';
@@ -14146,4 +14146,7 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'آپ کی منتظر ریکارڈنگز کو متن میں بدلا جا رہا ہے';
 }

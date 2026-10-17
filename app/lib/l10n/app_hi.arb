@@ -4023,7 +4023,7 @@
     "paywallRecommended": "सुझाया गया",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "सभी योजनाएं देखें",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "प्लान देखें",
     "paywallYourPlan": "आपकी योजना",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} प्रतीक्षा में",
     "heldAudioWaitingOn": "सीमा {date} को रीसेट होने के बाद लिखा जाएगा",
     "heldAudioCardTitle": "{duration} ट्रांसक्रिप्शन के इंतज़ार में",
-    "heldAudioAndMore": "{count, plural, =1{और 1 अन्य} other{और {count} अन्य}}"
+    "heldAudioAndMore": "{count, plural, =1{और 1 अन्य} other{और {count} अन्य}}",
+    "heldAudioRecovering": "आपकी प्रतीक्षारत रिकॉर्डिंग का लिप्यंतरण हो रहा है"
 }

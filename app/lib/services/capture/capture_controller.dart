@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/live_held_audio_state.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
@@ -707,6 +708,8 @@ class CaptureController extends ChangeNotifier
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
+  final liveHeldAudio = LiveHeldAudioState();
+
   /// Unix timestamp (seconds) when the current capture session started.
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
@@ -1239,6 +1242,7 @@ class CaptureController extends ChangeNotifier
     _manualSpeakerDefaults.clear();
     _conversation = null;
     taggingSegmentIds = [];
+    liveHeldAudio.reset();
     _sessionStartSeconds = 0;
     _endOfflineSession();
     notifyListeners();
@@ -1707,6 +1711,7 @@ class CaptureController extends ChangeNotifier
       _transcriptServiceReady = true;
       _beginWedgeSession(socket);
       if (_sessionStartSeconds == 0) {
+        liveHeldAudio.reset();
         _sessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
       }
     }
@@ -3231,6 +3236,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _socketClosedBody(int? closeCode) async {
     _socketCloseQueued = false;
+    liveHeldAudio.reset();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     final wedgeSocket = _wedgeSession?.socket;
@@ -3415,6 +3421,7 @@ class CaptureController extends ChangeNotifier
       notifyListeners(); // WAL/microphone and the healthy transcript-ingest socket continue.
       return;
     }
+    liveHeldAudio.reset();
     _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
@@ -3431,6 +3438,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<Object?> _socketConnectedBody() async {
+    liveHeldAudio.reset();
     _recordingTelemetry.observeConnected();
     _transcriptServiceReady = true;
     final socket = _socket;
@@ -3727,9 +3735,7 @@ class CaptureController extends ChangeNotifier
     }
 
     if (event is SttCapLiveHeldEvent) {
-      final phone = _wal.getSyncs().phone;
-      if (phone is LocalWalSyncImpl) phone.retainSuppressedFromPcmOffset(event.pcmByteOffset);
-      notifyListeners();
+      if (liveHeldAudio.apply(event)) notifyListeners();
       return;
     }
 

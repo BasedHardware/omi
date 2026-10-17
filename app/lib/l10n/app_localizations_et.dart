@@ -13117,7 +13117,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallOtherPlans => 'Vaata kõiki plaane';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Vaata pakette';
 
   @override
   String get paywallYourPlan => 'Teie plaan';
@@ -14125,4 +14125,7 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Sinu ootel salvestiste transkribeerimine';
 }

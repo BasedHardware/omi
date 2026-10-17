@@ -4023,7 +4023,7 @@
     "paywallRecommended": "おすすめ",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "すべてのプランを見る",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "プランを見る",
     "paywallYourPlan": "現在のプラン",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration}待機中",
     "heldAudioWaitingOn": "上限が{date}にリセットされた後に文字起こし",
     "heldAudioCardTitle": "{duration}が文字起こし待ち",
-    "heldAudioAndMore": "{count, plural, =1{ほか1件} other{ほか{count}件}}"
+    "heldAudioAndMore": "{count, plural, =1{ほか1件} other{ほか{count}件}}",
+    "heldAudioRecovering": "待機中の録音を文字起こししています"
 }

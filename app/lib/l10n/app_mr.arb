@@ -11446,7 +11446,7 @@
     "paywallRecommended": "शिफारस केलेले",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "सर्व योजना पहा",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "प्लॅन पहा",
     "paywallYourPlan": "तुमची योजना",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} प्रतीक्षेत",
     "heldAudioWaitingOn": "मर्यादा {date} रोजी रीसेट झाल्यानंतर लिहिले जाईल",
     "heldAudioCardTitle": "{duration} ट्रान्सक्रिप्शनच्या प्रतीक्षेत",
-    "heldAudioAndMore": "{count, plural, =1{आणि आणखी 1} other{आणि आणखी {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{आणि आणखी 1} other{आणि आणखी {count}}}",
+    "heldAudioRecovering": "तुमच्या प्रतीक्षेत असलेल्या रेकॉर्डिंगचे लिप्यंतरण होत आहे"
 }

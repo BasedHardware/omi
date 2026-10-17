@@ -13162,7 +13162,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallOtherPlans => 'ಎಲ್ಲಾ ಯೋಜನೆಗಳನ್ನು ನೋಡಿ';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'ಯೋಜನೆಗಳನ್ನು ನೋಡಿ';
 
   @override
   String get paywallYourPlan => 'ನಿಮ್ಮ ಯೋಜನೆ';
@@ -14178,4 +14178,7 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'ನಿಮ್ಮ ಕಾಯುತ್ತಿರುವ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ';
 }

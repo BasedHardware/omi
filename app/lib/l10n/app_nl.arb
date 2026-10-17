@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Aanbevolen",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Alle abonnementen",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Bekijk abonnementen",
     "paywallYourPlan": "Je abonnement",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} in de wacht",
     "heldAudioWaitingOn": "Getranscribeerd nadat je limiet op {date} wordt gereset",
     "heldAudioCardTitle": "{duration} wacht op transcriptie",
-    "heldAudioAndMore": "{count, plural, =1{en nog 1} other{en nog {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{en nog 1} other{en nog {count}}}",
+    "heldAudioRecovering": "Je wachtende opnamen worden getranscribeerd"
 }

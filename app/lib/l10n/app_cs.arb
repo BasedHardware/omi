@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Doporučeno",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Zobrazit všechny plány",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Zobrazit tarify",
     "paywallYourPlan": "Váš plán",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} čeká",
     "heldAudioWaitingOn": "Přepsáno po obnovení limitu {date}",
     "heldAudioCardTitle": "{duration} čeká na přepis",
-    "heldAudioAndMore": "{count, plural, =1{a 1 další} other{a {count} dalších}}"
+    "heldAudioAndMore": "{count, plural, =1{a 1 další} other{a {count} dalších}}",
+    "heldAudioRecovering": "Přepisujeme vaše čekající nahrávky"
 }

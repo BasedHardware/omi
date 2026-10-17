@@ -11446,7 +11446,7 @@
     "paywallRecommended": "پیشنهادی",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "مشاهده همه طرح‌ها",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "مشاهده طرح‌ها",
     "paywallYourPlan": "طرح شما",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} در انتظار",
     "heldAudioWaitingOn": "پس از بازنشانی سقف در {date} پیاده می شود",
     "heldAudioCardTitle": "{duration} در انتظار رونویسی",
-    "heldAudioAndMore": "{count, plural, =1{و 1 مورد دیگر} other{و {count} مورد دیگر}}"
+    "heldAudioAndMore": "{count, plural, =1{و 1 مورد دیگر} other{و {count} مورد دیگر}}",
+    "heldAudioRecovering": "در حال رونویسی ضبط‌های منتظر شما"
 }

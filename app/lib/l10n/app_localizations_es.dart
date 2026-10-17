@@ -13162,7 +13162,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get paywallOtherPlans => 'Ver todos los planes';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Ver planes';
 
   @override
   String get paywallYourPlan => 'Tu plan';
@@ -14176,4 +14176,7 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Transcribiendo tus grabaciones pendientes';
 }

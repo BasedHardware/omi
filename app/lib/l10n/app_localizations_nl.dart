@@ -13159,7 +13159,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get paywallOtherPlans => 'Alle abonnementen';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Bekijk abonnementen';
 
   @override
   String get paywallYourPlan => 'Je abonnement';
@@ -14171,4 +14171,7 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Je wachtende opnamen worden getranscribeerd';
 }

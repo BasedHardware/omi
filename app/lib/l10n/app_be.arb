@@ -11446,7 +11446,7 @@
     "paywallRecommended": "Рэкамендаваны",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Усе планы",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Паглядзець планы",
     "paywallYourPlan": "Ваш план",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} у чаканні",
     "heldAudioWaitingOn": "Расшыфроўваецца пасля скіду ліміту {date}",
     "heldAudioCardTitle": "{duration} чакае транскрыпцыі",
-    "heldAudioAndMore": "{count, plural, =1{і яшчэ 1} other{і яшчэ {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{і яшчэ 1} other{і яшчэ {count}}}",
+    "heldAudioRecovering": "Транскрыбуем вашы запісы ў чаканні"
 }

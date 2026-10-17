@@ -12918,7 +12918,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallOtherPlans => '查看所有套餐';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => '查看方案';
 
   @override
   String get paywallYourPlan => '你的套餐';
@@ -13911,4 +13911,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => '正在转写等待中的录音';
 }

@@ -342,6 +342,8 @@ class HeldAudioRecording {
 }
 
 class HeldAudioSummary {
+  final String state;
+  bool get isRecovering => state == 'recovering';
   final int seconds;
   final int resetAt;
   final bool retainLive;
@@ -349,6 +351,7 @@ class HeldAudioSummary {
   final List<HeldAudioRecording> recordings;
 
   const HeldAudioSummary({
+    this.state = 'paused',
     required this.seconds,
     required this.resetAt,
     required this.retainLive,
@@ -358,6 +361,7 @@ class HeldAudioSummary {
 
   factory HeldAudioSummary.fromGenerated(wire.GeneratedHeldAudioSummary generated) {
     return HeldAudioSummary(
+      state: generated.state,
       seconds: generated.seconds,
       resetAt: generated.resetAt,
       retainLive: generated.retainLive,
@@ -456,6 +460,7 @@ class UserSubscriptionResponse {
       heldAudio: heldAudio == null
           ? null
           : wire.GeneratedHeldAudioSummary(
+              state: heldAudio!.state,
               recordings: heldAudio!.recordings
                   .map((row) => wire.GeneratedHeldAudioRecording(
                         id: row.id,

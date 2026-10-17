@@ -13136,7 +13136,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paywallOtherPlans => 'Tüm planları görün';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Planları gör';
 
   @override
   String get paywallYourPlan => 'Planınız';
@@ -14144,4 +14144,7 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Bekleyen kayıtlarınız yazıya dökülüyor';
 }

@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Soovitatud",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Vaata kõiki plaane",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Vaata pakette",
     "paywallYourPlan": "Teie plaan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} ootel",
     "heldAudioWaitingOn": "Transkribeeritakse pärast limiidi lähtestamist {date}",
     "heldAudioCardTitle": "{duration} ootab transkribeerimist",
-    "heldAudioAndMore": "{count, plural, =1{ja veel 1} other{ja veel {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{ja veel 1} other{ja veel {count}}}",
+    "heldAudioRecovering": "Sinu ootel salvestiste transkribeerimine"
 }

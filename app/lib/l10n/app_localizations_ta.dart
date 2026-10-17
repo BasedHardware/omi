@@ -13213,7 +13213,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paywallOtherPlans => 'அனைத்து திட்டங்களையும் காண்க';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'திட்டங்களைப் பார்';
 
   @override
   String get paywallYourPlan => 'உங்கள் திட்டம்';
@@ -14229,4 +14229,7 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'காத்திருக்கும் உங்கள் பதிவுகள் எழுத்தாக்கப்படுகின்றன';
 }

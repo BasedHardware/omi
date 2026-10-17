@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Suositeltu",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Näytä kaikki paketit",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Katso tilaukset",
     "paywallYourPlan": "Pakettisi",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} odottaa",
     "heldAudioWaitingOn": "Litteroidaan, kun rajasi nollautuu {date}",
     "heldAudioCardTitle": "{duration} odottaa litterointia",
-    "heldAudioAndMore": "{count, plural, =1{ja 1 muu} other{ja {count} muuta}}"
+    "heldAudioAndMore": "{count, plural, =1{ja 1 muu} other{ja {count} muuta}}",
+    "heldAudioRecovering": "Odotuksella olevia tallenteitasi litteroidaan"
 }

@@ -13121,7 +13121,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOtherPlans => 'Xem tất cả các gói';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Xem các gói';
 
   @override
   String get paywallYourPlan => 'Gói của bạn';
@@ -14132,4 +14132,7 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Đang chuyển các bản ghi đang chờ của bạn thành văn bản';
 }

@@ -13175,7 +13175,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallOtherPlans => 'అన్ని ప్లాన్‌లు చూడండి';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'ప్లాన్‌లను చూడండి';
 
   @override
   String get paywallYourPlan => 'మీ ప్లాన్';
@@ -14190,4 +14190,7 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'వేచి ఉన్న మీ రికార్డింగ్‌లు లిప్యంతరీకరించబడుతున్నాయి';
 }

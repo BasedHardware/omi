@@ -17,10 +17,6 @@ class WalFrame {
   final int? liveOrdinal;
   final int? liveRingId;
 
-  /// PCM16 byte offset of this frame in the live session. The server's cap
-  /// notice uses the same unit for audio it already forwarded.
-  final int sessionPcmStart;
-
   WalFrame({
     required this.payload,
     required this.syncKey,
@@ -32,7 +28,6 @@ class WalFrame {
     this.liveFragmentIndex,
     this.liveOrdinal,
     this.liveRingId,
-    this.sessionPcmStart = 0,
   });
 }
 

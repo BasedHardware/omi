@@ -11446,7 +11446,7 @@
     "paywallRecommended": "பரிந்துரைக்கப்பட்டது",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "அனைத்து திட்டங்களையும் காண்க",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "திட்டங்களைப் பார்",
     "paywallYourPlan": "உங்கள் திட்டம்",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} காத்திருக்கிறது",
     "heldAudioWaitingOn": "வரம்பு {date} அன்று மீட்டமைக்கப்பட்ட பிறகு எழுதப்படும்",
     "heldAudioCardTitle": "{duration} உரையாக்கக் காத்திருக்கிறது",
-    "heldAudioAndMore": "{count, plural, =1{மேலும் 1} other{மேலும் {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{மேலும் 1} other{மேலும் {count}}}",
+    "heldAudioRecovering": "காத்திருக்கும் உங்கள் பதிவுகள் எழுத்தாக்கப்படுகின்றன"
 }

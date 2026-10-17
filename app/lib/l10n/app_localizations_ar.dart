@@ -13050,7 +13050,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paywallOtherPlans => 'عرض كل الخطط';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'عرض الخطط';
 
   @override
   String get paywallYourPlan => 'خطتك';
@@ -14054,4 +14054,7 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'جارٍ تحويل تسجيلاتك المنتظرة إلى نص';
 }

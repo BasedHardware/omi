@@ -25106,6 +25106,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{and 1 more} other{and {count} more}}'**
   String heldAudioAndMore(int count);
+
+  /// No description provided for @heldAudioRecovering.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing your waiting recordings'**
+  String get heldAudioRecovering;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4058,7 +4058,7 @@
     "paywallRecommended": "Önerilen",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Tüm planları görün",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Planları gör",
     "paywallYourPlan": "Planınız",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4354,5 +4354,6 @@
     "heldAudioWaiting": "{duration} bekliyor",
     "heldAudioWaitingOn": "Limit {date} tarihinde sıfırlandıktan sonra yazıya dökülür",
     "heldAudioCardTitle": "{duration} yazıya dökülmeyi bekliyor",
-    "heldAudioAndMore": "{count, plural, =1{ve 1 tane daha} other{ve {count} tane daha}}"
+    "heldAudioAndMore": "{count, plural, =1{ve 1 tane daha} other{ve {count} tane daha}}",
+    "heldAudioRecovering": "Bekleyen kayıtlarınız yazıya dökülüyor"
 }

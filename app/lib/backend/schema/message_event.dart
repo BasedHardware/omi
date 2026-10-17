@@ -285,14 +285,23 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
   }
 }
 
+/// UI acknowledgement of audio durably saved by this listen connection.
 class SttCapLiveHeldEvent extends MessageEvent {
-  final int pcmByteOffset;
+  final String sessionId;
+  final int heldSeconds;
+  final int resetAt;
+  final bool paused;
 
-  SttCapLiveHeldEvent({required this.pcmByteOffset}) : super(eventType: 'stt_cap_live_held');
+  SttCapLiveHeldEvent({required this.sessionId, required this.heldSeconds, required this.paused, this.resetAt = 0})
+      : super(eventType: 'stt_cap_live_held');
 
   factory SttCapLiveHeldEvent.fromJson(Map<String, dynamic> json) {
-    final offset = json['pcm_byte_offset'];
-    return SttCapLiveHeldEvent(pcmByteOffset: offset is int ? offset : 0);
+    return SttCapLiveHeldEvent(
+      sessionId: json['session_id'] as String,
+      heldSeconds: json['held_seconds'] as int,
+      resetAt: json['reset_at'] as int? ?? 0,
+      paused: json['paused'] as bool,
+    );
   }
 }
 

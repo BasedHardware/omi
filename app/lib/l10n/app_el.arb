@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Προτεινόμενο",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Δείτε όλα τα προγράμματα",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Δείτε τα προγράμματα",
     "paywallYourPlan": "Το πρόγραμμά σας",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} σε αναμονή",
     "heldAudioWaitingOn": "Απομαγνητοφωνείται αφού το όριο μηδενιστεί στις {date}",
     "heldAudioCardTitle": "{duration} σε αναμονή για μεταγραφή",
-    "heldAudioAndMore": "{count, plural, =1{και 1 ακόμη} other{και {count} ακόμη}}"
+    "heldAudioAndMore": "{count, plural, =1{και 1 ακόμη} other{και {count} ακόμη}}",
+    "heldAudioRecovering": "Γίνεται απομαγνητοφώνηση των εγγραφών σας σε αναμονή"
 }

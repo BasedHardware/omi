@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Empfohlen",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Alle Pläne anzeigen",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Tarife ansehen",
     "paywallYourPlan": "Ihr Plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} warten",
     "heldAudioWaitingOn": "Wird transkribiert, nachdem Ihr Limit am {date} zurückgesetzt wird",
     "heldAudioCardTitle": "{duration} warten auf Transkription",
-    "heldAudioAndMore": "{count, plural, =1{und 1 weitere} other{und {count} weitere}}"
+    "heldAudioAndMore": "{count, plural, =1{und 1 weitere} other{und {count} weitere}}",
+    "heldAudioRecovering": "Deine wartenden Aufnahmen werden transkribiert"
 }

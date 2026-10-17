@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Рекомендовано",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Усі плани",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Переглянути плани",
     "paywallYourPlan": "Ваш план",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} в очікуванні",
     "heldAudioWaitingOn": "Розшифровується після скидання ліміту {date}",
     "heldAudioCardTitle": "{duration} очікує на транскрипцію",
-    "heldAudioAndMore": "{count, plural, =1{і ще 1} other{і ще {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{і ще 1} other{і ще {count}}}",
+    "heldAudioRecovering": "Транскрибуємо ваші записи в очікуванні"
 }

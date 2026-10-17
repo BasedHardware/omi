@@ -13147,7 +13147,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallOtherPlans => 'Žiūrėti visus planus';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Peržiūrėti planus';
 
   @override
   String get paywallYourPlan => 'Jūsų planas';
@@ -14156,4 +14156,7 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Transkribuojami jūsų laukiantys įrašai';
 }

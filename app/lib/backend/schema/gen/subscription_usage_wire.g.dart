@@ -289,6 +289,7 @@ class GeneratedHeldAudioSummary {
   final int resetAt;
   final bool retainLive;
   final int seconds;
+  final String state;
 
   const GeneratedHeldAudioSummary({
     this.count = 0,
@@ -296,6 +297,7 @@ class GeneratedHeldAudioSummary {
     required this.resetAt,
     required this.retainLive,
     required this.seconds,
+    this.state = "paused",
   });
 
   factory GeneratedHeldAudioSummary.fromJson(Map<String, dynamic> json) {
@@ -305,6 +307,7 @@ class GeneratedHeldAudioSummary {
       resetAt: _required(_readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt, requiredField: true, nullable: false), "reset_at"),
       retainLive: _required(_readFieldValue<bool>(_readField(json, const ["retain_live"]), "retain_live", _readBool, requiredField: true, nullable: false), "retain_live"),
       seconds: _required(_readFieldValue<int>(_readField(json, const ["seconds"]), "seconds", _readInt, requiredField: true, nullable: false), "seconds"),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: false, nullable: false, defaultValue: "paused"), "state"),
     );
   }
 
@@ -315,6 +318,7 @@ class GeneratedHeldAudioSummary {
       'reset_at': resetAt,
       'retain_live': retainLive,
       'seconds': seconds,
+      'state': state,
     };
   }
 }

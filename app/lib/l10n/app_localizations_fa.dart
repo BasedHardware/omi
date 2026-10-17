@@ -13118,7 +13118,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get paywallOtherPlans => 'مشاهده همه طرح‌ها';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'مشاهده طرح‌ها';
 
   @override
   String get paywallYourPlan => 'طرح شما';
@@ -14126,4 +14126,7 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'در حال رونویسی ضبط‌های منتظر شما';
 }

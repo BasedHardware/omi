@@ -4058,7 +4058,7 @@
     "paywallRecommended": "Direkomendasikan",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Lihat semua paket",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Lihat paket",
     "paywallYourPlan": "Paket Anda",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4354,5 +4354,6 @@
     "heldAudioWaiting": "{duration} menunggu",
     "heldAudioWaitingOn": "Ditranskripsi setelah batas direset pada {date}",
     "heldAudioCardTitle": "{duration} menunggu ditranskripsi",
-    "heldAudioAndMore": "{count, plural, =1{dan 1 lainnya} other{dan {count} lainnya}}"
+    "heldAudioAndMore": "{count, plural, =1{dan 1 lainnya} other{dan {count} lainnya}}",
+    "heldAudioRecovering": "Mentranskripsikan rekaman Anda yang menunggu"
 }

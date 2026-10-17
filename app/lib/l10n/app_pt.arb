@@ -4058,7 +4058,7 @@
     "paywallRecommended": "Recomendado",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Ver todos os planos",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Ver planos",
     "paywallYourPlan": "Seu plano",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4354,5 +4354,6 @@
     "heldAudioWaiting": "{duration} aguardando",
     "heldAudioWaitingOn": "Transcrito depois que seu limite for redefinido em {date}",
     "heldAudioCardTitle": "{duration} aguardando transcrição",
-    "heldAudioAndMore": "{count, plural, =1{e mais 1} other{e mais {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{e mais 1} other{e mais {count}}}",
+    "heldAudioRecovering": "Transcrevendo suas gravações pendentes"
 }

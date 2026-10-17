@@ -4058,7 +4058,7 @@
     "paywallRecommended": "Рекомендуем",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Все тарифы",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Посмотреть тарифы",
     "paywallYourPlan": "Ваш тариф",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4354,5 +4354,6 @@
     "heldAudioWaiting": "{duration} в ожидании",
     "heldAudioWaitingOn": "Расшифровывается после сброса лимита {date}",
     "heldAudioCardTitle": "Ожидает расшифровки: {duration}",
-    "heldAudioAndMore": "{count, plural, =1{и ещё 1} other{и ещё {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{и ещё 1} other{и ещё {count}}}",
+    "heldAudioRecovering": "Расшифровываем ваши ожидающие записи"
 }

@@ -439,7 +439,8 @@ void main() {
     expect(find.text('Remove Speech Model'), findsNothing);
   });
 
-  HeldAudioSummary heldSummary({bool retainLive = true}) => HeldAudioSummary(
+  HeldAudioSummary heldSummary({bool retainLive = true, String state = 'paused'}) => HeldAudioSummary(
+        state: state,
         seconds: 150,
         count: 22,
         resetAt: DateTime.utc(2026, 11, 1).millisecondsSinceEpoch ~/ 1000,
@@ -545,6 +546,34 @@ void main() {
           ),
         );
       });
+    }
+  }
+
+  for (final language in const ['en', 'es', 'ja']) {
+    for (final light in const [false, true]) {
+      for (final surface in const ['a', 'b', 'c']) {
+        testWidgets('held audio recovering $surface $language $light', (tester) async {
+          final value = controller(settings: const OnDeviceSettings(enabled: false));
+          final held = heldSummary(retainLive: false, state: 'recovering');
+          final Widget content;
+          if (surface == 'a') {
+            content = HeldAudioHomeSection(controller: value, gate: true, summary: held);
+          } else if (surface == 'b') {
+            content = HeldAudioLiveBanner(controller: value, gate: true, summary: held, recordedSeconds: 185);
+          } else {
+            content = HeldAudioUsageSection(controller: value, gate: true, summary: held, paid: true);
+          }
+          await shoot(
+            tester,
+            'held-audio-$surface-recovering-$language-${light ? 'light' : 'dark'}.png',
+            light: light,
+            locale: Locale(language),
+            fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
+            home: Scaffold(body: ListView(children: [content])),
+          );
+          expect(find.textContaining('resets'), findsNothing);
+        });
+      }
     }
   }
 

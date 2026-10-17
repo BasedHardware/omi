@@ -4023,7 +4023,7 @@
     "paywallRecommended": "추천",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "모든 플랜 보기",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "요금제 보기",
     "paywallYourPlan": "내 플랜",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} 대기 중",
     "heldAudioWaitingOn": "한도가 {date}에 초기화된 뒤 받아쓰기",
     "heldAudioCardTitle": "{duration} 분량이 변환 대기 중",
-    "heldAudioAndMore": "{count, plural, =1{외 1개} other{외 {count}개}}"
+    "heldAudioAndMore": "{count, plural, =1{외 1개} other{외 {count}개}}",
+    "heldAudioRecovering": "대기 중인 녹음을 텍스트로 변환하고 있어요"
 }

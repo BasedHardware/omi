@@ -11446,7 +11446,7 @@
     "paywallRecommended": "מומלץ",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "הצג את כל התוכניות",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "הצגת תוכניות",
     "paywallYourPlan": "התוכנית שלך",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} בהמתנה",
     "heldAudioWaitingOn": "מתומלל אחרי שהמכסה תתאפס ב-{date}",
     "heldAudioCardTitle": "{duration} של הקלטות ממתינות לתמלול",
-    "heldAudioAndMore": "{count, plural, =1{ועוד 1} other{ועוד {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{ועוד 1} other{ועוד {count}}}",
+    "heldAudioRecovering": "מתמללים את ההקלטות הממתינות שלך"
 }

@@ -4065,7 +4065,7 @@
     "paywallRecommended": "Anbefalet",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Se alle planer",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Se abonnementer",
     "paywallYourPlan": "Din plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4361,5 +4361,6 @@
     "heldAudioWaiting": "{duration} venter",
     "heldAudioWaitingOn": "Transskriberes, efter din grænse nulstilles {date}",
     "heldAudioCardTitle": "{duration} venter på transskription",
-    "heldAudioAndMore": "{count, plural, =1{og 1 mere} other{og {count} mere}}"
+    "heldAudioAndMore": "{count, plural, =1{og 1 mere} other{og {count} mere}}",
+    "heldAudioRecovering": "Transskriberer dine ventende optagelser"
 }

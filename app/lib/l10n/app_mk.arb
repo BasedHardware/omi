@@ -11446,7 +11446,7 @@
     "paywallRecommended": "Препорачано",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Погледнете ги сите планови",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Види планови",
     "paywallYourPlan": "Вашиот план",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} на чекање",
     "heldAudioWaitingOn": "Се транскрибира откако границата ќе се ресетира на {date}",
     "heldAudioCardTitle": "{duration} чека транскрипција",
-    "heldAudioAndMore": "{count, plural, =1{и уште 1} other{и уште {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{и уште 1} other{и уште {count}}}",
+    "heldAudioRecovering": "Се транскрибираат вашите снимки на чекање"
 }

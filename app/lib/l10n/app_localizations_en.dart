@@ -14117,4 +14117,7 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Transcribing your waiting recordings';
 }

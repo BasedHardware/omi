@@ -13157,7 +13157,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get paywallOtherPlans => 'Pogledajte sve planove';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Pogledaj planove';
 
   @override
   String get paywallYourPlan => 'Vaš plan';
@@ -14168,4 +14168,7 @@ class AppLocalizationsHr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Transkribiramo vaše snimke na čekanju';
 }

@@ -12937,7 +12937,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallOtherPlans => 'すべてのプランを見る';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'プランを見る';
 
   @override
   String get paywallYourPlan => '現在のプラン';
@@ -13931,4 +13931,7 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => '待機中の録音を文字起こししています';
 }

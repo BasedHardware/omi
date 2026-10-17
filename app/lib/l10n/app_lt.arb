@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Rekomenduojama",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Žiūrėti visus planus",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Peržiūrėti planus",
     "paywallYourPlan": "Jūsų planas",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} laukia",
     "heldAudioWaitingOn": "Transkribuojama po limito atstatymo {date}",
     "heldAudioCardTitle": "{duration} laukia transkripcijos",
-    "heldAudioAndMore": "{count, plural, =1{ir dar 1} other{ir dar {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{ir dar 1} other{ir dar {count}}}",
+    "heldAudioRecovering": "Transkribuojami jūsų laukiantys įrašai"
 }

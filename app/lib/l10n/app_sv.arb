@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Rekommenderas",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Visa alla planer",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Se abonnemang",
     "paywallYourPlan": "Din plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} väntar",
     "heldAudioWaitingOn": "Transkriberas efter att din gräns återställs {date}",
     "heldAudioCardTitle": "{duration} väntar på transkribering",
-    "heldAudioAndMore": "{count, plural, =1{och 1 till} other{och {count} till}}"
+    "heldAudioAndMore": "{count, plural, =1{och 1 till} other{och {count} till}}",
+    "heldAudioRecovering": "Transkriberar dina väntande inspelningar"
 }

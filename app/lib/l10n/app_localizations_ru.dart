@@ -13169,7 +13169,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paywallOtherPlans => 'Все тарифы';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Посмотреть тарифы';
 
   @override
   String get paywallYourPlan => 'Ваш тариф';
@@ -14180,4 +14180,7 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'Расшифровываем ваши ожидающие записи';
 }

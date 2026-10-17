@@ -11446,7 +11446,7 @@
     "paywallRecommended": "تجویز کردہ",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "تمام پلان دیکھیں",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "پلان دیکھیں",
     "paywallYourPlan": "آپ کا پلان",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -11745,5 +11745,6 @@
     "heldAudioWaiting": "{duration} انتظار میں",
     "heldAudioWaitingOn": "حد {date} کو ری سیٹ ہونے کے بعد نقل ہوگی",
     "heldAudioCardTitle": "{duration} ٹرانسکرپشن کے انتظار میں",
-    "heldAudioAndMore": "{count, plural, =1{اور 1 مزید} other{اور {count} مزید}}"
+    "heldAudioAndMore": "{count, plural, =1{اور 1 مزید} other{اور {count} مزید}}",
+    "heldAudioRecovering": "آپ کی منتظر ریکارڈنگز کو متن میں بدلا جا رہا ہے"
 }

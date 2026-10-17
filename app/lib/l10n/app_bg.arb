@@ -4023,7 +4023,7 @@
     "paywallRecommended": "Препоръчано",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Всички планове",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Вижте плановете",
     "paywallYourPlan": "Вашият план",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4319,5 +4319,6 @@
     "heldAudioWaiting": "{duration} в изчакване",
     "heldAudioWaitingOn": "Транскрибира се, след като лимитът се нулира на {date}",
     "heldAudioCardTitle": "{duration} чакат транскрибиране",
-    "heldAudioAndMore": "{count, plural, =1{и още 1} other{и още {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{и още 1} other{и още {count}}}",
+    "heldAudioRecovering": "Транскрибираме чакащите ви записи"
 }

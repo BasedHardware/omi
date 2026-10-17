@@ -4119,7 +4119,7 @@
     "paywallRecommended": "Ajánlott",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "Összes csomag megtekintése",
-    "paywallComparePlans": "See plans",
+    "paywallComparePlans": "Csomagok megtekintése",
     "paywallYourPlan": "Az Ön csomagja",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
@@ -4415,5 +4415,6 @@
     "heldAudioWaiting": "{duration} várakozik",
     "heldAudioWaitingOn": "Átírás a keret {date} napi visszaállása után",
     "heldAudioCardTitle": "{duration} vár átírásra",
-    "heldAudioAndMore": "{count, plural, =1{és még 1} other{és még {count}}}"
+    "heldAudioAndMore": "{count, plural, =1{és még 1} other{és még {count}}}",
+    "heldAudioRecovering": "A várakozó felvételeid átírása folyamatban"
 }

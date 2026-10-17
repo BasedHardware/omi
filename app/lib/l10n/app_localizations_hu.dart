@@ -13175,7 +13175,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallOtherPlans => 'Összes csomag megtekintése';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Csomagok megtekintése';
 
   @override
   String get paywallYourPlan => 'Az Ön csomagja';
@@ -14190,4 +14190,7 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get heldAudioRecovering => 'A várakozó felvételeid átírása folyamatban';
 }
