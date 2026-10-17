@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-watch-pending-transfer.png",
+      "platform": "mobile-ios",
+      "description": "Real Watch view on 40 mm watchOS simulator, synthetic pending backup state and visible retry control. Isolated native UI target; no paired transfer claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-watch-recovery-error.png",
+      "platform": "mobile-ios",
+      "description": "Real Watch view with synthetic storage failure. Scroll view retains recovery copy and retry messaging on the 40 mm screen.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
