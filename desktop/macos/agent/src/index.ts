@@ -102,6 +102,7 @@ import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
+import { OMI_TOOLS_MCP_SERVER_NAME } from "./runtime/kernel-support.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
@@ -1508,7 +1509,7 @@ function buildMcpServers(
       value: context?.executionRole === "leaf" ? "leaf" : "coordinator",
     });
     servers.push({
-      name: "omi-tools",
+      name: OMI_TOOLS_MCP_SERVER_NAME,
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
