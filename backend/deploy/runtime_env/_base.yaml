@@ -954,6 +954,9 @@ environment_shared:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          AFFILIATE_NATIVE_ENABLED: {value: 'false', category: rollout}
+          AFFILIATE_NATIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AFFILIATE_NATIVE_PERCENT: {value: '0', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}

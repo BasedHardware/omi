@@ -21,6 +21,7 @@ from database.legal_holds import (
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
+from database.affiliates import delete_affiliate_link
 from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids, get_conversation_photos
@@ -93,6 +94,7 @@ def delete_account_credentials(uid: str) -> None:
     for key in get_mcp_keys_for_user(uid):
         delete_mcp_key(uid, key.id)
     delete_user_oauth_credentials(uid)
+    delete_affiliate_link(uid)
 
 
 def purge_derived_user_data(uid: str) -> PurgeResult:

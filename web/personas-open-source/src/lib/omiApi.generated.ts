@@ -190,6 +190,127 @@ export interface AdviceResponse {
   advice: string;
 }
 
+export interface AffiliateCommission {
+  commission_on?: string | null;
+  commission_type?: string | null;
+  commission_value?: number | null;
+  name?: string | null;
+  standard?: boolean;
+}
+
+export interface AffiliateEarningsResponse {
+  commissions: Array<AffiliateCommission>;
+  transactions: Array<AffiliateTransaction>;
+}
+
+export interface AffiliateLinkCredentialsRequest {
+  email: string;
+  password: string;
+}
+
+export interface AffiliateLinkResponse {
+  method: "email_match" | "affiliate_login" | "joined";
+  status: AffiliateStatusResponse;
+}
+
+export interface AffiliateOrder {
+  commission?: number | null;
+  created_at?: string | null;
+  currency?: string | null;
+  id: string;
+  number?: string | null;
+  status?: string | null;
+  total?: number | null;
+}
+
+export interface AffiliateOrdersResponse {
+  count?: number | null;
+  orders: Array<AffiliateOrder>;
+}
+
+export interface AffiliatePayout {
+  amount?: number | null;
+  currency?: string | null;
+  date?: string | null;
+  id: string;
+  payment_method?: string | null;
+  status?: "completed" | "transferred" | "reversed";
+}
+
+export interface AffiliatePayoutAccountStatusResponse {
+  connected: boolean;
+  currently_due?: Array<string>;
+  details_submitted?: boolean;
+  has_account: boolean;
+  has_issues?: boolean;
+  payouts_enabled?: boolean;
+}
+
+export interface AffiliatePayoutLinkResponse {
+  url: string;
+}
+
+export interface AffiliatePayoutSetupRequest {
+  country?: string | null;
+}
+
+export interface AffiliatePayoutsResponse {
+  count?: number | null;
+  payouts: Array<AffiliatePayout>;
+}
+
+export interface AffiliateProfile {
+  affiliate_id: string;
+  coupon?: string | null;
+  email?: string | null;
+  name?: string | null;
+  ref_code?: string | null;
+  referral_url?: string | null;
+}
+
+export interface AffiliateRefCodeAvailabilityResponse {
+  available: boolean;
+  current?: boolean;
+  error?: string | null;
+}
+
+export interface AffiliateRefCodeUpdateRequest {
+  ref_code: string;
+}
+
+export interface AffiliateRefCodeUpdateResponse {
+  ref_code: string;
+  referral_url: string;
+  unchanged?: boolean;
+}
+
+export interface AffiliateStatsResponse {
+  paid_commission: number;
+  total_clicks: number;
+  total_commission: number;
+  total_orders: number;
+  total_sales: number;
+  unpaid_commission: number;
+}
+
+export interface AffiliateStatusResponse {
+  email_match_available?: boolean;
+  native_enabled: boolean;
+  profile?: AffiliateProfile | null;
+  state: "unavailable" | "not_linked" | "linked" | "blocked";
+}
+
+export interface AffiliateTransaction {
+  amount?: number | null;
+  created_at?: string | null;
+  currency?: string | null;
+  entity_type?: string | null;
+  event_type?: string | null;
+  id: string;
+  order_number?: string | null;
+  status?: string | null;
+}
+
 export interface AgentProposalAnswer {
   decision: "accept" | "dismiss";
 }
@@ -6199,6 +6320,24 @@ export interface OmiApiSchemas {
   "AddTesterRequest": AddTesterRequest;
   "AdviceAssistantSettings": AdviceAssistantSettings;
   "AdviceResponse": AdviceResponse;
+  "AffiliateCommission": AffiliateCommission;
+  "AffiliateEarningsResponse": AffiliateEarningsResponse;
+  "AffiliateLinkCredentialsRequest": AffiliateLinkCredentialsRequest;
+  "AffiliateLinkResponse": AffiliateLinkResponse;
+  "AffiliateOrder": AffiliateOrder;
+  "AffiliateOrdersResponse": AffiliateOrdersResponse;
+  "AffiliatePayout": AffiliatePayout;
+  "AffiliatePayoutAccountStatusResponse": AffiliatePayoutAccountStatusResponse;
+  "AffiliatePayoutLinkResponse": AffiliatePayoutLinkResponse;
+  "AffiliatePayoutSetupRequest": AffiliatePayoutSetupRequest;
+  "AffiliatePayoutsResponse": AffiliatePayoutsResponse;
+  "AffiliateProfile": AffiliateProfile;
+  "AffiliateRefCodeAvailabilityResponse": AffiliateRefCodeAvailabilityResponse;
+  "AffiliateRefCodeUpdateRequest": AffiliateRefCodeUpdateRequest;
+  "AffiliateRefCodeUpdateResponse": AffiliateRefCodeUpdateResponse;
+  "AffiliateStatsResponse": AffiliateStatsResponse;
+  "AffiliateStatusResponse": AffiliateStatusResponse;
+  "AffiliateTransaction": AffiliateTransaction;
   "AgentProposalAnswer": AgentProposalAnswer;
   "AgentProposalItem": AgentProposalItem;
   "AgentToolSchema": AgentToolSchema;
@@ -7188,6 +7327,134 @@ export interface OmiApiPaths {
         "200": ActionItemResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/earnings": {
+    get: {
+      operationId: "get_affiliate_earnings_v1_affiliate_earnings_get";
+      responses: {
+        "200": AffiliateEarningsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/join": {
+    post: {
+      operationId: "join_affiliate_program_v1_affiliate_join_post";
+      responses: {
+        "200": AffiliateLinkResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/link/credentials": {
+    post: {
+      operationId: "link_affiliate_by_credentials_v1_affiliate_link_credentials_post";
+      responses: {
+        "200": AffiliateLinkResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/link/email": {
+    post: {
+      operationId: "link_affiliate_by_email_v1_affiliate_link_email_post";
+      responses: {
+        "200": AffiliateLinkResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/me": {
+    get: {
+      operationId: "get_affiliate_status_v1_affiliate_me_get";
+      responses: {
+        "200": AffiliateStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/orders": {
+    get: {
+      operationId: "get_affiliate_orders_v1_affiliate_orders_get";
+      responses: {
+        "200": AffiliateOrdersResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/payouts": {
+    get: {
+      operationId: "get_affiliate_payouts_v1_affiliate_payouts_get";
+      responses: {
+        "200": AffiliatePayoutsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/payouts/account": {
+    get: {
+      operationId: "get_affiliate_payout_account_v1_affiliate_payouts_account_get";
+      responses: {
+        "200": AffiliatePayoutAccountStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/payouts/dashboard": {
+    post: {
+      operationId: "open_affiliate_payout_dashboard_v1_affiliate_payouts_dashboard_post";
+      responses: {
+        "200": AffiliatePayoutLinkResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/payouts/setup": {
+    post: {
+      operationId: "start_affiliate_payout_setup_v1_affiliate_payouts_setup_post";
+      responses: {
+        "200": AffiliatePayoutLinkResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/ref-code": {
+    get: {
+      operationId: "check_affiliate_ref_code_v1_affiliate_ref_code_get";
+      responses: {
+        "200": AffiliateRefCodeAvailabilityResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_affiliate_ref_code_v1_affiliate_ref_code_patch";
+      responses: {
+        "200": AffiliateRefCodeUpdateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/affiliate/stats": {
+    get: {
+      operationId: "get_affiliate_stats_v1_affiliate_stats_get";
+      responses: {
+        "200": AffiliateStatsResponse;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -12630,6 +12897,268 @@ export async function toggle_action_item_completion_v1_action_items__action_item
   const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "PATCH",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_affiliate_earnings_v1_affiliate_earnings_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateEarningsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/earnings`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function join_affiliate_program_v1_affiliate_join_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateLinkResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/join`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function link_affiliate_by_credentials_v1_affiliate_link_credentials_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: AffiliateLinkCredentialsRequest, init?: OmiApiClientInit): Promise<AffiliateLinkResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/link/credentials`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function link_affiliate_by_email_v1_affiliate_link_email_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateLinkResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/link/email`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_affiliate_status_v1_affiliate_me_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/me`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_affiliate_orders_v1_affiliate_orders_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateOrdersResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/orders`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_affiliate_payouts_v1_affiliate_payouts_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliatePayoutsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/payouts`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_affiliate_payout_account_v1_affiliate_payouts_account_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliatePayoutAccountStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/payouts/account`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function open_affiliate_payout_dashboard_v1_affiliate_payouts_dashboard_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliatePayoutLinkResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/payouts/dashboard`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function start_affiliate_payout_setup_v1_affiliate_payouts_setup_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: AffiliatePayoutSetupRequest, init?: OmiApiClientInit): Promise<AffiliatePayoutLinkResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/payouts/setup`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function check_affiliate_ref_code_v1_affiliate_ref_code_get(query: { code: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateRefCodeAvailabilityResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/ref-code`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_affiliate_ref_code_v1_affiliate_ref_code_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: AffiliateRefCodeUpdateRequest, init?: OmiApiClientInit): Promise<AffiliateRefCodeUpdateResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/ref-code`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_affiliate_stats_v1_affiliate_stats_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AffiliateStatsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/affiliate/stats`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -22514,4 +23043,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 514 client methods generated.
+// Total: 527 client methods generated.

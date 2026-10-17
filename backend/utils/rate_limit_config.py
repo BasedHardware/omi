@@ -78,7 +78,8 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
+    "affiliate:link"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -95,6 +96,11 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "users:budget_choice": (6, 60),  # Shared GET/PUT ceiling before monthly usage reads.
     # A plans sheet opens on user intent; bound accidental polling before provider reads.
     "storefront:plans": (12, 60),
+    # Each affiliate read fans out to GoAffPro (and Stripe for payouts).
+    "affiliate:read": (60, 60),
+    "affiliate:write": (10, 60),
+    # Affiliate email/password verification: bound password guessing per account.
+    "affiliate:link": (5, 900),
     "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
