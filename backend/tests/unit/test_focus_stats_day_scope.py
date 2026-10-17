@@ -17,7 +17,7 @@ def _capture(monkeypatch):
     """Record the date get_focus_stats scopes its query to."""
     seen = {}
 
-    def fake_get_focus_sessions(uid, date=None, limit=100, offset=0):
+    def fake_get_focus_sessions(uid, date=None, limit=100, offset=0, tz=None):
         seen['date'] = date
         seen['limit'] = limit
         return []
