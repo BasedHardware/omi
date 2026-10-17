@@ -83,7 +83,7 @@ def _eligible_meeting_request(**overrides):
 def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     captured = {}
 
-    def _process(uid, language, conversation):
+    def _process(uid, language, conversation, **kwargs):
         captured['uid'] = uid
         captured['language'] = language
         captured['conversation'] = conversation
@@ -114,6 +114,36 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     claim.assert_not_called()
 
 
+def test_from_segments_runs_as_client_finalize_not_capture_end(monkeypatch):
+    # A client-uploaded, already-final transcript must run now, not be swallowed by the
+    # freemium desktop capture-time deferral (which stores a title-only placeholder and
+    # skips enrichment entirely — BasedHardware/omi#19705).
+    captured = {}
+
+    def _process(_uid, _language, conversation, **kwargs):
+        captured.update(kwargs)
+        return Conversation(
+            id='processed',
+            created_at=NOW,
+            started_at=conversation.started_at,
+            finished_at=conversation.finished_at,
+            source=conversation.source,
+            language=conversation.language,
+            structured={'title': 'Real summary'},
+            transcript_segments=conversation.transcript_segments,
+            external_data=None,
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock())
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+
+    developer._create_conversation_from_segments('uid1', _request())
+
+    assert captured.get('trigger') is developer.ProcessingTrigger.CLIENT_FINALIZE
+
+
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     captured = {}
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
@@ -122,7 +152,7 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(uid, language, conversation):
+    def _process(uid, language, conversation, **kwargs):
         captured['conversation'] = conversation
         conversation.status = ConversationStatus.completed
         return conversation
@@ -197,7 +227,7 @@ def test_client_session_id_persists_when_processor_returns_without_saving(monkey
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **kwargs):
         conversation.status = ConversationStatus.completed
         return conversation
 
@@ -217,7 +247,7 @@ def test_completed_desktop_meeting_preserves_treatment_projection(monkeypatch):
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **kwargs):
         conversation.status = ConversationStatus.completed
         conversation.structured.title = 'Design review'
         return conversation
@@ -238,7 +268,7 @@ def test_real_from_segments_shape_records_audit_without_posting_to_chat(monkeypa
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=True))
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **kwargs):
         conversation.status = ConversationStatus.completed
         conversation.structured.title = 'Hardware startup collaboration'
         return conversation
@@ -290,7 +320,7 @@ def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch)
     persisted = MagicMock()
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **kwargs):
         conversation.status = ConversationStatus.completed
         conversation.structured.title = 'Design review'
         return conversation
@@ -362,7 +392,7 @@ def test_short_desktop_meeting_stays_ordinary_conversation(monkeypatch):
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock())
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock())
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **kwargs):
         return Conversation(
             id='short-meeting',
             created_at=NOW,
@@ -437,7 +467,7 @@ def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
         },
     }
     delete = MagicMock()
-    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
+    process = MagicMock(side_effect=lambda _uid, _language, conversation, **kwargs: conversation)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=stale_claim))
     monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -513,7 +543,7 @@ def test_from_segments_returns_byok_rate_limit_and_releases_idempotent_claim(mon
 
 
 def test_client_session_id_atomic_claim_winner_processes_once(monkeypatch):
-    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
+    process = MagicMock(side_effect=lambda _uid, _language, conversation, **kwargs: conversation)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
@@ -547,7 +577,7 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
     monkeypatch.setattr(developer.lifecycle_service.jobs_db, 'renew_processing_lease', fake_renew)
     monkeypatch.setattr(developer.lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
 
-    def blocking_process(_uid, _language, conversation):
+    def blocking_process(_uid, _language, conversation, **kwargs):
         assert lease_renewed.wait(timeout=5.0), 'lease not renewed during from-segments processing'
         conversation.status = ConversationStatus.completed
         return conversation
@@ -656,7 +686,7 @@ def test_product_creation_metric_through_http(monkeypatch, platform, client_kind
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
-    monkeypatch.setattr(developer, 'process_conversation', lambda _uid, _language, conversation: conversation)
+    monkeypatch.setattr(developer, 'process_conversation', lambda _uid, _language, conversation, **kwargs: conversation)
     app = FastAPI()
     app.include_router(developer.router)
     app.dependency_overrides[developer.get_current_user_uid] = lambda: 'uid1'
@@ -721,7 +751,7 @@ def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_i
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **kwargs):
         conversation.status = ConversationStatus.completed
         return conversation
 
