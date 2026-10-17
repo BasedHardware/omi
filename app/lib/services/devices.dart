@@ -391,20 +391,18 @@ class DeviceService {
   /// A connection leaving [_connections] is always disposed: an orphaned
   /// transport stays registered for native events and would swallow the next
   /// device-ready, leaving the UI disconnected over a live link.
+  ///
+  /// Deliberately not serialized on the per-device mutex: the drop takes effect
+  /// immediately, like on main, and an in-flight forced [ensureConnection] for
+  /// the same device simply fails when its transport goes away.
   Future<void> disconnectDevice(String deviceId) async {
-    final mutex = _connectionMutexes.putIfAbsent(deviceId, Mutex.new);
-    await mutex.acquire();
+    final connection = _connections.remove(deviceId);
+    if (connection == null) return;
+    Logger.debug("DeviceService: Disconnecting device $deviceId...");
     try {
-      final connection = _connections.remove(deviceId);
-      if (connection == null) return;
-      Logger.debug("DeviceService: Disconnecting device $deviceId...");
-      try {
-        await connection.disconnect();
-      } finally {
-        await connection.transport.dispose();
-      }
+      await connection.disconnect();
     } finally {
-      mutex.release();
+      await connection.transport.dispose();
     }
   }
 
