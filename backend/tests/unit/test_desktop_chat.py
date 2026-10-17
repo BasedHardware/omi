@@ -57,6 +57,29 @@ def test_request_translates_openai_tool_history_and_alias():
     assert payload['tool_choice'] == {'type': 'auto'}
 
 
+def test_request_drops_assistant_turn_with_no_text_or_tool_calls():
+    # Anthropic rejects an empty text block with 400 invalid_request_error, so a
+    # replayed assistant turn that carried nothing must not reach the wire as one.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'first'},
+                {'role': 'assistant', 'content': ''},
+                {'role': 'assistant', 'content': None, 'tool_calls': []},
+                {'role': 'user', 'content': 'second'},
+            ],
+        }
+    )
+    assert [message['role'] for message in payload['messages']] == ['user', 'user']
+    assert [message['content'] for message in payload['messages']] == ['first', 'second']
+
+
+def test_request_rejects_messages_with_no_sendable_turn():
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'assistant', 'content': ''}]})
+
+
 def test_request_injects_web_search_for_desktop_opt_in():
     _, payload = _authorized_request(
         {
