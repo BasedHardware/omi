@@ -1235,6 +1235,20 @@ def get_user_subscription_endpoint(
     if allowance.remaining_seconds is None or (allowance.limit_seconds is not None and allowance.limit_seconds > 0):
         response.transcription_seconds_limit = allowance.limit_seconds or 0
         response.subscription.limits.transcription_seconds = allowance.limit_seconds
+    if (
+        allowance.managed
+        and allowance.reason in {'plan_within_allowance', 'plan_unlimited'}
+        and not getattr(allowance, 'byok_active', False)
+    ):
+        try:
+            from database import redis_db
+
+            if redis_db.r.set(f"users:{uid}:locked_content_recovery:refresh_lease", '1', nx=True, ex=300):
+                from utils.locked_content_recovery import recover_locked_content
+
+                db_executor.submit(recover_locked_content, uid)
+        except Exception as e:
+            logger.warning(f"Failed to schedule background recovery sweep for user {uid}: {e}")
     return response
 
 
