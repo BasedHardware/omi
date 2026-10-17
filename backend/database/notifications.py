@@ -357,12 +357,19 @@ def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_documen
 
 def remove_invalid_token(token: str) -> None:
     """Remove invalid token using collection group query (rare operation)"""
-    # Query across ALL users' fcm_tokens subcollections
-    query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token)).limit(1)
-
-    for doc in query.stream():
-        doc.reference.delete()
+    if not token or not token.strip():
         return
+    query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', '==', token.strip())).limit(1)
+
+    try:
+        for doc in query.stream():
+            try:
+                doc.reference.delete()
+            except Exception as e:
+                logger.warning('Failed to delete token reference: %s', e)
+            return
+    except Exception as e:
+        logger.warning('Failed to query invalid token: %s', e)
 
 
 def remove_bulk_tokens(tokens: list[str]) -> None:
@@ -370,31 +377,39 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
     if not tokens:
         return
 
+    # Deduplicate and sanitize tokens
+    valid_tokens = list(dict.fromkeys(t.strip() for t in tokens if t and t.strip()))
+    if not valid_tokens:
+        return
+
     # Firestore IN queries support up to 30 items
     chunk_size = 30
-    token_chunks = [tokens[i : i + chunk_size] for i in range(0, len(tokens), chunk_size)]
+    token_chunks = [valid_tokens[i : i + chunk_size] for i in range(0, len(valid_tokens), chunk_size)]
 
     for chunk in token_chunks:
-        # Query for all tokens in this chunk at once
-        query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
+        try:
+            # Query for all tokens in this chunk at once
+            query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
 
-        # Batch delete for efficiency
-        batch = db.batch()
-        count = 0
+            # Batch delete for efficiency
+            batch = db.batch()
+            count = 0
 
-        for doc in query.stream():
-            batch.delete(doc.reference)
-            count += 1
+            for doc in query.stream():
+                batch.delete(doc.reference)
+                count += 1
 
-            # Firestore batch limit is 500 operations
-            if count >= 500:
+                # Firestore batch limit is 500 operations
+                if count >= 500:
+                    batch.commit()
+                    batch = db.batch()
+                    count = 0
+
+            # Commit remaining deletes
+            if count > 0:
                 batch.commit()
-                batch = db.batch()
-                count = 0
-
-        # Commit remaining deletes
-        if count > 0:
-            batch.commit()
+        except Exception as e:
+            logger.warning('Failed to process bulk token removal chunk: %s', e)
 
 
 def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
