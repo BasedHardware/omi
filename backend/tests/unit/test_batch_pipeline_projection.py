@@ -222,16 +222,25 @@ def test_batch_contention_control_retries_projection_transactions(monkeypatch, f
     assert operation.call_count == 2
 
 
-def test_owner_claim_is_shared_token_fenced_and_expires(monkeypatch):
+@pytest.fixture
+def claim_redis():
     import fakeredis
-    from database import batch_pipeline_projection_claim as claims
 
     redis = fakeredis.FakeRedis()
+    redis.eval('return 1', 0)  # Load the Lua emulator in harness setup.
+    return redis
+
+
+def test_owner_claim_is_shared_token_fenced_with_bounded_ttl(monkeypatch, claim_redis):
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = claim_redis
     monkeypatch.setattr(claims.redis_db, 'r', redis)
     script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
     monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
     with claims.projection_claim('synthetic', 'owner') as first:
         assert first
+        assert 0 < redis.ttl('batch_projection:synthetic:owner') <= claims.LEASE_SECONDS
         with claims.projection_claim('synthetic', 'owner') as second:
             assert not second
         # A timed-out caller must never release the replacement's token.
@@ -253,3 +262,21 @@ def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
     monkeypatch.setattr(claims.redis_db, 'r', redis)
     with claims.projection_claim('synthetic', 'owner') as acquired:
         assert acquired
+
+
+def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import projection
+
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    claim = Mock(side_effect=AssertionError('dark flag touched Redis'))
+    monkeypatch.setattr(projection, 'projection_claim', claim)
+    projector = projection.Projector(Mock(), Mock())
+    projector.store = Mock()
+    job, entry, binding = {}, {}, SimpleNamespace(owner_id='synthetic-owner')
+    projector.store.read.return_value = (job, entry, binding)
+    projector._project = Mock(return_value={'outcome': 'success'})
+    assert projector.project('synthetic-segment') == {'outcome': 'success'}
+    projector.store.read.assert_called_once_with('synthetic-segment')
+    projector._project.assert_called_once_with('synthetic-segment', job, entry, binding)
+    claim.assert_not_called()

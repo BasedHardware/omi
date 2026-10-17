@@ -1184,6 +1184,7 @@ def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatc
     monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
     batch = lane.seed()
     lane.finish(batch)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
     entered, release = threading.Event(), threading.Event()
     load = lane.projector.load_result
 
@@ -1237,3 +1238,57 @@ def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkey
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert lane.projector.store.ref('results', batch.ids[0]).get().to_dict()['projection_state'] == 'completed'
     assert not active_rows(lane) and not lane.loads and not lane.tasks
+
+
+@pytest.mark.parametrize('boundary', ['projection', 'assignment'])
+def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, monkeypatch, boundary):
+    from google.api_core.exceptions import Aborted
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    # The emulator does not deterministically emit read-time contention. Inject
+    # its explicit envelope at the real BatchGet transport boundary, as in the
+    # shared contention qualification script; begin/rollback/retry/commit and
+    # every stored receipt/index/conversation remain real emulator operations.
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims.redis_db, 'r', redis)
+    script = claims.redis_db._RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA.script
+    monkeypatch.setattr(claims.redis_db, '_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA', redis.register_script(script))
+    batch = lane.seed()
+    lane.finish(batch)
+    transport = lane.client._firestore_api._transport
+    original = transport._wrapped_methods[transport.batch_get_documents]
+    assign = lane.conversations.assign_sync_conversation
+    inside_assignment = False
+    injected = False
+    transactions = []
+
+    def assignment(*args, **kwargs):
+        nonlocal inside_assignment
+        inside_assignment = True
+        try:
+            return assign(*args, **kwargs)
+        finally:
+            inside_assignment = False
+
+    def read(request, **kwargs):
+        nonlocal injected
+        selected = inside_assignment if boundary == 'assignment' else not inside_assignment
+        if request.transaction and selected:
+            transactions.append(bytes(request.transaction))
+            if not injected:
+                injected = True
+                raise Aborted('synthetic read-time contention')
+        return original(request, **kwargs)
+
+    monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', assignment)
+    monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
+    result = lane.projector.project(batch.ids[0])
+    assert result['outcome'] == 'success' and injected
+    assert len(set(transactions)) >= 2
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
+    assert len(lane.tasks) == len(lane.published) == len(lane.loads) == 1
