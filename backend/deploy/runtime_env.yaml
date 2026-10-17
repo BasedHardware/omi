@@ -3241,7 +3241,7 @@ environments:
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             POSTHOG_BILLING_API_KEY:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -3607,7 +3607,7 @@ environments:
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
