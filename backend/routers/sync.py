@@ -40,7 +40,7 @@ from database.sync_jobs import (
     SyncLedgerFenceMode,
     TERMINAL_STATUSES,
     RUN_LOCK_TTL_SECONDS,
-    STALE_THRESHOLD_SECONDS,
+    QUEUED_DISPATCH_STALE_SECONDS,
     create_sync_job,
     delete_sync_job,
     delete_sync_job_run_lock_epoch,
@@ -2319,8 +2319,15 @@ async def _defer_sync_job_after_handler_budget_expiry(
             # continuation runs. A failed marker write therefore falls back to
             # the queue-owned 409 rather than acking against an unprotected
             # poll window.
+            # A budget-deferred job's protection must outlast the replacement's
+            # scheduled time: the backfill lane is concurrency-capped, so a
+            # replacement can sit queued well past its schedule_at before a
+            # worker picks it up. The stale poller's own congestion allowance
+            # (QUEUED_DISPATCH_STALE_SECONDS) is exactly the horizon to reuse —
+            # the marker expires only after the job would already be
+            # dispatch-lost by normal queued-staleness had it never deferred.
             try:
-                await _mark_sync_job_deferred_until(job_id, schedule_at + STALE_THRESHOLD_SECONDS)
+                await _mark_sync_job_deferred_until(job_id, schedule_at + QUEUED_DISPATCH_STALE_SECONDS)
             except Exception as error:
                 logger.warning(
                     'event=sync_transcription_job outcome=handler_budget_deferral_marker_failed exception_type=%s',

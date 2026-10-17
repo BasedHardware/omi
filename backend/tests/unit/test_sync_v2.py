@@ -3627,6 +3627,7 @@ class TestV2EndpointExecution:
         # stale threshold must be comparable numbers, not MagicMock attrs.
         mock_sync_jobs.RUN_LOCK_TTL_SECONDS = 1800
         mock_sync_jobs.STALE_THRESHOLD_SECONDS = 600
+        mock_sync_jobs.QUEUED_DISPATCH_STALE_SECONDS = 1800
         mock_sync_jobs.is_sync_job_stale = MagicMock(return_value=False)
         mock_sync_jobs.try_acquire_sync_job_run_lock = MagicMock()
         mock_sync_jobs.get_sync_job_run_lock_epoch = MagicMock(return_value=1)

@@ -125,6 +125,7 @@ def _build_fakes() -> dict:
     # constants; MagicMock attrs cannot be compared inside min().
     fakes['database.sync_jobs'].RUN_LOCK_TTL_SECONDS = 1800
     fakes['database.sync_jobs'].STALE_THRESHOLD_SECONDS = 600
+    fakes['database.sync_jobs'].QUEUED_DISPATCH_STALE_SECONDS = 1800
 
     # firebase_admin
     fb = MagicMock()

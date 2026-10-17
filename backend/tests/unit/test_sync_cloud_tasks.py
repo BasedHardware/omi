@@ -1348,6 +1348,7 @@ def _load_sync_router_for_fast_path():
     mock_sync_jobs.try_acquire_job_run_lock = MagicMock(return_value='legacy-lock-token')
     mock_sync_jobs.RUN_LOCK_TTL_SECONDS = 1800
     mock_sync_jobs.STALE_THRESHOLD_SECONDS = 600
+    mock_sync_jobs.QUEUED_DISPATCH_STALE_SECONDS = 1800
     sys.modules['database.sync_jobs'] = mock_sync_jobs
 
     sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
@@ -3906,8 +3907,10 @@ async def test_sync_task_pipeline_budget_ends_attempt_before_platform_timeout():
         assert payload[module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] == 1
         # The preserved lock expires before the replacement is due; the job
         # is marked deferred so a poll in that gap cannot finalize it stale.
+        # The horizon covers queue congestion past schedule_at (the poller's
+        # own queued-dispatch-stale allowance), not just the stale threshold.
         module.update_sync_job.assert_called_once_with(
-            'job-1', {'deferred_until': schedule_at + module.STALE_THRESHOLD_SECONDS}
+            'job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}
         )
         assert fallback_calls == []
         module.fenced_mark_job_queued_for_retry.assert_not_called()
@@ -4260,6 +4263,90 @@ def test_deferred_processing_job_is_not_stale_until_its_replacement_is_due():
     assert sync_jobs.is_sync_job_stale({**job, 'status': 'queued', 'attempt': 1}, now=6_000.0) is False
 
 
+def test_deferred_queued_job_is_not_dispatch_lost_before_its_replacement_is_due():
+    """A budget expiry during post-lock setup (staged download, account checks)
+    leaves the job queued with the deferral marker set and no run lock held;
+    the replacement is scheduled past the preserved lock's TTL (~31 minutes),
+    beyond the 30-minute queued-dispatch-stale threshold. The marker must guard
+    that window in the queued state too, then resume dispatch-lost detection
+    once the replacement is overdue so a lost replacement still self-heals."""
+
+    sync_jobs, _ = _load_sync_jobs()
+    job = {
+        'status': 'queued',
+        'dispatch_mode': 'cloud_tasks',
+        'started_at': None,
+        'attempt': None,
+        'updated_at': 1_000.0,
+        'deferred_until': 5_000.0,
+    }
+    past_queued_threshold = 1_000.0 + sync_jobs.QUEUED_DISPATCH_STALE_SECONDS + 1
+
+    assert sync_jobs.is_sync_job_stale(job, now=past_queued_threshold) is False
+    assert sync_jobs.is_sync_job_stale(job, now=4_999.0) is False
+    assert sync_jobs.is_sync_job_stale(job, now=5_000.0) is True
+    # No marker: normal queued dispatch-lost detection is untouched.
+    assert (
+        sync_jobs.is_sync_job_stale({k: v for k, v in job.items() if k != 'deferred_until'}, now=past_queued_threshold)
+        is True
+    )
+    # A marker that is not a number protects nothing.
+    assert sync_jobs.is_sync_job_stale({**job, 'deferred_until': 'later'}, now=past_queued_threshold) is True
+
+
+def test_processing_transition_retires_the_deferral_marker():
+    """The delivery that transitions a job to processing IS the deferred
+    replacement arriving: the marker must be retired by that transition rather
+    than lingering to suppress stale detection for a job that is actively
+    running under a fresh run lock. Both the fenced and legacy transitions
+    clear it."""
+
+    redis_client = fakeredis.FakeRedis()
+    sync_jobs, _ = _load_sync_jobs(redis_client)
+    job_id = 'job-1'
+    deferred_until = time.time() + sync_jobs.QUEUED_DISPATCH_STALE_SECONDS
+    _seed_fenced_job(
+        redis_client,
+        sync_jobs,
+        job_id,
+        {
+            'job_id': job_id,
+            'status': 'queued',
+            'lane': 'backfill',
+            'result': None,
+            'deferred_until': deferred_until,
+        },
+        owner='owner-a',
+    )
+
+    processing = sync_jobs.fenced_mark_job_processing(job_id, 'owner-a', now=100.0)
+
+    assert processing.applied is True
+    assert processing.job['status'] == 'processing'
+    assert processing.job['deferred_until'] is None
+
+    # Legacy (tokenless) path: same retirement on its queued->processing CAS.
+    legacy_job_id = 'job-legacy'
+    redis_client.set(
+        f'{sync_jobs.JOB_KEY_PREFIX}{legacy_job_id}',
+        json.dumps(
+            {
+                'job_id': legacy_job_id,
+                'status': 'queued',
+                'lane': 'backfill',
+                'result': None,
+                'deferred_until': deferred_until,
+            },
+            separators=(',', ':'),
+        ),
+        ex=12_345,
+    )
+    legacy = sync_jobs.mark_job_processing(legacy_job_id)
+    assert legacy is not None
+    assert legacy['status'] == 'processing'
+    assert legacy['deferred_until'] is None
+
+
 @pytest.mark.asyncio
 async def test_sequenced_budget_deferral_acks_without_finishing_sequencer_owner():
     """A budget-expired sequenced delivery is an ack, not a completion claim:
@@ -4561,7 +4648,7 @@ async def test_sync_task_budget_expiry_during_lock_acquire_still_defers():
         module.enqueue_sync_job_budget_replacement.assert_called_once()
         payload, schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
         module.update_sync_job.assert_called_once_with(
-            'job-1', {'deferred_until': schedule_at + module.STALE_THRESHOLD_SECONDS}
+            'job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}
         )
         module.release_job_run_lock.assert_not_called()
         assert fallback_calls == []
@@ -4614,7 +4701,7 @@ async def test_sync_task_budget_deferral_enqueue_failure_clears_deferred_marker(
         # enqueue: stale detection resumes instead of waiting out a
         # replacement that was never scheduled.
         assert module.update_sync_job.call_args_list == [
-            (('job-1', {'deferred_until': schedule_at + module.STALE_THRESHOLD_SECONDS}),),
+            (('job-1', {'deferred_until': schedule_at + module.QUEUED_DISPATCH_STALE_SECONDS}),),
             (('job-1', {'deferred_until': None}),),
         ]
         assert [call['reason'] for call in fallback_calls] == ['enqueue_failed']
