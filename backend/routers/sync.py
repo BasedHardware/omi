@@ -15,6 +15,8 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from config.summary_guarantee import repair_enabled as summary_repair_enabled
+from services import summary_debt_repair
 from config.batch_pipeline import enabled_for as batch_enabled_for
 from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
 from models.sync_job_status import (
@@ -1903,6 +1905,17 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
             repair = {'repaired': 0, 'error': 1}
         outcomes['reprocess_repaired'] = repair['repaired']
         outcomes['reprocess_repair_errors'] = repair['error']
+        if summary_repair_enabled():
+            # Only the scheduled two-minute owner scans conversation debt.
+            # Batch pumps replay the outbox without paying a per-pump cursor read.
+            try:
+                summary = await run_blocking(db_executor, summary_debt_repair.tick)
+            except Exception as error:
+                logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
+                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+            outcomes['summary_debt_scanned'] = summary['scanned']
+            outcomes['summary_debt_admitted'] = summary['admitted']
+            outcomes['summary_debt_errors'] = summary['errors']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

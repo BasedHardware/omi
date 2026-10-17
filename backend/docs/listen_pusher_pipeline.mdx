@@ -4963,6 +4963,32 @@ Valid backfill bindings remain on their original worker and queue. Unbound hosts
 skip invalid rows and increment `sync_reprocess_unbound_total{action="repair"}`
 instead of emitting a per-row repair error.
 
+### First-summary deadline and repair (dark)
+
+`FIRST_SUMMARY_DEADLINE_ENABLED` (default false) caps the existing outbox's first
+summary dispatch at original pending time + `FIRST_SUMMARY_DEADLINE_SECONDS`
+(default 120, bounded 60–120); `FIRST_SUMMARY_UID_ALLOWLIST` supports a canary.
+First-summary work bypasses demand-tier waiting and uses a 120s lease, renewed
+every 30s for the same owner/task token while the request is alive. Only a
+replacement conversation owner fences persistence; the same owner's result can
+commit after its original expiry. The claim uses the already-loaded snapshot;
+each heartbeat adds a CAS read/write. Three empty kept results terminally block
+the obligation with `empty_output_exhausted`, outside the indexed due scan,
+without clearing any structured content. Intake discards never enter that index.
+Appends and retries preserve the original time; later enriched revisions retain coalescing.
+
+`SUMMARY_DEBT_REPAIR_ENABLED` (default false) adds completed server-minimum debt
+to the existing repair owner: one globally leased two-minute page, at most 100
+rows and ten admission attempts. It reuses the same outbox/generation, checks
+manual/discard/deletion/privacy/local-only/BYOK/lease fences, and emits terminal
+summary receipts only after the fenced write. No new claim reads. A rendered
+section body or nonempty overview is required; a title/actions/events alone do
+not settle debt. The bounded debt gauges include their sample timestamp.
+
+[Index readiness, read budget, historical-provenance limits and enable/rollback](runbooks/summary-guarantee.md)
+are part of the rollout contract. This PR ships dark and does not bulk-repair
+unmarked historical rows or change record-projection completion semantics.
+
 ### Dormant batch pull protocol
 
 [Batch pipeline worker](batch-pipeline-worker.md) defines a separate default-off

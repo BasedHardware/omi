@@ -1329,6 +1329,10 @@ class TestAsyncCoordinatorBehavioral:
     @staticmethod
     def _load_sync_module():
         """Load routers/sync.py with all heavy deps stubbed, return (module, stubs)."""
+        # Load the optional repair dependency before replacing database/google
+        # with non-package stubs. It stays real and gated off in dispatch tests.
+        from services import summary_debt_repair  # noqa: F401
+
         saved_modules = {}
         stubs = {}
         from database.sync_jobs import SyncLedgerFenceMode
