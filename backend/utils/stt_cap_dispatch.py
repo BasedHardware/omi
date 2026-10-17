@@ -10,6 +10,7 @@ from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
 
 from config.stt_cap_dispatch import enabled, execution_admission_enabled
+from config.ladder_v1 import budget_enforcement_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
@@ -25,7 +26,10 @@ def customer_funded(provider):
     )
 
 
-def funded_allowance(uid, source=None):
+_UNRESOLVED = object()
+
+
+def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
     from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
@@ -36,7 +40,10 @@ def funded_allowance(uid, source=None):
         # dispatch enforcement. A missing/unreadable budget is never permission
         # to spend; match the funded resolver's fail-closed behavior.
         try:
-            snapshot = ladder_v1.budget_snapshot(uid)
+            budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}
+            if subscription is not _UNRESOLVED:
+                budget_kwargs['subscription'] = subscription
+            snapshot = ladder_v1.budget_snapshot(uid, **budget_kwargs)
             if snapshot is None:
                 return TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled', limit_seconds=None)
             exhausted = snapshot['budget_percent'] >= 100
@@ -50,7 +57,10 @@ def funded_allowance(uid, source=None):
             )
         except Exception:
             return TranscriptionAllowance('on_device', 0, 'allowance_unavailable')
-    return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True)
+    kwargs = {'usage_cache': usage_cache} if usage_cache is not None else {}
+    if subscription is not _UNRESOLVED:
+        kwargs['subscription'] = subscription
+    return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
 def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown') -> bool:
@@ -73,7 +83,7 @@ class LiveAdmission:
     """One balance shared by every channel, replay and replacement in a session.
 
     Accepted packets debit a finite seconds or unit snapshot locally. Ladder
-    snapshots rescan only near the cap, on invalidation, or after 900 seconds;
+    snapshots read open buckets near cap, and rescan on invalidation or at 900 seconds;
     legacy admission keeps main's flush cadence. Provider queues may drain.
     """
 
@@ -87,9 +97,24 @@ class LiveAdmission:
         self.remaining_units = None
         self.budget_units = None
         self.refreshed_at = None
+        self.failures = 0
+        self.usage_cache = None
+        if budget_enforcement_enabled():
+            from database.usage_units_session import UsageUnitsSession
+
+            self.usage_cache = UsageUnitsSession()
 
     def refresh_due(self):
         if self.refreshed_at is None:
+            return True
+        if self.reason == 'allowance_unavailable' and self.usage_cache is not None:
+            delay = min(900, 60 * 2 ** min(max(self.failures - 1, 0), 4))
+            return time.monotonic() - self.refreshed_at >= delay
+        if (
+            self.usage_cache is not None
+            and self.usage_cache.full_at is not None
+            and time.monotonic() - self.usage_cache.full_at >= 900
+        ):
             return True
         if self.remaining_units is None:
             # A known non-ladder account needs only a long membership refresh
@@ -101,13 +126,23 @@ class LiveAdmission:
         )
         return time.monotonic() - self.refreshed_at >= (60 if near else 900)
 
-    async def refresh(self, *, force=True):
+    async def refresh(self, *, force=True, subscription=_UNRESOLVED):
         if not force and not self.refresh_due():
             return
-        allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source)
+        kwargs = {}
+        if self.usage_cache is not None:
+            if force:
+                self.usage_cache.invalidate()
+            kwargs['usage_cache'] = self.usage_cache
+            if subscription is not _UNRESOLVED:
+                kwargs['subscription'] = subscription
+        allowance = await run_blocking(db_executor, funded_allowance, self.uid, self.source, **kwargs)
+        self.failures = min(self.failures + 1, 5) if allowance.reason == 'allowance_unavailable' else 0
         self.remaining, self.reason, self.managed = allowance.remaining_seconds, allowance.reason, allowance.managed
         self.remaining_units = allowance.remaining_units
         self.budget_units = allowance.budget_units
+        if self.usage_cache is not None and self.remaining_units is None and self.reason != 'allowance_unavailable':
+            self.usage_cache.invalidate()
         self.refreshed_at = time.monotonic()
         if self.remaining_units is not None:
             # A conservative seconds equivalent for existing client warnings.

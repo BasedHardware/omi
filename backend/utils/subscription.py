@@ -1727,6 +1727,7 @@ def resolve_transcription_allowance(
     usage: Any = _UNRESOLVED,
     byok_active: Any = _UNRESOLVED,
     omi_funded: bool = False,
+    usage_cache: Any = None,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1775,7 +1776,8 @@ def resolve_transcription_allowance(
             subscription = users_db.get_user_valid_subscription(uid)
         if not subscription:
             return _closed('subscription_inactive')
-        ladder_budget = ladder_v1.budget_snapshot(uid, subscription)
+        budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription, **budget_kwargs)
         if ladder_budget is not None:
             exhausted = ladder_budget['budget_percent'] >= 100
             return TranscriptionAllowance(

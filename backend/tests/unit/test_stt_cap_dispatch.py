@@ -271,10 +271,10 @@ async def test_live_minute_refresh_stops_funded_audio_after_ladder_crossing(monk
     allowance = SimpleNamespace(
         managed=True, remaining_seconds=None, reason='usage_budget_available', remaining_units=None, budget_units=None
     )
-    monkeypatch.setattr(cap, 'funded_allowance', lambda *a: allowance)
+    monkeypatch.setattr(cap, 'funded_allowance', lambda *a, **k: allowance)
 
-    async def run(_executor, fn, *args):
-        return fn(*args)
+    async def run(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
 
     monkeypatch.setattr(cap, 'run_blocking', run)
     state = cap.LiveAdmission('synthetic')
@@ -309,8 +309,8 @@ async def test_ladder_live_estimate_debits_locally_and_bounds_rescans(monkeypatc
     )
     monkeypatch.setattr(cap, 'funded_allowance', resolver)
 
-    async def run(executor, fn, *args):
-        return fn(*args)
+    async def run(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
 
     monkeypatch.setattr(cap, 'run_blocking', run)
     state = cap.LiveAdmission('synthetic')
@@ -353,8 +353,8 @@ async def test_ladder_only_legacy_profile_keeps_long_read_cadence_and_invalidate
     resolver = Mock(return_value=TranscriptionAllowance('managed', None, 'legacy_dispatch_disabled'))
     monkeypatch.setattr(cap, 'funded_allowance', resolver)
 
-    async def run(executor, fn, *args):
-        return fn(*args)
+    async def run(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
 
     monkeypatch.setattr(cap, 'run_blocking', run)
     state = cap.LiveAdmission('synthetic')

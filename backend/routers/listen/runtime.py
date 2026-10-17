@@ -811,7 +811,7 @@ class ListenSessionRuntime:
         )
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
         if admission is not None:
-            await admission.refresh(force=bool(invalidated))
+            await admission.refresh(force=bool(invalidated), subscription=subscription)
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
                 await self.receiver.initialize_stt()
         credit_admission = (

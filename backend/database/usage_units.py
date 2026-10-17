@@ -257,29 +257,7 @@ def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
     return int(covered) if quantity == 'events' else covered
 
 
-def get_usage_units(
-    uid: str, period: datetime, *, firestore_client: Any | None = None, entitlements: Mapping[str, Any] | None = None
-) -> dict[str, Any]:
-    """Read one UTC calendar month; annual plans still use monthly budgets.
-
-    period selects the month. Uses one existing year/month query and at most
-    two day-rollups per elapsed day in one batched RPC, without immutable attempt
-    scans. Missing records and known producer gaps make this a lower-bound shadow total. Flagged ladder
-    enforcement adds conservative residual-second and attempt estimates in memory;
-    legacy and flag-off reads retain the shadow-only total.
-    """
-    if period.tzinfo is None:
-        raise ValueError('timezone-aware period required')
-    period = period.astimezone(timezone.utc)
-    start = period.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
-    client = firestore_client or get_customer_firestore_client()
-    user = client.collection('users').document(uid)
-    if entitlements is None:
-        snap = user.get(['subscription'])
-        data = snap.to_dict() or {}
-        entitlements = resolve_subscription_entitlements(data.get('subscription') or {})
-    enforcing = budget_enforcement_enabled() and entitlements['entitlement_version'] == 'ladder_v1'
+def _summarize_usage(hourly, days, entitlements, enforcing):
     totals: dict[str, int] = {}
     statuses: dict[str, dict[str, int]] = {}
     funding_totals: dict[str, int] = {}
@@ -299,19 +277,24 @@ def get_usage_units(
                 continue
             for funding, leaf in feature_data.get('funding', {}).items():
                 units = int(leaf.get('micro_units', 0))
+                if enforcing and funding not in EXCLUDED_FUNDING and feature != 'web_search_tool':
+                    quantity = 'legacy_counter_seconds' if feature == 'transcription' else 'events'
+                    ambiguous = _ambiguous_quantity(leaf, quantity)
+                    if ambiguous:
+                        historical_units = _historical_quantity(leaf, quantity)[1]
+                        proxy = (
+                            price_transcription(ambiguous, provider='unknown', accepted=True)['micro_units']
+                            if quantity == 'legacy_counter_seconds'
+                            else int(Decimal(ambiguous) * standard_chat_units() * 1_000_000)
+                        )
+                        units += max(0, proxy - historical_units)
                 totals[feature] = totals.get(feature, 0) + units
                 funding_totals[funding] = funding_totals.get(funding, 0) + units
                 counts = statuses.setdefault(feature, {})
                 for status, count in leaf.get('status_counts', {}).items():
                     counts[status] = counts.get(status, 0) + int(count)
 
-    query = (
-        user.collection('hourly_usage')
-        .where(filter=FieldFilter('year', '==', start.year))
-        .where(filter=FieldFilter('month', '==', start.month))
-    )
-    for snap in query.select(['shadow_v1', 'transcription_seconds', 'speech_seconds']).stream():
-        data = snap.to_dict() or {}
+    for data in hourly:
         shadow = data.get('shadow_v1')
         if isinstance(shadow, Mapping):
             features = shadow.get('features', {})
@@ -336,30 +319,7 @@ def get_usage_units(
         elif data.get('transcription_seconds') or data.get('speech_seconds'):
             missing_hourly += 1
             missing_seconds += float(data.get('transcription_seconds', 0))
-    hashed = hashlib.sha256(uid.encode()).hexdigest()[:16]
-    # Batch explicit day refs in one RPC. Missing docs still cost a read, so
-    # never request future dates (including the future tail of this month).
-    through = min(
-        end, datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    )
-    days = []
-    day = start
-    while day < through:
-        days.append(day.date().isoformat())
-        day += timedelta(days=1)
-    refs = [client.collection('llm_gateway_user_days').document(f'{day}_{hashed}') for day in days]
-    if entitlements['entitlement_version'] == 'ladder_v1':
-        refs.extend(user.collection('ladder_v1_api_days').document(day) for day in days)
-    documents = (
-        {
-            snap.id: snap.to_dict() or {}
-            for snap in client.get_all(refs, field_paths=['shadow_v1', 'attempts', 'micro_units', 'requests'])
-        }
-        if refs
-        else {}
-    )
-    for day in days:
-        data = documents.get(f'{day}_{hashed}', {})
+    for data, api in days:
         shadow = data.get('shadow_v1')
         projected = 0
         if isinstance(shadow, Mapping):
@@ -385,7 +345,6 @@ def get_usage_units(
             missing_attempts += residual
         # New daily API quantities are priced separately from tool/model attempts.
         if entitlements['entitlement_version'] == 'ladder_v1':
-            api = documents.get(day, {})
             if api.get('micro_units'):
                 consume(
                     {
@@ -399,6 +358,36 @@ def get_usage_units(
                         }
                     }
                 )
+    return {
+        'totals': totals,
+        'statuses': statuses,
+        'funding_totals': funding_totals,
+        'missing_hourly': missing_hourly,
+        'missing_days': missing_days,
+        'missing_attempts': missing_attempts,
+        'missing_seconds': missing_seconds,
+        'ambiguous_seconds': ambiguous_seconds,
+        'ambiguous_attempts': ambiguous_attempts,
+        'lane_totals': lane_totals,
+        'lane_seconds': lane_seconds,
+        'lane_accepted': lane_accepted,
+    }
+
+
+def _render_usage(summary, entitlements, enforcing):
+    summary = deepcopy(summary)
+    totals = summary['totals']
+    statuses = summary['statuses']
+    funding_totals = summary['funding_totals']
+    missing_hourly = summary['missing_hourly']
+    missing_days = summary['missing_days']
+    missing_attempts = summary['missing_attempts']
+    missing_seconds = summary['missing_seconds']
+    ambiguous_seconds = summary['ambiguous_seconds']
+    ambiguous_attempts = summary['ambiguous_attempts']
+    lane_totals = summary['lane_totals']
+    lane_seconds = summary['lane_seconds']
+    lane_accepted = summary['lane_accepted']
     if enforcing:
         # Treat every residual second as speech at the pinned unknown-provider
         # provisional rate. Do not apply the historical elapsed/silence ratio.
@@ -407,7 +396,9 @@ def get_usage_units(
         speech_proxy = price_transcription(missing_seconds, provider='unknown', funding='omi', accepted=True)
         attempt_proxy = int(Decimal(missing_attempts) * standard_chat_units() * 1_000_000)
         for feature, amount in [('transcription', speech_proxy['micro_units']), ('other_llm', attempt_proxy)]:
-            consume({feature: {'funding': {'omi': {'micro_units': amount, 'status_counts': {}}}}})
+            totals[feature] = totals.get(feature, 0) + amount
+            funding_totals['omi'] = funding_totals.get('omi', 0) + amount
+            statuses.setdefault(feature, {})
     return {
         'used_units': float(Decimal(sum(totals.values())) / 1_000_000),
         'budget_units': budget_units(entitlements),
@@ -441,3 +432,77 @@ def get_usage_units(
         'entitlement_version': entitlements['entitlement_version'],
         'rate_card_version': 'v1',
     }
+
+
+def _read_usage_month(uid, period, client, entitlements):
+    start = period.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    user = client.collection('users').document(uid)
+    query = (
+        user.collection('hourly_usage')
+        .where(filter=FieldFilter('year', '==', start.year))
+        .where(filter=FieldFilter('month', '==', start.month))
+    )
+    hourly = [
+        (snap.id, snap.to_dict() or {})
+        for snap in query.select(['shadow_v1', 'transcription_seconds', 'speech_seconds']).stream()
+    ]
+    hashed = hashlib.sha256(uid.encode()).hexdigest()[:16]
+    # Batch explicit day refs in one RPC. Missing docs still cost a read, so
+    # never request future dates (including the future tail of this month).
+    through = min(
+        end, datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    )
+    days = []
+    day = start
+    while day < through:
+        days.append(day.date().isoformat())
+        day += timedelta(days=1)
+    refs = [client.collection('llm_gateway_user_days').document(f'{day}_{hashed}') for day in days]
+    if entitlements['entitlement_version'] == 'ladder_v1':
+        refs.extend(user.collection('ladder_v1_api_days').document(day) for day in days)
+    documents = (
+        {
+            snap.id: snap.to_dict() or {}
+            for snap in client.get_all(refs, field_paths=['shadow_v1', 'attempts', 'micro_units', 'requests'])
+        }
+        if refs
+        else {}
+    )
+    return hourly, [(day, documents.get(f'{day}_{hashed}', {}), documents.get(day, {})) for day in days]
+
+
+def get_usage_units(
+    uid: str,
+    period: datetime,
+    *,
+    firestore_client: Any | None = None,
+    entitlements: Mapping[str, Any] | None = None,
+    session_cache: Any | None = None,
+) -> dict[str, Any]:
+    """Read one UTC calendar month; annual plans still use monthly budgets.
+
+    period selects the month. Uses one existing year/month query and at most
+    two day-rollups per elapsed day in one batched RPC, without immutable attempt
+    scans. Missing records and known producer gaps make this a lower-bound shadow total. Flagged ladder
+    enforcement adds conservative residual-second and attempt estimates in memory;
+    legacy and flag-off reads retain the shadow-only total.
+    """
+    if period.tzinfo is None:
+        raise ValueError('timezone-aware period required')
+    period = period.astimezone(timezone.utc)
+    client = firestore_client or get_customer_firestore_client()
+    user = client.collection('users').document(uid)
+    if entitlements is None:
+        snap = user.get(['subscription'])
+        data = snap.to_dict() or {}
+        entitlements = resolve_subscription_entitlements(data.get('subscription') or {})
+    enforcing = budget_enforcement_enabled() and entitlements['entitlement_version'] == 'ladder_v1'
+    if session_cache is not None and enforcing:
+        summary = session_cache.read(uid, period, client, entitlements)
+    else:
+        hourly, days = _read_usage_month(uid, period, client, entitlements)
+        summary = _summarize_usage(
+            [data for _, data in hourly], [(data, api) for _, data, api in days], entitlements, enforcing
+        )
+    return _render_usage(summary, entitlements, enforcing)

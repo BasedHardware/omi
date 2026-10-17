@@ -196,32 +196,45 @@ Reset or upgrade recovery rechecks the current ladder budget before dispatch.
 Live sessions carry numeric remaining units, debited from accepted provider PCM
 at the pinned provider speech rate (silence is conservatively included). Shared
 channels, replacements and replay share this estimate. A packet exceeding the local estimate is suppressed; there is no packet-level I/O.
-Full snapshots refresh every 900 seconds, every 60 seconds below 10% remaining
-or two minutes at the maximum managed speech rate, and on subscription
-invalidation. The near-cap external-usage detection bound is one 60-second
-flush plus persistence latency; this is not a cross-session quota reservation.
-Concurrent spending far from the local estimate can remain unseen for 900 seconds.
+Full snapshots refresh at session start, every 900 seconds, and on subscription
+invalidation. Near cap (>=90% used or <=120 seconds at the maximum managed
+speech rate), each 60-second refresh reads only the current hour, today's gateway
+day and today's API day. The session retains a closed-bucket sum, never monthly
+document lists. Hour/day rollover reads the closing buckets once before freezing
+them. Backdated writes reconcile at the next full scan. The subscription already
+read by the flush is reused; near-cap external spending is detected within one
+flush plus persistence latency. Far-away concurrent spending can remain unseen
+for 900 seconds; this is not a distributed reservation.
 
-For H hourly docs and D elapsed UTC days, a ladder snapshot reads H + 2D docs
-in one hourly query plus one batched day RPC, with no future-day reads. The
-existing account/invalidation lookups are separate. Against the former monthly
-H + 62 day reads every minute, steady-state usage-ledger reads per session/minute
-are (H + 2D)/15 at 0% and 50%, and H + 2D at 95%. On October 17 these are
-(H + 34)/15, (H + 34)/15 and H + 34. Batching reduces RPCs, not billed doc reads.
-Including the two subscription/account lookups (one per minute, one per scan),
-the uncached ladder-only path is 1 + (H + 2D + 1)/15 away from cap, H + 2D + 2 near cap;
-Redis invalidation/fair-use operations are outside these Firestore doc totals.
-At H=408 and D=17 this is 30.53 / 30.53 / 444 versus the old 472 at each level.
-No month aggregate cache hides late-arriving usage or corrections.
+A full ledger scan reads H hourly documents + 2D elapsed-day documents; future
+days are never read. With the unchanged one subscription read per minute, the
+steady ladder-only document cost is:
 
-Hourly/day writers atomically record unpriced counter seconds/events separately
-from status counts. Only zero-unit missing quantities receive a residual proxy;
-missing annotations with nonzero units are already charged. Newly attributed
-units and missing events are separated from historical totals, so later priced
-writes cannot hide a historical zero-unit gap. Historical mixed
-leaves without quantity attribution cannot be reconstructed exactly: quantities
-in leaves containing priced units are never priced a second time. Coverage
-metrics report residual quantities and ambiguous historical mixed leaves separately.
-Unresolved historical attribution blocks enforced budget admission with
-`usage_budget_coverage_unavailable` (503); funded STT holds audio as an unavailable
-allowance. A clean new UTC month or corrected attribution clears the guard.
+| Budget used | Ordinary minute | 15-minute amortized cost |
+| --- | ---: | ---: |
+| 0% / 50% | 1 (full scan at 900 s) | 1 + (H+2D)/15 |
+| 95% | 4 | 1 + (H+2D+14*3)/15 |
+
+At H=408 / D=17, the averages are 30.47 / 30.47 / 33.27 reads/minute,
+versus 30.53 / 30.53 / 444 before this follow-up. The 900-second scan
+is a 443-read minute (442 ledger + 1 subscription); cold admission also resolves
+its subscription once. Hour rollover costs one additional read; day rollover adds
+two more, each once per boundary. Batch RPCs reduce latency, not billed reads.
+Redis invalidation/fair-use operations are outside these Firestore totals.
+
+An unavailable snapshot retries after 60, 120, 240, 480 and then at most once
+per 900 seconds. No ledger read occurs on intervening flushes. Invalidation
+bypasses backoff; a successful read resets it. Even a failure after all full-scan
+reads is bounded to 30.47 reads/minute in steady state at this ledger size, rather
+than 444; earlier failures cost less. Warm retries use the three open buckets
+until the full scan is due. A read failure still pauses funded STT and retains
+capture; historical coverage ambiguity alone never causes that denial.
+
+Hourly/day writers atomically record unpriced seconds/events separately from
+status counts. Only zero-unit missing quantities receive residual proxies;
+nonzero missing annotations are already charged. Newly attributed quantities and
+units remain separate from history. Each ambiguous historical leaf contributes
+`max(historical priced units, unknown-provider quantity proxy)` once, plus any
+separately attributed new units. A gateway proxy uses the standard-chat estimate.
+Ambiguity does not return 503 or deny an account until reset. Coverage histograms
+and the shared degraded/fallback metric remain visible; no history is rewritten.

@@ -21,14 +21,19 @@ def account(uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any 
     return policy.entitlements(subscription)
 
 
-def usage_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any = None) -> dict | None:
+def usage_snapshot(
+    uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any = None, session_cache: Any = None
+) -> dict | None:
     entitlement = account(uid, subscription, firestore_client=firestore_client)
     if entitlement is None:
         return None
     from database import usage_units
 
     now = datetime.now(timezone.utc)
-    snapshot = usage_units.get_usage_units(uid, now, firestore_client=firestore_client, entitlements=entitlement)
+    kwargs = {'session_cache': session_cache} if session_cache is not None else {}
+    snapshot = usage_units.get_usage_units(
+        uid, now, firestore_client=firestore_client, entitlements=entitlement, **kwargs
+    )
     if policy.budget_enforcement_enabled():
         record_coverage(snapshot.get('completeness', {}))
     reset = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=timezone.utc)
@@ -44,20 +49,27 @@ def usage_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_clien
     )
 
 
-def budget_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any = None):
+def budget_snapshot(
+    uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any = None, session_cache: Any = None
+):
     if not policy.budget_enforcement_enabled():
         return None
-    snapshot = usage_snapshot(uid, subscription, firestore_client=firestore_client)
+    kwargs = {'session_cache': session_cache} if session_cache is not None else {}
+    # Historical coverage gaps are our metering uncertainty, never a reason to
+    # deny a subscriber. The projection prices each ambiguous quantity once.
+    snapshot = usage_snapshot(uid, subscription, firestore_client=firestore_client, **kwargs)
     coverage = (snapshot or {}).get('completeness', {})
     if any(
         coverage.get(key, 0) > 0
         for key in ('ambiguous_priced_transcription_seconds', 'ambiguous_priced_gateway_attempts')
     ):
-        # Original mixed-status quantities cannot be reconstructed without
-        # double pricing. Funded STT catches this transient denial and retains
-        # audio; other paid work retries instead of treating an unknown cap as
-        # available. A new UTC month or repaired attribution clears the guard.
-        raise HTTPException(status_code=503, detail={'error': 'usage_budget_coverage_unavailable'})
+        record_fallback(
+            component='other',
+            from_mode='ladder_coverage_unknown',
+            to_mode='conservative_snapshot',
+            reason='coverage_gap',
+            outcome='degraded',
+        )
     return snapshot
 
 

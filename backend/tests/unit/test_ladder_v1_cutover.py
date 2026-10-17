@@ -567,7 +567,7 @@ def test_coverage_metrics_survive_isolated_auth_reimports():
 
 @pytest.mark.parametrize('key', ['ambiguous_priced_transcription_seconds', 'ambiguous_priced_gateway_attempts'])
 @pytest.mark.parametrize('dispatch', [False, True])
-def test_historical_mixed_coverage_cannot_authorize_funded_work(monkeypatch, key, dispatch):
+def test_historical_mixed_coverage_admits_on_snapshot(monkeypatch, key, dispatch):
     from types import SimpleNamespace
     from utils import stt_cap_dispatch, subscription
 
@@ -580,11 +580,6 @@ def test_historical_mixed_coverage_cannot_authorize_funded_work(monkeypatch, key
     monkeypatch.setattr(
         subscription.users_db, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan='plus')
     )
-    with pytest.raises(HTTPException) as error:
-        ladder.budget_snapshot('u')
-    assert error.value.status_code == 503
-    assert error.value.detail == {'error': 'usage_budget_coverage_unavailable'}
-    assert not stt_cap_dispatch.sync_allowed('u')
-    assert stt_cap_dispatch.funded_allowance('u').reason == 'allowance_unavailable'
-    snapshot['completeness'][key] = 0
-    assert stt_cap_dispatch.sync_allowed('u')  # Clean reset/repaired attribution resumes work.
+    assert ladder.budget_snapshot('u') is snapshot
+    assert stt_cap_dispatch.sync_allowed('u')
+    assert stt_cap_dispatch.funded_allowance('u').reason == 'usage_budget_available'

@@ -28,10 +28,14 @@ With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, funded ladder/Free live sessio
 install the shared provider admission state even when legacy dispatch remains off.
 It carries remaining units and debits accepted PCM at the pinned provider speech
 rate. A packet exceeding the estimate is suppressed while capture continues.
-There is no per-audio-chunk I/O. A full snapshot is refreshed at the existing
-60-second flush only when >=90% used or below two minutes at the maximum managed
-speech rate; otherwise it uses 900 seconds. Subscription invalidation forces a
-refresh. Custom STT without a funded socket keeps the 900-second cache.
+There is no per-audio-chunk I/O. Full scans run at session start, every 900 seconds,
+and on subscription invalidation. At >=90% used or below two minutes at the maximum
+managed speech rate, the 60-second flush refreshes only the current hour, today's
+gateway day and today's API day, combining them with the session's closed-bucket
+sum. Rollover closes the old buckets once; backdated writes reconcile at 900 seconds.
+The existing flush subscription is reused. Unavailable snapshots retry after
+60 / 120 / 240 / 480 / 900 seconds, capped at 900; successful reads reset backoff.
+Custom STT without a funded socket keeps the 900-second cache.
 
 Near-cap external usage is detected within a 60-second flush plus persistence
 latency. Far from cap, concurrent external spending can remain unseen for 900
@@ -41,23 +45,24 @@ reauthorize with the current ladder allowance. Exhausted uploads use durable
 holds instead of a ladder 402 or locked transcript; reset/upgrade recovery checks
 the current allowance again. Ladder-only activation bypasses legacy monthly seconds.
 
-The month reader batches only elapsed day refs, never future days. For H hourly
-docs and D elapsed days its ledger reads/minute/session are (H+2D)/15 at 0% / 50%
-and H+2D at 95%, versus H+62 previously. See the account-inclusive read costs and
-custody response contract in [provider dispatch](stt-cap-dispatch.md#ladder-v1-admission-in-21488).
+The month reader batches only elapsed day refs, never future days. A normal near-cap
+minute costs three ledger reads plus the existing subscription read. The required
+900-second full scans still add periodic spikes: at H=408 hourly documents / D=17
+elapsed days, ordinary / amortized reads per minute are 1 / 30.47 at 0% and 50%,
+and 4 / 33.27 at 95%, versus the prior 30.53 / 30.53 / 444 averages. Rollover adds
+one closing-hour read and, at midnight, two closing-day reads. See the complete
+[failure/read-cost model](stt-cap-dispatch.md#ladder-v1-admission-in-21488).
 
 Unprojected seconds receive the pinned provisional speech rate without a silence
 ratio; unpriced gateway attempts receive the standard-chat estimate. Atomic
-unpriced-quantity counters ensure each priced second/event is excluded from the
-residual even when its status is missing. Newly attributed units and missing-event
-counts keep historical zero-unit gaps visible after later priced writes.
-Historical mixed leaves already carrying
-units cannot reconstruct exact quantities and are never charged a second time.
-Such unresolved coverage blocks enforced budget admission (503); funded STT
-retains audio until a clean period or corrected attribution clears it.
-Residual and historical ambiguity histograms (`omi_ladder_unprojected_*` and
-`omi_ladder_ambiguous_priced_*`) expose both limitations, without user labels or
-historical writes. Repeated evaluations are observations, not unique usage.
+unpriced-quantity counters keep priced seconds/events out of residuals. Newly
+attributed quantities and units remain separate from history. For each ambiguous
+historical leaf, charge `max(historical priced units, unknown-provider proxy)`
+once, plus separately attributed new units. Ambiguity never raises a 503 or denies
+a paying account until reset. Residual and historical ambiguity histograms
+(`omi_ladder_unprojected_*`, `omi_ladder_ambiguous_priced_*`) and the shared degraded
+fallback metric expose uncertainty without user labels or historical writes.
+Repeated evaluations are observations, not unique usage.
 With ladder flags off, shadow totals and #21866 dispatch behavior remain unchanged.
 No switch or deployment binding is activated.
 

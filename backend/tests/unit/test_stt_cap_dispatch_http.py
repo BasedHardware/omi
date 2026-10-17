@@ -153,29 +153,26 @@ def test_transient_policy_hold_does_not_claim_credits_exhausted(client, monkeypa
 
 
 @pytest.mark.parametrize('version', ['v1', 'v2'])
-@pytest.mark.parametrize('ambiguous', [False, True])
-def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, version, ambiguous):
+@pytest.mark.parametrize('unavailable', [False, True])
+def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, version, unavailable):
     from utils import ladder_v1
     from utils.sync import cap_hold
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setattr(
-        ladder_v1,
-        'usage_snapshot',
-        lambda *a, **k: {
-            'budget_percent': 0 if ambiguous else 100,
-            'used_units': 0 if ambiguous else 100,
-            'budget_units': 100,
-            'completeness': {'ambiguous_priced_transcription_seconds': 600 if ambiguous else 0},
-        },
-    )
+
+    def snapshot(*args, **kwargs):
+        if unavailable:
+            raise RuntimeError('synthetic ledger read failure')
+        return {'budget_percent': 100, 'used_units': 100, 'budget_units': 100}
+
+    monkeypatch.setattr(ladder_v1, 'usage_snapshot', snapshot)
     reject = Mock(side_effect=AssertionError('upload must hold instead of raising 402'))
     monkeypatch.setattr(ladder_v1, 'enforce_budget', reject)
     monkeypatch.setattr(
         router,
         'resolve_transcription_allowance',
-        lambda _: SimpleNamespace(reason='allowance_unavailable' if ambiguous else 'usage_budget_exhausted'),
+        lambda _: SimpleNamespace(reason='allowance_unavailable' if unavailable else 'usage_budget_exhausted'),
     )
     if version == 'v1':
         # Exercise the actual funded budget -> full capture hold decision.
@@ -185,7 +182,7 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, v
         response = client.post('/v1/sync-local-files', files={'files': ('omi_1792152000.bin', b'synthetic')})
         assert response.status_code == 200, response.text
         assert response.json()['held_audio'] is True
-        assert response.json()['credits_exhausted'] is (not ambiguous)
+        assert response.json()['credits_exhausted'] is (not unavailable)
         retained.assert_awaited_once()
     else:
         # V2 acknowledges archived bytes/job custody; the real coordinator's
