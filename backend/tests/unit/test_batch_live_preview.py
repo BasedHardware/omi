@@ -2,6 +2,7 @@
 
 import asyncio
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -12,6 +13,11 @@ from routers.listen import batch_preview, demand_routing
 from utils.observability import demand_cohort as telemetry
 from utils.stt import streaming
 from utils.stt.soniox import SafeSonioxSocket
+from database import helpers
+from models.conversation import Conversation
+from utils.conversations import lifecycle
+from routers.listen.receiver import ListenReceiver
+from routers.listen.lane_meter import LiveLaneMeter
 
 
 @pytest.fixture(autouse=True)
@@ -159,8 +165,12 @@ def test_actual_selector_prefers_configured_parakeet_and_retains_policy(monkeypa
     assert batch_preview.capture_batch_preview(h)
     assert h.stt_service == streaming.STTService.soniox
     monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
-    assert not batch_preview.capture_batch_preview(h)
-    assert h.demand_telemetry.batch_cohort == 'eligible_control'
+    assert batch_preview.capture_batch_preview(h)  # Existing connection remains pinned.
+    assert h.demand_telemetry.batch_cohort == 'admitted'
+    control = host()
+    telemetry.attach_demand_telemetry(control, 'ineligible')
+    assert not batch_preview.capture_batch_preview(control)
+    assert control.demand_telemetry.batch_cohort == 'eligible_control'
 
 
 @pytest.mark.asyncio
@@ -189,3 +199,95 @@ async def test_actual_soniox_writes_and_capture_pin_retirement_denominator():
         await sock.drain_and_close()
     assert telemetry.BATCH_WIRE_AUDIO.labels(provider='soniox', batch_cohort='admitted')._value.get() - before == 2
     assert telemetry.BATCH_CAPTURE_AUDIO.labels(batch_cohort='admitted')._value.get() - capture_before == 1
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced', 'e2ee', 'unknown'])
+@pytest.mark.parametrize('idempotent', [False, True])
+def test_fresh_model_resolves_privacy_before_ownership_without_an_extra_lookup(monkeypatch, level, idempotent):
+    enable(monkeypatch)
+    reads = []
+    monkeypatch.setattr(helpers.redis_db, 'get_user_data_protection_level', lambda uid: reads.append(uid) or level)
+    saved = []
+
+    @helpers.set_data_protection_level(data_arg_name='conversation_data')
+    def persist(uid, conversation_data):
+        saved.append(dict(conversation_data))
+        return True
+
+    monkeypatch.setattr(lifecycle.conversations_db, 'upsert_conversation_with_lifecycle', persist)
+    monkeypatch.setattr(lifecycle.conversations_db, 'create_conversation_if_absent_with_lifecycle', persist)
+    now = datetime.now(timezone.utc)
+    row = Conversation(
+        id='synthetic-conversation',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        status='in_progress',
+        structured={},
+        language='en',
+        private_cloud_sync_enabled=True,
+    ).model_dump()
+    assert row['data_protection_level'] is None
+    assert lifecycle.create_in_progress_conversation('synthetic-owner', row, idempotent=idempotent)
+    assert len(reads) == 1
+    assert saved[0]['data_protection_level'] == level
+    assert (saved[0].get('record_lane_owner') == 'batch_live_v1') == (level in {'standard', 'enhanced'})
+
+
+def test_capture_snapshot_never_retains_transcript_or_photo_payloads():
+    row = {
+        **host().batch_record_capture,
+        'transcript_segments': [{'text': 'synthetic'}],
+        'photos': [{'base64': 'synthetic'}],
+        'structured': {'overview': 'synthetic'},
+    }
+    snapshot = batch_live_preview.capture_snapshot(row)
+    assert set(snapshot) == {
+        'id',
+        'record_lane_owner',
+        'private_cloud_sync_enabled',
+        'uses_custom_stt',
+        'deleted',
+        'discarded',
+        'data_protection_level',
+        'language',
+    }
+    assert all(not isinstance(value, (dict, list)) for value in snapshot.values())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('percent,cohort', [('0', 'eligible_control'), ('100', 'admitted')])
+async def test_cap_pause_pins_capture_before_return_and_resume_does_not_reclassify(monkeypatch, percent, cohort):
+    enable(monkeypatch)
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', percent)
+    monkeypatch.setattr(batch_preview, 'get_stt_service_for_language', lambda *a, **k: pytest.fail('paused dial'))
+    h = host()
+    h.stt_service = streaming.STTService.soniox
+    attached = telemetry.attach_demand_telemetry(h, 'admitted')
+    h._demand_cohort = 'admitted'
+    receiver = SimpleNamespace(host=h, cap_admission=SimpleNamespace(refresh=AsyncMock(), allowed=lambda _: False))
+    h.receiver = receiver
+    before = telemetry.BATCH_CAPTURE_AUDIO.labels(batch_cohort=cohort)._value.get()
+    assert await ListenReceiver.initialize_stt(receiver)
+    assert receiver.cap_paused
+    attached.capture(1)
+    assert attached.batch_cohort == cohort
+    assert telemetry.BATCH_CAPTURE_AUDIO.labels(batch_cohort=cohort)._value.get() - before == 1
+    monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', '0' if percent == '100' else '100')
+    assert batch_preview.capture_batch_preview(h, select_provider=False) == (cohort == 'admitted')
+    assert attached.batch_cohort == cohort
+
+
+def test_batch_treatment_is_excluded_from_all_existing_live_demand_arms(monkeypatch):
+    enable(monkeypatch)
+    h = host()
+    attached = telemetry.attach_demand_telemetry(h, 'admitted')
+    h._demand_cohort = 'admitted'
+    h.receiver = SimpleNamespace(lane_meter=LiveLaneMeter())
+    h.receiver.lane_meter.demand_cohort = 'admitted'
+    old_before = telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted')._value.get()
+    assert batch_preview.capture_batch_preview(h, select_provider=False)
+    assert h._demand_cohort == attached.cohort == h.receiver.lane_meter.demand_cohort == 'ineligible'
+    assert demand_routing.attach_live_demand(SimpleNamespace(host=h)) is None
+    attached.capture(1)
+    assert telemetry.CAPTURE_AUDIO.labels(demand_cohort='admitted')._value.get() == old_before

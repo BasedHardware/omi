@@ -5429,13 +5429,19 @@ conversation's durable `record_lane_owner=batch_live_v1`, matching conversation
 ID, current batch/live admission, private-cloud sync, platform keys, single
 channel, explicit single-language English, and pusher enabled. Resumed legacy
 records never qualify just because the owner is admitted. The already loaded
-conversation snapshot is reused; no new Firestore scan is introduced.
+conversation snapshot is reduced to scalar eligibility fields; transcripts and
+photos are never retained by this gate. Fresh capture resolves the privacy level
+through the existing write resolver before stamping ownership, so E2EE remains
+excluded and the write performs no second privacy lookup. No new Firestore scan
+is introduced.
 
 Selected sessions prefer the configured self-hosted Parakeet RNNT preview.
 Provider/model/language policy and the managed chain's health, account, capacity
 and failover gates remain authoritative; vendor failover is still available.
-The separate live-demand visibility experiment does not switch these sessions
-back to vendors. There is no silent/none-preview mode. Batch ownership and final
+Admission is pinned before a cap-paused return and stays fixed on resume.
+Batch-treated sessions are excluded from both arms of the separate live-demand
+experiment before capture or socket metering; its visibility policy does not
+switch these sessions back to vendors. There is no silent/none-preview mode. Batch ownership and final
 transcript projection are unchanged. Other languages retain existing live STT.
 Compatible listen **and pusher** artifacts and all-live batch qualification must
 precede this ramp; Cloud Run deployment alone does not install GKE artifacts.

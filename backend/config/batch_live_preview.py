@@ -28,3 +28,20 @@ def covered(host) -> bool:
         and host.pusher_enabled
         and language_qualified(host)
     )
+
+
+def capture_snapshot(capture: dict) -> dict:
+    """Retain only scalar eligibility evidence, never decoded content/photos."""
+    return {
+        key: capture.get(key)
+        for key in (
+            'id',
+            'record_lane_owner',
+            'private_cloud_sync_enabled',
+            'uses_custom_stt',
+            'deleted',
+            'discarded',
+            'data_protection_level',
+            'language',
+        )
+    }

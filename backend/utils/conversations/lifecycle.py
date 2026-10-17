@@ -9,7 +9,7 @@ lifecycle fields directly.
 from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase
-from config.batch_pipeline import record_capture_eligible
+from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
 
 import logging
 import os
@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from typing import Any, Mapping, Optional
 
+from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
@@ -98,11 +99,19 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
         raise LifecycleTransitionError(f'lifecycle persistence rejects status={status}')
 
 
+@set_data_protection_level(data_arg_name='conversation_data')
+def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> None:
+    # Resolve privacy at the existing write boundary before deciding ownership.
+    # The downstream DB decorator sees the resolved value and performs no second lookup.
+    if record_capture_eligible(uid, conversation_data):
+        conversation_data['record_lane_owner'] = 'batch_live_v1'
+
+
 def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
-    if record_capture_eligible(uid, conversation_data):
-        conversation_data['record_lane_owner'] = 'batch_live_v1'
+    if live_record_enabled_for(uid):
+        _reserve_batch_live_capture(uid, conversation_data)
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)

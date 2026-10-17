@@ -1246,6 +1246,7 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        capture_batch_preview(self.host, select_provider=False)
         admission = getattr(self, 'cap_admission', None)
         if admission is not None:
             await admission.refresh()
