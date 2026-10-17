@@ -8,7 +8,7 @@ from google.cloud import firestore
 from config.stt_cap_dispatch import enabled
 from models.users import HeldAudioRecording, HeldAudioSummary
 from utils.stt_cap_dispatch import funded_allowance
-from utils.sync.cap_hold import holds, summary_ref, whole_seconds, ensure_summary, remaining_seconds
+from utils.sync.cap_hold import holds, whole_seconds, ensure_summary, remaining_seconds
 
 # Newest-first page. The exact total lives on the summary doc, not this page.
 LIST_LIMIT = 20

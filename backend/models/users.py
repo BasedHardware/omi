@@ -1,7 +1,7 @@
 from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional, List, Literal
+from typing import Optional, List, Literal
 
 from pydantic import BaseModel, Field, model_serializer
 
