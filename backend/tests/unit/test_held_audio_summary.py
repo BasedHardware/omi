@@ -181,5 +181,5 @@ def test_partial_receipts_and_retries_adjust_summary_under_lease(monkeypatch):
 
 
 def test_fractional_pieces_do_not_accumulate_rounding_drift(monkeypatch):
-    assert cap_hold._summary_after({'seconds': 0.4, 'count': 1}, 0.4, 1)['seconds'] == 0.8
+    assert cap_hold.summary_after({'seconds': 0.4, 'count': 1}, 0.4, 1)['seconds'] == 0.8
     assert cap_hold.remaining_seconds({'state': 'held', 'piece_plan': {}, 'seconds': 80}) == 0

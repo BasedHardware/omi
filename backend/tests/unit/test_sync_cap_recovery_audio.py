@@ -59,15 +59,23 @@ async def test_already_segmented_hold_preserves_position_without_repeating_vad(m
     coverage.assert_not_called()
 
 
-async def test_live_short_tail_is_not_dropped_by_sync_vad_or_wal_coverage(monkeypatch):
-    vad, coverage = Mock(), AsyncMock()
+async def test_live_short_tail_runs_vad_without_wal_coverage(monkeypatch):
+    coverage = AsyncMock()
+
+    def vad(path, segments, errors, **kwargs):
+        assert kwargs['keep_short'] is True
+        segments.add(path)
+
+    async def leaf(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(audio, 'run_blocking', leaf)
     monkeypatch.setattr(audio, 'retrieve_vad_segments', vad)
     monkeypatch.setattr(audio, 'apply_sync_wal_audio_coverage', coverage)
     paths, maps, targets, bindings = await audio.prepare(
         'synthetic',
         '/local/1792152000.125000.wav',
-        {'origin': 'live', 'full_capture': False, 'target_conversation_id': 'live-conversation'},
+        {'origin': 'live', 'full_capture': True, 'target_conversation_id': 'live-conversation'},
     )
     assert paths == {'/local/1792152000.125000.wav'}
-    vad.assert_not_called()
     coverage.assert_not_called()

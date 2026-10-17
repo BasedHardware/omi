@@ -14,11 +14,20 @@ class PlanFenced(RuntimeError):
     pass
 
 
-def persist_piece(uid: str, hold_id: str, path: str, context: dict[str, Any]) -> dict[str, Any]:
-    identity = hashlib.sha256(
+def piece_identity(hold_id: str, path: str, context: dict[str, Any]) -> str:
+    return hashlib.sha256(
         (hold_id + cap_hold.capture_identity(path, context) + json.dumps(context, sort_keys=True)).encode()
     ).hexdigest()
-    return {**cap_hold.upload_held_audio(uid, path, identity, context), 'seconds': get_wav_duration(path)}
+
+
+def persist_piece(uid: str, hold_id: str, path: str, context: dict[str, Any]) -> dict[str, Any]:
+    identity = piece_identity(hold_id, path, context)
+    return {
+        **cap_hold.upload_held_audio(
+            uid, path, identity, context, **({'immutable': True} if context.get('live_storage_month') else {})
+        ),
+        'seconds': get_wav_duration(path),
+    }
 
 
 async def ensure_plan(
@@ -52,7 +61,16 @@ async def ensure_plan(
             context['live_storage_month'] = meta['live_storage_month']
             size = await run_blocking(storage_executor, lambda: Path(path).stat().st_size)
             size += 32 * ((size + cap_hold.AUDIO_CHUNK_BYTES - 1) // cap_hold.AUDIO_CHUNK_BYTES)
-            await run_blocking(db_executor, reserve, uid, size, month=meta['live_storage_month'], recovery=True)
+            reservation_id = await run_blocking(storage_executor, piece_identity, snapshot.id, path, context)
+            await run_blocking(
+                db_executor,
+                reserve,
+                uid,
+                size,
+                month=meta['live_storage_month'],
+                recovery=True,
+                reservation_id=reservation_id,
+            )
         plan[name] = await run_blocking(storage_executor, persist_piece, uid, snapshot.id, path, context)
         local_paths[name], contexts[name] = path, context
     if not await save(uid, snapshot, row, {'piece_plan': plan}):

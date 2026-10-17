@@ -267,8 +267,8 @@ The receive boundary holds decoded PCM16 mono (all supported input codecs are
 already decoded), resampled to 16 kHz for multi-channel inputs. One-second WAV
 objects use the same authenticated chunk encryption, owner prefix, manifests,
 pinned piece plan, fenced ingestion receipts and idempotent usage settlement
-as held sync uploads. Live pieces bypass the sync VAD minimum-duration filter,
-which otherwise discards sub-second tails; no WAL coverage belongs to this
+as held sync uploads. Live recovery runs VAD with short segments enabled, so silence makes no provider
+call and sub-second speech tails survive. No WAL coverage belongs to this
 server-origin PCM. Ownership/rate/channel changes and clock gaps split packs.
 The projected capture clock and conversation ownership ranges preserve the
 original timestamps and target conversations. If ownership has expired, recovery
@@ -284,9 +284,12 @@ before forwarding the next receive buffer; it never sends held PCM to live STT.
 
 The sink bounds individual objects to one second of mono PCM and backpressure to
 60 seconds of pending PCM. The async receive path and the one-second update task
-serialize publication. Disconnect, ordinary exceptions and cancellation flush
-the tail in cleanup; cleanup lets an in-flight executor upload finish before
-removing its WAV. **SIGKILL/pod loss can lose the pending PCM plus an in-flight write**
+serialize publication. Each capture manifest groups at most 60 seconds / 120
+immutable PCM parts; an active stream lease fences recovery until seal, or expires
+30 minutes after a crash. Ownership/rate/channel/month changes or clock gaps seal
+the group. Disconnect, ordinary exceptions and cancellation hand final publication
+to a supervised task; cancellation of the socket owner cannot cancel that flush.
+Cleanup lets an in-flight executor upload finish before removing its WAV. **SIGKILL/pod loss can lose the pending PCM plus an in-flight write**
 (up to the 60-second aggregate buffer bound; ordinarily a sub-second mono tail). Published holds have no TTL and recover after restart.
 Counters are receipts, not an assertion that in-flight data is durable. This is
 an explicit activation limitation; no client acknowledgement protocol was added.
@@ -294,6 +297,8 @@ an explicit activation limitation; no client acknowledgement protocol was added.
 A transactional per-user, capture-UTC-month reservation admits at most 96 GiB /
 3,000,000 source objects. Frozen recovery pieces and conservative failed/retried
 reservations share a 192 GiB / 6,000,000 total ceiling for that capture month;
+object-identity reservation receipts and generation-zero uploads make retries
+idempotent (ambiguous failures conservatively retain their reservation).
 recovery does not escape it at a later month boundary. Capacity failure closes
 the listen path with an error, never a successful custody receipt. This adds no
 TTL or deletion policy. At 16 kHz, a full continuous 31-day mono month is about
@@ -305,15 +310,19 @@ STT. Unrecovered months accumulate; this is an incremental monthly bound, not a
 lifetime retention cap. No production location/bucket settings were read.
 
 For a steady, mono capped minute (60 one-second publications), custody adds 60
-GCS uploads, 180 Firestore writes and 780 Firestore document reads, including the
-existing two-read deletion gates (13 reads / publication). Header overhead is
+GCS uploads, 241 Firestore writes and 781 Firestore document reads: 13 reads /
+4 writes per publication plus one read/write to seal the one-minute manifest.
+This includes the existing two-read deletion gates and reservation receipts. Header overhead is
 4,560 bytes/minute; PCM is 1,920,000 bytes/minute. Boundary fragments, retries,
 transaction contention, initial summary migration and recovery add operations.
 The existing usage/allowance refresh is separate. At illustrative us-central1
 rates $0.03/100k reads, $0.09/100k writes and $0.005/1k GCS Class A operations,
-this is about **$0.000696/capped minute** before metadata/storage/recovery, or
-$31.07 for 44,640 continuous capped minutes. One-second recovery requests add
-provider overhead; a coalesced recovery dispatch is a future efficiency task.
+this is about **$0.0007512/capped minute** before metadata/storage/recovery, or
+$33.53 for 44,640 continuous capped minutes. Firestore metadata/index storage
+(including up to three million source reservation receipts) is additional.
+Recovery operates on the grouped captures rather than one-second provider calls.
+A productive ten-row recovery page schedules the next pass after the existing
+60-second cooldown; a blocked page never self-polls.
 Sources: [GCS pricing](https://cloud.google.com/storage/pricing),
 [Firestore pricing](https://cloud.google.com/firestore/pricing).
 
@@ -322,9 +331,13 @@ recursively deletes user subcollections, including manifests, summary and monthl
 reservations. The existing deletion/write gates guard reservations, uploads and
 publication; no independent store or deletion pathway was introduced.
 
-Summary v2 lazily rebuilds older/missing totals from held rows in a transaction,
-backfills listing timestamps in bounded batches, and then uses transactional
-piece-level deltas. It counts pending frozen-piece seconds, removes successful
+Summary v2 lazily rebuilds older/missing totals under a short initializer lease
+in transactions of at most 400 rows. Each page fences the cursor and listing
+backfill; only the last page publishes v2. Concurrent publishers wait for that
+publication, and an expired initializer resumes at the last committed cursor.
+The loopback Firestore emulator exercises 805 legacy rows with concurrent
+rebuild/publish and deletion/retry fences. Afterwards transactional piece-level
+deltas maintain the total. It counts pending frozen-piece seconds, removes successful
 or silent receipts immediately, and retains failed-reconciliation seconds.
 Subscription HTTP serialization omits only an absent `held_audio`, preserving all
 other null fields. A funded user with pending holds receives `state=recovering`;

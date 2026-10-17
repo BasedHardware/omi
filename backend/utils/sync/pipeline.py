@@ -988,6 +988,7 @@ def retrieve_vad_segments(
     source_frame_map: dict | None = None,
     segment_source_maps: dict | None = None,
     segment_source_lock: threading.Lock | None = None,
+    keep_short: bool = False,
 ):
     try:
         start_timestamp = get_timestamp_from_path(path)
@@ -1010,7 +1011,11 @@ def retrieve_vad_segments(
 
     try:
         for i, segment in enumerate(segments):
-            if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
+            if (
+                segment['end'] - segment['start'] < 1
+                and not keep_short
+                and not (source_frame_map or {}).get('coverage_trimmed')
+            ):
                 continue
             segment_timestamp = start_timestamp + segment['start']
             # Two distinct source files can independently compute the same absolute
@@ -1551,7 +1556,18 @@ def process_segment(
             geolocation=geolocation,
         )
         incoming = Conversation(
-            id=chunk_identity(uid, source, client_device_id, is_locked, timestamp),
+            id=chunk_identity(
+                uid,
+                source,
+                client_device_id,
+                is_locked,
+                timestamp,
+                **(
+                    {'capture_partition': cap_recovery_checkpoint['capture_partition']}
+                    if cap_recovery_checkpoint and cap_recovery_checkpoint.get('capture_partition')
+                    else {}
+                ),
+            ),
             created_at=started_at,
             structured=build_deterministic_minimum_structured(create_memory),
             **create_memory.model_dump(),

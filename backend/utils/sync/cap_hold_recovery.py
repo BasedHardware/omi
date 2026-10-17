@@ -38,7 +38,11 @@ RECONCILIATION_COOLDOWN_SECONDS = 1800
 
 def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
     # Account deletion already purges this existing owner-scoped chunk prefix.
-    objects = [row, *(row.get('piece_plan') or {}).values()]
+    objects = [
+        row,
+        *({'audio_path': part} for part in row.get('audio_parts') or []),
+        *(row.get('piece_plan') or {}).values(),
+    ]
     for path in {item[key] for item in objects for key in ('audio_path', 'metadata_path') if item.get(key)}:
         if not path.startswith(f'chunks/{uid}/cap-held/'):
             raise ValueError('hold audio owner mismatch')
@@ -236,6 +240,11 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                             'lease_token': row['lease_token'],
                             'attempt': attempt,
                             'receipt': intent,
+                            **(
+                                {'capture_partition': f"live:{snapshot.id}:channel:{meta.get('channel', 0)}"}
+                                if meta.get('origin') == 'live'
+                                else {}
+                            ),
                         },
                     )
                 except Exception as error:
@@ -341,11 +350,13 @@ async def recover(uid: str) -> None:
     if not acquired:
         return
     rows = await run_blocking(db_executor, cap_hold.pending_holds, uid)
+    progressed = False
     for snapshot in rows:
         row = snapshot.to_dict() or {}
         try:
             if row.get('state') == 'completed':
                 await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+                progressed = True
                 continue
             row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
             if row is None:
@@ -357,10 +368,21 @@ async def recover(uid: str) -> None:
                     if not await _save(uid, snapshot, row, {'state': 'completed'}):
                         continue
                     await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+                    progressed = True
             finally:
                 await run_blocking(db_executor, cap_hold.release, uid, snapshot.reference, row['lease_token'])
         except Exception as error:
             logger.warning('event=stt_cap_recovery outcome=deferred exception_type=%s', type(error).__name__)
+
+    if progressed and len(rows) == 10:
+        start_background_task(_continue_recovery(uid), name='stt_cap_hold_recovery_continuation')
+
+
+async def _continue_recovery(uid: str) -> None:
+    # Continue a productive bounded page after the distributed cooldown. A
+    # single app open can drain a backlog; blocked pages never self-poll.
+    await asyncio.sleep(60)
+    await recover(uid)
 
 
 async def _schedule(uid: str) -> None:

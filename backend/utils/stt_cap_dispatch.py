@@ -5,7 +5,7 @@ import os
 import time
 from functools import lru_cache, wraps
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Callable
 from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
 
@@ -99,8 +99,8 @@ class LiveAdmission:
         self.refreshed_at = None
         self.failures = 0
         self.usage_cache = None
-        self.capture_observer = None
-        self.active_capture = None
+        self.capture_observer: Callable[[bytes, int, int, bool], None] | None = None
+        self.active_capture: tuple[bytes, int, list[tuple[int, int]]] | None = None
         if budget_enforcement_enabled():
             from database.usage_units_session import UsageUnitsSession
 

@@ -454,3 +454,59 @@ async def test_ladder_only_recovery_waits_for_budget_reset_then_releases(state, 
     assert await recovery._recover_row('synthetic', state.snapshot, state.row)
     recovery.process_segment.assert_called_once()
     assert state.row['finalized'] is True
+
+
+async def test_silent_live_capture_settles_without_provider_or_ambiguous_receipt(state, monkeypatch):
+    from utils.sync import cap_recovery_audio
+
+    meta = {
+        'origin': 'live',
+        'full_capture': True,
+        'timestamp': 100,
+        'source': 'phone',
+        'channel': 0,
+        'live_storage_month': '2026-10',
+    }
+    monkeypatch.setattr(recovery.cap_hold, 'metadata', Mock(return_value=meta))
+    monkeypatch.setattr(recovery, 'prepare_audio', cap_recovery_audio.prepare)
+    monkeypatch.setattr(cap_recovery_audio, 'retrieve_vad_segments', Mock())  # Real branch, no speech windows.
+
+    async def leaf(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(cap_recovery_audio, 'run_blocking', leaf)
+    assert await recovery._recover_row('synthetic', state.snapshot, state.row)
+    assert state.row['piece_plan'] == {}
+    assert not state.row['failed_reconciliation']
+    recovery.process_segment.assert_not_called()
+    assert recovery.cap_hold.remaining_seconds({**state.row, 'seconds': 60}) == 0
+
+
+@pytest.mark.parametrize('productive', [False, True])
+async def test_productive_full_page_schedules_backlog_continuation_without_another_http_open(monkeypatch, productive):
+    monkeypatch.setattr(recovery, 'enabled', lambda: True)
+    monkeypatch.setattr(recovery.cap_hold, 'recovery_cooldown', lambda uid: True)
+    snapshots = [
+        SimpleNamespace(id=f'hold-{i}', reference=Mock(), to_dict=lambda: {'state': 'held', 'lease_token': 'owner'})
+        for i in range(10)
+    ]
+    monkeypatch.setattr(recovery.cap_hold, 'pending_holds', lambda uid: snapshots)
+    monkeypatch.setattr(recovery.cap_hold, 'claim', lambda *args: {'state': 'held', 'lease_token': 'owner'})
+    monkeypatch.setattr(recovery.cap_hold, 'checkpoint', lambda *args: True)
+    monkeypatch.setattr(recovery.cap_hold, 'release', lambda *args: None)
+    monkeypatch.setattr(recovery, '_recover_row', AsyncMock(return_value=productive))
+    monkeypatch.setattr(recovery, '_settle_and_erase', lambda *args: None)
+
+    async def leaf(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(recovery, 'run_blocking', leaf)
+    continued = []
+
+    def schedule(coro, **kwargs):
+        continued.append(kwargs['name'])
+        coro.close()
+
+    monkeypatch.setattr(recovery, 'start_background_task', schedule)
+    await recovery.recover('synthetic')
+    assert continued == (['stt_cap_hold_recovery_continuation'] if productive else [])

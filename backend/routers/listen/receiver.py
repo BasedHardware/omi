@@ -36,7 +36,7 @@ from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, run_blocking, start_background_task
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -64,7 +64,6 @@ from models.message_event import (
     PhotoDescribedEvent,
     PhotoProcessingEvent,
     MessageServiceStatusEvent,
-    SttCapLiveHeldEvent,
 )
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
@@ -1259,11 +1258,11 @@ class ListenReceiver(ReplayFilterMixin):
     async def initialize_stt(self) -> bool:
         lock = getattr(self, '_cap_init_lock', None)
         if getattr(self, 'cap_admission', None) is None or lock is None:
-            return await self._initialize_stt()
+            return await ListenReceiver._initialize_stt(self)
         async with lock:
             if not self.cap_paused and (self.stt_socket is not None or any(self.stt_sockets_multi)):
                 return True
-            return await self._initialize_stt()
+            return await ListenReceiver._initialize_stt(self)
 
     async def _initialize_stt(self) -> bool:
         capture_batch_preview(self.host, select_provider=False)
@@ -1884,10 +1883,12 @@ class ListenReceiver(ReplayFilterMixin):
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
     def _observe_cap_capture(self, data, rate, start, admitted):
-        self.live_hold.observe(self, data, rate, start, admitted)
+        if self.live_hold is not None:
+            self.live_hold.observe(self, data, rate, start, admitted)
 
     async def _cap_hold_updates(self):
-        await self.live_hold.run_updates(self)
+        if self.live_hold is not None:
+            await self.live_hold.run_updates(self)
 
     async def _emit_stt_cap_live_held(self) -> None:
         hold = getattr(self, 'live_hold', None)
@@ -2175,7 +2176,7 @@ class ListenReceiver(ReplayFilterMixin):
                     'suppressed',
                     self.host.stt_service,
                     len(pcm) / (2 * TARGET_SAMPLE_RATE),
-                    admission.reason == 'plan_allowance_exhausted',
+                    admission is not None and admission.reason == 'plan_allowance_exhausted',
                 )
             if suppressed:
                 hold = getattr(self, 'live_hold', None)
@@ -2188,7 +2189,7 @@ class ListenReceiver(ReplayFilterMixin):
                         channel_index,
                     )
                 await self._emit_stt_cap_live_held()
-            elif getattr(self, 'live_hold', None) is not None and self.live_hold.paused:
+            elif self.live_hold is not None and self.live_hold.paused:
                 await self.live_hold.flush(force=True)
                 await self.live_hold.notice(paused=False)
             if should_send and not suppressed:
@@ -2544,20 +2545,16 @@ class ListenReceiver(ReplayFilterMixin):
                 else:
                     await self._teardown_body(buffer, decoded_audio_bytes)
             finally:
-                if cap_updates is not None:
-                    self._cap_hold_stop.set()
-                    # Let the leaf upload finish before cleaning its temporary
-                    # WAV. Cancelling run_in_executor cannot cancel its thread.
+                if self.live_hold is not None:
+                    custody = start_background_task(
+                        self.live_hold.finish_updates(cap_updates, self._cap_hold_stop), name='stt_cap_live_final_flush'
+                    )
                     try:
-                        await asyncio.shield(cap_updates)
-                    except Exception as error:
-                        logger.error(
-                            'event=stt_cap_live_held outcome=update_failed exception_type=%s', type(error).__name__
-                        )
-                        self.host.state.close_code = 1011
-                if getattr(self, 'live_hold', None) is not None:
-                    try:
-                        await self.live_hold.close()
+                        await asyncio.shield(custody)
+                    except asyncio.CancelledError:
+                        self.stt_drain_complete.set()
+                        self.host.state.active = False
+                        raise  # Custody remains supervised and keeps the PCM alive.
                     except Exception as error:
                         self.host.state.close_code = 1011
                         logger.error(
