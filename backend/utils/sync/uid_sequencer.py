@@ -6,7 +6,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
@@ -25,6 +25,7 @@ from database.sync_jobs import (
 )
 from utils.cloud_tasks import enqueue_sync_job
 from utils.sync import backfill_cutover, stage as sync_stage
+from utils.sync.backfill_order import newest_first
 
 logger = logging.getLogger(__name__)
 MAX_EXPIRED_RETIREMENTS = 50
@@ -50,7 +51,9 @@ def retire_expired_enabled() -> bool:
     return production_stage() and os.getenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false').strip().lower() == 'true'
 
 
-def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> _RetirementOutcome:
+def _retire_expired(
+    uid: str, job_id: str, *, epoch: int | None = None, allow_active_owner: bool = False
+) -> _RetirementOutcome:
     # Malformed job JSON must never count as absence. Redis errors propagate.
     sync_job_key_exists(job_id)
     token = try_acquire_job_run_lock(job_id)
@@ -59,7 +62,8 @@ def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> _Reti
     try:
         if sync_job_key_exists(job_id):
             return _RetirementOutcome.KEY_PRESENT
-        retired = registry.retire_expired(uid, job_id, epoch=epoch)
+        options: dict[str, Any] = {'allow_active_owner': True} if allow_active_owner else {}
+        retired = registry.retire_expired(uid, job_id, epoch=epoch, **options)
     finally:
         release_job_run_lock(job_id, token)
     if retired:
@@ -134,7 +138,7 @@ def enabled() -> bool:
 
 def _dispatch(claim: dict[str, Any]) -> None:
     payload = {**claim['payload'], 'sequencer_epoch': claim['epoch']}
-    enqueue_sync_job(payload)
+    enqueue_sync_job(payload, dispatch_attempt=claim.get('dispatch_attempt', 0))
     latency = max(0.0, (datetime.now(timezone.utc) - claim['accepted_at']).total_seconds())
     logger.info('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
 
@@ -193,7 +197,7 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _Cl
         _dispatch(claim)
     except Exception as error:
         # A named task may exist despite a lost acknowledgement. The periodic
-        # reconciler replaces the dispatch epoch; old deliveries then ACK stale.
+        # reconciler retries dispatch with the same epoch so queued work stays valid.
         logger.error(
             'event=sync_uid_sequencer action=dispatch outcome=uncertain exception_type=%s', type(error).__name__
         )
@@ -341,6 +345,20 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
         progress = _ClaimProgress()
         try:
             registry.defer_pending(job['id'], now=now)
+            # Reuse the existing bounded page, independent of newest selection
+            # and of this UID's live reservation. Age is only a cheap filter;
+            # exact Redis absence, run-lock and ledger proofs still decide.
+            accepted_at = job.get('accepted_at')
+            if (
+                newest_first(job['uid'])
+                and retire_expired_enabled()
+                and isinstance(accepted_at, datetime)
+                and accepted_at <= now - timedelta(days=1)
+            ):
+                retirement = _retire_expired(job['uid'], job['job_id'], allow_active_owner=True)
+                if retirement is _RetirementOutcome.RETIRED:
+                    progress.retired += 1
+                    continue
             if job['uid'] in seen_uids:
                 continue
             seen_uids.add(job['uid'])

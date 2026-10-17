@@ -89,8 +89,8 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
-# main.py mounts sync intake/worker RPC and owns serving startup. pusher.main
-# mounts none of those surfaces and never starts the dedicated GPU process.
+# main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
+# none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
         'BATCH_PIPELINE_ENABLED',
@@ -103,6 +103,16 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT',
         'BATCH_PIPELINE_UNIT_SECONDS',
         'BATCH_PIPELINE_SHARED_LIVE_ENABLED',
+        'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED',
+        'BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED',
+        'BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED',
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',
+        'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_RECOVERY_MODE',
+        'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
         'BUCKET_BATCH_PIPELINE',
     }
 )
@@ -317,7 +327,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
-    | _BATCH_PIPELINE_LISTEN_ONLY,
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the

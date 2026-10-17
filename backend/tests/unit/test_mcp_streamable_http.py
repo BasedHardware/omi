@@ -76,10 +76,12 @@ EXPECTED_TOOL_ORDER = [
     "dismiss_person",
     "get_screen_activity",
     "get_daily_summaries",
+    "process_recent_conversations",
 ]
 
 # Representative handler results exercising every success output schema.
 FAKE_SUCCESS = {
+    "process_recent_conversations": {"status": "processing", "ready": False, "promoted": 1, "has_more": False},
     "get_user_profile": {
         "profile_text": "p",
         "generated_at": "2026-06-11T10:30:00+00:00",
@@ -297,16 +299,25 @@ class TestVersionNegotiation:
 
 
 class TestStateless2026:
-    def test_tools_list_2026_via_header(self):
+    def test_tools_list_2026_via_header(self, monkeypatch):
+        monkeypatch.setenv("DEMAND_PROCESSING_ENABLED", "false")
         auth = _full_auth()
         request = mcp_transport.McpRequestContext(auth_context=auth, header_version=PROTOCOL_VERSION_2026)
         response = mcp_transport.handle_mcp_message(auth, _msg("tools/list"), request)
         result = response["result"]
         assert result["resultType"] == "complete"
         assert result["_meta"][META_SERVER_INFO] == SERVER_INFO
-        assert len(result["tools"]) == len(TOOL_SPECS)
+        assert len(result["tools"]) == len(TOOL_SPECS) - 1
+        assert "process_recent_conversations" not in {tool["name"] for tool in result["tools"]}
         assert result["ttlMs"] == TOOLS_LIST_TTL_MS == 3_600_000
         assert result["cacheScope"] == TOOLS_LIST_CACHE_SCOPE == "private"
+
+    def test_demand_tool_is_advertised_only_with_its_opt_in(self, monkeypatch):
+        monkeypatch.setenv("DEMAND_PROCESSING_ENABLED", "true")
+        monkeypatch.setenv("DEMAND_PROCESSING_TOOL_ENABLED", "true")
+        auth = _full_auth()
+        result = mcp_transport.handle_mcp_message(auth, _msg("tools/list"))["result"]
+        assert [tool["name"] for tool in result["tools"]] == EXPECTED_TOOL_ORDER
 
     def test_stateless_2026_via_meta_wins(self):
         auth = _full_auth()

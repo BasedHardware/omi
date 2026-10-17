@@ -16277,5 +16277,393 @@
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {
         "description": "Needs attention row: the server gave up summarizing a conversation"
+    },
+    "connectAgentHeadline": "Use your Omi memory in ChatGPT and your AI agents",
+    "@connectAgentHeadline": {
+        "description": "Headline at the top of the Connect an Agent screen"
+    },
+    "connectAgentIntro": "Connect once. Then ask them about your conversations, memories, and tasks.",
+    "@connectAgentIntro": {
+        "description": "Intro under the Connect an Agent headline"
+    },
+    "connectAgentOneTap": "One Tap",
+    "@connectAgentOneTap": {
+        "description": "Section header for apps that connect with one tap (ChatGPT)"
+    },
+    "connectAgentComputerAgents": "Agents With Their Own Computer",
+    "@connectAgentComputerAgents": {
+        "description": "Section header for AI agents that run on their own computer (Grok Bot, Muse, Instinct)"
+    },
+    "connectAgentComputerAgentsSubtitle": "Copy one prompt. Omi makes a key just for that agent and sends it securely.",
+    "@connectAgentComputerAgentsSubtitle": {
+        "description": "Explains how agents with their own computer are connected"
+    },
+    "connectAgentOtherAgent": "Other Agent",
+    "@connectAgentOtherAgent": {
+        "description": "Row for any other AI agent not listed by name"
+    },
+    "connectAgentKeyActive": "Key active",
+    "@connectAgentKeyActive": {
+        "description": "Status under an agent that holds an Omi key"
+    },
+    "connectAgentLastUsed": "Last used {time}",
+    "@connectAgentLastUsed": {
+        "description": "When an agent last used its Omi key; time is a localized timestamp",
+        "placeholders": {
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentDevelopers": "MCP and API keys for developers",
+    "@connectAgentDevelopers": {
+        "description": "Link at the bottom of Connect an Agent that opens the web developer page"
+    },
+    "connectAgentLoadFailed": "Couldn't load your connections.",
+    "@connectAgentLoadFailed": {
+        "description": "Error when connected apps and keys fail to load"
+    },
+    "connectAgentActionFailed": "Something went wrong. Try again.",
+    "@connectAgentActionFailed": {
+        "description": "Error when connecting, disconnecting or revoking fails"
+    },
+    "connectChatGptTitle": "Connect ChatGPT",
+    "@connectChatGptTitle": {
+        "description": "Title of the sheet that connects ChatGPT to Omi"
+    },
+    "connectChatGptSubtitle": "Takes about 30 seconds. You approve it inside ChatGPT, and it works on your phone and computer.",
+    "@connectChatGptSubtitle": {
+        "description": "Subtitle of the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepOpen": "We open Omi in ChatGPT",
+    "@connectChatGptStepOpen": {
+        "description": "Step 1 title in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepOpenBody": "ChatGPT opens straight to the Omi app page.",
+    "@connectChatGptStepOpenBody": {
+        "description": "Step 1 detail in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepApprove": "Tap Connect, then sign in to Omi",
+    "@connectChatGptStepApprove": {
+        "description": "Step 2 title in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepApproveBody": "Use the same account you use here.",
+    "@connectChatGptStepApproveBody": {
+        "description": "Step 2 detail in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepReturn": "Come back to Omi",
+    "@connectChatGptStepReturn": {
+        "description": "Step 3 title in the Connect ChatGPT sheet"
+    },
+    "connectChatGptStepReturnBody": "We check the connection automatically.",
+    "@connectChatGptStepReturnBody": {
+        "description": "Step 3 detail in the Connect ChatGPT sheet"
+    },
+    "openChatGpt": "Open ChatGPT",
+    "@openChatGpt": {
+        "description": "Button that opens ChatGPT"
+    },
+    "chatGptConnectedEverywhere": "Connected on phone and computer",
+    "@chatGptConnectedEverywhere": {
+        "description": "Status on the ChatGPT page once connected"
+    },
+    "tryAskingChatGpt": "Try Asking ChatGPT",
+    "@tryAskingChatGpt": {
+        "description": "Section header above example questions to ask ChatGPT"
+    },
+    "tryAskingChatGptFooter": "Tap one to open ChatGPT with it filled in.",
+    "@tryAskingChatGptFooter": {
+        "description": "Footer under the example questions"
+    },
+    "chatGptExampleMeetings": "What did I agree to in yesterday's meetings?",
+    "@chatGptExampleMeetings": {
+        "description": "Example question a person can ask ChatGPT about their Omi data"
+    },
+    "chatGptExampleTasks": "Turn my open Omi tasks into a plan for this week.",
+    "@chatGptExampleTasks": {
+        "description": "Example question a person can ask ChatGPT about their Omi data"
+    },
+    "chatGptExampleGoals": "What does Omi know about my goals?",
+    "@chatGptExampleGoals": {
+        "description": "Example question a person can ask ChatGPT about their Omi data"
+    },
+    "disconnectChatGpt": "Disconnect ChatGPT",
+    "@disconnectChatGpt": {
+        "description": "Destructive button that removes ChatGPT's access to Omi"
+    },
+    "disconnectChatGptQuestion": "Disconnect ChatGPT?",
+    "@disconnectChatGptQuestion": {
+        "description": "Confirm dialog title before removing ChatGPT's access"
+    },
+    "disconnectChatGptMessage": "ChatGPT will no longer be able to read your Omi memories, conversations, or tasks.",
+    "@disconnectChatGptMessage": {
+        "description": "Confirm dialog message before removing ChatGPT's access"
+    },
+    "connectAgentNamed": "Connect {name}",
+    "@connectAgentNamed": {
+        "description": "Sheet title for connecting a named AI agent; name is a product name such as Muse",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentPromptSubtitle": "Paste one prompt. {name} sets up Omi on its own computer.",
+    "@connectAgentPromptSubtitle": {
+        "description": "Subtitle of the sheet that connects an AI agent; name is the agent's product name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentGenericPromptSubtitle": "Paste one prompt. Your agent sets up Omi on its own computer.",
+    "@connectAgentGenericPromptSubtitle": {
+        "description": "Subtitle of the sheet that connects an unnamed AI agent"
+    },
+    "connectAgentKeyCreated": "Key “{name}” created",
+    "@connectAgentKeyCreated": {
+        "description": "Notice that an Omi key was created for an agent; name is the key's name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentKeyCreatedBody": "The prompt has a one-time link, not the key itself. It opens once and expires in 1 hour. Revoke the key here anytime.",
+    "@connectAgentKeyCreatedBody": {
+        "description": "Explains the one-time secure link in the prompt"
+    },
+    "connectAgentPreparing": "Making a key and a secure link…",
+    "@connectAgentPreparing": {
+        "description": "Shown while the app creates a key and a one-time link"
+    },
+    "connectAgentPrepareFailed": "Couldn't make the key. Check your connection and try again.",
+    "@connectAgentPrepareFailed": {
+        "description": "Error when the key or the one-time link cannot be created"
+    },
+    "copyPrompt": "Copy Prompt",
+    "@copyPrompt": {
+        "description": "Button that copies the setup prompt for an AI agent"
+    },
+    "connectAgentNewLink": "Link Expired? Make a New One",
+    "@connectAgentNewLink": {
+        "description": "Button that creates a fresh key and one-time link"
+    },
+    "connectAgentActiveTitle": "{name} Is Connected",
+    "@connectAgentActiveTitle": {
+        "description": "Sheet title for an agent that holds an Omi key; name is the agent's product name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "connectAgentActiveBody": "{name} holds an Omi key. Revoke it to cut off access. You can connect again anytime.",
+    "@connectAgentActiveBody": {
+        "description": "Explains an agent's active key and how to remove it",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "revokeAgentKeyQuestion": "Revoke {name}'s Key?",
+    "@revokeAgentKeyQuestion": {
+        "description": "Confirm dialog title before deleting an agent's Omi key",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "revokeAgentKeyMessage": "{name} loses access to your Omi memory right away.",
+    "@revokeAgentKeyMessage": {
+        "description": "Confirm dialog message before deleting an agent's Omi key",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "askAboutConversation": "Ask About This Conversation",
+    "@askAboutConversation": {
+        "description": "Menu item and sheet title for asking ChatGPT about a conversation"
+    },
+    "askAboutConversationSubtitle": "Opens ChatGPT with your question ready. It looks the conversation up through Omi, so you don't paste the transcript.",
+    "@askAboutConversationSubtitle": {
+        "description": "Explains the ask-about-this-conversation sheet"
+    },
+    "askYourQuestion": "Your question",
+    "@askYourQuestion": {
+        "description": "Label of the question field in the ask sheet"
+    },
+    "askSuggestFollowUp": "Draft a follow-up email from this conversation.",
+    "@askSuggestFollowUp": {
+        "description": "Suggested question about a conversation"
+    },
+    "askSuggestCommitments": "What did I commit to in this conversation?",
+    "@askSuggestCommitments": {
+        "description": "Suggested question about a conversation"
+    },
+    "askSuggestDoc": "Turn this conversation into a short doc.",
+    "@askSuggestDoc": {
+        "description": "Suggested question about a conversation"
+    },
+    "askInChatGpt": "Ask ChatGPT",
+    "@askInChatGpt": {
+        "description": "Button that opens ChatGPT with the question"
+    },
+    "copyForAnyApp": "Copy for Any App",
+    "@copyForAnyApp": {
+        "description": "Button that copies the question so it can be pasted into any AI app"
+    },
+    "askConnectChatGptFirst": "Connect ChatGPT once to ask it about your conversations.",
+    "@askConnectChatGptFirst": {
+        "description": "Shown in the ask sheet when ChatGPT is not connected yet"
+    },
+    "reconnect": "Reconnect",
+    "@reconnect": {
+        "description": "Button that connects an app (ChatGPT) again so it gets the access it is missing"
+    },
+    "chatGptNeedsReconnect": "Needs more access. Reconnect to fix.",
+    "@chatGptNeedsReconnect": {
+        "description": "Status under ChatGPT when it is connected but was approved without access to some Omi data"
+    },
+    "connectAgentWaiting": "Waiting for the agent to use its key",
+    "@connectAgentWaiting": {
+        "description": "Status under an AI agent whose Omi key was made but has not been used yet (the prompt was not pasted or not run)"
+    },
+    "connectAgentWaitingTitle": "{name} Hasn't Connected Yet",
+    "@connectAgentWaitingTitle": {
+        "description": "Sheet title for an agent whose Omi key has never been used; name is the agent's product name such as Muse",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryNotSummarizedYet": "Not summarized yet",
+    "@summaryNotSummarizedYet": {
+        "description": "Title of the card shown on a conversation that has no summary yet."
+    },
+    "summaryEmptyStateBody": "Omi can turn this conversation into an overview, key points and action items.",
+    "@summaryEmptyStateBody": {
+        "description": "Body of the card shown on a conversation that has no summary yet. Omi is the product name; keep it untranslated."
+    },
+    "summaryWithOmi": "Summarize with Omi",
+    "@summaryWithOmi": {
+        "description": "Button that summarizes the conversation with Omi's built-in summary. Omi is the product name."
+    },
+    "summaryWithTemplate": "Summarize with {name}",
+    "@summaryWithTemplate": {
+        "description": "Button that summarizes the conversation with the named summary template.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryUseDifferentTemplate": "Use a Different Template",
+    "@summaryUseDifferentTemplate": {
+        "description": "Button that opens the list of summary templates to pick another one."
+    },
+    "summaryFromTheTranscript": "From the transcript",
+    "@summaryFromTheTranscript": {
+        "description": "Small section header above a quoted excerpt of the conversation transcript."
+    },
+    "summaryReadFullTranscript": "Read Full Transcript",
+    "@summaryReadFullTranscript": {
+        "description": "Link that switches to the full transcript tab."
+    },
+    "summarySheetTitle": "Summarize with",
+    "@summarySheetTitle": {
+        "description": "Title of the sheet that lists the ways (Omi, templates) to summarize a conversation; the rows below complete the phrase."
+    },
+    "summaryOmiTemplateSubtitle": "Overview, key points and action items",
+    "@summaryOmiTemplateSubtitle": {
+        "description": "Subtitle of the built-in Omi summary row, describing what it produces."
+    },
+    "summaryYourTemplates": "Your templates",
+    "@summaryYourTemplates": {
+        "description": "Section header for the summary templates the user has added."
+    },
+    "summarySuggestedTemplates": "Suggested for this conversation",
+    "@summarySuggestedTemplates": {
+        "description": "Section header for summary templates suggested for this conversation."
+    },
+    "summaryBrowseTemplates": "Browse Templates",
+    "@summaryBrowseTemplates": {
+        "description": "Row that opens the catalog of summary templates."
+    },
+    "summaryCreateYourOwn": "Create Your Own",
+    "@summaryCreateYourOwn": {
+        "description": "Row that opens the editor to create a custom summary template."
+    },
+    "summaryUseForNewConversations": "Make this my default",
+    "@summaryUseForNewConversations": {
+        "description": "Checkbox label in the summary template sheet: remember the chosen template (or Omi) as the default this device offers first."
+    },
+    "summaryTemplatesLoadFailed": "Couldn't load your templates. Omi still works.",
+    "@summaryTemplatesLoadFailed": {
+        "description": "Inline message when the user's summary templates could not be loaded; the built-in Omi summary still works."
+    },
+    "summaryNoTemplatesYet": "You haven't added any templates yet. Browse a few or make your own.",
+    "@summaryNoTemplatesYet": {
+        "description": "Inline message when the user has no summary templates."
+    },
+    "summarySummarizingWith": "Summarizing with {name}…",
+    "@summarySummarizingWith": {
+        "description": "Progress label while the conversation is being summarized with Omi or the named template. Keep the single ellipsis character.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryTemplateFailedTitle": "{name} couldn't finish",
+    "@summaryTemplateFailedTitle": {
+        "description": "Heading when the named summary template failed to produce a summary.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryTemplateFailedBody": "The template didn't return a summary for this conversation.",
+    "@summaryTemplateFailedBody": {
+        "description": "Body when a summary template failed to produce a summary."
+    },
+    "summaryWithOmiInstead": "Summarize with Omi Instead",
+    "@summaryWithOmiInstead": {
+        "description": "Button that falls back to Omi's built-in summary after a template failed. Omi is the product name."
+    },
+    "summaryBusyTitle": "Still processing",
+    "@summaryBusyTitle": {
+        "description": "Heading when the conversation is already being processed and a new summary cannot start."
+    },
+    "summaryBusyBody": "Omi is already working on this conversation. The summary will appear here when it finishes.",
+    "@summaryBusyBody": {
+        "description": "Body when the conversation is already being processed. Omi is the product name."
+    },
+    "summaryCheckAgain": "Check Again",
+    "@summaryCheckAgain": {
+        "description": "Button that re-reads the conversation to see if processing finished."
+    },
+    "summaryLimitTitle": "Summary limit reached",
+    "@summaryLimitTitle": {
+        "description": "Heading when the user has regenerated too many summaries recently."
+    },
+    "summaryLimitBody": "You've regenerated several summaries in the last hour. Try again later.",
+    "@summaryLimitBody": {
+        "description": "Body when the user hit the hourly limit on regenerating summaries."
+    },
+    "summaryFailedTitle": "Couldn't summarize",
+    "@summaryFailedTitle": {
+        "description": "Heading when summarizing the conversation failed for an unknown reason."
+    },
+    "summaryFailedBody": "Something went wrong while summarizing this conversation.",
+    "@summaryFailedBody": {
+        "description": "Body when summarizing the conversation failed for an unknown reason."
     }
 }

@@ -1178,7 +1178,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/deploy": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 15,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1187,7 +1187,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Main-branch path filter now includes resilience.json so gated finalization rules cannot drift. Non-PR; one extra budget minute records that wider trigger.",
+      "rationale": "Planning budget increased from 5 to 15 minutes for pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes; the trigger now also spans resilience.json and the GMP frontend overlay; main/dev or explicit prod only, not a measured p50.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1196,7 +1196,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 7,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
@@ -1205,7 +1205,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Main-branch path filter now includes resilience.json so the import job runs when finalization rules change. Non-PR; one extra budget minute records that wider trigger.",
+      "rationale": "Planning budget increased from 5 to 7 minutes for canary-first import/readback and live-STT coverage; the trigger now spans both resilience.json and the GMP frontend overlay; no PR execution and no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1412,7 +1412,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_frontend.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1421,7 +1421,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Plan 6-minute p50 (previously 5) for the local package install and consumer rebuild. Package-only note-shared edits now trigger the existing main/development or manual frontend deployment; expected PR runs/day stays zero, with no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1664,36 +1664,29 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/provision": {
-      "budget_p50_minutes": 4,
+      "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
-      "if": null,
+      "if": "github.ref == 'refs/heads/main'",
       "matrix": {
-        "include": [
-          {
-            "environment": "prod",
-            "url": "https://monitor.omi.me"
-          },
-          {
-            "environment": "dev",
-            "url": "https://monitor.omiapi.com"
-          }
+        "environment": [
+          "${{ github.event.inputs.environment || 'dev' }}"
         ]
       },
-      "matrix_size": 2,
+      "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Two existing environments with allowlisted imports; add one prod-only Business board and ACL checks. Four-minute API budget, no PR runs or runner expansion.",
+      "rationale": "Planning budget raised to 6 minutes for exclusive dashboard/alert backups with complete readback plus the prod-only Business board and ACL step; matrix narrows to one selected environment, main auto-dev and explicit protected prod only.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 2
+        "linux": 1
       },
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/validate": {
-      "budget_p50_minutes": 1,
+      "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1702,7 +1695,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Existing JSON validation job also triggers for canonical v2/provisioner changes; one-minute pure parsing budget, no new matrix or PR runs.",
+      "rationale": "Planning budget increased to 6 minutes for dashboard JSON plus combined/split alert lint; triggers now also cover the Business board JSON and both dashboard provisioners; no PR execution or new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2232,6 +2225,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile_rollout_watch.yml/dispatch": {
+      "budget_p50_minutes": 5,
+      "display_name": "dispatch",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 6,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2777,7 +2788,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 1-minute p50 and 13 PR runs/day: note-shared changes select the existing app build after the source move; package edits previously lived under consumer paths, so no additional job or steady-state run volume is expected.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2813,7 +2824,7 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 2-minute p50 and 4 PR runs/day: note-shared changes select the existing frontend consumer after the source move; no new job or steady-state run volume is expected.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3979,7 +3990,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Push paths include alerts/resilience.json so gated finalization rules provision with the live-STT import.",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now span the GMP frontend overlay and resilience.json, and render/query-path gates add work without adding runners or PR events.",
       "triggers": {
         "push": {
           "branches": [
@@ -3991,6 +4002,7 @@
             "backend/charts/monitoring/alerts/live-stt.json",
             "backend/charts/monitoring/alerts/resilience.json",
             "backend/charts/monitoring/live-alert-gate.json",
+            "backend/charts/monitoring/gmp/frontend-values.prod.yaml",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]
         },
@@ -4271,7 +4283,7 @@
     "gcp_frontend.yml": {
       "name": "Deploy Frontend to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "The frontend depends on @omi/note-shared; package-only edits must trigger its existing main/development deployment. No new PR event or runner. Allow one extra p50 minute for the local package install and consumer rebuild.",
       "triggers": {
         "push": {
           "branches": [
@@ -4280,6 +4292,7 @@
           ],
           "paths": [
             "web/frontend/**",
+            "web/packages/note-shared/**",
             "config/public-build-*.json",
             ".github/actions/deploy-public-build/**",
             ".github/actions/prepare-public-build/**",
@@ -4459,14 +4472,14 @@
               "required": "true",
               "type": "choice"
             },
-            "rollback_digest": {
-              "default": "",
-              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
-              "required": "false"
-            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
+              "required": "false"
+            },
+            "rollback_digest": {
+              "default": "",
+              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
               "required": "false"
             }
           }
@@ -4713,7 +4726,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Provision canonical private v2 board and folder ACL after its JSON or provisioner changes; prod-only Business API step reuses existing job, no new workflow or PR matrix.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix.",
       "triggers": {
         "push": {
           "branches": [
@@ -4721,6 +4734,10 @@
           ],
           "paths": [
             "backend/charts/monitoring/dashboards/**",
+            "backend/charts/monitoring/alerts/**",
+            "backend/charts/monitoring/alert-rules.json",
+            "backend/scripts/provision_monitoring_alerts.py",
+            "backend/scripts/provision_grafana_dashboards.py",
             ".github/workflows/grafana_dashboard_provisioning.yml",
             ".github/scripts/provision_grafana_dashboards.py",
             ".github/scripts/grafana_business.py",
@@ -4734,8 +4751,7 @@
               "description": "Select the Grafana to provision",
               "options": [
                 "prod",
-                "dev",
-                "both"
+                "dev"
               ],
               "required": "true",
               "type": "choice"
@@ -4967,6 +4983,18 @@
           }
         ],
         "workflow_dispatch": ""
+      }
+    },
+    "mobile_rollout_watch.yml": {
+      "name": "Mobile rollout watch",
+      "owner": "CI maintainers",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "0 1,5,9,13,17,21 * * *"
+          }
+        ]
       }
     },
     "onboarding_figma_sync.yml": {

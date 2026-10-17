@@ -820,6 +820,9 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        sys.modules['database._client'].get_firestore_client = MagicMock(
+            side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
+        )
         # Segment error handling is isolated from enrollment/voiceprint loading.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)
@@ -863,6 +866,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
         sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].list_audio_chunks = MagicMock(return_value=[])
         sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
         sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
         sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()

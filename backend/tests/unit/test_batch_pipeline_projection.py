@@ -155,6 +155,7 @@ def test_projection_enrichment_and_receipt_share_transaction_on_unbound_host(bin
         ('receipts', 'segment'),
     ]
     outbox = transaction.sets[0][1]
+    assert '_wake' not in outbox
     assert (outbox['dispatch'] is not None) == bound
     assert enqueue.call_count == int(bound)
     session.guard.assert_called_once_with(transaction, ['c'])
@@ -198,3 +199,123 @@ def test_projection_cannot_override_mark_with_poison_backfill_binding(binding, m
         store.mark_enrichment('segment', binding, 0, 'c', 'en')
     assert not client.transactions[0].sets
     session.write_receipt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'flag', ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED']
+)
+def test_batch_contention_control_retries_projection_transactions(monkeypatch, flag):
+    from database import firestore_transaction_retry
+
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    monkeypatch.setenv(flag, 'true')
+    actual = firestore_transaction_retry.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        firestore_transaction_retry,
+        'run_with_transaction_contention_retry',
+        lambda *args, **kwargs: actual(*args, **kwargs, sleep=lambda _: None),
+    )
+    client = Mock()
+    client.transaction.side_effect = [object(), object()]
+    operation = Mock(side_effect=[Aborted('synthetic'), 'persisted'])
+    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert operation.call_count == 2
+
+
+@pytest.fixture
+def claim_redis(monkeypatch):
+    import fakeredis
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    redis.eval('return 1', 0)  # Load the Lua emulator in harness setup.
+    claims._redis_client.cache_clear()
+    factory = Mock(return_value=redis)
+    monkeypatch.setattr(claims.redis_db, 'create_bounded_redis_client', factory)
+    try:
+        yield redis
+        factory.assert_called_once_with(1.0)
+    finally:
+        claims._redis_client.cache_clear()
+
+
+def test_owner_claim_is_shared_token_fenced_with_bounded_ttl(monkeypatch, claim_redis):
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = claim_redis
+    with claims.projection_claim('synthetic', 'owner') as first:
+        assert first
+        assert 0 < redis.ttl('batch_projection:synthetic:owner') <= claims.LEASE_SECONDS
+        with claims.projection_claim('synthetic', 'owner') as second:
+            assert not second
+        # A timed-out caller must never release the replacement's token.
+        redis.set('batch_projection:synthetic:owner', 'replacement', ex=300)
+    assert redis.get('batch_projection:synthetic:owner') == b'replacement'
+    redis.delete('batch_projection:synthetic:owner')
+    with pytest.raises(RuntimeError):
+        with claims.projection_claim('synthetic', 'owner') as acquired:
+            assert acquired
+            raise RuntimeError('synthetic interruption')
+    assert not redis.exists('batch_projection:synthetic:owner')
+
+
+def test_claim_redis_unavailable_keeps_firestore_as_authority(monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = Mock()
+    redis.set.side_effect = ConnectionError('synthetic')
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    with claims.projection_claim('synthetic', 'owner') as acquired:
+        assert acquired
+
+
+def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import projection
+
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    claim = Mock(side_effect=AssertionError('dark flag touched Redis'))
+    monkeypatch.setattr(projection, 'projection_claim', claim)
+    projector = projection.Projector(Mock(), Mock())
+    projector.store = Mock()
+    job, entry, binding = {}, {}, SimpleNamespace(owner_id='synthetic-owner')
+    projector.store.read.return_value = (job, entry, binding)
+    projector._project = Mock(return_value={'outcome': 'success'})
+    assert projector.project('synthetic-segment') == {'outcome': 'success'}
+    projector.store.read.assert_called_once_with('synthetic-segment')
+    projector._project.assert_called_once_with('synthetic-segment', job, entry, binding)
+    claim.assert_not_called()
+
+
+def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding):
+    from dataclasses import asdict
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.batch_pipeline.projection import Projector
+    from database.batch_pipeline_projection import ProjectionReplay
+
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    projector = Projector(Mock(), Mock())
+    projector.store = Mock()
+    projector.store.session.return_value.persist_empty.side_effect = ProjectionReplay({'state': 'persisted'})
+    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
+    with pytest.raises(ProjectionReplay):
+        projector._project('segment', asdict(item), {'result': {'outcome': 'silence'}}, binding)
+    projector.store.complete.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'flag', ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED']
+)
+def test_contention_control_retains_existing_expired_transaction_restart(monkeypatch, flag):
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    monkeypatch.setenv(flag, 'true')
+    client = Mock()
+    client.transaction.side_effect = [object(), object()]
+    operation = Mock(
+        side_effect=[InvalidArgument('The referenced transaction has expired or is no longer valid'), 'persisted']
+    )
+    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert operation.call_count == client.transaction.call_count == 2
+    assert operation.call_args_list[0] != operation.call_args_list[1]

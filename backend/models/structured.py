@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
 
+from pydantic.json_schema import SkipJsonSchema
 from pydantic import BaseModel, Field, field_validator, model_serializer
 
 _SDK_SRC = Path(__file__).resolve().parents[2] / 'plugins' / 'omi-plugin-sdk' / 'src'
@@ -28,7 +29,7 @@ except ModuleNotFoundError:
         'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
     ]
 
-    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims')
+    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance')
 
     def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
         for field_name in fields:
@@ -161,6 +162,7 @@ except ModuleNotFoundError:
         )
 
     class Structured(BaseModel):
+        title_provenance: SkipJsonSchema[Optional[Literal['server_minimum']]] = None
         note_claims: Optional[List[NoteClaim]] = Field(
             default=None, description='Episode claim provenance; absent on legacy notes'
         )

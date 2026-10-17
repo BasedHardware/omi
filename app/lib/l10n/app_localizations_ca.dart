@@ -13568,4 +13568,281 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
+
+  @override
+  String get connectAgentHeadline => 'Fes servir la memòria d\'Omi a ChatGPT i als teus agents d\'IA';
+
+  @override
+  String get connectAgentIntro =>
+      'Connecta-ho una vegada. Després pregunta\'ls sobre les teves converses, records i tasques.';
+
+  @override
+  String get connectAgentOneTap => 'Amb un toc';
+
+  @override
+  String get connectAgentComputerAgents => 'Agents amb el seu propi ordinador';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Copia una sola indicació. Omi crea una clau només per a aquell agent i l\'envia de manera segura.';
+
+  @override
+  String get connectAgentOtherAgent => 'Un altre agent';
+
+  @override
+  String get connectAgentKeyActive => 'Clau activa';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Darrer ús: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Claus MCP i API per a desenvolupadors';
+
+  @override
+  String get connectAgentLoadFailed => 'No s\'han pogut carregar les teves connexions.';
+
+  @override
+  String get connectAgentActionFailed => 'Alguna cosa ha fallat. Torna-ho a provar.';
+
+  @override
+  String get connectChatGptTitle => 'Connecta ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Triga uns 30 segons. Ho aproves dins de ChatGPT i funciona al telèfon i a l\'ordinador.';
+
+  @override
+  String get connectChatGptStepOpen => 'Obrim Omi a ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT s\'obre directament a la pàgina de l\'aplicació Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Toca «Connecta» i després inicia la sessió a Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Fes servir el mateix compte que utilitzes aquí.';
+
+  @override
+  String get connectChatGptStepReturn => 'Torna a Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Comprovem la connexió automàticament.';
+
+  @override
+  String get openChatGpt => 'Obre ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Connectat al telèfon i a l\'ordinador';
+
+  @override
+  String get tryAskingChatGpt => 'Prova de preguntar a ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Toca\'n una per obrir ChatGPT amb la pregunta ja escrita.';
+
+  @override
+  String get chatGptExampleMeetings => 'A què em vaig comprometre a les reunions d\'ahir?';
+
+  @override
+  String get chatGptExampleTasks => 'Converteix les meves tasques obertes d\'Omi en un pla per a aquesta setmana.';
+
+  @override
+  String get chatGptExampleGoals => 'Què sap Omi dels meus objectius?';
+
+  @override
+  String get disconnectChatGpt => 'Desconnecta ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Vols desconnectar ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT ja no podrà llegir els teus records, converses ni tasques d\'Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Connecta $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Enganxa una sola indicació. $name configura Omi al seu propi ordinador.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Enganxa una sola indicació. El teu agent configura Omi al seu propi ordinador.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'S\'ha creat la clau «$name»';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'La indicació conté un enllaç d\'un sol ús, no la clau. S\'obre una vegada i caduca en 1 hora. Pots revocar la clau aquí quan vulguis.';
+
+  @override
+  String get connectAgentPreparing => 'S\'està creant una clau i un enllaç segur…';
+
+  @override
+  String get connectAgentPrepareFailed => 'No s\'ha pogut crear la clau. Comprova la connexió i torna-ho a provar.';
+
+  @override
+  String get copyPrompt => 'Copia la indicació';
+
+  @override
+  String get connectAgentNewLink => 'Ha caducat l\'enllaç? Crea\'n un de nou';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name està connectat';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name té una clau d\'Omi. Revoca-la per tallar l\'accés. Pots tornar a connectar-lo quan vulguis.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Vols revocar la clau de $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name perd l\'accés a la teva memòria d\'Omi immediatament.';
+  }
+
+  @override
+  String get askAboutConversation => 'Pregunta sobre aquesta conversa';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Obre ChatGPT amb la pregunta a punt. Busca la conversa a través d\'Omi, així que no cal enganxar la transcripció.';
+
+  @override
+  String get askYourQuestion => 'La teva pregunta';
+
+  @override
+  String get askSuggestFollowUp => 'Redacta un correu de seguiment a partir d\'aquesta conversa.';
+
+  @override
+  String get askSuggestCommitments => 'A què em vaig comprometre en aquesta conversa?';
+
+  @override
+  String get askSuggestDoc => 'Converteix aquesta conversa en un document breu.';
+
+  @override
+  String get askInChatGpt => 'Pregunta a ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Copia per a qualsevol app';
+
+  @override
+  String get askConnectChatGptFirst => 'Connecta ChatGPT una vegada per preguntar-li sobre les teves converses.';
+
+  @override
+  String get reconnect => 'Torna a connectar';
+
+  @override
+  String get chatGptNeedsReconnect => 'Necessita més accés. Torna a connectar-ho per solucionar-ho.';
+
+  @override
+  String get connectAgentWaiting => 'Esperant que l\'agent utilitzi la seva clau';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name encara no s\'ha connectat';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Encara no s\'ha resumit';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi pot convertir aquesta conversa en una visió general, punts clau i tasques.';
+
+  @override
+  String get summaryWithOmi => 'Resumeix amb Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Resumeix amb $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Fes servir una altra plantilla';
+
+  @override
+  String get summaryFromTheTranscript => 'De la transcripció';
+
+  @override
+  String get summaryReadFullTranscript => 'Llegeix la transcripció completa';
+
+  @override
+  String get summarySheetTitle => 'Resumeix amb';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Visió general, punts clau i tasques';
+
+  @override
+  String get summaryYourTemplates => 'Les teves plantilles';
+
+  @override
+  String get summarySuggestedTemplates => 'Suggerides per a aquesta conversa';
+
+  @override
+  String get summaryBrowseTemplates => 'Explora plantilles';
+
+  @override
+  String get summaryCreateYourOwn => 'Crea la teva';
+
+  @override
+  String get summaryUseForNewConversations => 'Fes-ho el meu predeterminat';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'No s\'han pogut carregar les teves plantilles. Omi continua funcionant.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Encara no has afegit cap plantilla. Explora\'n algunes o crea la teva.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'S\'està resumint amb $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name no ha pogut acabar';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'La plantilla no ha retornat cap resum per a aquesta conversa.';
+
+  @override
+  String get summaryWithOmiInstead => 'Resumeix amb Omi en lloc d\'això';
+
+  @override
+  String get summaryBusyTitle => 'Encara s\'està processant';
+
+  @override
+  String get summaryBusyBody => 'Omi ja està treballant en aquesta conversa. El resum apareixerà aquí quan acabi.';
+
+  @override
+  String get summaryCheckAgain => 'Torna-ho a comprovar';
+
+  @override
+  String get summaryLimitTitle => 'S\'ha arribat al límit de resums';
+
+  @override
+  String get summaryLimitBody =>
+      'Has tornat a generar diversos resums durant l\'última hora. Torna-ho a provar més tard.';
+
+  @override
+  String get summaryFailedTitle => 'No s\'ha pogut resumir';
+
+  @override
+  String get summaryFailedBody => 'Alguna cosa ha anat malament en resumir aquesta conversa.';
 }

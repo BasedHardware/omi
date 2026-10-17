@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
+from typing import Any
 import pytest
 from tests.unit.fixtures.shadow_usage_firestore import Store, merge
 
@@ -13,7 +14,7 @@ def units():
 
 
 def test_normalize_old_and_new_attribution_without_mutating_history(units):
-    old = {
+    old: dict[str, Any] = {
         'plan_usage.plus.transcription_seconds': 70,
         'plan_usage.plus._metadata.cost_status_counts.missing': 1,
         'plan_usage': {'plus': {'transcription_seconds': 30, '_metadata': {'cost_status_counts': {'missing': 2}}}},
@@ -34,6 +35,8 @@ def test_stt_fractional_funding_and_estimation_are_distinct(units):
         ),
     )
     leaf = accepted['shadow_v1']['features']['transcription']['funding']['omi']
+    assert accepted['shadow_v1']['rate_card_version'] == 'v1'
+    assert leaf['rate_card_version'] == 'v1'
     assert leaf['micro_units'] > 0 and leaf['status_counts'] == {'complete': 1}
     estimate = {}
     merge(
@@ -148,7 +151,7 @@ def test_gateway_keeps_two_existing_writes_and_no_duplicate_charge(units, monkey
 
     monkeypatch.setattr(ledger, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
     store = Store({'users/u': {'subscription': {'plan': 'plus'}}})
-    event = {
+    event: dict[str, Any] = {
         'attempt_id': 'one',
         'user_uid': 'u',
         'payer': 'omi',
@@ -169,6 +172,7 @@ def test_gateway_keeps_two_existing_writes_and_no_duplicate_charge(units, monkey
     assert store.writes == 2
     annotation = store.docs['llm_gateway_attempts/one']['usage_units_v1']
     assert annotation['micro_units'] == 1059799
+    assert annotation['rate_card_version'] == 'v1'
     result = units.get_usage_units('u', datetime(2026, 10, 1, tzinfo=timezone.utc), firestore_client=store)
     assert result['used_units'] == 1.059799
     event.update(attempt_id='byok', payer='byok', estimated_cost_micro_usd=None, cost_status='not_omi_cost')
@@ -179,11 +183,87 @@ def test_gateway_keeps_two_existing_writes_and_no_duplicate_charge(units, monkey
     assert result['by_funding']['byok'] == 0
 
 
+def test_v1_and_v2_usage_projections_keep_separate_card_identity(units, monkeypatch):
+    from database import llm_gateway_accounting as ledger
+
+    monkeypatch.setattr(ledger, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
+    event = {
+        'attempt_id': 'v2-price',
+        'user_uid': 'u',
+        'payer': 'omi',
+        'provider': 'gemini',
+        'configured_model': 'gemini-2.5-flash',
+        'usage_status': 'confirmed',
+        'feature': 'chat_agent',
+        'uncached_input_tokens': 1_000_000,
+        'cached_input_tokens': 0,
+        'output_tokens': 0,
+        'occurred_at': '2026-10-01T08:00:00+00:00',
+        'date': '2026-10-01',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+    store = Store({'users/u': {'subscription': {'plan': 'plus'}}})
+
+    monkeypatch.setenv('RATE_CARD_VERSION', 'v1')
+    v1_annotation, v1_rollup = units.gateway_shadow(event)
+    v1_hourly = units.hourly_shadow(
+        {'transcription_seconds': 10}, {'provider': 'parakeet', 'funding': 'omi', 'source': 'test'}
+    )
+
+    monkeypatch.setenv('RATE_CARD_VERSION', 'v2')
+    event['attempt_id'] = 'v2-price-selected'
+    v2_annotation, v2_rollup = units.gateway_shadow(event)
+    v2_hourly = units.hourly_shadow(
+        {'transcription_seconds': 10}, {'provider': 'parakeet', 'funding': 'omi', 'source': 'test'}
+    )
+    assert v1_annotation['rate_card_version'] == 'v1'
+    assert v2_annotation['rate_card_version'] == 'v2'
+    assert v2_annotation['micro_units'] > v1_annotation['micro_units']
+    assert v1_rollup['shadow_v1']['rate_card_version'] == 'v1'
+    assert v2_rollup['shadow_v2']['rate_card_version'] == 'v2'
+    assert v1_hourly['shadow_v1']['features']['transcription']['funding']['omi']['rate_card_version'] == 'v1'
+    assert v2_hourly['shadow_v2']['features']['transcription']['funding']['omi']['rate_card_version'] == 'v2'
+
+    hourly = {}
+    merge(hourly, v1_hourly)
+    merge(hourly, v2_hourly)
+    hourly.update(year=2026, month=10, transcription_seconds=20)
+    day = {}
+    merge(day, v1_rollup)
+    merge(day, v2_rollup)
+    day['attempts'] = 2
+    uid_hash = hashlib.sha256(b'u').hexdigest()[:16]
+    store.docs['users/u/hourly_usage/2026-10-01-08'] = hourly
+    store.docs[f'llm_gateway_user_days/2026-10-01_{uid_hash}'] = day
+
+    v1 = units.get_usage_units(
+        'u', datetime(2026, 10, 1, tzinfo=timezone.utc), firestore_client=store, rate_card_version='v1'
+    )
+    v2 = units.get_usage_units(
+        'u', datetime(2026, 10, 1, tzinfo=timezone.utc), firestore_client=store, rate_card_version='v2'
+    )
+    assert v1['rate_card_version'] == 'v1'
+    assert v2['rate_card_version'] == 'v2'
+    assert v2['used_units'] > v1['used_units']
+    combined = units.get_usage_units('u', datetime(2026, 10, 1, tzinfo=timezone.utc), firestore_client=store)
+    assert combined['rate_card_version'] == 'v2'
+    assert combined['rate_card_versions'] == ['v1', 'v2']
+    assert combined['used_units'] == pytest.approx(v1['used_units'] + v2['used_units'])
+
+    attempt_store = Store({'users/u': {'subscription': {'plan': 'plus'}}})
+    event['attempt_id'] = 'persist-v2'
+    assert ledger.record_llm_gateway_attempt(event, firestore_client=attempt_store)
+    attempt = attempt_store.docs['llm_gateway_attempts/persist-v2']
+    assert attempt['usage_units_v2']['rate_card_version'] == 'v2'
+    assert 'usage_units_v1' not in attempt
+
+
 def test_sync_marker_and_nested_usage_remain_in_existing_two_write_transaction(units, monkeypatch):
     from database import user_usage
 
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
-    original = user_usage._update_hourly_usage_once_transaction.to_wrap
+    original = user_usage._update_hourly_usage_once_transaction.to_wrap  # pyright: ignore[reportPrivateUsage]
 
     class Transaction:
         def set(self, ref, data, merge=False):
@@ -194,7 +274,7 @@ def test_sync_marker_and_nested_usage_remain_in_existing_two_write_transaction(u
     )
     store = Store()
     date = datetime(2026, 10, 1, 8, tzinfo=timezone.utc)
-    kwargs = {
+    kwargs: dict[str, Any] = {
         'firestore_client': store,
         'usage_metadata': {'provider': 'parakeet', 'funding': 'omi', 'source': 'sync_v2'},
     }

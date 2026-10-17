@@ -57,7 +57,6 @@ except ImportError:
 
 
 import logging
-from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -406,10 +405,6 @@ def perform_merge_async(
                 historical_source_ids=historical_source_ids,
                 merged_into=new_conversation_id,
             )
-
-        # Sources are now merged and deleted; preserve the user's manual
-        # choice even if the completion notification subsequently fails.
-        record_capture_outcome(uid, 'manual_merge', list(conversation_ids))
 
         # 10. Send FCM notification
         send_merge_completed_message(uid, new_conversation_id, conversation_ids)

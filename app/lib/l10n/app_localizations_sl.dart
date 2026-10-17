@@ -13530,4 +13530,278 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Tega pogovora ni bilo mogoče povzeti';
+
+  @override
+  String get connectAgentHeadline => 'Uporabljajte svoj spomin Omi v ChatGPT in svojih agentih UI';
+
+  @override
+  String get connectAgentIntro => 'Povežite se enkrat. Nato jih sprašujte o svojih pogovorih, spominih in nalogah.';
+
+  @override
+  String get connectAgentOneTap => 'Z enim dotikom';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenti z lastnim računalnikom';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopirajte en poziv. Omi ustvari ključ samo za tega agenta in ga varno pošlje.';
+
+  @override
+  String get connectAgentOtherAgent => 'Drug agent';
+
+  @override
+  String get connectAgentKeyActive => 'Ključ je aktiven';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Nazadnje uporabljeno: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Ključi MCP in API za razvijalce';
+
+  @override
+  String get connectAgentLoadFailed => 'Vaših povezav ni bilo mogoče naložiti.';
+
+  @override
+  String get connectAgentActionFailed => 'Prišlo je do napake. Poskusite znova.';
+
+  @override
+  String get connectChatGptTitle => 'Povežite ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Traja približno 30 sekund. Odobrite v ChatGPT in deluje v telefonu in računalniku.';
+
+  @override
+  String get connectChatGptStepOpen => 'Odpremo Omi v ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT se odpre neposredno na strani aplikacije Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Tapnite »Poveži«, nato se prijavite v Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Uporabite isti račun kot tukaj.';
+
+  @override
+  String get connectChatGptStepReturn => 'Vrnite se v Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Povezavo preverimo samodejno.';
+
+  @override
+  String get openChatGpt => 'Odpri ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Povezano v telefonu in računalniku';
+
+  @override
+  String get tryAskingChatGpt => 'Poskusite vprašati ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Tapnite eno, da odprete ChatGPT z že izpolnjenim vprašanjem.';
+
+  @override
+  String get chatGptExampleMeetings => 'S čim sem se strinjal na včerajšnjih sestankih?';
+
+  @override
+  String get chatGptExampleTasks => 'Spremeni moje odprte naloge v Omi v načrt za ta teden.';
+
+  @override
+  String get chatGptExampleGoals => 'Kaj Omi ve o mojih ciljih?';
+
+  @override
+  String get disconnectChatGpt => 'Odklopi ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Odklopim ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT ne bo mogel več brati vaših spominov, pogovorov ali nalog v Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Povežite $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Prilepite en poziv. $name nastavi Omi na svojem računalniku.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Prilepite en poziv. Vaš agent nastavi Omi na svojem računalniku.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Ključ »$name« je ustvarjen';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Poziv vsebuje enkratno povezavo, ne samega ključa. Odpre se enkrat in poteče v 1 uri. Ključ lahko tukaj kadar koli prekličete.';
+
+  @override
+  String get connectAgentPreparing => 'Ustvarjanje ključa in varne povezave…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Ključa ni bilo mogoče ustvariti. Preverite povezavo in poskusite znova.';
+
+  @override
+  String get copyPrompt => 'Kopiraj poziv';
+
+  @override
+  String get connectAgentNewLink => 'Je povezava potekla? Ustvarite novo';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name je povezan';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name ima ključ Omi. Prekličite ga, da prekinete dostop. Znova se lahko povežete kadar koli.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Prekličem ključ za $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name takoj izgubi dostop do vašega spomina Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Vprašaj o tem pogovoru';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Odpre ChatGPT s pripravljenim vprašanjem. Pogovor poišče prek Omi, zato vam prepisa ni treba prilepiti.';
+
+  @override
+  String get askYourQuestion => 'Vaše vprašanje';
+
+  @override
+  String get askSuggestFollowUp => 'Pripravi osnutek nadaljnjega e-poštnega sporočila iz tega pogovora.';
+
+  @override
+  String get askSuggestCommitments => 'K čemu sem se zavezal v tem pogovoru?';
+
+  @override
+  String get askSuggestDoc => 'Spremeni ta pogovor v kratek dokument.';
+
+  @override
+  String get askInChatGpt => 'Vprašaj ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopiraj za katero koli aplikacijo';
+
+  @override
+  String get askConnectChatGptFirst => 'Enkrat povežite ChatGPT, da ga lahko sprašujete o svojih pogovorih.';
+
+  @override
+  String get reconnect => 'Znova poveži';
+
+  @override
+  String get chatGptNeedsReconnect => 'Potreben je dodatni dostop. Znova poveži za popravilo.';
+
+  @override
+  String get connectAgentWaiting => 'Čakamo, da agent uporabi svoj ključ';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name še ni povezan';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Še ni povzeto';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi lahko ta pogovor pretvori v pregled, ključne točke in naloge.';
+
+  @override
+  String get summaryWithOmi => 'Povzemi z Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Povzemi z $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Uporabi drugo predlogo';
+
+  @override
+  String get summaryFromTheTranscript => 'Iz prepisa';
+
+  @override
+  String get summaryReadFullTranscript => 'Preberi celoten prepis';
+
+  @override
+  String get summarySheetTitle => 'Povzemi z';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Pregled, ključne točke in naloge';
+
+  @override
+  String get summaryYourTemplates => 'Vaše predloge';
+
+  @override
+  String get summarySuggestedTemplates => 'Predlagano za ta pogovor';
+
+  @override
+  String get summaryBrowseTemplates => 'Prebrskaj predloge';
+
+  @override
+  String get summaryCreateYourOwn => 'Ustvari svojo';
+
+  @override
+  String get summaryUseForNewConversations => 'Nastavi kot privzeto';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Vaših predlog ni bilo mogoče naložiti. Omi še vedno deluje.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Dodali še niste nobene predloge. Prebrskajte nekaj ali ustvarite svojo.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Povzemanje z $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ni mogel dokončati';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Predloga za ta pogovor ni vrnila povzetka.';
+
+  @override
+  String get summaryWithOmiInstead => 'Raje povzemi z Omi';
+
+  @override
+  String get summaryBusyTitle => 'Obdelava še poteka';
+
+  @override
+  String get summaryBusyBody => 'Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.';
+
+  @override
+  String get summaryCheckAgain => 'Preveri znova';
+
+  @override
+  String get summaryLimitTitle => 'Dosežena omejitev povzetkov';
+
+  @override
+  String get summaryLimitBody => 'V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.';
+
+  @override
+  String get summaryFailedTitle => 'Povzemanje ni uspelo';
+
+  @override
+  String get summaryFailedBody => 'Pri povzemanju tega pogovora je prišlo do napake.';
 }

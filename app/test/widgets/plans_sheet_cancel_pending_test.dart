@@ -128,7 +128,6 @@ Future<_Usage> _pump(
     ..sessionError = sessionError
     ..clearCancelOnFetch = clearCancelOnFetch;
   addTearDown(usage.dispose);
-  final periodEnd = DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000;
   usage.debugSetSubscription(
     UserSubscriptionResponse(
       subscription: Subscription(
@@ -136,7 +135,7 @@ Future<_Usage> _pump(
         status: SubscriptionStatus.active,
         stripeSubscriptionId: 'sub_1',
         currentPriceId: 'price_plus_month',
-        currentPeriodEnd: omitPeriodEnd ? null : periodEnd,
+        currentPeriodEnd: omitPeriodEnd ? null : _periodEndSeconds,
         cancelAtPeriodEnd: true,
       ),
       transcriptionSecondsUsed: 0,
@@ -173,9 +172,14 @@ Future<_Usage> _pump(
   return usage;
 }
 
+/// 2026-11-03 00:00:00 UTC. Far-east and far-west zones put that instant on different
+/// local calendar days, so the expected label is the local day of the same epoch
+/// the sheet formats.
+final int _periodEndSeconds = DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000;
+
 String _date(WidgetTester tester) {
   final context = tester.element(find.byType(PlansSheet));
-  return OmiDateFormat.of(context).date(DateTime.utc(2026, 11, 3));
+  return OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(_periodEndSeconds * 1000));
 }
 
 void main() {
@@ -186,11 +190,10 @@ void main() {
   });
 
   testWidgets('resubscribe uses the current price and replaces the ends line', (tester) async {
-    final periodEnd = DateTime.utc(2026, 11, 3).millisecondsSinceEpoch ~/ 1000;
     final usage = await _pump(
       tester,
       clearCancelOnFetch: true,
-      sessionResult: {'status': 'reactivated', 'message': 'ok', 'next_billing_date': periodEnd},
+      sessionResult: {'status': 'reactivated', 'message': 'ok', 'next_billing_date': _periodEndSeconds},
     );
     final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
     final date = _date(tester);

@@ -157,6 +157,7 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
+    from utils.conversations import summary_delivery
 
     firestore = _Firestore([])
 
@@ -174,6 +175,7 @@ def conversations_db():
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
+    exceptions_module.FailedPrecondition = type("FailedPrecondition", (Exception,), {})
     exceptions_module.NotFound = type("NotFound", (Exception,), {})
 
     database_client = ModuleType("database._client")
@@ -224,6 +226,7 @@ def conversations_db():
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
         "utils.conversations": utils_conversations,
+        "utils.conversations.summary_delivery": summary_delivery,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),
@@ -276,6 +279,9 @@ def conversations_db():
     # when the fixture replaces the utils package with an empty import path.
     fakes["utils.firestore_document_size"] = load_module_fresh(
         "utils.firestore_document_size", str(_BACKEND / "utils" / "firestore_document_size.py")
+    )
+    fakes["utils.other.playback_identity"] = load_module_fresh(
+        "utils.other.playback_identity", str(_BACKEND / "utils" / "other" / "playback_identity.py")
     )
 
     with stub_modules(fakes):

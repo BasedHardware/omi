@@ -13504,4 +13504,280 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
+
+  @override
+  String get connectAgentHeadline => 'Käytä Omi-muistiasi ChatGPT:ssä ja tekoälyagenteissasi';
+
+  @override
+  String get connectAgentIntro => 'Yhdistä kerran. Kysy niiltä sitten keskusteluistasi, muistoistasi ja tehtävistäsi.';
+
+  @override
+  String get connectAgentOneTap => 'Yhdellä napautuksella';
+
+  @override
+  String get connectAgentComputerAgents => 'Agentit, joilla on oma tietokone';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopioi yksi kehote. Omi luo avaimen vain tälle agentille ja lähettää sen turvallisesti.';
+
+  @override
+  String get connectAgentOtherAgent => 'Muu agentti';
+
+  @override
+  String get connectAgentKeyActive => 'Avain aktiivinen';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Viimeksi käytetty $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP- ja API-avaimet kehittäjille';
+
+  @override
+  String get connectAgentLoadFailed => 'Yhteyksiäsi ei voitu ladata.';
+
+  @override
+  String get connectAgentActionFailed => 'Jokin meni pieleen. Yritä uudelleen.';
+
+  @override
+  String get connectChatGptTitle => 'Yhdistä ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Kestää noin 30 sekuntia. Hyväksyt sen ChatGPT:ssä, ja se toimii puhelimessa ja tietokoneella.';
+
+  @override
+  String get connectChatGptStepOpen => 'Avaamme Omin ChatGPT:ssä';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT avautuu suoraan Omi-sovelluksen sivulle.';
+
+  @override
+  String get connectChatGptStepApprove => 'Napauta ”Yhdistä” ja kirjaudu sitten Omiin';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Käytä samaa tiliä kuin täällä.';
+
+  @override
+  String get connectChatGptStepReturn => 'Palaa Omiin';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Tarkistamme yhteyden automaattisesti.';
+
+  @override
+  String get openChatGpt => 'Avaa ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Yhdistetty puhelimessa ja tietokoneella';
+
+  @override
+  String get tryAskingChatGpt => 'Kokeile kysyä ChatGPT:ltä';
+
+  @override
+  String get tryAskingChatGptFooter => 'Napauta kysymystä, niin ChatGPT avautuu se valmiiksi täytettynä.';
+
+  @override
+  String get chatGptExampleMeetings => 'Mistä sovin eilisissä kokouksissa?';
+
+  @override
+  String get chatGptExampleTasks => 'Tee avoimista Omi-tehtävistäni suunnitelma tälle viikolle.';
+
+  @override
+  String get chatGptExampleGoals => 'Mitä Omi tietää tavoitteistani?';
+
+  @override
+  String get disconnectChatGpt => 'Katkaise ChatGPT-yhteys';
+
+  @override
+  String get disconnectChatGptQuestion => 'Katkaistaanko ChatGPT-yhteys?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT ei voi enää lukea Omi-muistojasi, -keskustelujasi tai -tehtäviäsi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Yhdistä $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Liitä yksi kehote. $name ottaa Omin käyttöön omalla tietokoneellaan.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Liitä yksi kehote. Agenttisi ottaa Omin käyttöön omalla tietokoneellaan.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Avain ”$name” luotu';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Kehotteessa on kertakäyttöinen linkki, ei itse avainta. Se avautuu kerran ja vanhenee tunnissa. Voit peruuttaa avaimen täällä milloin tahansa.';
+
+  @override
+  String get connectAgentPreparing => 'Luodaan avainta ja suojattua linkkiä…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Avainta ei voitu luoda. Tarkista yhteys ja yritä uudelleen.';
+
+  @override
+  String get copyPrompt => 'Kopioi kehote';
+
+  @override
+  String get connectAgentNewLink => 'Vanheniko linkki? Luo uusi';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name on yhdistetty';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name käyttää Omi-avainta. Peruuta se katkaistaksesi pääsyn. Voit yhdistää uudelleen milloin tahansa.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Peruutetaanko kohteen $name avain?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name menettää heti pääsyn Omi-muistiisi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Kysy tästä keskustelusta';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Avaa ChatGPT:n kysymyksesi valmiina. Se hakee keskustelun Omin kautta, joten litteraattia ei tarvitse liittää.';
+
+  @override
+  String get askYourQuestion => 'Kysymyksesi';
+
+  @override
+  String get askSuggestFollowUp => 'Luonnostele tästä keskustelusta jatkoviesti sähköpostiin.';
+
+  @override
+  String get askSuggestCommitments => 'Mitä lupasin tässä keskustelussa?';
+
+  @override
+  String get askSuggestDoc => 'Tee tästä keskustelusta lyhyt dokumentti.';
+
+  @override
+  String get askInChatGpt => 'Kysy ChatGPT:ltä';
+
+  @override
+  String get copyForAnyApp => 'Kopioi mihin tahansa sovellukseen';
+
+  @override
+  String get askConnectChatGptFirst => 'Yhdistä ChatGPT kerran, niin voit kysyä siltä keskusteluistasi.';
+
+  @override
+  String get reconnect => 'Yhdistä uudelleen';
+
+  @override
+  String get chatGptNeedsReconnect => 'Tarvitsee lisäoikeuksia. Korjaa yhdistämällä uudelleen.';
+
+  @override
+  String get connectAgentWaiting => 'Odotetaan, että agentti käyttää avaintaan';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ei ole vielä yhdistetty';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Ei vielä tiivistetty';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi voi muuttaa tämän keskustelun yleiskatsaukseksi, pääkohdiksi ja tehtäviksi.';
+
+  @override
+  String get summaryWithOmi => 'Tiivistä Omilla';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Tiivistä: $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Käytä toista mallia';
+
+  @override
+  String get summaryFromTheTranscript => 'Litteroinnista';
+
+  @override
+  String get summaryReadFullTranscript => 'Lue koko litterointi';
+
+  @override
+  String get summarySheetTitle => 'Tiivistä käyttäen';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Yleiskatsaus, pääkohdat ja tehtävät';
+
+  @override
+  String get summaryYourTemplates => 'Omat mallisi';
+
+  @override
+  String get summarySuggestedTemplates => 'Ehdotettu tähän keskusteluun';
+
+  @override
+  String get summaryBrowseTemplates => 'Selaa malleja';
+
+  @override
+  String get summaryCreateYourOwn => 'Luo oma';
+
+  @override
+  String get summaryUseForNewConversations => 'Tee tästä oletukseni';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Mallejasi ei voitu ladata. Omi toimii edelleen.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Et ole vielä lisännyt malleja. Selaa muutamia tai tee oma.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Tiivistetään: $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ei voinut valmistua';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Malli ei palauttanut tiivistelmää tästä keskustelusta.';
+
+  @override
+  String get summaryWithOmiInstead => 'Tiivistä sen sijaan Omilla';
+
+  @override
+  String get summaryBusyTitle => 'Käsittely on yhä kesken';
+
+  @override
+  String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
+
+  @override
+  String get summaryCheckAgain => 'Tarkista uudelleen';
+
+  @override
+  String get summaryLimitTitle => 'Tiivistelmien raja saavutettu';
+
+  @override
+  String get summaryLimitBody =>
+      'Olet luonut useita tiivistelmiä uudelleen viimeisen tunnin aikana. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get summaryFailedTitle => 'Tiivistäminen epäonnistui';
+
+  @override
+  String get summaryFailedBody => 'Jokin meni vikaan tätä keskustelua tiivistettäessä.';
 }

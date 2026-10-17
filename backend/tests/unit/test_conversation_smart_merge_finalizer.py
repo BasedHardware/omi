@@ -47,11 +47,16 @@ class _Conversation:
 def harness(monkeypatch):
     calls = []
     row = {'id': 'n', 'status': 'completed', 'source': 'omi', 'discarded': False, **_BOUND}
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
-        calls.append(function)
         if function is finalizer.conversations_db.get_conversation:
+            calls.append(function)
             return row
+        if function is finalizer.reserve_recording:
+            # Exercise the real default-off gate; it must not claim a route or touch Firestore.
+            return function(*args, **kwargs)
+        calls.append(function)
         if function is finalizer.finalization_jobs_db.get_finalization_job:
             return _JOB
         if function is finalizer.get_cached_user_geolocation:
@@ -93,6 +98,27 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
     return await finalizer.finalize_persisted_conversation(
         'u', 'n', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
+
+
+def test_default_off_reservation_does_not_claim_record_owner(monkeypatch):
+    from utils.batch_pipeline import live as batch_live
+
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+
+    def unexpected_claim(*_args, **_kwargs):
+        raise AssertionError('dark-path reservation attempted a Firestore owner claim')
+
+    monkeypatch.setattr(batch_live, 'claim_record_lane_owner', unexpected_claim)
+    conversation = {
+        'id': 'n',
+        'status': 'processing',
+        'private_cloud_sync_enabled': True,
+        'language': 'en',
+        'data_protection_level': 'standard',
+    }
+
+    assert finalizer.reserve_recording('u', conversation) is None
+    assert 'record_lane_owner' not in conversation
 
 
 @pytest.mark.asyncio

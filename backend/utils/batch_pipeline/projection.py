@@ -4,6 +4,12 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.batch_pipeline import (
+    authoritative_labels_enabled,
+    require_live_target_enabled,
+    projection_contention_enabled,
+)
 from datetime import datetime, timezone
 import time
 import math
@@ -13,12 +19,17 @@ from uuid import NAMESPACE_URL, uuid5
 
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_store import FirestoreStore
-from utils.batch_pipeline.contracts import WorkItem
+from database import conversations as conversations_db
+from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
+from utils.batch_pipeline.correctness_metrics import record_labels
+from utils.batch_pipeline.recovery_disposition import result_outcome
+from database.batch_pipeline_projection_claim import projection_claim
+from utils.batch_pipeline.scheduler import owner_key
 
 logger = logging.getLogger(__name__)
 
 
-def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) -> dict:
+def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None, batch_segment_id=None) -> dict:
     """Use legacy word alignment, segment grouping and minimum conversation shape."""
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
@@ -38,6 +49,23 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
     # The existing final-pass aligner abstains in diarization gaps; the existing
     # prerecorded grouper supplies the same sentence/segment shapes as sync.
     aligned = words if payload.get('recovery_version') == 1 else assign_words(words, payload['diarization']['turns'])
+    authoritative = (binding.record_origin or authoritative_labels_enabled()) and payload.get('recovery_version') != 1
+    if authoritative:
+        # The legacy grouper imputes None from adjacent voices. Keep each gap an
+        # explicit anonymous abstention instead of borrowing a speaker/owner.
+        gap = 0
+        in_gap = False
+        prepared = []
+        for word in aligned:
+            if word['speaker'] is None:
+                if not in_gap:
+                    gap += 1
+                in_gap = True
+                word = {**word, 'speaker': f'BATCH_UNASSIGNED_{item.segment_id}_{gap}'}
+            else:
+                in_gap = False
+            prepared.append(word)
+        aligned = prepared
     segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
     if not segments:
         raise ValueError('successful batch result produced no transcript')
@@ -49,8 +77,15 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         segment.start = round(segment.start + offset, 2)
         segment.end = round(segment.end + offset, 2)
         segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
-        segment.speaker_id_scope = f'sync:{item.segment_id}'
+        segment.speaker_id_scope = (
+            f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
+        )
         segment.stt_provider = payload.get('words_provider')
+        if authoritative:
+            abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
+            segment.is_user, segment.person_id = False, None
+            segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
+            segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
     create = CreateConversation(
         started_at=started,
@@ -58,7 +93,7 @@ def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None) 
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
-        is_locked=binding.is_locked,
+        is_locked=False if cap_dispatch_enabled() else binding.is_locked,
         private_cloud_sync_enabled=binding.private_cloud_sync_enabled,
         client_device_id=binding.client_device_id,
         client_platform=binding.client_platform,
@@ -90,6 +125,8 @@ def publish_client_completion(binding, result: dict) -> None:
         fenced_finalize_sync_job_from_durable_ledger,
     )
 
+    if binding.native_record:
+        return
     job = get_sync_job(binding.job_id)
     if job is None:
         return
@@ -125,17 +162,46 @@ class Projector:
 
     def project(self, segment_id: str) -> dict | None:
         job, entry, binding = self.store.read(segment_id)
+        if projection_contention_enabled():
+            with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
+                if not acquired:
+                    logger.info('event=batch_projection action=claim outcome=busy')
+                    return None
+                result = self._project(segment_id, job, entry, binding)
+                logger.info(
+                    'event=batch_projection action=project outcome=%s',
+                    'completed' if result is not None else 'waiting',
+                )
+                return result
+        return self._project(segment_id, job, entry, binding)
+
+    def _project(self, segment_id, job, entry, binding):
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock())
         try:
             self.store.check(session)
         except ProjectionReplay:
-            # Every assignment committed already; no transcript/audio download
-            # is needed to resume outstanding post-persist obligations.
             pass
         else:
-            if entry['result']['outcome'] == 'silence':
-                session.persist_empty()
+            if entry['result']['outcome'] in {'silence', 'no_recoverable_speech'}:
+                if entry['result']['outcome'] == 'no_recoverable_speech':
+                    payload = self.load_result(item, entry['result']['result_uri'])
+                    if (
+                        entry.get('recovery_version') != 1
+                        or result_outcome(payload) != 'no_recoverable_speech'
+                        or abs(payload['audio_seconds'] - item.duration_seconds) > 0.1
+                    ):
+                        raise ProjectionBlocked('terminal empty recovery evidence required')
+                try:
+                    if binding.record_origin:
+                        self.assign_record_silence(item, binding, session)
+                    else:
+                        session.persist_empty()
+                except ProjectionReplay:
+                    if not projection_contention_enabled():
+                        raise
+                    # A receipt is assignment progress, not completion. Resume
+                    # every post-persist obligation after losing the empty race.
             else:
                 self.assign_parts(item, entry, binding)
         entry = self.store.ref('results', segment_id).get().to_dict() or {}
@@ -172,8 +238,29 @@ class Projector:
                 self.store.acknowledge(sibling, binding, self.clock())
         return result
 
+    def assign_record_silence(self, item, binding, session):
+        incoming = {
+            'id': binding.target_conversation_id,
+            'started_at': datetime.fromtimestamp(item.capture_at, timezone.utc),
+            'finished_at': datetime.fromtimestamp(item.capture_at + item.duration_seconds, timezone.utc),
+            'transcript_segments': [],
+            'data_protection_level': binding.data_protection_level,
+            '_batch_require_live_target': True,
+            '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
+        }
+        conversations_db.assign_sync_conversation(
+            binding.owner_id,
+            incoming,
+            target_id=binding.target_conversation_id,
+            firestore_client=self.store.client,
+            before_assign=session.prepare,
+            validate_plan=session.validate_plan,
+            after_assign=lambda transaction, planned: session.persist(transaction, planned),
+            retry_contention=projection_contention_enabled(),
+        )
+
     def assign_parts(self, item, entry, binding):
-        from database.conversations import assign_sync_conversation, get_closest_conversation_to_timestamps
+        from database.conversations import get_closest_conversation_to_timestamps
         from utils.batch_pipeline.context import ResolvedContext, resolve_context
         from utils.batch_pipeline.projection_parts import split_result
 
@@ -188,7 +275,9 @@ class Projector:
             or not 0 < speech <= float(payload['audio_seconds'])
         ):
             raise ProjectionBlocked('validated VAD speech accounting required')
-        parts = split_result(item, payload)
+        if binding.record_origin:
+            projection_speech_spans(payload, item.duration_seconds)
+        parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
         manifest = None
         if item.requires_compute_admission:
             if self.fetch_audio is None:
@@ -217,7 +306,17 @@ class Projector:
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:
-                    incoming = build_incoming(part, binding, part_payload, geolocation=context.geolocation)
+                    incoming = build_incoming(
+                        part, binding, part_payload, geolocation=context.geolocation, batch_segment_id=item.segment_id
+                    )
+                    session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
+                    if binding.record_origin:
+                        incoming['_batch_replace_live'] = {
+                            'start': item.capture_at,
+                            'end': item.capture_at + item.duration_seconds,
+                        }
+                    if (binding.record_origin or require_live_target_enabled()) and context.target_id:
+                        incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
                     session.incoming_segment_count = len(incoming['transcript_segments'])
@@ -233,7 +332,7 @@ class Projector:
                             int(incoming['started_at'].timestamp()),
                             int(incoming['finished_at'].timestamp()),
                         )
-                    assign_sync_conversation(
+                    assigned = conversations_db.assign_sync_conversation(
                         binding.owner_id,
                         incoming,
                         target_id=context.target_id,
@@ -242,10 +341,18 @@ class Projector:
                         before_assign=session.prepare,
                         validate_plan=session.validate_plan,
                         after_assign=persisted,
+                        retry_contention=projection_contention_enabled(),
                     )
                     receipt = receipt_box[0]
+                    record_labels(assigned[2])
             except ProjectionReplay as replay:
                 receipt = replay.receipt
+            except Exception as error:
+                if projection_contention_enabled():
+                    logger.error(
+                        'event=batch_projection action=assignment outcome=error exception_type=%s', type(error).__name__
+                    )
+                raise
             self.finish_part(item, binding, receipt, index)
 
     def finish_part(self, item, binding, receipt, index):
@@ -254,8 +361,12 @@ class Projector:
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 
-            canonical = finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
-            if receipt.get('audio_required'):
+            canonical = (
+                receipt['conversation_id']
+                if binding.record_origin
+                else finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
+            )
+            if receipt.get('audio_required') and not binding.native_record:
                 if self.playback is not None:
                     self.playback(item, canonical)
                 else:
@@ -302,6 +413,10 @@ class Projector:
         for segment in segments:
             if segment.get('speaker_id_scope') == scope:
                 stamp = origin + segment['start']
+                if scope.startswith('final:batch:') and not (
+                    capture_at <= stamp < (receipt.get('audio_end') or item.capture_at + item.duration_seconds)
+                ):
+                    continue
                 survivors.append(
                     {
                         **segment,
@@ -359,4 +474,12 @@ class Projector:
                 logger.error(
                     'event=batch_projection action=sweep outcome=error exception_type=%s', type(error).__name__
                 )
+        if projection_contention_enabled():
+            logger.info(
+                'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
+                counts['completed'],
+                counts['waiting'],
+                counts['blocked'],
+                counts['error'],
+            )
         return counts

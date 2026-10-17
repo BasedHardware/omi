@@ -46,6 +46,10 @@ are constrained; ordinary legacy-file growth stays unblocked. Diagnostics name
 the request interface to use. Run `TZ=UTC bash app/test.sh` for the protected contracts. Pending tests
 execute and fail on unexpected success; builders remove only their pending marker.
 
+For native BLE changes, distinguish a connected radio from device audio setup.
+The [device lifecycle architecture](https://github.com/BasedHardware/omi/blob/main/app/lib/services/devices/ARCHITECTURE.md)
+describes late readiness after a launch timeout and the Limitless regression path.
+
 ## Pull Request Quality
 
 Good PRs are easy to review and come with evidence that the change works.

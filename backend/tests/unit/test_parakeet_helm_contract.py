@@ -53,6 +53,44 @@ def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     ]
 
 
+def test_demand_scaler_renders_requests_and_queue_ages_without_raw_tail_or_gpu():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm not installed')
+    command = [
+        helm,
+        'template',
+        'prod-omi-parakeet',
+        str(CHART),
+        '-f',
+        str(CHART / 'prod_omi_parakeet_values.yaml'),
+        '--set',
+        'autoscaling.demand.enabled=true',
+        '--set-string',
+        'image.tag=packing-contract-test',
+        '--show-only',
+        'templates/hpa.yaml',
+    ]
+    hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
+    assert hpa['spec']['minReplicas'] == 3 and hpa['spec']['maxReplicas'] == 12
+    metrics = hpa['spec']['metrics']
+    assert all(metric['type'] == 'Pods' for metric in metrics)
+    targets = {metric['pods']['metric']['name']: str(metric['pods']['target']['averageValue']) for metric in metrics}
+    assert targets == {
+        'parakeet_active_requests_total': '2',
+        'parakeet_live_queue_age_seconds': '0.75',
+        'parakeet_backfill_queue_age_seconds': '30',
+    }
+
+
+def test_packing_is_dark_and_admission_remains_two_thirty_five():
+    values = _values('prod')
+    assert _literal_env(values)['PARAKEET_PACKING_ENABLED'] == 'false'
+    assert _literal_env(values)['PARAKEET_EXPLICIT_CUDA_GRAPHS'] == 'false'
+    assert values['autoscaling']['requestsPerPod'] == 2
+    assert values['autoscaling']['targetGPUUtilization'] == 35
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_parakeet_probes_remove_and_recycle_fatal_gpu_workers(environment):
     values = _values(environment)

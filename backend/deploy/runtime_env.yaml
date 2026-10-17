@@ -18,7 +18,11 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -31,15 +35,14 @@ environments:
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_UID_ALLOWLIST: {value: '', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
           BATCH_PIPELINE_API_URL:
-            value: ''
             category: service_discovery
+            value: ''
           BATCH_PIPELINE_WORKER_AUDIENCE:
             value: ''
             category: service_auth
@@ -47,8 +50,8 @@ environments:
             value: ''
             category: service_auth
           BUCKET_BATCH_PIPELINE:
-            value: ''
             category: service_discovery
+            value: ''
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
             category: reliability
@@ -58,31 +61,30 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
+          SONIOX_WIRE_LEDGER: {category: rollout, value: 'false'}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -151,28 +153,34 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
-          STT_LIVE_DEMAND_ENABLED: {value: 'false', category: rollout}
+          STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
-          STT_FAILOVER_RECOVERY_ENABLED: {value: 'false', category: rollout}
-          STT_ROUTING_MODE: {value: shadow, category: rollout}
+          STT_FAILOVER_RECOVERY_ENABLED: {category: rollout, value: 'false'}
+          STT_ROUTING_MODE: {category: rollout, value: shadow}
           STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
-          STT_ROUTING_ON_PERCENT: {value: '0', category: rollout}
+          STT_ROUTING_ON_PERCENT: {category: rollout, value: '0'}
           STT_ROUTING_TARGETS_JSON: {value: '', category: rollout}
           STT_ROUTING_DISRUPTION_GATE:
             value: '0.08'
             category: reliability
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
-          SONIOX_MONTHLY_CEILING_USD: {value: '0', category: rollout}
+          SONIOX_MONTHLY_CEILING_USD: {category: rollout, value: '0'}
           SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
           SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {value: '1', category: rollout}
-          PARAKEET_WINDOW_MAX_SESSIONS: {value: '1', category: rollout}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '1'}
+          PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '1'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
@@ -184,14 +192,14 @@ environments:
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
             value: dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local
             category: service_discovery
-          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS: {value: '1', category: rollout}
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS: {category: rollout, value: '1'}
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS: {value: '1800', category: rollout}
           STT_CIRCUIT_HALF_OPEN_PROBES: {value: '1', category: rollout}
           STT_SHED_CONNECT_FAILURES: {value: '3', category: rollout}
           SONIOX_CIRCUIT_FAILURE_THRESHOLD: {value: '3', category: rollout}
           SONIOX_CIRCUIT_COOLDOWN_SECONDS: {value: '30', category: rollout}
           STT_SERVICE_MODELS:
-            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+            value: parakeet-window,modulate-velma-2,soniox
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -217,7 +225,7 @@ environments:
           LISTEN_RECONNECT_BUDGET_PER_MIN:
             value: '6'
             category: reliability
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {category: rollout, value: gateway}
           ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE: {value: '0.01', category: rollout}
           MODULATE_API_KEY:
@@ -293,16 +301,38 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
             category: storage_retention
+            value: based-hardware-dev-screen-frames
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '0'}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            value: ''
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
@@ -312,20 +342,9 @@ environments:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
-          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
-          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-          REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -340,7 +359,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -357,30 +381,29 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'false'}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
+          SONIOX_WIRE_LEDGER: {category: rollout, value: 'false'}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -392,6 +415,12 @@ environments:
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
             value: 'on'
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
           CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
@@ -401,16 +430,24 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://172.16.48.49/diarizer
-          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_SCREEN_FRAMES:
-            value: based-hardware-dev-screen-frames
             category: storage_retention
+            value: based-hardware-dev-screen-frames
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '0'}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: omi-release-probe, category: rollout}
@@ -430,19 +467,9 @@ environments:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_BELIEF_MODEL_ENABLED: {value: 'true', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
-          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -496,7 +523,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -572,7 +599,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: modulate-velma-2,soniox,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -617,6 +644,12 @@ environments:
         TTS_PROVIDER: {value: gemini, category: rollout}
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         GCP_LOCATION:
           value: us-central1
         PROMETHEUS_SIDECAR_PORT:
@@ -625,7 +658,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -645,8 +678,8 @@ environments:
           value: based-hardware
       secrets:
         GEMINI_API_KEY:
-          secret: GEMINI_API_KEY
           version: latest
+          secret: GEMINI_API_KEY
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest
@@ -693,23 +726,27 @@ environments:
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
-            POSTHOG_PROJECT_API_KEY:
-              secret: POSTHOG_PROJECT_API_KEY
-              version: latest
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: '', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_WORKER_AUDIENCE:
               value: ''
               category: service_auth
@@ -717,24 +754,24 @@ environments:
               value: ''
               category: service_auth
             BUCKET_BATCH_PIPELINE:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
             BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             BUCKET_TEMPORAL_SYNC_LOCAL:
-              value: syncing-local-development
               category: storage_retention
+              value: syncing-local-development
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -742,7 +779,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -760,7 +797,7 @@ environments:
               value: based-hardware-dev
               category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -773,9 +810,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -842,6 +878,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -858,8 +900,8 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
               category: telemetry
+              value: https://app.posthog.com
             GCP_LOCATION:
               value: us-central1
             SYNC_LEDGER_FENCE_MODE:
@@ -877,9 +919,8 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: dev-v1
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -887,8 +928,31 @@ environments:
             SCREEN_FRAME_EGRESS_ENABLED: {value: 'true', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_SCREEN_FRAMES:
-              value: based-hardware-dev-screen-frames
               category: storage_retention
+              value: based-hardware-dev-screen-frames
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '0'}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              value: ''
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -913,28 +977,10 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
-            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
-            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
         backend-sync:
-          forbidden_env:
-          - DEEPGRAM_SELF_HOSTED_ENABLED
-          - DEEPGRAM_SELF_HOSTED_URL
-          - HOSTED_PUSHER_API_URL
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -964,25 +1010,29 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: '', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_WORKER_AUDIENCE:
-              value: ''
               category: service_auth
+              value: ''
             BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-              value: ''
               category: service_auth
-            BUCKET_BATCH_PIPELINE:
               value: ''
+            BUCKET_BATCH_PIPELINE:
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
@@ -995,10 +1045,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
@@ -1012,7 +1062,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1029,7 +1079,7 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1042,9 +1092,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1073,10 +1122,10 @@ environments:
               provisional: true
               value: 'off'
               category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
-            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'false', category: rollout}
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
+            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'false', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'false'}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1095,6 +1144,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -1110,16 +1165,16 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
-            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
-            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'false'}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'false'}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: ''}
+            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '0'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              category: reliability
               value: '60'
-              category: reliability
             SYNC_LEGACY_FRESH_BURST_TOKENS:
-              value: '10'
               category: reliability
+              value: '10'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -1128,8 +1183,8 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
               category: telemetry
+              value: https://app.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
               value: '300'
@@ -1157,9 +1212,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -1171,8 +1225,30 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_SCREEN_FRAMES:
-              value: based-hardware-dev-screen-frames
               category: storage_retention
+              value: based-hardware-dev-screen-frames
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '0'}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {category: rollout, value: '0'}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {category: rollout, value: '0'}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              value: ''
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
@@ -1197,20 +1273,9 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
             MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
-            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-        backend-sync-backfill:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -1219,6 +1284,7 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1236,16 +1302,20 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: '', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_WORKER_AUDIENCE:
               value: ''
               category: service_auth
@@ -1253,8 +1323,8 @@ environments:
               value: ''
               category: service_auth
             BUCKET_BATCH_PIPELINE:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
@@ -1267,10 +1337,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -1278,7 +1348,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1295,7 +1365,7 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1308,9 +1378,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1340,10 +1409,10 @@ environments:
               provisional: true
               value: 'off'
               category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
-            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'false', category: rollout}
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'false'}
+            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'false'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'false', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'false'}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1362,6 +1431,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omiapi.com
@@ -1377,16 +1452,16 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
-            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
-            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'false'}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'false'}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: ''}
+            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '0'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              category: reliability
               value: '60'
-              category: reliability
             SYNC_LEGACY_FRESH_BURST_TOKENS:
-              value: '10'
               category: reliability
+              value: '10'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -1395,8 +1470,8 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
               category: telemetry
+              value: https://app.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
               value: '300'
@@ -1419,9 +1494,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -1432,6 +1506,26 @@ environments:
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {category: rollout, value: '0'}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {category: rollout, value: '0'}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              value: ''
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1451,17 +1545,8 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
-            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           provisional: true
-        backend-integration:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -1470,6 +1555,7 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1490,16 +1576,19 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: '', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_WORKER_AUDIENCE:
               value: ''
               category: service_auth
@@ -1507,8 +1596,8 @@ environments:
               value: ''
               category: service_auth
             BUCKET_BATCH_PIPELINE:
-              value: ''
               category: service_discovery
+              value: ''
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
@@ -1521,10 +1610,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -1532,7 +1621,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1549,7 +1638,7 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'false'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -1562,9 +1651,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1595,6 +1683,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -1618,8 +1712,8 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://app.posthog.com
               category: telemetry
+              value: https://app.posthog.com
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: dev-omi-frame-requests
@@ -1632,13 +1726,27 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              value: ''
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1658,6 +1766,14 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - HOSTED_PUSHER_API_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:
@@ -1680,7 +1796,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1707,6 +1823,12 @@ environments:
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1741,7 +1863,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1817,7 +1939,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1884,7 +2006,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1937,7 +2059,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2013,7 +2135,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2064,7 +2186,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2084,8 +2206,8 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware-dev
             DAY3_REENGAGEMENT_EMAIL_ENABLED:
-              value: 'false'
               category: lifecycle_email
+              value: 'false'
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
               category: lifecycle_email
@@ -2118,6 +2240,7 @@ environments:
       env:
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+        DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         PROACTIVITY_REDIS_HOST:
           config_map:
             name: prod-omi-backend-config
@@ -2130,7 +2253,6 @@ environments:
             name: prod-omi-backend-secrets
             key: REDIS_DB_PASSWORD
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
-        DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
           category: service_discovery
@@ -2146,7 +2268,11 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2158,16 +2284,15 @@ environments:
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
-          BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
           BATCH_PIPELINE_API_URL:
-            value: https://backend-sync-hhibjajaja-uc.a.run.app
             category: service_discovery
+            value: https://backend-sync-hhibjajaja-uc.a.run.app
           BATCH_PIPELINE_WORKER_AUDIENCE:
             value: ''
             category: service_auth
@@ -2175,8 +2300,8 @@ environments:
             value: ''
             category: service_auth
           BUCKET_BATCH_PIPELINE:
-            value: based-hardware-batch-pipeline-staging
             category: service_discovery
+            value: based-hardware-batch-pipeline-staging
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
             category: reliability
@@ -2186,31 +2311,30 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
+          SONIOX_WIRE_LEDGER: {category: rollout, value: 'true'}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           TRANSLATION_DEMAND_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -2275,28 +2399,34 @@ environments:
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
-          STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
+          STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
-          STT_FAILOVER_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          STT_ROUTING_MODE: {value: 'on', category: rollout}
+          STT_FAILOVER_RECOVERY_ENABLED: {category: rollout, value: 'true'}
+          STT_ROUTING_MODE: {category: rollout, value: 'on'}
           STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
-          STT_ROUTING_ON_PERCENT: {value: '100', category: rollout}
+          STT_ROUTING_ON_PERCENT: {category: rollout, value: '100'}
           STT_ROUTING_TARGETS_JSON: {value: '', category: rollout}
           STT_ROUTING_DISRUPTION_GATE:
             value: '0.08'
             category: reliability
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
-          SONIOX_MONTHLY_CEILING_USD: {value: '10000', category: rollout}
+          SONIOX_MONTHLY_CEILING_USD: {category: rollout, value: '10000'}
           SONIOX_ESTIMATED_USD_PER_HOUR: {value: '0.07537', category: rollout}
           STT_MULTI_LANGUAGE_HINTS: {value: 'true', category: rollout}
           SONIOX_CONTEXT_TERMS: {value: 'false', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {value: '100', category: rollout}
-          PARAKEET_WINDOW_MAX_SESSIONS: {value: '16', category: rollout}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
+          PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
@@ -2308,14 +2438,14 @@ environments:
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
             value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
             category: service_discovery
-          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS: {value: '3', category: rollout}
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS: {category: rollout, value: '3'}
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS: {value: '1800', category: rollout}
           STT_CIRCUIT_HALF_OPEN_PROBES: {value: '1', category: rollout}
           STT_SHED_CONNECT_FAILURES: {value: '3', category: rollout}
           SONIOX_CIRCUIT_FAILURE_THRESHOLD: {value: '3', category: rollout}
           SONIOX_CIRCUIT_COOLDOWN_SECONDS: {value: '30', category: rollout}
           STT_SERVICE_MODELS:
-            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+            value: parakeet-window,modulate-velma-2,soniox
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -2341,7 +2471,7 @@ environments:
           LISTEN_RECONNECT_BUDGET_PER_MIN:
             value: '6'
             category: reliability
-          PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: 'off', category: rollout}
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {category: rollout, value: 'off'}
           ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
           DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE: {value: '0.01', category: rollout}
           MODULATE_API_KEY:
@@ -2417,12 +2547,36 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          BUCKET_SCREEN_FRAMES:
+            category: storage_retention
+            value: based-hardware-prod-screen-frames
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '100'}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             category: telemetry
@@ -2447,7 +2601,6 @@ environments:
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
             value: '12'
             category: reliability
@@ -2461,9 +2614,6 @@ environments:
           STT_NO_TEXT_RESCUE_ENABLED: {value: 'true', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
-          BUCKET_SCREEN_FRAMES:
-            value: based-hardware-prod-screen-frames
-            category: storage_retention
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -2515,19 +2665,8 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
           CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
-          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-          REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
@@ -2543,7 +2682,12 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+          PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2560,30 +2704,29 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
           AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          AUDIO_TIMELINE_SPANS: {value: 'true', category: rollout}
-          LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+          AUDIO_TIMELINE_SPANS: {category: rollout, value: 'true'}
+          LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'true', category: rollout}
-          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'true', category: rollout}
-          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'true', category: rollout}
-          SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
+          LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
+          LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
+          SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
+          SONIOX_WIRE_LEDGER: {category: rollout, value: 'true'}
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
-          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-          DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+          DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
           DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
           FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
           FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
@@ -2591,6 +2734,12 @@ environments:
           LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
           MEMORY_ENABLED:
             value: 'on'
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED: {category: rollout, value: 'true'}
           CONVERSATION_OCR_CONTEXT_ENABLED: {category: rollout, value: 'true'}
@@ -2600,6 +2749,23 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://172.16.160.20/diarizer
+          DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+          DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
+          PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          BUCKET_SCREEN_FRAMES:
+            category: storage_retention
+            value: based-hardware-prod-screen-frames
+          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '100'}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+          CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -2617,11 +2783,6 @@ environments:
           TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
           TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-          DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
-          PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             category: telemetry
@@ -2650,24 +2811,10 @@ environments:
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
-          BUCKET_SCREEN_FRAMES:
-            value: based-hardware-prod-screen-frames
-            category: storage_retention
-          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
           CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
-          CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-          CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -2696,7 +2843,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
+            value: parakeet-window,modulate-velma-2,soniox
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -2748,6 +2895,12 @@ environments:
         TTS_PROVIDER: {value: gemini, category: rollout}
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         GCP_LOCATION:
           value: us-central1
         PROMETHEUS_SIDECAR_PORT:
@@ -2756,7 +2909,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2783,8 +2936,8 @@ environments:
           value: based-hardware
       secrets:
         GEMINI_API_KEY:
-          secret: DESKTOP_GEMINI_API_KEY
           version: latest
+          secret: DESKTOP_GEMINI_API_KEY
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest
@@ -2833,6 +2986,9 @@ environments:
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
+            SCREEN_FRAME_SIGNING_SECRET:
+              secret: SCREEN_FRAME_SIGNING_SECRET
+              version: latest
             TELEGRAM_BOT_TOKEN:
               secret: TELEGRAM_BOT_TOKEN
               version: latest
@@ -2857,20 +3013,21 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
-            SCREEN_FRAME_SIGNING_SECRET:
-              secret: SCREEN_FRAME_SIGNING_SECRET
-              version: latest
           env:
-            BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+            BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: https://backend-sync-hhibjajaja-uc.a.run.app
               category: service_discovery
+              value: https://backend-sync-hhibjajaja-uc.a.run.app
             BATCH_PIPELINE_WORKER_AUDIENCE:
               value: ''
               category: service_auth
@@ -2878,24 +3035,24 @@ environments:
               value: ''
               category: service_auth
             BUCKET_BATCH_PIPELINE:
-              value: based-hardware-batch-pipeline-staging
               category: service_discovery
+              value: based-hardware-batch-pipeline-staging
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
             BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
             BUCKET_TEMPORAL_SYNC_LOCAL:
-              value: syncing-local
               category: storage_retention
+              value: syncing-local
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -2903,7 +3060,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2921,7 +3078,7 @@ environments:
               value: based-hardware
               category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -2934,9 +3091,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -3000,6 +3156,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -3016,8 +3178,8 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://us.posthog.com
               category: telemetry
+              value: https://us.posthog.com
             GCP_LOCATION:
               value: us-central1
             SYNC_LEDGER_FENCE_MODE:
@@ -3035,6 +3197,39 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
+            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            SCREEN_FRAME_EGRESS_ENABLED: {value: 'true', category: rollout}
+            REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+            BUCKET_SCREEN_FRAMES:
+              category: storage_retention
+              value: based-hardware-prod-screen-frames
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '100'}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3064,16 +3259,11 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
-            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             POSTHOG_BILLING_API_KEY:
               value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
               category: telemetry
@@ -3084,15 +3274,10 @@ environments:
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
               value: backend-runtime@based-hardware.iam.gserviceaccount.com
-            SCREEN_FRAME_EGRESS_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
-            BUCKET_SCREEN_FRAMES:
-              value: based-hardware-prod-screen-frames
-              category: storage_retention
             ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE: {value: '1', category: rollout}
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
@@ -3129,9 +3314,11 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
@@ -3153,29 +3340,15 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
-            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
-            REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+              category: reliability
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
-          forbidden_env:
-          - DEEPGRAM_SELF_HOSTED_ENABLED
-          - DEEPGRAM_SELF_HOSTED_URL
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -3205,25 +3378,29 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
-            BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
+            BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: https://backend-sync-hhibjajaja-uc.a.run.app
               category: service_discovery
+              value: https://backend-sync-hhibjajaja-uc.a.run.app
             BATCH_PIPELINE_WORKER_AUDIENCE:
+              category: service_auth
               value: https://backend-sync-hhibjajaja-uc.a.run.app
-              category: service_auth
             BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-              value: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
               category: service_auth
+              value: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
             BUCKET_BATCH_PIPELINE:
-              value: based-hardware-batch-pipeline-staging
               category: service_discovery
+              value: based-hardware-batch-pipeline-staging
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
@@ -3236,10 +3413,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
@@ -3253,7 +3430,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3270,7 +3447,7 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3283,9 +3460,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -3311,10 +3487,10 @@ environments:
               provisional: true
               value: 'off'
               category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
-            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'true'}
+            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'true'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'true'}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -3333,6 +3509,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -3348,16 +3530,16 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
-            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
-            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'true'}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '100'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              value: '60'
               category: reliability
+              value: '120'
             SYNC_LEGACY_FRESH_BURST_TOKENS:
-              value: '10'
               category: reliability
+              value: '60'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -3366,8 +3548,8 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://us.posthog.com
               category: telemetry
+              value: https://us.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
               value: '300'
@@ -3395,6 +3577,42 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            BUCKET_SCREEN_FRAMES:
+              category: storage_retention
+              value: based-hardware-prod-screen-frames
+            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_PERCENT: {category: rollout, value: '100'}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {category: rollout, value: '100'}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {category: rollout, value: '100'}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3413,38 +3631,23 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
             DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
-            SYNC_PHASE_METRICS_EXPORT_ENABLED:
-              value: 'true'
-              category: telemetry
-            SYNC_PHASE_METRICS_PROJECT:
-              value: based-hardware
-              category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
-            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
             SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
             LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
-            BUCKET_SCREEN_FRAMES:
-              value: based-hardware-prod-screen-frames
-              category: storage_retention
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -3480,28 +3683,45 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
-            CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-        backend-sync-backfill:
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
+            SYNC_BACKFILL_ORDER_PERCENT: {value: '100', category: rollout}
+            SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_TASKS_HANDLER_URL:
+              env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_QUEUE:
+              value: sync-backfill
+              category: reliability
+            SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
+            SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_TASKS_QUEUE:
+              value: sync-jobs
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -3509,6 +3729,8 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3523,16 +3745,20 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
-            BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
+            BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: https://backend-sync-hhibjajaja-uc.a.run.app
               category: service_discovery
+              value: https://backend-sync-hhibjajaja-uc.a.run.app
             BATCH_PIPELINE_WORKER_AUDIENCE:
               value: ''
               category: service_auth
@@ -3540,8 +3766,8 @@ environments:
               value: ''
               category: service_auth
             BUCKET_BATCH_PIPELINE:
-              value: based-hardware-batch-pipeline-staging
               category: service_discovery
+              value: based-hardware-batch-pipeline-staging
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
@@ -3554,10 +3780,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -3565,7 +3791,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3582,7 +3808,7 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3595,9 +3821,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -3624,10 +3849,10 @@ environments:
               provisional: true
               value: 'off'
               category: rollout
-            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
-            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {category: rollout, value: 'true'}
+            SYNC_REPROCESS_COALESCE_ENABLED: {category: rollout, value: 'true'}
             SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
-            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'true'}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -3646,6 +3871,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             HOSTED_PARAKEET_API_URL:
               category: service_discovery
               value: http://parakeet.omi.me
@@ -3661,16 +3892,16 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
-            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
-            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
-            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
+            SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'true'}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+            SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '100'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-              value: '60'
               category: reliability
+              value: '120'
             SYNC_LEGACY_FRESH_BURST_TOKENS:
-              value: '10'
               category: reliability
+              value: '60'
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -3679,8 +3910,8 @@ environments:
               value: 'false'
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://us.posthog.com
               category: telemetry
+              value: https://us.posthog.com
             SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS:
               provisional: true
               value: '300'
@@ -3703,6 +3934,37 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
+            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            SYNC_PHASE_METRICS_EXPORT_ENABLED:
+              value: 'true'
+              category: telemetry
+            SYNC_PHASE_METRICS_PROJECT:
+              value: based-hardware
+              category: telemetry
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {category: rollout, value: '100'}
+            MEMORY_OWNER_JEV_SHADOW_PERCENT: {category: rollout, value: '100'}
+            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
+            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
               value: http://172.16.160.20/diarizer-batch
               category: service_discovery
@@ -3721,24 +3983,12 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_PHASE_METRICS_EXPORT_ENABLED:
-              value: 'true'
-              category: telemetry
-            SYNC_PHASE_METRICS_PROJECT:
-              value: based-hardware
-              category: telemetry
-            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
-            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
             SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -3776,29 +4026,48 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_PERCENT: {value: '100', category: rollout}
-            CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT: {value: '0', category: rollout}
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
-            CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
-            CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
+            SYNC_BACKFILL_ORDER_PERCENT: {value: '0', category: rollout}
+            SYNC_BACKFILL_ROUTING_ENABLED: {value: 'true', category: rollout}
+            SYNC_BACKFILL_TASKS_HANDLER_URL:
+              env_var: SYNC_BACKFILL_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_BACKFILL_TASKS_QUEUE:
+              value: sync-backfill
+              category: reliability
+            SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
+            SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_TASKS_QUEUE:
+              value: sync-backfill
+              category: reliability
           provisional: true
-          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-        backend-integration:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -3806,6 +4075,8 @@ environments:
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3823,16 +4094,19 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
-            BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
+            REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_SERVING_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_API_URL:
-              value: https://backend-sync-hhibjajaja-uc.a.run.app
               category: service_discovery
+              value: https://backend-sync-hhibjajaja-uc.a.run.app
             BATCH_PIPELINE_WORKER_AUDIENCE:
               value: ''
               category: service_auth
@@ -3840,8 +4114,8 @@ environments:
               value: ''
               category: service_auth
             BUCKET_BATCH_PIPELINE:
-              value: based-hardware-batch-pipeline-staging
               category: service_discovery
+              value: based-hardware-batch-pipeline-staging
             BATCH_PIPELINE_UNIT_SECONDS:
               value: '3600'
               category: reliability
@@ -3854,10 +4128,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'true', category: rollout}
             AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
-            AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+            AUDIO_ARCHIVE_UID_ALLOWLIST: {category: rollout, value: ''}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
             AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
@@ -3865,7 +4139,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3882,7 +4156,7 @@ environments:
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
-            LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
+            LIVE_SPEAKER_SPAN_RESOLUTION: {category: rollout, value: 'true'}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
@@ -3895,9 +4169,8 @@ environments:
             CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
               value: 'true'
               category: ops_kill
-            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
-            DESKTOP_PENDANT_CALL_LINK_MODE: {value: 'off', category: rollout}
+            DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -3925,6 +4198,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -3948,8 +4227,8 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             POSTHOG_HOST:
-              value: https://us.posthog.com
               category: telemetry
+              value: https://us.posthog.com
             BUCKET_FRAME_REQUESTS:
               env_var: BUCKET_FRAME_REQUESTS
               default: prod-omi-frame-requests
@@ -3962,20 +4241,34 @@ environments:
               category: storage_retention
             GCP_LOCATION:
               value: us-central1
-            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
+            CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
             SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -3995,20 +4288,32 @@ environments:
               category: reliability
             SYNC_TASKS_INVOKER_SA:
               env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
               category: reliability
             SYNC_TASKS_QUEUE:
               value: sync-jobs
               category: reliability
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             SYNC_TASKS_HANDLER_URL:
               env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:
@@ -4032,7 +4337,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4059,6 +4364,12 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
         x-connector-sync-job:
@@ -4088,7 +4399,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4162,7 +4473,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4229,7 +4540,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4283,7 +4594,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4361,7 +4672,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4412,7 +4723,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4432,8 +4743,8 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             DAY3_REENGAGEMENT_EMAIL_ENABLED:
-              value: 'true'
               category: lifecycle_email
+              value: 'true'
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
               category: lifecycle_email

@@ -1,3 +1,4 @@
+import { captureEvidenceCtes } from "./wall-capture-sql";
 import { mcpActivityCtes, MCP_MARKER_STATUS_ROW } from "./wall-mcp";
 import { WallSourceError } from "./wall-source-error";
 import { withRowLimit } from "./posthog";
@@ -51,7 +52,7 @@ function activityCtes(
     app_pd AS (SELECT actor,p,intDiv(dateDiff('second',${at},${sqlTime(
     end
   )})-1,${days * 86400}) period,
-      uniqExact(toDate(${at})) days,max(${at}) latest,countIf(cap) captures${
+      uniqExact(${UTC_DAY(at)}) days,max(${at}) latest,countIf(cap) captures${
     extra.app
   } FROM qualified
       WHERE ${predicate} AND ${at} >= ${sqlTime(start)} AND ${at} < ${sqlTime(
@@ -217,7 +218,9 @@ export function cohortQuery(end: Date, maturity: 0 | 2 | 7 | 37, periods = 6) {
     people AS (SELECT actor,min(anchor) a,
       coalesce(nullIf(argMinIf(p,tuple(timestamp,${PLATFORM_RANK_SQL}),p!='unknown'),''),'unknown') entry,
       min(timestamp) first_event,
-      uniqExactIf(toDate(qt),(fg OR cap) AND qt >= anchor AND qt < anchor + interval 7 day) days7,
+      uniqExactIf(${UTC_DAY(
+        "qt"
+      )},(fg OR cap) AND qt >= anchor AND qt < anchor + interval 7 day) days7,
       countIf((fg OR cap) AND qt >= anchor + interval 1 day AND qt < anchor + interval 2 day) d1,
       countIf((fg OR cap) AND qt >= anchor + interval 7 day AND qt < anchor + interval 37 day) returned,
       countIf(cap AND qt >= anchor AND qt < anchor + interval 7 day) capture
@@ -236,7 +239,9 @@ export function establishedQuery(end: Date, periods = 6) {
     weeks AS (SELECT actor,p,intDiv(dateDiff('second',qt,${sqlTime(
       end
     )})-1,604800) w,
-      uniqExact(toDate(qt)) days,max(qt) latest FROM qualified WHERE (fg OR cap)
+      uniqExact(${UTC_DAY(
+        "qt"
+      )}) days,max(qt) latest FROM qualified WHERE (fg OR cap)
       AND qt >= ${sqlTime(
         shiftDay(end, -7 * (periods + 2))
       )} AND qt < ${sqlTime(end)} GROUP BY actor,p,w),
@@ -255,49 +260,99 @@ export function establishedQuery(end: Date, periods = 6) {
     SELECT period,p,countIf(eligible),countIf(eligible AND returned) FROM people GROUP BY period,p LIMIT 100`;
 }
 
-/** Explicit blocking reads, bounded transient retries, and safe failure categories. */
+/** PostHog's blocking budget (~10 s since 2026-10-16) is far below what the
+ * wall's multi-week scans need, while async queries run to completion. */
+export const ASYNC_POLL_MS = 2_000;
+export const ASYNC_DEADLINE_MS = 240_000;
+
+function httpFailure(status: number) {
+  // Never expose/log the response body, SQL, headers or credential values.
+  const reason =
+    status === 429
+      ? "rate limited"
+      : status === 504
+      ? "execution time limit exceeded"
+      : [401, 403].includes(status)
+      ? "access denied"
+      : status === 400
+      ? "query rejected"
+      : "service request failed";
+  return new WallSourceError(
+    `PostHog ${reason} (HTTP ${status})`,
+    [429, 502, 503, 504].includes(status)
+  );
+}
+
+type QueryStatus = {
+  id?: unknown;
+  complete?: unknown;
+  error?: unknown;
+  error_message?: unknown;
+  results?: unknown;
+};
+
+/** Poll an async HogQL query until it completes, fails or the deadline passes. */
+async function awaitAsync(
+  url: string,
+  key: string,
+  initial: QueryStatus
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + ASYNC_DEADLINE_MS;
+  let status = initial;
+  for (;;) {
+    if (status.complete === true) {
+      if (status.error)
+        throw new WallSourceError(
+          /execution time/i.test(String(status.error_message ?? ""))
+            ? "PostHog execution time limit exceeded (async)"
+            : "PostHog async query failed",
+          true
+        );
+      if (status.results && typeof status.results === "object")
+        return status.results as Record<string, unknown>;
+      throw new WallSourceError("PostHog aggregate response missing", true);
+    }
+    if (typeof status.id !== "string" || Date.now() >= deadline)
+      throw new WallSourceError("PostHog request timed out", true);
+    await new Promise((resolve) => setTimeout(resolve, ASYNC_POLL_MS));
+    const res = await fetch(`${url}${encodeURIComponent(status.id)}/`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw httpFailure(res.status);
+    const body = await res.json();
+    status = (body?.query_status ?? body) as QueryStatus;
+  }
+}
+
+/** Async reads polled to completion (cached results return at once), bounded
+ * transient retries, and safe failure categories. */
 export const queryPosthog: Query = async (query) => {
   const key = process.env.POSTHOG_PERSONAL_API_KEY;
   const project = process.env.POSTHOG_PROJECT_ID;
   if (!key || !project)
     throw new WallSourceError("PostHog credentials unavailable");
+  const url = `${
+    process.env.POSTHOG_HOST || "https://us.posthog.com"
+  }/api/projects/${project}/query/`;
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await fetch(
-        `${
-          process.env.POSTHOG_HOST || "https://us.posthog.com"
-        }/api/projects/${project}/query/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: { kind: "HogQLQuery", query: withRowLimit(query) },
-            refresh: "blocking",
-          }),
-          signal: AbortSignal.timeout(120_000),
-        }
-      );
-      if (!res.ok) {
-        // Never expose/log the response body, SQL, headers or credential values.
-        const reason =
-          res.status === 429
-            ? "rate limited"
-            : res.status === 504
-            ? "execution time limit exceeded"
-            : [401, 403].includes(res.status)
-            ? "access denied"
-            : res.status === 400
-            ? "query rejected"
-            : "service request failed";
-        throw new WallSourceError(
-          `PostHog ${reason} (HTTP ${res.status})`,
-          [429, 502, 503, 504].includes(res.status)
-        );
-      }
-      const data = await res.json();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: { kind: "HogQLQuery", query: withRowLimit(query) },
+          refresh: "async",
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw httpFailure(res.status);
+      let data = await res.json();
+      if (!Array.isArray(data.results) && data.query_status)
+        data = await awaitAsync(url, key, data.query_status);
       if (!Array.isArray(data.results))
         throw new WallSourceError(
           data.query_status
@@ -399,12 +454,6 @@ export function captureSourceQuery(end: Date) {
   const start = shiftDay(cohortEnd, -7);
   const week = (at: string) =>
     `${at} >= anchor AND ${at} < anchor + interval 7 day`;
-  const family = (name: string, fam: string[], type: string[] = []) =>
-    `dev AND (fam IN (${fam.map((f) => `'${f}'`).join(",")})${
-      type.length
-        ? ` OR properties.type IN (${type.map((t) => `'${t}'`).join(",")})`
-        : ""
-    }),'${name}'`;
   return `WITH ${raw(
     shiftDay(start, -180),
     end,
@@ -412,45 +461,9 @@ export function captureSourceQuery(end: Date) {
       start
     )} AND person.created_at < ${sqlTime(cohortEnd)}`
   )},
-    cls AS (SELECT *,
-      if(event='Memory Created' AND p IN ('ios','android'),parseDateTimeBestEffort(coalesce(toString(properties.timestamp),'1970-01-01')),timestamp) et,
-      (event='Memory Created' AND properties.memory_result='saved' AND toString(properties.memory_discarded)='false' AND properties.memory_id IS NOT NULL) saved_mem,
-      event IN ('Device Connected','Device Paired','Device Session Ended') dev,
-      coalesce(toString(properties.hardware_family),'') fam,
-      coalesce(toString(properties.conversation_source),'') src FROM qualified),
-    hw AS (SELECT *,multiIf(${family("Omi pendant", ["omi_cv1"])},
-      ${family("Omi Neo", ["omi_neo"])},${family("Omi devkit", [
-    "omi_devkit",
-    "friend_devkit",
-  ])},
-      ${family("Omi Glass", ["omi_glass"], ["openglass"])},${family(
-    "Apple Watch",
-    ["apple_watch"],
-    ["appleWatch"]
-  )},
-      ${family("Plaud", ["plaud"], ["plaud"])},${family(
-    "Bee",
-    ["bee"],
-    ["bee"]
-  )},${family("Fieldy", ["fieldy"], ["fieldy"])},
-      ${family(
-        "Friend pendant",
-        ["friend_pendant"],
-        ["friendPendant"]
-      )},${family("Limitless", ["limitless"], ["limitless"])},
-      ${family(
-        "Ray-Ban Meta",
-        ["rayban_meta"],
-        ["raybanMeta"]
-      )},dev AND properties.type='omi','Omi unspecified',
-      saved_mem AND src='omi','Omi unspecified',saved_mem AND src='openglass','Omi Glass',saved_mem AND src='apple_watch','Apple Watch',
-      saved_mem AND src='limitless','Limitless',saved_mem AND src='fieldy','Fieldy',saved_mem AND src='bee','Bee',
-      saved_mem AND src='friend_com','Friend pendant',saved_mem AND src='rayban_meta','Ray-Ban Meta',
-      saved_mem AND properties.recording_hardware_type='plaud','Plaud','') h,
-      (event='Phone Mic Recording Started' OR (saved_mem AND src='phone')) phone,
-      ((event='Memory Created' AND src='desktop') OR event='Desktop Recording Started') mac FROM cls),
+    ${captureEvidenceCtes()},
     people AS (SELECT actor,min(anchor) a,min(timestamp) first_event,
-      uniqExactIf(toDate(qt),(fg OR cap) AND ${week("qt")}) days7,
+      uniqExactIf(${UTC_DAY("qt")},(fg OR cap) AND ${week("qt")}) days7,
       groupUniqArrayIf(h,h!='' AND ${week("et")}) hws,
       countIf(phone AND ${week("et")}) > 0 ph,countIf(mac AND ${week(
     "et"

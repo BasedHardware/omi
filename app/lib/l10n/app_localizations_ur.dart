@@ -13513,4 +13513,279 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'اس گفتگو کا خلاصہ نہیں بن سکا';
+
+  @override
+  String get connectAgentHeadline => 'ChatGPT اور اپنے AI ایجنٹس میں اپنی Omi میموری استعمال کریں';
+
+  @override
+  String get connectAgentIntro => 'ایک بار جڑیں۔ پھر ان سے اپنی بات چیت، یادوں اور کاموں کے بارے میں پوچھیں۔';
+
+  @override
+  String get connectAgentOneTap => 'ایک ٹیپ میں';
+
+  @override
+  String get connectAgentComputerAgents => 'اپنے کمپیوٹر والے ایجنٹس';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'ایک پرامپٹ کاپی کریں۔ Omi صرف اسی ایجنٹ کے لیے ایک کلید بناتا ہے اور اسے محفوظ طریقے سے بھیجتا ہے۔';
+
+  @override
+  String get connectAgentOtherAgent => 'دیگر ایجنٹ';
+
+  @override
+  String get connectAgentKeyActive => 'کلید فعال ہے';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'آخری استعمال $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'ڈویلپرز کے لیے MCP اور API کلیدیں';
+
+  @override
+  String get connectAgentLoadFailed => 'آپ کے کنکشنز لوڈ نہیں ہو سکے۔';
+
+  @override
+  String get connectAgentActionFailed => 'کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPT جوڑیں';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'تقریباً 30 سیکنڈ لگتے ہیں۔ آپ ChatGPT کے اندر اسے منظور کرتے ہیں، اور یہ آپ کے فون اور کمپیوٹر پر کام کرتا ہے۔';
+
+  @override
+  String get connectChatGptStepOpen => 'ہم ChatGPT میں Omi کھولتے ہیں';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT براہ راست Omi ایپ کے صفحے پر کھلتا ہے۔';
+
+  @override
+  String get connectChatGptStepApprove => '\"کنیکٹ\" پر ٹیپ کریں، پھر Omi میں سائن ان کریں';
+
+  @override
+  String get connectChatGptStepApproveBody => 'وہی اکاؤنٹ استعمال کریں جو آپ یہاں استعمال کرتے ہیں۔';
+
+  @override
+  String get connectChatGptStepReturn => 'Omi پر واپس آئیں';
+
+  @override
+  String get connectChatGptStepReturnBody => 'ہم کنکشن خود بخود چیک کرتے ہیں۔';
+
+  @override
+  String get openChatGpt => 'ChatGPT کھولیں';
+
+  @override
+  String get chatGptConnectedEverywhere => 'فون اور کمپیوٹر پر منسلک';
+
+  @override
+  String get tryAskingChatGpt => 'ChatGPT سے پوچھ کر دیکھیں';
+
+  @override
+  String get tryAskingChatGptFooter => 'کسی ایک پر ٹیپ کریں تاکہ ChatGPT اسے بھر کر کھل جائے۔';
+
+  @override
+  String get chatGptExampleMeetings => 'کل کی میٹنگز میں میں نے کس بات پر اتفاق کیا؟';
+
+  @override
+  String get chatGptExampleTasks => 'میرے Omi کے زیرِ التوا کاموں کو اس ہفتے کے منصوبے میں بدل دو۔';
+
+  @override
+  String get chatGptExampleGoals => 'Omi میرے اہداف کے بارے میں کیا جانتا ہے؟';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPT منقطع کریں';
+
+  @override
+  String get disconnectChatGptQuestion => 'ChatGPT منقطع کریں؟';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT اب آپ کی Omi یادیں، بات چیت یا کام نہیں پڑھ سکے گا۔';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$name جوڑیں';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'ایک پرامپٹ پیسٹ کریں۔ $name اپنے کمپیوٹر پر خود Omi سیٹ اپ کرتا ہے۔';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'ایک پرامپٹ پیسٹ کریں۔ آپ کا ایجنٹ اپنے کمپیوٹر پر خود Omi سیٹ اپ کرتا ہے۔';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'کلید “$name” بن گئی';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'پرامپٹ میں کلید نہیں بلکہ ایک بار استعمال ہونے والا لنک ہوتا ہے۔ یہ صرف ایک بار کھلتا ہے اور 1 گھنٹے میں ختم ہو جاتا ہے۔ کلید کو یہاں کسی بھی وقت منسوخ کریں۔';
+
+  @override
+  String get connectAgentPreparing => 'کلید اور محفوظ لنک بنایا جا رہا ہے…';
+
+  @override
+  String get connectAgentPrepareFailed => 'کلید نہیں بن سکی۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get copyPrompt => 'پرامپٹ کاپی کریں';
+
+  @override
+  String get connectAgentNewLink => 'لنک کی میعاد ختم؟ نیا بنائیں';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name منسلک ہے';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name کے پاس Omi کلید ہے۔ رسائی ختم کرنے کے لیے اسے منسوخ کریں۔ آپ کسی بھی وقت دوبارہ جڑ سکتے ہیں۔';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '$name کی کلید منسوخ کریں؟';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name فوراً آپ کی Omi میموری تک رسائی کھو دیتا ہے۔';
+  }
+
+  @override
+  String get askAboutConversation => 'اس بات چیت کے بارے میں پوچھیں';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'آپ کے سوال کے ساتھ ChatGPT کھولتا ہے۔ یہ Omi کے ذریعے بات چیت تلاش کرتا ہے، اس لیے آپ کو ٹرانسکرپٹ پیسٹ نہیں کرنی پڑتی۔';
+
+  @override
+  String get askYourQuestion => 'آپ کا سوال';
+
+  @override
+  String get askSuggestFollowUp => 'اس بات چیت سے ایک فالو اپ ای میل کا مسودہ تیار کرو۔';
+
+  @override
+  String get askSuggestCommitments => 'اس بات چیت میں میں نے کیا کرنے کا وعدہ کیا؟';
+
+  @override
+  String get askSuggestDoc => 'اس بات چیت کو ایک مختصر دستاویز میں بدل دو۔';
+
+  @override
+  String get askInChatGpt => 'ChatGPT سے پوچھیں';
+
+  @override
+  String get copyForAnyApp => 'کسی بھی ایپ کے لیے کاپی کریں';
+
+  @override
+  String get askConnectChatGptFirst => 'اپنی بات چیت کے بارے میں پوچھنے کے لیے ایک بار ChatGPT جوڑیں۔';
+
+  @override
+  String get reconnect => 'دوبارہ کنیکٹ کریں';
+
+  @override
+  String get chatGptNeedsReconnect => 'مزید رسائی درکار ہے۔ درست کرنے کے لیے دوبارہ کنیکٹ کریں۔';
+
+  @override
+  String get connectAgentWaiting => 'ایجنٹ کے اپنی کلید استعمال کرنے کا انتظار ہے';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name ابھی تک منسلک نہیں ہوا';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'ابھی تک خلاصہ نہیں کیا گیا';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi اس گفتگو کو جائزے، اہم نکات اور کرنے کے کاموں میں بدل سکتا ہے۔';
+
+  @override
+  String get summaryWithOmi => 'Omi سے خلاصہ کریں';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name سے خلاصہ کریں';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'دوسرا ٹیمپلیٹ استعمال کریں';
+
+  @override
+  String get summaryFromTheTranscript => 'ٹرانسکرپٹ سے';
+
+  @override
+  String get summaryReadFullTranscript => 'مکمل ٹرانسکرپٹ پڑھیں';
+
+  @override
+  String get summarySheetTitle => 'اس سے خلاصہ کریں';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'جائزہ، اہم نکات اور کرنے کے کام';
+
+  @override
+  String get summaryYourTemplates => 'آپ کے ٹیمپلیٹس';
+
+  @override
+  String get summarySuggestedTemplates => 'اس گفتگو کے لیے تجویز کردہ';
+
+  @override
+  String get summaryBrowseTemplates => 'ٹیمپلیٹس براؤز کریں';
+
+  @override
+  String get summaryCreateYourOwn => 'اپنا بنائیں';
+
+  @override
+  String get summaryUseForNewConversations => 'اسے میرا ڈیفالٹ بنائیں';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'آپ کے ٹیمپلیٹس لوڈ نہیں ہو سکے۔ Omi اب بھی کام کر رہا ہے۔';
+
+  @override
+  String get summaryNoTemplatesYet => 'آپ نے ابھی تک کوئی ٹیمپلیٹ شامل نہیں کیا۔ کچھ براؤز کریں یا اپنا بنائیں۔';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name سے خلاصہ کیا جا رہا ہے…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name مکمل نہیں کر سکا';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'ٹیمپلیٹ نے اس گفتگو کا کوئی خلاصہ نہیں دیا۔';
+
+  @override
+  String get summaryWithOmiInstead => 'اس کے بجائے Omi سے خلاصہ کریں';
+
+  @override
+  String get summaryBusyTitle => 'ابھی کارروائی جاری ہے';
+
+  @override
+  String get summaryBusyBody => 'Omi پہلے ہی اس گفتگو پر کام کر رہا ہے۔ مکمل ہونے پر خلاصہ یہاں ظاہر ہوگا۔';
+
+  @override
+  String get summaryCheckAgain => 'دوبارہ چیک کریں';
+
+  @override
+  String get summaryLimitTitle => 'خلاصے کی حد پوری ہو گئی';
+
+  @override
+  String get summaryLimitBody => 'آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get summaryFailedTitle => 'خلاصہ نہیں ہو سکا';
+
+  @override
+  String get summaryFailedBody => 'اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔';
 }

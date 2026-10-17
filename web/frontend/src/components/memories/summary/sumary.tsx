@@ -5,16 +5,55 @@ import ScreenMoments from './screen-moments';
 import MemoryEvents from '../events/memory-events';
 import Plugins from '../plugins/plugins';
 import Markdown from 'markdown-to-jsx';
+import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 
 interface SummaryProps {
   memory: Memory;
+  onOpenSource?: (id: string) => void;
   screenshots?: SharedScreenshotsResult | null;
 }
 
-export default function Summary({ memory, screenshots = null }: SummaryProps) {
-  const overview = (memory?.structured?.overview || '').trim();
-  const { mains, sideNotes } = splitSections(memory?.structured?.sections);
+export default function Summary({
+  memory,
+  screenshots = null,
+  onOpenSource,
+}: SummaryProps) {
+  const knownIDs = (memory.transcript_segments ?? []).flatMap((segment) =>
+    segment.id ? [segment.id] : [],
+  );
+  const overview = repairNoteCitations(
+    (memory?.structured?.overview || '').trim(),
+    knownIDs,
+  ).text;
+  const presentable = memory?.structured?.sections?.map((section) => ({
+    ...section,
+    heading: repairNoteCitations(section.heading ?? '', knownIDs).text,
+    body_markdown: repairNoteCitations(section.body_markdown ?? '', knownIDs).text,
+  }));
+  const { mains, sideNotes } = splitSections(presentable);
   const ids = assignSectionIds(mains);
+
+  const sourceChip = (sourceIDs?: string[]) => {
+    const ids = resolvableNoteSources(sourceIDs, knownIDs);
+    if (!ids.length || !onOpenSource) return null;
+    return (
+      <div className="sn-sources" aria-label="Transcript sources">
+        {ids.map((id, index) => (
+          <button
+            key={id}
+            type="button"
+            className="sn-source-chip"
+            onClick={() => onOpenSource(id)}
+            aria-label={`View transcript source ${index + 1} of ${ids.length}`}
+          >
+            <span aria-hidden="true">❞</span>{' '}
+            {index === 0 ? `Sources (${ids.length})` : index + 1}
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col">
@@ -45,6 +84,7 @@ export default function Summary({ memory, screenshots = null }: SummaryProps) {
                     {body}
                   </Markdown>
                 ) : null}
+                {sourceChip(section.source_segment_ids)}
               </section>
             );
           })}
@@ -61,6 +101,7 @@ export default function Summary({ memory, screenshots = null }: SummaryProps) {
                         {body}
                       </Markdown>
                     ) : null}
+                    {sourceChip(section.source_segment_ids)}
                   </div>
                 );
               })}

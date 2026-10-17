@@ -5,6 +5,7 @@ line-count ratchet, and so this provider's token-delta protocol stays readable o
 its own. Imports flow one way: this module never imports from ``streaming.py``.
 """
 
+from utils.stt_cap_dispatch import live_provider
 import asyncio
 import json
 import logging
@@ -35,6 +36,7 @@ from utils.stt.soniox_capture_axis import (
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
+from utils.observability.demand_cohort import create_wire_meter, telemetry_call
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
@@ -194,6 +196,7 @@ class SafeSonioxSocket(STTSocket):
         *,
         sample_rate: int = 16000,
     ) -> None:
+        self._demand_wire = create_wire_meter('soniox', sample_rate)
         self._wire_ledger_enabled = soniox_wire_ledger_enabled()
         self._wire_epoch: Any = None
         self._wire_samples = 0
@@ -468,6 +471,7 @@ class SafeSonioxSocket(STTSocket):
         try:
             await self._ws.send(data)
             written = True
+            telemetry_call(self, '_demand_wire', 'written', data)
             if provider_clock is not None and finalize:
                 provider_clock.finalize_written()
             if provider_clock is not None and isinstance(data, bytes):
@@ -712,6 +716,7 @@ class SafeSonioxSocket(STTSocket):
             self._stream_transcript(ready)
 
 
+@live_provider('soniox', 1)
 async def process_audio_soniox(
     stream_transcript: Callable[[List[Dict[str, Any]]], None],
     sample_rate: int,

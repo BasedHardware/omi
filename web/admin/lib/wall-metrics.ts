@@ -27,6 +27,7 @@ import { fetchShopifyWeek } from "./wall-shopify";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
+  SAAS_AS_OF,
   SAAS_MONTHLY_USD,
   STT_MONTHLY_USD,
   STT_SOURCE,
@@ -103,6 +104,8 @@ export interface Metric {
   stale: boolean;
   /** Controlled source error; only failed nulls may retain last-good values. */
   retryableFailure?: string;
+  /** Any controlled source failure: the cache keeps the last good value. */
+  sourceFailure?: string;
   retainedSince?: string;
   partial: boolean;
   windowStart: string | null;
@@ -398,6 +401,7 @@ export async function computeWall(
         for (const id of ids)
           if (metrics[id].value == null) {
             metrics[id].reason = reason;
+            metrics[id].sourceFailure = reason;
             if (retryable) metrics[id].retryableFailure = reason;
           }
         // Configuration/non-retryable failures retain the normal TTL too.
@@ -412,74 +416,64 @@ export async function computeWall(
         );
       }
     };
-  for (const [id, days, kind] of [
-    ["growth.wau", 7, "active"],
-    ["engagement.dau", 1, "active"],
-    ["engagement.mau", 30, "active"],
-    ["engagement.saved_creators", 1, "saved"],
-    ["engagement.assistant_success", 1, "assistant"],
-  ] as const)
-    jobs.push(
-      guarded([id], "PostHog", async () =>
-        fromCounts(
-          id,
-          days === 30
-            ? await periodQueries(
-                sources.query,
-                (stop) => activityQuery(stop, 30, kind, 1),
-                end,
-                30,
-                2,
-                1
-              )
-            : await sources.query(activityQuery(end, days, kind)),
-          end,
-          days
-        )
-      )
-    );
-  for (const maturity of [2, 7, 37] as const)
-    jobs.push(
-      guarded(
-        maturity === 2
-          ? ["retention.day1_return"]
-          : maturity === 7
-          ? ["activation.rate", "activation.capture_week1_share"]
-          : ["retention.if_activated", "retention.recovery"],
-        "PostHog",
-        async () => {
-          const rows = await periodQueries(
-            sources.query,
-            (stop, count) => cohortQuery(stop, maturity, count),
-            end,
-            7
-          );
-          const stop = shiftDay(end, -maturity);
-          if (maturity === 2)
-            fromCounts("retention.day1_return", rows, stop, 7, 7, 2);
-          if (maturity === 7) {
-            fromCounts("activation.rate", rows, stop, 7, 3, 2);
-            fromCounts("activation.capture_week1_share", rows, stop, 7, 8, 2);
-          }
-          if (maturity === 37) {
-            fromCounts("retention.if_activated", rows, stop, 7, 4, 3);
-            fromCounts("retention.recovery", rows, stop, 7, 6, 5);
-          }
-        }
-      )
-    );
-  jobs.push(
-    guarded(["growth.true_new_7d"], "PostHog", async () => {
-      const rows = await periodQueries(
-        sources.query,
-        (stop, count) => cohortQuery(stop, 0, count),
+  const activityJob = (
+    id: MetricId,
+    days: 1 | 7 | 30,
+    kind: "active" | "saved" | "assistant"
+  ) =>
+    guarded([id], "PostHog", async () =>
+      fromCounts(
+        id,
+        days === 30
+          ? await periodQueries(
+              sources.query,
+              (stop) => activityQuery(stop, 30, kind, 1),
+              end,
+              30,
+              2,
+              1
+            )
+          : await sources.query(activityQuery(end, days, kind)),
         end,
-        7
-      ); // latest complete 7d; no future query bounds
-      fromCounts("growth.true_new_7d", rows, end, 7, 2);
-      metrics["growth.true_new_7d"].reason =
-        "Interim first-seen proxy, bounded 180-day history; " + COVERAGE_REASON;
-    })
+        days
+      )
+    );
+  const cohortJob = (maturity: 2 | 7 | 37) =>
+    guarded(
+      maturity === 2
+        ? ["retention.day1_return"]
+        : maturity === 7
+        ? ["activation.rate", "activation.capture_week1_share"]
+        : ["retention.if_activated", "retention.recovery"],
+      "PostHog",
+      async () => {
+        const rows = await periodQueries(
+          sources.query,
+          (stop, count) => cohortQuery(stop, maturity, count),
+          end,
+          7
+        );
+        const stop = shiftDay(end, -maturity);
+        if (maturity === 2)
+          fromCounts("retention.day1_return", rows, stop, 7, 7, 2);
+        if (maturity === 7) {
+          fromCounts("activation.rate", rows, stop, 7, 3, 2);
+          fromCounts("activation.capture_week1_share", rows, stop, 7, 8, 2);
+        }
+        if (maturity === 37) {
+          fromCounts("retention.if_activated", rows, stop, 7, 4, 3);
+          fromCounts("retention.recovery", rows, stop, 7, 6, 5);
+        }
+      }
+    );
+  // Headline stats first (the TV's stats and their deltas), then the v2-only
+  // tiles, so a cold refresh fills what the wall shows before the rest.
+  jobs.push(
+    activityJob("growth.wau", 7, "active"),
+    activityJob("engagement.dau", 1, "active"),
+    activityJob("engagement.mau", 30, "active"),
+    cohortJob(7),
+    cohortJob(37)
   );
   jobs.push(
     guarded(["retention.established_week"], "PostHog", async () => {
@@ -494,28 +488,52 @@ export async function computeWall(
       );
     })
   );
-  // Bound PostHog concurrency to avoid flooding the query service.
-  for (let i = 0; i < jobs.length; i += 2)
-    await Promise.allSettled(jobs.slice(i, i + 2).map((job) => job()));
-  // Cohort period labels describe the denominator; dataThrough describes the
-  // fully observed outcome cutoff. Keep both rather than aging a mature cohort.
-  const cohortIds: MetricId[] = [
-    "activation.rate",
-    "activation.capture_week1_share",
-    "retention.if_activated",
-    "retention.recovery",
-    "retention.day1_return",
-  ];
-  for (const id of cohortIds) {
-    const m = metrics[id];
-    if (m.value != null) {
-      m.dataThrough = isoDay(shiftDay(end, -1));
-      m.reason = `First-seen cohort ${m.windowStart?.slice(
-        0,
-        10
-      )} to ${m.windowEnd?.slice(0, 10)} (exclusive end); ${m.reason}`;
+  jobs.push(cohortJob(2));
+  jobs.push(
+    guarded(["growth.true_new_7d"], "PostHog", async () => {
+      const rows = await periodQueries(
+        sources.query,
+        (stop, count) => cohortQuery(stop, 0, count),
+        end,
+        7
+      ); // latest complete 7d; no future query bounds
+      fromCounts("growth.true_new_7d", rows, end, 7, 2);
+      metrics["growth.true_new_7d"].reason =
+        "Interim first-seen proxy, bounded 180-day history; " + COVERAGE_REASON;
+    })
+  );
+  jobs.push(
+    activityJob("engagement.saved_creators", 1, "saved"),
+    activityJob("engagement.assistant_success", 1, "assistant")
+  );
+  // At most two PostHog reads at a time, in the order above: a pool, so one
+  // slow job never holds the next back. Stripe and Shopify run alongside.
+  const queue = [...jobs];
+  const posthog = Promise.all(
+    [0, 1].map(async () => {
+      for (let job = queue.shift(); job; job = queue.shift()) await job();
+    })
+  ).then(() => {
+    // Cohort period labels describe the denominator; dataThrough describes the
+    // fully observed outcome cutoff. Keep both rather than aging a mature cohort.
+    const cohortIds: MetricId[] = [
+      "activation.rate",
+      "activation.capture_week1_share",
+      "retention.if_activated",
+      "retention.recovery",
+      "retention.day1_return",
+    ];
+    for (const id of cohortIds) {
+      const m = metrics[id];
+      if (m.value != null) {
+        m.dataThrough = isoDay(shiftDay(end, -1));
+        m.reason = `First-seen cohort ${m.windowStart?.slice(
+          0,
+          10
+        )} to ${m.windowEnd?.slice(0, 10)} (exclusive end); ${m.reason}`;
+      }
     }
-  }
+  });
   const week = completeWeek(now);
   await Promise.allSettled([
     guarded(
@@ -595,98 +613,98 @@ export async function computeWall(
         );
       }
     })(),
-    guarded(["cost.net_day", "cost.per_mau_month"], "Billing", async () => {
-      const bill = await sources.billing();
-      if (!bill || bill.summary.costSource !== "billing") {
-        metrics["cost.net_day"].reason = metrics["cost.per_mau_month"].reason =
-          "Settled billing aggregate unavailable";
-        return;
-      }
-      const cutoff = isoDay(shiftDay(end, -2));
-      // All-in: GCP net of CUD minus one-time incidents, plus OpenAI/Anthropic
-      // invoices, the Soniox-console STT estimate and fixed SaaS (David 2026-10-16).
-      const cost = allInCost(
-        bill.daily.filter((d) => d.date <= cutoff),
-        bill.summary.coverage
-      );
-      const daily = cost.daily;
-      const last = daily.find((d) => d.date === cutoff);
-      if (!last) {
-        metrics["cost.net_day"].reason = metrics[
-          "cost.per_mau_month"
-        ].reason = `Billing data has not reached ${cutoff}`;
-        return;
-      }
-      const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate)${
-        cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
-      }`;
-      const m = metrics["cost.net_day"];
-      m.value = last.total;
-      m.prev =
-        daily.find((d) => d.date === isoDay(shiftDay(end, -3)))?.total ?? null;
-      m.partial = true;
-      stamp(
-        m,
-        shiftDay(end, -2),
-        shiftDay(end, -1),
-        lines,
-        new Date(bill.generatedAt).toISOString()
-      );
-      m.stale = freshness(
-        m.sourceRefreshedAt,
-        m.dataThrough,
-        "settled",
-        now
-      ).stale;
-      m.trend = daily.slice(-14).map((d) => ({ date: d.date, value: d.total }));
-      const window = completeWindow(30, now, 1); // ends D-1 exclusive, D-2 inclusive
-      const costs = daily.filter(
-        (d) => d.date >= isoDay(window.start) && d.date < isoDay(window.end)
-      );
-      if (new Set(costs.map((d) => d.date)).size !== 30) {
-        metrics["cost.per_mau_month"].reason =
-          "Billing window missing settled days";
-        return;
-      }
-      const rows = await sources.query(
-        activityQuery(window.end, 30, "active", 1)
-      );
-      const mau = rows
-        .filter((r) => Number(r[0]) === 0)
-        .reduce((s, r) => s + Number(r[2]), 0);
-      const c = metrics["cost.per_mau_month"];
-      if (!mau) {
-        c.reason = "Zero same-window MAU denominator";
-        return;
-      }
-      c.definitionVersion = MCP_ACTIVITY_VERSION;
-      c.value = costs.reduce((s, d) => s + d.total, 0) / mau;
-      c.numerator = costs.reduce((s, d) => s + d.total, 0);
-      c.denominator = mau;
-      c.partial = true;
-      stamp(
-        c,
-        window.start,
-        window.end,
-        "Same-window 30-day all-in cost / qualified MAU. " +
-          lines +
-          "; " +
-          COVERAGE_REASON,
-        new Date(bill.generatedAt).toISOString()
-      );
-      c.sourceRefreshedAt = rows.sourceRefreshedAt
-        ? [
-            new Date(bill.generatedAt).toISOString(),
-            rows.sourceRefreshedAt,
-          ].sort()[0]
-        : null;
-      c.stale = freshness(
-        c.sourceRefreshedAt,
-        c.dataThrough,
-        "settled",
-        now
-      ).stale;
-    })(),
+    // Billing's cost/MAU denominator is a PostHog read: after the pool.
+    posthog.then(
+      guarded(["cost.net_day", "cost.per_mau_month"], "Billing", async () => {
+        const bill = await sources.billing();
+        // Source failures (not empty data): the cache keeps the last good cost.
+        if (!bill || bill.summary.costSource !== "billing")
+          throw new WallSourceError("Settled billing aggregate unavailable");
+        const cutoff = isoDay(shiftDay(end, -2));
+        // All-in: GCP net of CUD minus one-time incidents, plus OpenAI/Anthropic
+        // invoices, the Soniox-console STT estimate and fixed SaaS (David 2026-10-16).
+        const cost = allInCost(
+          bill.daily.filter((d) => d.date <= cutoff),
+          bill.summary.coverage
+        );
+        const daily = cost.daily;
+        const last = daily.find((d) => d.date === cutoff);
+        if (!last)
+          throw new WallSourceError(`Billing data has not reached ${cutoff}`);
+        const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF})${
+          cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
+        }`;
+        const m = metrics["cost.net_day"];
+        m.value = last.total;
+        m.prev =
+          daily.find((d) => d.date === isoDay(shiftDay(end, -3)))?.total ??
+          null;
+        m.partial = true;
+        stamp(
+          m,
+          shiftDay(end, -2),
+          shiftDay(end, -1),
+          lines,
+          new Date(bill.generatedAt).toISOString()
+        );
+        m.stale = freshness(
+          m.sourceRefreshedAt,
+          m.dataThrough,
+          "settled",
+          now
+        ).stale;
+        m.trend = daily
+          .slice(-14)
+          .map((d) => ({ date: d.date, value: d.total }));
+        const window = completeWindow(30, now, 1); // ends D-1 exclusive, D-2 inclusive
+        const costs = daily.filter(
+          (d) => d.date >= isoDay(window.start) && d.date < isoDay(window.end)
+        );
+        if (new Set(costs.map((d) => d.date)).size !== 30) {
+          metrics["cost.per_mau_month"].reason =
+            "Billing window missing settled days";
+          return;
+        }
+        const rows = await sources.query(
+          activityQuery(window.end, 30, "active", 1)
+        );
+        const mau = rows
+          .filter((r) => Number(r[0]) === 0)
+          .reduce((s, r) => s + Number(r[2]), 0);
+        const c = metrics["cost.per_mau_month"];
+        if (!mau) {
+          c.reason = "Zero same-window MAU denominator";
+          return;
+        }
+        c.definitionVersion = MCP_ACTIVITY_VERSION;
+        c.value = costs.reduce((s, d) => s + d.total, 0) / mau;
+        c.numerator = costs.reduce((s, d) => s + d.total, 0);
+        c.denominator = mau;
+        c.partial = true;
+        stamp(
+          c,
+          window.start,
+          window.end,
+          "Same-window 30-day all-in cost / qualified MAU. " +
+            lines +
+            "; " +
+            COVERAGE_REASON,
+          new Date(bill.generatedAt).toISOString()
+        );
+        c.sourceRefreshedAt = rows.sourceRefreshedAt
+          ? [
+              new Date(bill.generatedAt).toISOString(),
+              rows.sourceRefreshedAt,
+            ].sort()[0]
+          : null;
+        c.stale = freshness(
+          c.sourceRefreshedAt,
+          c.dataThrough,
+          "settled",
+          now
+        ).stale;
+      })
+    ),
   ]);
   // Derived units recompute from reused source snapshots without querying Stripe
   // again when only MAU needs retrying (or vice versa).
@@ -729,6 +747,8 @@ export async function computeWall(
     }
     if (m.retryableFailure || mau.retryableFailure)
       a.retryableFailure = m.retryableFailure || mau.retryableFailure;
+    if (a.value == null && (m.sourceFailure || mau.sourceFailure))
+      a.sourceFailure = m.sourceFailure || mau.sourceFailure;
   }
   const list = WALL_DEFINITIONS.map(([id]) => metrics[id]);
   return {

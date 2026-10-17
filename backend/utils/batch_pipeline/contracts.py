@@ -103,14 +103,28 @@ class WorkResult:
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
             raise ValueError('segment_id must be a bounded opaque document ID')
-        if self.outcome not in {'success', 'silence'}:
-            raise ValueError('failed items must retry, never become silence')
+        if self.outcome not in {'success', 'silence', 'no_recoverable_speech'}:
+            raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
 
 
+@dataclass(frozen=True)
+class HeldWork:
+    segment_id: str
+    retry_after: int = 60
+
+
+@dataclass(frozen=True)
+class RecoveryWork:
+    """Non-success handoff after speech VAD and an exhausted padded ASR retry."""
+
+    segment_id: str
+    padded_retry_empty: bool = False
+
+
 class BatchWorker(Protocol):
-    def process_batch(self, items: Sequence[WorkItem]) -> Sequence[WorkResult]: ...
+    def process_batch(self, items: Sequence[WorkItem], **kwargs) -> Sequence[WorkResult | HeldWork | RecoveryWork]: ...
 
 
 @dataclass(frozen=True)
@@ -138,6 +152,8 @@ class ProjectionBinding:
     run_epoch: int | None = None
     privacy_generation: int = 0
     language: str | None = None
+    record_origin: bool = False
+    native_record: bool = False
 
     def __post_init__(self):
         # Firestore caps transaction writes at 500; completion reads all siblings.

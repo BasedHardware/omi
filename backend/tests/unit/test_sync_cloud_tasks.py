@@ -31,9 +31,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
 import pytest
+from starlette.datastructures import UploadFile
 
 # Keep additive batch imports real before legacy fixtures replace package roots.
 from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from utils.batch_pipeline import live_projection as _batch_live_projection  # noqa: F401
+from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
 from routers import batch_pipeline as _batch_router  # noqa: F401
 from models import sync_job_status as _sync_job_status  # noqa: F401
 
@@ -907,6 +910,54 @@ class TestVerifyCloudTasksOidc:
             'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'job-1-s7',
         )
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            cloud_tasks.enqueue_sync_job(payload, dispatch_attempt=2)
+            cloud_tasks.enqueue_sync_job(payload, dispatch_attempt=2)
+        assert [call.args[2] for call in enqueue.call_args_list] == ['job-1-s7-d2', 'job-1-s7-d2']
+        assert all(call.args[3] == payload for call in enqueue.call_args_list)
+
+    @pytest.mark.parametrize('sequencer', ['on', 'off'])
+    def test_direct_backfill_newest_gets_earlier_eligibility(self, sequencer):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_BACKFILL_ORDER': 'newest',
+            'SYNC_BACKFILL_UID_SEQUENCER': sequencer,
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'true',
+            'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill',
+            'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/run',
+        }
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
+            for age in (3600, 21600):
+                cloud_tasks.enqueue_sync_job(
+                    _valid_sync_task_payload(lane='backfill', enqueued_at=1000000, recording_age_seconds=age)
+                )
+            assert [call.kwargs['schedule_at'] for call in enqueue.call_args_list] == [1000013, 1000075]
+            cloud_tasks.enqueue_sync_job(_valid_sync_task_payload(lane='backfill', sequencer_epoch=1))
+            assert 'schedule_at' not in enqueue.call_args.kwargs
+
+    def test_explicit_oldest_cloud_task_is_byte_identical_to_default(self):
+        cloud_tasks = _load_cloud_tasks()
+        fake = MagicMock()
+        fake.queue_path.return_value = 'projects/p/locations/l/queues/sync'
+        fake.task_path.return_value = 'projects/p/locations/l/queues/sync/tasks/job-1'
+        env = {
+            **OIDC_ENV,
+            'SYNC_TASKS_PROJECT': 'p',
+            'SYNC_TASKS_LOCATION': 'l',
+            'SYNC_TASKS_QUEUE': 'sync',
+            'SYNC_BACKFILL_ROUTING_ENABLED': 'false',
+        }
+        payload = _valid_sync_task_payload(lane='backfill')
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_get_tasks_client', return_value=fake):
+            os.environ.pop('SYNC_BACKFILL_ORDER', None)
+            cloud_tasks.enqueue_sync_job(payload)
+            default = fake.create_task.call_args.kwargs['task']
+            os.environ['SYNC_BACKFILL_ORDER'] = 'oldest'
+            cloud_tasks.enqueue_sync_job(payload)
+            explicit = fake.create_task.call_args.kwargs['task']
+            assert type(default).pb(default).SerializeToString(deterministic=True) == type(explicit).pb(
+                explicit
+            ).SerializeToString(deterministic=True)
 
     def test_fresh_lane_uses_main_queue_when_backfill_routing_enabled(self):
         cloud_tasks = _load_cloud_tasks()
@@ -1138,6 +1189,8 @@ class TestSyncRouterStructure:
 
 def _load_sync_router_for_fast_path():
     """Load routers/sync.py with heavy deps stubbed for fast-path behavioral tests."""
+    from services import summary_debt_repair  # noqa: F401 - load before flat database stubs
+
     import contextvars
     import importlib.util
     from io import BytesIO
@@ -3628,6 +3681,46 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'test-uid')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    transaction, store = MagicMock(), MagicMock()
+    transaction.get.return_value = {}
+    store.run.side_effect = lambda body: body(transaction)
+    monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
+    module.has_byok_keys = MagicMock(return_value=True)
+    accepted = AsyncMock(wraps=_batch_intake.accept_upload)
+    module.accept_batch_upload = accepted
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))],
+            uid='test-uid',
+            conversation_id='unowned-record',
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
+        assert response.headers['Retry-After'] == '30'
+        accepted.assert_awaited_once()
+        assert accepted.call_args.kwargs['byok_enabled'] is True
+        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        transaction.put.assert_not_called()
+        module.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 @pytest.mark.asyncio

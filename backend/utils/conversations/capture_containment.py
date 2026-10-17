@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 MODE_ENV = 'CAPTURE_GROUP_CONTAINMENT_MODE'
 _MODES = ('off', 'shadow', 'on')
-_PHASES = ('rule', 'jev')
 _BASES = ('full', 'sampled')
 _REASONS = (
     'contained',
@@ -120,30 +119,21 @@ def capture_group_containment_mode() -> str:
     return value if value in _MODES else 'off'
 
 
-def record_capture_containment(
-    decision: CaptureContainment, *, mode: str, phase: str = 'rule', jev_p: Any = None
-) -> None:
+def record_capture_containment(decision: CaptureContainment, *, mode: str) -> None:
     """Emit the single fixed-format, content-free containment log line."""
     safe_mode = mode if mode in _MODES else 'off'
-    safe_phase = phase if phase in _PHASES else 'rule'
     reason = decision.reason if decision.reason in _REASONS else 'ineligible'
     basis = getattr(decision, 'basis', 'full')
     basis = basis if basis in _BASES else 'full'
-    score = 'unavailable'
-    if isinstance(jev_p, (int, float)) and not isinstance(jev_p, bool):
-        if math.isfinite(jev_p) and 0 <= jev_p <= 1:
-            score = f'{round(float(jev_p), 6):f}'
     dropped = getattr(decision, 'dropped_segments', 0)
     if not isinstance(dropped, int) or isinstance(dropped, bool):
         dropped = 0
     dropped = max(0, min(dropped, 2 * MAX_SEGMENTS))
     logger.info(
-        'event=capture_group_containment mode=%s phase=%s would_join=%s reason=%s jev_p=%s basis=%s dropped_segments=%d',
+        'event=capture_group_containment mode=%s phase=rule would_join=%s reason=%s basis=%s dropped_segments=%d',
         safe_mode,
-        safe_phase,
         'true' if decision.would_join else 'false',
         reason,
-        score,
         basis,
         dropped,
     )

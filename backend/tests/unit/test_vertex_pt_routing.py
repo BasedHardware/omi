@@ -112,6 +112,22 @@ def test_pt_constants_stay_distinct():
     assert ptr.PT_MODEL_TARGET not in ptr.OVERFLOW_PREFERENCE
 
 
+def test_routing_price_table_tracks_gateway_cards_without_changing_overflow_order():
+    # Vertex global endpoint cards reviewed 2026-10-15; 3.8 uses its dated
+    # post-intro standard card so this clock-free routing policy stays stable.
+    assert (ptr.PRICE_PER_MTOK_IN['gemini-2.5-flash'], ptr.PRICE_PER_MTOK_OUT['gemini-2.5-flash']) == (0.54, 4.50)
+    assert (ptr.PRICE_PER_MTOK_IN['gemini-3.1-flash-lite'], ptr.PRICE_PER_MTOK_OUT['gemini-3.1-flash-lite']) == (
+        0.25,
+        1.50,
+    )
+    assert (ptr.PRICE_PER_MTOK_IN['gemini-3.8-flash'], ptr.PRICE_PER_MTOK_OUT['gemini-3.8-flash']) == (1.50, 7.50)
+    assert ptr.OVERFLOW_PREFERENCE == ('gemini-3.1-flash-lite', 'gemini-2.5-flash-lite')
+    assert ptr.resolve_overflow_ladder(pt_model=ptr.PT_MODEL_CURRENT, origin_model=ptr.PT_MODEL_CURRENT) == (
+        'gemini-3.1-flash-lite',
+        'gemini-2.5-flash-lite',
+    )
+
+
 # --- Endpoint selection ----------------------------------------------------
 
 

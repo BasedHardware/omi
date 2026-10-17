@@ -91,10 +91,20 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
-  - name: BATCH_PIPELINE_ENABLED
+  - name: DEMAND_PROCESSING_ENABLED
     value: "false"
-  - name: BATCH_PIPELINE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: DEMAND_PROCESSING_LAZY_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_TOOL_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+    value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
+  - name: DEMAND_PROCESSING_PERCENT
+    value: "0"
+  - name: BATCH_PIPELINE_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_SERVING_ENABLED
@@ -113,6 +123,36 @@ env:
     value: "3600"
   - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
     value: "false"
+  - name: PLAYBACK_ON_DEMAND_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_REVISION_ENABLED
+    value: "false"
+  - name: REPEAT_WORK_LLM_VERSION
+    value: "2026-10-16-v1"
+  - name: SYNC_POLL_BACKOFF_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
+    value: 'false'
+  - name: BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_ALL_ADMITTED
+    value: "false"
+  - name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_RECOVERY_MODE
+    value: "off"
+  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+    value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -124,11 +164,11 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
-    value: "0"
+    value: "100"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -143,7 +183,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":5,"backfill_task_reads":5,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":5,"subscription_cache":5,"usage_month_cache":5}'
+    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -196,7 +236,7 @@ env:
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "off"
+    value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
     value: "100"
   # Keep these aligned with the production GitHub environment variables used
@@ -322,12 +362,6 @@ env:
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
-  - name: CAPTURE_JEV_SHADOW_ENABLED
-    value: "true"
-  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: CAPTURE_JEV_SHADOW_PERCENT
-    value: "0"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
@@ -602,7 +636,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
+    value: "parakeet-window,modulate-velma-2,soniox"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://172.16.160.20/nllb"
   - name: TRANSLATION_SERVICE_MODELS

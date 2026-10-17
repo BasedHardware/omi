@@ -13504,4 +13504,280 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
+
+  @override
+  String get connectAgentHeadline => 'Använd ditt Omi-minne i ChatGPT och dina AI-agenter';
+
+  @override
+  String get connectAgentIntro => 'Anslut en gång. Fråga dem sedan om dina konversationer, minnen och uppgifter.';
+
+  @override
+  String get connectAgentOneTap => 'Med ett tryck';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenter med egen dator';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopiera en prompt. Omi skapar en nyckel bara för den agenten och skickar den säkert.';
+
+  @override
+  String get connectAgentOtherAgent => 'Annan agent';
+
+  @override
+  String get connectAgentKeyActive => 'Nyckel aktiv';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Senast använd $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP- och API-nycklar för utvecklare';
+
+  @override
+  String get connectAgentLoadFailed => 'Det gick inte att läsa in dina anslutningar.';
+
+  @override
+  String get connectAgentActionFailed => 'Något gick fel. Försök igen.';
+
+  @override
+  String get connectChatGptTitle => 'Anslut ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Tar ungefär 30 sekunder. Du godkänner det i ChatGPT, och det fungerar på din telefon och dator.';
+
+  @override
+  String get connectChatGptStepOpen => 'Vi öppnar Omi i ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT öppnas direkt på Omi-appens sida.';
+
+  @override
+  String get connectChatGptStepApprove => 'Tryck på ”Anslut” och logga sedan in på Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Använd samma konto som du använder här.';
+
+  @override
+  String get connectChatGptStepReturn => 'Gå tillbaka till Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Vi kontrollerar anslutningen automatiskt.';
+
+  @override
+  String get openChatGpt => 'Öppna ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Ansluten på telefon och dator';
+
+  @override
+  String get tryAskingChatGpt => 'Testa att fråga ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Tryck på en för att öppna ChatGPT med den ifylld.';
+
+  @override
+  String get chatGptExampleMeetings => 'Vad gick jag med på under gårdagens möten?';
+
+  @override
+  String get chatGptExampleTasks => 'Gör om mina öppna Omi-uppgifter till en plan för den här veckan.';
+
+  @override
+  String get chatGptExampleGoals => 'Vad vet Omi om mina mål?';
+
+  @override
+  String get disconnectChatGpt => 'Koppla från ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Koppla från ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT kommer inte längre att kunna läsa dina Omi-minnen, -konversationer eller -uppgifter.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Anslut $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Klistra in en prompt. $name konfigurerar Omi på sin egen dator.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Klistra in en prompt. Din agent konfigurerar Omi på sin egen dator.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Nyckeln ”$name” har skapats';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Prompten innehåller en engångslänk, inte själva nyckeln. Den öppnas en gång och upphör efter 1 timme. Du kan återkalla nyckeln här när som helst.';
+
+  @override
+  String get connectAgentPreparing => 'Skapar en nyckel och en säker länk…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Det gick inte att skapa nyckeln. Kontrollera anslutningen och försök igen.';
+
+  @override
+  String get copyPrompt => 'Kopiera prompt';
+
+  @override
+  String get connectAgentNewLink => 'Har länken gått ut? Skapa en ny';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name är ansluten';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name har en Omi-nyckel. Återkalla den för att stänga av åtkomsten. Du kan ansluta igen när som helst.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Återkalla nyckeln för $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name förlorar direkt åtkomsten till ditt Omi-minne.';
+  }
+
+  @override
+  String get askAboutConversation => 'Fråga om den här konversationen';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Öppnar ChatGPT med din fråga klar. Den slår upp konversationen via Omi, så du behöver inte klistra in transkriptionen.';
+
+  @override
+  String get askYourQuestion => 'Din fråga';
+
+  @override
+  String get askSuggestFollowUp => 'Skriv ett utkast till ett uppföljningsmejl utifrån den här konversationen.';
+
+  @override
+  String get askSuggestCommitments => 'Vad lovade jag i den här konversationen?';
+
+  @override
+  String get askSuggestDoc => 'Gör om den här konversationen till ett kort dokument.';
+
+  @override
+  String get askInChatGpt => 'Fråga ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopiera för valfri app';
+
+  @override
+  String get askConnectChatGptFirst => 'Anslut ChatGPT en gång för att fråga den om dina konversationer.';
+
+  @override
+  String get reconnect => 'Anslut igen';
+
+  @override
+  String get chatGptNeedsReconnect => 'Behöver mer åtkomst. Anslut igen för att åtgärda.';
+
+  @override
+  String get connectAgentWaiting => 'Väntar på att agenten ska använda sin nyckel';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name är inte ansluten än';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Inte sammanfattad än';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi kan göra om det här samtalet till en översikt, nyckelpunkter och uppgifter.';
+
+  @override
+  String get summaryWithOmi => 'Sammanfatta med Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Sammanfatta med $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Använd en annan mall';
+
+  @override
+  String get summaryFromTheTranscript => 'Från transkriptionen';
+
+  @override
+  String get summaryReadFullTranscript => 'Läs hela transkriptionen';
+
+  @override
+  String get summarySheetTitle => 'Sammanfatta med';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Översikt, nyckelpunkter och uppgifter';
+
+  @override
+  String get summaryYourTemplates => 'Dina mallar';
+
+  @override
+  String get summarySuggestedTemplates => 'Förslag för det här samtalet';
+
+  @override
+  String get summaryBrowseTemplates => 'Bläddra bland mallar';
+
+  @override
+  String get summaryCreateYourOwn => 'Skapa egen';
+
+  @override
+  String get summaryUseForNewConversations => 'Gör detta till min standard';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Det gick inte att läsa in dina mallar. Omi fungerar fortfarande.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Du har inte lagt till några mallar än. Bläddra bland några eller skapa en egen.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Sammanfattar med $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name kunde inte slutföra';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Mallen returnerade ingen sammanfattning för det här samtalet.';
+
+  @override
+  String get summaryWithOmiInstead => 'Sammanfatta med Omi i stället';
+
+  @override
+  String get summaryBusyTitle => 'Bearbetas fortfarande';
+
+  @override
+  String get summaryBusyBody => 'Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.';
+
+  @override
+  String get summaryCheckAgain => 'Kontrollera igen';
+
+  @override
+  String get summaryLimitTitle => 'Gränsen för sammanfattningar har nåtts';
+
+  @override
+  String get summaryLimitBody =>
+      'Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.';
+
+  @override
+  String get summaryFailedTitle => 'Det gick inte att sammanfatta';
+
+  @override
+  String get summaryFailedBody => 'Något gick fel när det här samtalet skulle sammanfattas.';
 }

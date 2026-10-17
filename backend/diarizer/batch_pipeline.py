@@ -12,10 +12,15 @@ import logging
 import threading
 from typing import Any, Callable, Mapping, Sequence
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.batch_pipeline import empty_asr_recovery_enabled, empty_asr_disposition_enabled
+from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
-from utils.batch_pipeline.contracts import WorkItem, WorkResult
+from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.observability.fallback import record_fallback
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
@@ -218,6 +223,7 @@ class PipelineWorker:
         live_words: Callable | None = None,
         single_speaker: Callable | None = None,
         on_failure: Callable | None = None,
+        recover_words: Callable | None = None,
         gpu_lock=None,
     ):
         self.config = config or ProviderConfig()
@@ -227,11 +233,14 @@ class PipelineWorker:
         self.decode, self.vad, self.persist = decode, vad, persist
         self.live_words, self.single_speaker = live_words, single_speaker
         self.on_failure = on_failure
+        self.recover_words = recover_words
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
 
-    def process_batch(self, items: Sequence[WorkItem]) -> Sequence[WorkResult]:
+    def process_batch(
+        self, items: Sequence[WorkItem], *, authorize_dispatch=None
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
@@ -247,17 +256,30 @@ class PipelineWorker:
             # Bound decoded host memory to two audio-hours (~460 MB float32).
             for item in items:
                 if group and seconds + item.duration_seconds > 7200:
-                    results.extend(self._process(group))
+                    results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
                     group, seconds = [], 0
                 group.append(item)
                 seconds += item.duration_seconds
-            results.extend(self._process(group))
+            results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
             return results
 
-    def _process(self, items):
+    def _process(self, items, *, authorize_dispatch=None):
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
+        held = set()
+        recovery_records = []
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
+
+        def allowed(required):
+            try:
+                return set(authorize_dispatch(required)) if authorize_dispatch is not None else set()
+            except Exception:
+                return set()
+
+        def accepted(segment_id, seconds):
+            record_audio('sync', 'accepted', self.config.words, seconds)
+            state = states[segment_id]
+            state['cap_provider_audio_seconds'] = state.get('cap_provider_audio_seconds', 0) + seconds
 
         def fail(item, exc, stage):
             # Quarantine poisoned CUDA state without importing a second GPU owner.
@@ -268,6 +290,19 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                if reason == 'empty_asr':
+                    record_correctness('empty_asr_attempt', source='gpu_worker', seconds=item.duration_seconds)
+                if (
+                    (
+                        reason == 'empty_asr'
+                        and empty_asr_recovery_enabled()
+                        or reason in {'empty_asr', 'no_owned_words'}
+                        and empty_asr_disposition_enabled()
+                    )
+                    and stage == 'assemble_words'
+                    and self.recover_words is not None
+                ):
+                    results.append(RecoveryWork(item.segment_id, padded_retry_empty=True))
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(
@@ -312,6 +347,8 @@ class PipelineWorker:
                     'reused': False,
                     'speech_spans': speech_spans,
                     'speech_seconds': sum(span['end'] - span['start'] for span in speech_spans),
+                    'window_min_samples': min((len(w.samples) for w in clips), default=0),
+                    'window_max_samples': max((len(w.samples) for w in clips), default=0),
                 }
                 states[item.segment_id] = state
                 if not clips:
@@ -338,11 +375,21 @@ class PipelineWorker:
                 fail(item, exc, stage)
 
         for batch in pack_windows(windows, self.config):
-            batch = [w for w in batch if w.segment_id not in failed]
+            batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
+            if cap_dispatch_enabled():
+                # Authorization belongs immediately before ASR, after potentially
+                # slow decode/VAD and between successive microbatches. Missing
+                # policy authority is a hold, never provider permission.
+                required = {w.segment_id for w in batch}
+                held.update(required - allowed(required))
+                batch = [w for w in batch if w.segment_id not in held]
             if not batch:
                 continue
             try:
                 hypotheses = self.words.transcribe_batch([w.samples for w in batch])
+                if cap_dispatch_enabled():
+                    for window in batch:
+                        accepted(window.segment_id, window.duration)
                 if len(hypotheses) != len(batch):
                     raise ValueError('provider result cardinality mismatch')
             except Exception as exc:
@@ -363,12 +410,51 @@ class PipelineWorker:
 
         for state in states.values():
             item = state['item']
+            if item.segment_id in held:
+                results.append(HeldWork(item.segment_id))
+                continue
             if item.segment_id in failed:
                 continue
             stage = 'assemble_words'
             try:
                 duration = len(state['samples']) / SAMPLE_RATE
                 words = validate_words(sorted(state['words'], key=lambda w: w['timestamp'][0]), duration)
+                if not state['silence'] and not words and self.recover_words is not None:
+                    # Retry this unit once, independently of the length-bucketed
+                    # batch and VAD/core selection. Never combine partial text
+                    # with a second hypothesis or publish a fabricated silence.
+                    reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
+                    stage = 'asr_recovery'
+                    if cap_dispatch_enabled():
+                        recovered = self.recover_words(
+                            state['samples'],
+                            self.config.max_padded_seconds,
+                            before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
+                            after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
+                        )
+                        if recovered is None:
+                            held.add(item.segment_id)
+                            results.append(HeldWork(item.segment_id))
+                            continue
+                        words = validate_words(recovered, duration)
+                    else:
+                        words = validate_words(
+                            self.recover_words(state['samples'], self.config.max_padded_seconds), duration
+                        )
+                    recovery_records.append(
+                        (
+                            item.segment_id,
+                            reason,
+                            len(state['samples']),
+                            len(words),
+                            shapes[item.segment_id]['asr_words'],
+                            shapes[item.segment_id]['windows'],
+                            state['window_min_samples'],
+                            state['window_max_samples'],
+                            round(state['speech_seconds'] * SAMPLE_RATE),
+                        )
+                    )
+                    stage = 'assemble_words'
                 if not state['silence'] and not words:
                     raise BatchValidationError(
                         ValidationReason.NO_OWNED_WORDS
@@ -403,6 +489,11 @@ class PipelineWorker:
                     'speech_seconds': state['speech_seconds'],
                     'speech_spans': state['speech_spans'],
                 }
+                if cap_dispatch_enabled():
+                    payload['cap_dispatch'] = {
+                        'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
+                        'admission': 'authorized_compute',
+                    }
                 stage = 'persist'
                 uri = self.persist(item, payload)
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
@@ -410,6 +501,31 @@ class PipelineWorker:
                 fail(item, exc, stage)
         # Emit only strings/integers after every item exception handler has exited.
         # Handler error printers must not inherit the private worker exception.
+        for segment_id, reason, samples, owned, asr_words, clips, shortest, longest, speech in recovery_records:
+            try:
+                record_fallback(
+                    component='stt_selection',
+                    from_mode='batch',
+                    to_mode='batch',
+                    reason='other',
+                    outcome='recovered' if owned else 'exhausted',
+                )
+                logger.info(
+                    'event=batch_asr_recovery segment_id=%s reason=%s samples=%d owned_words=%d outcome=%s '
+                    'asr_words=%d windows=%d window_min_samples=%d window_max_samples=%d speech_samples=%d',
+                    segment_id,
+                    reason,
+                    samples,
+                    owned,
+                    'recovered' if owned else 'empty',
+                    asr_words,
+                    clips,
+                    shortest,
+                    longest,
+                    speech,
+                )
+            except Exception:
+                pass  # Metrics/logging cannot invalidate a completed inference.
         for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
             try:
                 logger.error(

@@ -34,6 +34,9 @@ KNOWN_LEVERS = frozenset(
         'action_items_page',
         'conversation_page',
         'backfill_task_reads',
+        'historical_scan_memo',
+        'ledger_purge_coalesce',
+        'people_scan_dedupe',
     }
 )
 

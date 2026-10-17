@@ -636,6 +636,11 @@ export interface RefreshOwnerMessage {
   ownerId: string;
 }
 
+/** Swift's Connect Claude control asks the runtime for a provider sign-in URL. */
+export interface StartProviderAuthMessage {
+  type: "start_provider_auth";
+}
+
 /**
  * Local/offline-only E2E probe for the real Chat-first Swift tool executor.
  * The kernel derives capability from the already-resolved session; this message
@@ -690,7 +695,8 @@ export type InboundMessage =
   | ChatFirstDeferralDeliveryResultMessage
   | ChatFirstHarnessExecutorBeginMessage
   | ModelHeadersResultMessage
-  | RefreshOwnerMessage;
+  | RefreshOwnerMessage
+  | StartProviderAuthMessage;
 
 const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
   "authorized_tool_execution_result",

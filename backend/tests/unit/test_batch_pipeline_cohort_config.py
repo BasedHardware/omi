@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.batch_pipeline import enabled_for
+from config.batch_pipeline import recovery_owners
 
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
@@ -17,6 +17,27 @@ def manifest():
     return yaml.load((ROOT / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)['environments']
 
 
+@pytest.fixture(scope='module')
+def recovery_base_hosts():
+    base = yaml.load((ROOT / 'deploy/runtime_env/_base.yaml').read_text(), Loader=yaml.CSafeLoader)[
+        'environment_shared'
+    ]
+    return {
+        **base['cloud_run']['services'],
+        'backend-listen': base['gke']['backend-listen'],
+    }
+
+
+@pytest.fixture(scope='module')
+def listen_chart_envs():
+    chart = ROOT / 'charts/backend-listen'
+    result = []
+    for stage in ('dev', 'prod'):
+        values = yaml.load((chart / f'{stage}_omi_backend_listen_values.yaml').read_text(), Loader=yaml.CSafeLoader)
+        result.append({entry['name']: entry.get('value') for entry in values['env']})
+    return result
+
+
 def hosts(config):
     return {
         **{name: config['cloud_run']['services'][name]['env'] for name in SERVICES},
@@ -24,22 +45,65 @@ def hosts(config):
     }
 
 
-def test_only_david_is_admitted_on_every_sync_host(manifest, monkeypatch):
+def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():
-            for key in ('BATCH_PIPELINE_ENABLED', 'BATCH_PIPELINE_PERCENT', 'BATCH_PIPELINE_UID_ALLOWLIST'):
-                monkeypatch.setenv(key, env[key]['value'])
-            # Admission paused 2026-10-16 (silent worker failures); prod keeps the David allowlist for resume.
-            assert enabled_for(UID) is False
-            for excluded in ('', 'another-owner', UID + '-suffix'):
-                assert not enabled_for(excluded)
+            assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            if stage == 'prod':
+                assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
+                assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
+            else:
+                allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
+                assert allowlist is None or allowlist.get('value', '') == ''
             assert env['BATCH_PIPELINE_WORKER_ENABLED']['value'] == 'false'
             assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED']['value'] == 'false'
             if stage == 'dev':
                 assert env['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'false'
-                assert env['BATCH_PIPELINE_UID_ALLOWLIST']['value'] == ''
+                assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
+    assert listen_chart_envs[0].get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
+    assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
+    prod_hosts = hosts(manifest['prod'])
+    assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
+    assert prod_hosts['backend-sync-backfill']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '0'
+    assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
+
+
+def test_quarantine_recovery_is_david_only_on_prod_integration(
+    manifest,
+    recovery_base_hosts,
+    listen_chart_envs,
+    monkeypatch,
+):
+    for stage, config in manifest.items():
+        for name, env in hosts(config).items():
+            recovery_mode = env['BATCH_PIPELINE_RECOVERY_MODE']
+            recovery_allowlist = env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST']
+            assert recovery_mode['category'] == 'rollout'
+            assert recovery_allowlist['category'] == 'rollout'
+
+            if stage == 'prod' and name == 'backend-integration':
+                assert recovery_mode['value'] == 'on'
+                assert recovery_allowlist['value'] == UID
+                expected = (UID,)
+            else:
+                assert recovery_mode['value'] == 'off'
+                assert recovery_allowlist['value'] == ''
+                expected = ()
+
+            monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', recovery_mode['value'])
+            monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', recovery_allowlist['value'])
+            assert recovery_owners() == expected
+
+    for host in recovery_base_hosts.values():
+        assert host['env']['BATCH_PIPELINE_RECOVERY_MODE'] == {'value': 'off', 'category': 'rollout'}
+        assert host['env']['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == {'value': '', 'category': 'rollout'}
+
+    for chart_env in listen_chart_envs:
+        assert chart_env['BATCH_PIPELINE_RECOVERY_MODE'] == 'off'
+        assert chart_env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == ''
 
 
 def test_only_always_cpu_integration_host_runs_projection_pump(manifest):
@@ -69,3 +133,23 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
         if name != 'backend-sync':
             assert values['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']['value'] == ''
             assert values['BATCH_PIPELINE_WORKER_AUDIENCE']['value'] == ''
+
+
+@pytest.mark.parametrize(
+    'name,reader',
+    [
+        ('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'authoritative_labels_enabled'),
+        ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'empty_asr_recovery_enabled'),
+        ('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'require_live_target_enabled'),
+    ],
+)
+def test_record_controls_default_off_and_read_at_call_time(monkeypatch, name, reader):
+    from config import batch_pipeline
+
+    read = getattr(batch_pipeline, reader)
+    monkeypatch.delenv(name, raising=False)
+    assert not read()
+    monkeypatch.setenv(name, 'true')
+    assert read()
+    monkeypatch.setenv(name, 'invalid')
+    assert not read()

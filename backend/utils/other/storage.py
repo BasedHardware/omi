@@ -11,6 +11,7 @@ from contextlib import contextmanager, nullcontext
 from itertools import chain
 from config import audio_archive
 from utils.other.audio_singleflight import coalesce_rebuild
+from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PCM_WRITES_AVOIDED
 from utils.other.raw_audio_read import list_packs, read_pack, verified_pcm_paths, pcm_for_span, invalidate_pack_index
 from utils.other.raw_audio import provenance, filename_provenance, packet_provenance
@@ -840,6 +841,8 @@ def upload_audio_chunks_batch(
         try:
             with owner_storage_write_gate(uid, bucket):
                 blob = bucket.blob(path)
+                if sample_rate is not None:
+                    blob.metadata = {'record_sample_rate': str(sample_rate)}
                 if span is not None:
                     payload = b''.join(chunk['data'] for chunk in sorted_chunks)
                     payload_digest = hashlib.sha256(payload)
@@ -872,7 +875,7 @@ def upload_audio_chunks_batch(
                             # Exit the playback gate before the optional archive.
                             break
                         raise ValueError(f'v2 audio blob content conflict at {path}')
-                    blob.metadata = span_blob_metadata(span)
+                    blob.metadata = {**(blob.metadata or {}), **span_blob_metadata(span)}
                 create_only = {'if_generation_match': 0} if span is not None else {}
                 if protection_level == 'enhanced':
                     # Encrypt each chunk individually (length-prefixed), stream to GCS
@@ -953,6 +956,7 @@ def list_audio_chunks(
     retry: Any = None,
     deadline: Optional[float] = None,
     max_count: Optional[int] = None,
+    source_identity: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List all audio chunks for a conversation.
@@ -1008,6 +1012,9 @@ def list_audio_chunks(
                     'is_batch': is_batch,
                     'generation': getattr(blob, 'generation', None),
                 }
+                if source_identity or playback_on_demand():
+                    chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
+                    chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
                 blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
                 if blob_bucket != private_cloud_sync_bucket:
                     chunk_entry['bucket'] = blob_bucket
@@ -1708,13 +1715,15 @@ def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) 
 
 
 def enqueue_conversation_audio_merge(
-    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str
+    uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str, *, playback_epoch: str | None = None
 ) -> None:
     """Enqueue one audio-merge Cloud Task per audio file (named-task deduped).
 
     Enqueue failures are swallowed: the file stays pending and the next /urls
     poll re-enqueues it.
     """
+    if playback_on_demand() and caller not in {'precache_endpoint', 'sync_urls', 'sync_download'}:
+        return
     for af in audio_files:
         audio_file_id = af.get('id')
         timestamps = af.get('chunk_timestamps')
@@ -1728,7 +1737,10 @@ def enqueue_conversation_audio_merge(
                     'conversation_id': conversation_id,
                     'audio_file_id': audio_file_id,
                     'timestamps': timestamps,
+                    **({'source_fingerprint': af.get('source_fingerprint')} if playback_on_demand() else {}),
                     'caller': caller,
+                    **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
+                    **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
                 }
             )
         except Exception as e:
@@ -1746,7 +1758,9 @@ def enqueue_conversation_audio_merge(
 CONVERSATION_ARTIFACT_NAME = 'conversation'
 
 
-def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
+def compute_audio_files_fingerprint(
+    audio_files: List[Dict[str, Any]], *, origin: Any = None, source_identity: bool = False
+) -> str:
     """Content fingerprint of a conversation's audio_files (id + chunk count +
     last chunk timestamp per part, order-insensitive). Stamped on the doc at
     build time; a mismatch with the current audio_files means the artifact is
@@ -1754,6 +1768,19 @@ def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
     chunks aren't swallowed by named-task dedup. For v2 files the validated
     chunk_spans layout is part of the fingerprint, so a span change (not just
     last-timestamp/count) invalidates a stamped artifact."""
+    if source_identity or playback_on_demand():
+        # Keep the logical IDs in the manifest for old client aliases. New IDs
+        # already derive from every ordered source object generation/checksum.
+        manifest = [
+            {
+                key: af.get(key)
+                for key in ('id', 'source_fingerprint', 'chunk_timestamps', 'chunk_spans', 'started_at', 'duration')
+            }
+            for af in audio_files
+        ]
+        return hashlib.sha256(
+            json.dumps({'files': manifest, 'origin': origin}, sort_keys=True, default=str).encode()
+        ).hexdigest()
     parts = []
     for af in audio_files:
         if not (af.get('id') and af.get('chunk_timestamps')):
@@ -1778,6 +1805,8 @@ def maybe_invalidate_conversation_playback(
     """Re-enqueue the conversation artifact build if a stamped artifact went
     stale (audio_files changed). No stamp -> no-op, so live-conversation batch
     flushes never churn rebuilds; the first build happens at completion."""
+    if playback_on_demand():
+        return  # Invalidation is detected by /urls; background updates do no build work.
     stamp = (conversation or {}).get('conversation_audio') or {}
     stamped = stamp.get('audio_files_fingerprint')
     if not stamped:
@@ -1787,20 +1816,23 @@ def maybe_invalidate_conversation_playback(
         enqueue_conversation_artifact_build(uid, conversation_id, fingerprint, caller)
 
 
-def _conversation_playback_blob(uid: str, conversation_id: str):
+def _conversation_playback_blob(uid: str, conversation_id: str, fingerprint: str | None = None):
     bucket = _get_storage_client().bucket(audio_archive.regional_bucket(uid, private_cloud_sync_bucket))
-    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{CONVERSATION_ARTIFACT_NAME}.mp3')
+    name = f'conversation-{fingerprint}' if fingerprint else CONVERSATION_ARTIFACT_NAME
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{name}.mp3')
 
 
-def get_conversation_playback_signed_url(uid: str, conversation_id: str):
-    blob = _conversation_playback_blob(uid, conversation_id)
+def get_conversation_playback_signed_url(uid: str, conversation_id: str, fingerprint: str | None = None):
+    blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     if not blob.exists():
         return None
     return _get_signed_url(blob, 60)
 
 
-def upload_conversation_playback_artifact(uid: str, conversation_id: str, mp3_data: bytes) -> None:
-    blob = _conversation_playback_blob(uid, conversation_id)
+def upload_conversation_playback_artifact(
+    uid: str, conversation_id: str, mp3_data: bytes, fingerprint: str | None = None
+) -> None:
+    blob = _conversation_playback_blob(uid, conversation_id, fingerprint)
     with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
         blob.upload_from_string(mp3_data, content_type='audio/mpeg')
 
@@ -1827,9 +1859,13 @@ def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id:
     return content.split(':', 1)[0] if content else None
 
 
-def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerprint: str, caller: str) -> None:
+def enqueue_conversation_artifact_build(
+    uid: str, conversation_id: str, fingerprint: str, caller: str, *, playback_epoch: str | None = None
+) -> None:
     """Enqueue the conversation-level artifact build (named-task deduped on the
     fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
+    if playback_on_demand() and caller not in {'precache_endpoint', 'sync_urls', 'sync_download'}:
+        return
     try:
         enqueue_audio_merge_job(
             {
@@ -1838,6 +1874,8 @@ def enqueue_conversation_artifact_build(uid: str, conversation_id: str, fingerpr
                 'conversation_id': conversation_id,
                 'fingerprint': fingerprint,
                 'caller': caller,
+                **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
+                **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
             }
         )
     except Exception as e:
@@ -1873,7 +1911,7 @@ def precache_conversation_audio(
         fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
         sample_rate: Audio sample rate in Hz (default 16000)
     """
-    if not audio_files:
+    if not audio_files or playback_on_demand():
         return
 
     if is_audio_merge_dispatch_enabled():

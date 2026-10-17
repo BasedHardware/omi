@@ -102,6 +102,9 @@ class StateStore:
     def load(self, *args):
         return copy.deepcopy(self.state)
 
+    def load_for_turn(self, *args):
+        return self.load(*args)
+
     def source_page(self, uid, session, before, cursor=None) -> tuple[list, dict | None, bool]:
         start = int(cursor['id']) + 1 if cursor else 0
         stop = int(before)
@@ -351,7 +354,7 @@ def test_real_shaped_runner_preserves_system_and_stable_history(monkeypatch, cha
 async def test_digest_latency_does_not_discard_ready_summary(monkeypatch):
     # The old serial path timed out at 150ms and threw away this loaded summary.
     async def blocking(executor, fn, *args):
-        await asyncio.sleep(0.11 if fn.__name__ == 'load' else 0.065)
+        await asyncio.sleep(0.11 if fn.__name__ == 'load_for_turn' else 0.065)
         return fn(*args)
 
     monkeypatch.setattr(context_module, 'run_blocking', blocking)
@@ -365,7 +368,7 @@ async def test_digest_latency_does_not_discard_ready_summary(monkeypatch):
 @pytest.mark.asyncio
 async def test_digest_timeout_keeps_summary_and_logs_phase_without_exception_text(monkeypatch, caplog):
     async def blocking(executor, fn, *args):
-        if fn.__name__ != 'load':
+        if fn.__name__ != 'load_for_turn':
             await asyncio.sleep(1)
         return fn(*args)
 

@@ -13495,4 +13495,279 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Tento rozhovor sa nepodarilo zhrnúť';
+
+  @override
+  String get connectAgentHeadline => 'Používajte svoju pamäť Omi v ChatGPT a svojich AI agentoch';
+
+  @override
+  String get connectAgentIntro => 'Pripojte sa raz. Potom sa ich pýtajte na svoje konverzácie, spomienky a úlohy.';
+
+  @override
+  String get connectAgentOneTap => 'Jedným ťuknutím';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenti s vlastným počítačom';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Skopírujte jeden prompt. Omi vytvorí kľúč len pre tohto agenta a bezpečne ho odošle.';
+
+  @override
+  String get connectAgentOtherAgent => 'Iný agent';
+
+  @override
+  String get connectAgentKeyActive => 'Kľúč je aktívny';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Naposledy použité $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP a API kľúče pre vývojárov';
+
+  @override
+  String get connectAgentLoadFailed => 'Vaše pripojenia sa nepodarilo načítať.';
+
+  @override
+  String get connectAgentActionFailed => 'Niečo sa pokazilo. Skúste to znova.';
+
+  @override
+  String get connectChatGptTitle => 'Pripojiť ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Trvá to asi 30 sekúnd. Schválite to priamo v ChatGPT a funguje to v telefóne aj počítači.';
+
+  @override
+  String get connectChatGptStepOpen => 'Otvoríme Omi v ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT sa otvorí priamo na stránke aplikácie Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Ťuknite na „Pripojiť“ a prihláste sa do Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Použite rovnaký účet ako tu.';
+
+  @override
+  String get connectChatGptStepReturn => 'Vráťte sa do Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Pripojenie skontrolujeme automaticky.';
+
+  @override
+  String get openChatGpt => 'Otvoriť ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Pripojené v telefóne aj počítači';
+
+  @override
+  String get tryAskingChatGpt => 'Skúste sa opýtať ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Ťuknutím na otázku otvoríte ChatGPT s už vyplneným textom.';
+
+  @override
+  String get chatGptExampleMeetings => 'S čím som súhlasil na včerajších stretnutiach?';
+
+  @override
+  String get chatGptExampleTasks => 'Sprav z mojich otvorených úloh v Omi plán na tento týždeň.';
+
+  @override
+  String get chatGptExampleGoals => 'Čo Omi vie o mojich cieľoch?';
+
+  @override
+  String get disconnectChatGpt => 'Odpojiť ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Odpojiť ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT už nebude môcť čítať vaše spomienky, konverzácie ani úlohy v Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Pripojiť $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Vložte jeden prompt. $name si Omi nastaví na svojom počítači.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => 'Vložte jeden prompt. Váš agent si Omi nastaví na svojom počítači.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Kľúč „$name“ bol vytvorený';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Prompt obsahuje jednorazový odkaz, nie samotný kľúč. Otvorí sa len raz a vyprší o 1 hodinu. Kľúč tu môžete kedykoľvek odvolať.';
+
+  @override
+  String get connectAgentPreparing => 'Vytvárame kľúč a zabezpečený odkaz…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Kľúč sa nepodarilo vytvoriť. Skontrolujte pripojenie a skúste to znova.';
+
+  @override
+  String get copyPrompt => 'Kopírovať prompt';
+
+  @override
+  String get connectAgentNewLink => 'Odkaz vypršal? Vytvorte nový';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name je pripojený';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name má kľúč Omi. Odvolajte ho, ak chcete zrušiť prístup. Znova sa môžete pripojiť kedykoľvek.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Odvolať kľúč pre $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name okamžite stratí prístup k vašej pamäti Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Opýtať sa na túto konverzáciu';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Otvorí ChatGPT s pripravenou otázkou. Konverzáciu si vyhľadá cez Omi, takže nemusíte vkladať prepis.';
+
+  @override
+  String get askYourQuestion => 'Vaša otázka';
+
+  @override
+  String get askSuggestFollowUp => 'Napíš návrh nadväzujúceho e-mailu z tejto konverzácie.';
+
+  @override
+  String get askSuggestCommitments => 'K čomu som sa v tejto konverzácii zaviazal?';
+
+  @override
+  String get askSuggestDoc => 'Sprav z tejto konverzácie krátky dokument.';
+
+  @override
+  String get askInChatGpt => 'Opýtať sa ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopírovať pre ľubovoľnú aplikáciu';
+
+  @override
+  String get askConnectChatGptFirst => 'Raz pripojte ChatGPT a pýtajte sa ho na svoje konverzácie.';
+
+  @override
+  String get reconnect => 'Znova pripojiť';
+
+  @override
+  String get chatGptNeedsReconnect => 'Potrebuje viac prístupu. Pripojte znova a opravte.';
+
+  @override
+  String get connectAgentWaiting => 'Čaká sa, kým agent použije svoj kľúč';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name sa zatiaľ nepripojil';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => 'Zatiaľ nezhrnuté';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi dokáže z tohto rozhovoru vytvoriť prehľad, kľúčové body a úlohy.';
+
+  @override
+  String get summaryWithOmi => 'Zhrnúť pomocou Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Zhrnúť pomocou $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Použiť inú šablónu';
+
+  @override
+  String get summaryFromTheTranscript => 'Z prepisu';
+
+  @override
+  String get summaryReadFullTranscript => 'Čítať celý prepis';
+
+  @override
+  String get summarySheetTitle => 'Zhrnúť pomocou';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Prehľad, kľúčové body a úlohy';
+
+  @override
+  String get summaryYourTemplates => 'Vaše šablóny';
+
+  @override
+  String get summarySuggestedTemplates => 'Navrhnuté pre tento rozhovor';
+
+  @override
+  String get summaryBrowseTemplates => 'Prehľadávať šablóny';
+
+  @override
+  String get summaryCreateYourOwn => 'Vytvoriť vlastnú';
+
+  @override
+  String get summaryUseForNewConversations => 'Nastaviť ako predvolené';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Vaše šablóny sa nepodarilo načítať. Omi stále funguje.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Zatiaľ ste nepridali žiadne šablóny. Prezrite si niektoré alebo si vytvorte vlastnú.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Zhrňuje sa pomocou $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name sa nepodarilo dokončiť';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Šablóna pre tento rozhovor nevrátila zhrnutie.';
+
+  @override
+  String get summaryWithOmiInstead => 'Radšej zhrnúť pomocou Omi';
+
+  @override
+  String get summaryBusyTitle => 'Stále sa spracúva';
+
+  @override
+  String get summaryBusyBody => 'Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.';
+
+  @override
+  String get summaryCheckAgain => 'Skontrolovať znova';
+
+  @override
+  String get summaryLimitTitle => 'Dosiahnutý limit zhrnutí';
+
+  @override
+  String get summaryLimitBody => 'Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.';
+
+  @override
+  String get summaryFailedTitle => 'Zhrnutie sa nepodarilo';
+
+  @override
+  String get summaryFailedBody => 'Pri zhrnutí tohto rozhovoru sa niečo pokazilo.';
 }

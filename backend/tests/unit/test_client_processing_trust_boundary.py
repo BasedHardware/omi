@@ -612,6 +612,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'source',
         'language',
         'uses_custom_stt',
+        # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
+        'record_lane_owner',
         'structured',
         'client_processing',
         # Authenticated owner-confirmed edits, not device-authored display projections.
@@ -677,6 +679,14 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # processing_state) — they are pinned here as non-projection-family.
         'sync_relevance',
         'sync_content_revision',
+        # Server-only successful-output checkpoints, NOT client-authored
+        # display projections. Loaded from the durable server snapshot for
+        # exact-input reuse; Field(exclude=True) keeps them out of client and
+        # integration dumps. Projection invalidation must retain them: only
+        # the successful-output persistence seams own these stamps.
+        'notes_llm_input_hash',
+        'notes_llm_output_hash',
+        'l1_llm_input_hash',
         # Server-authored cross-surface event membership (#3244): member ids,
         # sources, and windows only, written solely by database.capture_groups.
         # No client-authored text, so not projection-family.
@@ -2261,3 +2271,29 @@ def test_internal_owner_diagnostics_are_absent_from_client_and_integration_views
     assert 'owner_recognition_diagnostics' not in render_mod.conversation_to_dict(conv)
     for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
         assert 'owner_recognition_diagnostics' not in redact(conv.model_dump())
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_llm_checkpoints_are_server_only_and_survive_projection_invalidation(render_mod, projection_sink_fns, locked):
+    checkpoints = {
+        'notes_llm_input_hash': 'ab' * 32,
+        'notes_llm_output_hash': 'cd' * 32,
+        'l1_llm_input_hash': 'ef' * 32,
+    }
+    # These values come from a server snapshot, not a client display projection.
+    conv = Conversation.model_validate({**_make_conversation(is_locked=locked).model_dump(), **checkpoints})
+    for field, value in checkpoints.items():
+        assert field not in render_mod.PROJECTION_FAMILY_FIELDS
+        assert Conversation.model_fields[field].exclude is True
+        assert getattr(conv, field) == value
+    for payload in (conv.model_dump(), conv.model_dump(mode='json'), render_mod.conversation_to_dict(conv)):
+        assert checkpoints.keys().isdisjoint(payload)
+        for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+            assert checkpoints.keys().isdisjoint(redact(dict(payload)))
+    # Clearing untrusted projections must not destroy durable reuse checkpoints.
+    for sink in ('strip', 'invalidate'):
+        snapshot = {**conv.model_dump(), **checkpoints}
+        projection_sink_fns[sink](snapshot)
+        assert {field: snapshot[field] for field in checkpoints} == checkpoints
+    projection_sink_fns['drop'](conv)
+    assert {field: getattr(conv, field) for field in checkpoints} == checkpoints

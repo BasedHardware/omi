@@ -4,6 +4,10 @@ Migration and PostHog retirement default off. Delete-class changes are active:
 routine `Mobile Render Observation` is not sent to PostHog, and
 `wal_transcript_coverage` is debug-log only.
 
+PostHog ingestion-side sampling is also active; see the [sampling table](../../../../web/admin/docs/posthog-events.md#ingestion-sampling-since-2026-10-17).
+New events default to 2% unless added to the explicit keep-list or matched by
+its keep rules. Cloud Run server events stay dark.
+
 `Recording Requested` stays on PostHog. It means capture-session preparation,
 not a confirmed user attempt and not audio start. `request_origin` is
 `explicit_user` only for `PhoneStartRequested` and explicit Transcribe Later,

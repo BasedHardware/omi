@@ -143,7 +143,9 @@ class Caps:
     undo_min_samples: int = 10
     anonymous_k: int = 20
     manual_runs: int = 3
-    completion_tokens: int = 4096
+    # Main-lane reply ceiling. Gemini 3.x counts thinking inside it, so 4096 truncated medium-effort turns.
+    completion_tokens: int = 32768
+    verifier_completion_tokens: int = 4096
 
     @classmethod
     def from_env(cls):

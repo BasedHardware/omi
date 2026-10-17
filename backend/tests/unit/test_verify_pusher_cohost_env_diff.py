@@ -319,9 +319,17 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
 
 @pytest.mark.parametrize('env', ('dev', 'prod'))
 def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
-    assert gate._BATCH_PIPELINE_LISTEN_ONLY <= gate.LISTEN_ONLY_ALLOWED[env]
+    batch_listen_only = gate._BATCH_PIPELINE_LISTEN_ONLY
+    if env == 'prod':
+        batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
+    assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
+    assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_MODE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert gate.validate_preflight(REPO_ROOT) == []
 
 

@@ -3,20 +3,26 @@
  * total = GCP net of credits (spend-based CUD arrives as FEE_UTILIZATION_OFFSET
  *         credits) − one-time incident excess
  *       + OpenAI + Anthropic invoices (billing-mode legs)
- *       + STT (Soniox: no invoice feed yet, so a constant read from the Soniox
- *         console, labelled "estimate (Soniox console)")
+ *       + STT: a measured FinOps vendor line when one exists for the day,
+ *         otherwise a constant read from the Soniox console ("estimate")
  *       + SaaS at a fixed monthly estimate (labelled "fixed estimate").
+ * Each constant carries the date it was read; past ESTIMATE_STALE_DAYS the
+ * series flags it stale so the board can say so.
  * A line that cannot be sourced is reported in `missing`, never dropped silently.
  */
 import { isLlmService } from "./services/gcp-billing";
 
 export const SAAS_MONTHLY_USD = 4800; // "Omi Cost vs Revenue" artifact, Oct 2026 row
+export const SAAS_AS_OF = "2026-10-16";
 /** Soniox console, October 2026 (read 2026-10-16): ≈ $174/day; the KB
  * transcription-cost note's ≈ $204/day agrees in order. The FinOps
  * `stt_vendor_low` model (~$10K/mo) overstated it and is no longer used.
  * Replace with an invoice or usage feed when one exists. */
 export const STT_MONTHLY_USD = 5300;
-export const STT_SOURCE = "Soniox console, Oct 2026, read 2026-10-16";
+export const STT_AS_OF = "2026-10-16";
+export const STT_SOURCE = `Soniox console, Oct 2026, read ${STT_AS_OF}`;
+/** A manual estimate older than this is flagged stale on the cost frames. */
+export const ESTIMATE_STALE_DAYS = 35;
 const DAYS_PER_MONTH = 365.25 / 12;
 /** A GCP service-day is a one-time incident when it exceeds its trailing
  * 14-day median by both $500 and 2× (e.g. the 2026-09-07 Coldline migration:
@@ -35,6 +41,8 @@ export interface CostDay {
   openai: number | null;
   anthropic: number | null;
   stt: number;
+  /** STT came from a measured FinOps vendor line, not the console constant. */
+  sttMeasured: boolean;
   saas: number;
   oneTime: number;
   total: number;
@@ -82,9 +90,38 @@ export function oneTimeExcess(days: BillingDay[]) {
   return out;
 }
 
+export interface EstimateStatus {
+  line: "STT" | "SaaS";
+  monthlyUsd: number;
+  asOf: string;
+  ageDays: number;
+  stale: boolean;
+}
+
+/** Age of each manual cost constant on `now` (UTC days). */
+export function estimateStatus(now: Date): EstimateStatus[] {
+  const age = (asOf: string) =>
+    Math.floor((now.getTime() - Date.parse(`${asOf}T00:00:00Z`)) / 86_400_000);
+  return (
+    [
+      ["STT", STT_MONTHLY_USD, STT_AS_OF],
+      ["SaaS", SAAS_MONTHLY_USD, SAAS_AS_OF],
+    ] as const
+  ).map(([line, monthlyUsd, asOf]) => ({
+    line,
+    monthlyUsd,
+    asOf,
+    ageDays: age(asOf),
+    stale: age(asOf) > ESTIMATE_STALE_DAYS,
+  }));
+}
+
+/** `sttMeasured`: date → measured STT vendor USD; such a day uses it in place
+ * of the console constant. */
 export function allInCost(
   days: BillingDay[],
-  coverage: { openai?: boolean; anthropic?: boolean } = {}
+  coverage: { openai?: boolean; anthropic?: boolean } = {},
+  sttMeasured: Record<string, number> = {}
 ) {
   const oneTime = oneTimeExcess(days);
   const missing: string[] = [];
@@ -107,15 +144,18 @@ export function allInCost(
         : d.total;
       const vertexLlm = (c.vertexLlm ?? 0) - llmExcess;
       const gcp = gcpNet - excess - vertexLlm;
+      const measured = sttMeasured[d.date];
+      const stt = measured ?? sttUsd;
       const total =
-        gcp + vertexLlm + (openai ?? 0) + (anthropic ?? 0) + sttUsd + saas;
+        gcp + vertexLlm + (openai ?? 0) + (anthropic ?? 0) + stt + saas;
       return {
         date: d.date,
         gcp,
         vertexLlm,
         openai,
         anthropic,
-        stt: sttUsd,
+        stt,
+        sttMeasured: measured != null,
         saas,
         oneTime: excess,
         total,

@@ -4512,6 +4512,17 @@
             "title": "Provider",
             "type": "string"
           },
+          "source_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fingerprint"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -29515,7 +29526,7 @@
         "type": "object"
       },
       "SharedSection": {
-        "description": "Public note content, without internal transcript evidence IDs.",
+        "description": "Public note content linked to the transcript segments on the same share payload.",
         "properties": {
           "body_markdown": {
             "title": "Body Markdown",
@@ -29533,6 +29544,13 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           }
         },
         "required": [
@@ -31942,6 +31960,38 @@
         "title": "SummaryTaskReference",
         "type": "object"
       },
+      "SurfaceStateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "foreground": {
+            "title": "Foreground",
+            "type": "boolean"
+          },
+          "session_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9-]+$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "surface_open": {
+            "title": "Surface Open",
+            "type": "boolean"
+          },
+          "transcript_visible": {
+            "title": "Transcript Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "surface_open",
+          "foreground",
+          "transcript_visible"
+        ],
+        "title": "SurfaceStateRequest",
+        "type": "object"
+      },
       "SyncBatchItem": {
         "properties": {
           "apple_reminder_id": {
@@ -32298,6 +32348,17 @@
             "default": 0,
             "title": "Failed Segments",
             "type": "integer"
+          },
+          "held_audio": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Audio"
           },
           "new_memories": {
             "items": {
@@ -49807,7 +49868,7 @@
             "description": "The conversation or selected app does not exist"
           },
           "409": {
-            "description": "The selected app is disabled or not enabled by this user"
+            "description": "The selected app is disabled or not enabled by this user, or the conversation is already being processed (detail code conversation_processing_in_progress)"
           },
           "422": {
             "content": {
@@ -49818,6 +49879,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "description": "The selected app produced no summary (detail code app_result_failed)"
           }
         },
         "security": [
@@ -70724,6 +70788,94 @@
         "summary": "Put Budget Choice"
       }
     },
+    "/v1/users/client-state": {
+      "post": {
+        "description": "Explicit expiring human-surface intent; no user-document lookup.",
+        "operationId": "report_surface_state_v1_users_client_state_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SurfaceStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Report Surface State",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/daily-summaries": {
       "get": {
         "description": "Get list of daily summaries for the authenticated user.\nReturns summaries in reverse chronological order.",
@@ -81548,6 +81700,16 @@
             "schema": {
               "title": "Job Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface_open",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Surface Open",
+              "type": "boolean"
             }
           },
           {
