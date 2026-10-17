@@ -2987,6 +2987,18 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            GOAFFPRO_ACCESS_TOKEN:
+              secret: GOAFFPRO_ACCESS_TOKEN
+              version: latest
+            GOAFFPRO_PUBLIC_TOKEN:
+              secret: GOAFFPRO_PUBLIC_TOKEN
+              version: latest
+            GOAFFPRO_STRIPE_METHOD_KEY:
+              secret: GOAFFPRO_STRIPE_METHOD_KEY
+              version: latest
+            GOAFFPRO_STRIPE_FIELD_KEY:
+              secret: GOAFFPRO_STRIPE_FIELD_KEY
+              version: latest
             TELEGRAM_BOT_TOKEN:
               secret: TELEGRAM_BOT_TOKEN
               version: latest

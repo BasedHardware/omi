@@ -911,6 +911,10 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             'TELEGRAM_WEBHOOK_SECRET',
             'LINQ_API_KEY',
             'LINQ_WEBHOOK_SECRET',
+            'GOAFFPRO_ACCESS_TOKEN',
+            'GOAFFPRO_PUBLIC_TOKEN',
+            'GOAFFPRO_STRIPE_METHOD_KEY',
+            'GOAFFPRO_STRIPE_FIELD_KEY',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
