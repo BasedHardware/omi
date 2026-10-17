@@ -1,11 +1,14 @@
 """Stable person rename and bounded exact-alias retention."""
 
+import logging
 from datetime import datetime, timezone
 from database import chat_edits
 from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
+
+logger = logging.getLogger(__name__)
 
 
 def normalized_person_alias(value: Any) -> str | None:
@@ -65,8 +68,10 @@ def rename_person_retaining_aliases(
     db_client: Any, uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None
 ) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
+    if not uid or not person_id or not uid.strip() or not person_id.strip():
+        return False
 
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    person_ref = db_client.collection('users').document(uid.strip()).collection('people').document(person_id.strip())
     try:
         if expected_chat_state is not None:
             return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
@@ -100,8 +105,10 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
 
 def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
     """Soft-dismiss an owner-scoped person and map concurrent deletion to missing."""
+    if not uid or not person_id or not uid.strip() or not person_id.strip():
+        return False
 
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    person_ref = db_client.collection('users').document(uid.strip()).collection('people').document(person_id.strip())
     try:
         return dismiss_person_transaction(db_client.transaction(), person_ref)
     except NotFound:
@@ -112,29 +119,51 @@ def list_people(
     db_client: Any, uid: str, *, include_dismissed: bool = False, limit: Optional[int] = None
 ) -> list[dict[str, Any]]:
     """List owner-scoped people, hiding soft-dismissed records by default."""
+    if not uid or not uid.strip():
+        return []
 
-    people_ref = db_client.collection('users').document(uid).collection('people')
+    people_ref = db_client.collection('users').document(uid.strip()).collection('people')
     if limit is not None:
         people_ref = people_ref.limit(limit)
     result = []
-    for person in people_ref.stream():
-        data = person.to_dict()
-        if not include_dismissed and data.get('is_dismissed') is True:
-            continue
-        data.setdefault('id', person.id)
-        result.append(data)
+    try:
+        for person in people_ref.stream():
+            data = person.to_dict()
+            if not include_dismissed and data.get('is_dismissed') is True:
+                continue
+            data.setdefault('id', person.id)
+            result.append(data)
+    except Exception as e:
+        logger.warning("Error streaming people for uid %s: %s", uid, e)
+        return []
     return result
 
 
 def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
-    """Find the first active owner-scoped person with an exact display name."""
+    """Find the first active owner-scoped person with an exact display name or alias."""
+    clean_name = normalized_person_alias(name)
+    if not uid or not uid.strip() or clean_name is None:
+        return None
 
-    people_ref = db_client.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name))
-    for person in query.stream():
-        data = person.to_dict()
-        if data.get('is_dismissed') is True:
-            continue
-        data.setdefault('id', person.id)
-        return data
+    people_ref = db_client.collection('users').document(uid.strip()).collection('people')
+    try:
+        query = people_ref.where(filter=FieldFilter('name', '==', clean_name))
+        for person in query.stream():
+            data = person.to_dict()
+            if data.get('is_dismissed') is True:
+                continue
+            data.setdefault('id', person.id)
+            return data
+
+        # Check aliases if primary name does not match
+        alias_query = people_ref.where(filter=FieldFilter('aliases', 'array_contains', clean_name))
+        for person in alias_query.stream():
+            data = person.to_dict()
+            if data.get('is_dismissed') is True:
+                continue
+            data.setdefault('id', person.id)
+            return data
+    except Exception as e:
+        logger.warning("Error finding person by name/alias for uid %s: %s", uid, e)
+        return None
     return None
