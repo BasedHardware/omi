@@ -34,8 +34,9 @@ enum ComputerAgent {
   /// Product name; never translated. Null for the catch-all row.
   final String? brandName;
 
-  /// The MCP key's name, which is also how the row finds its active key again.
-  String get keyName => brandName ?? 'Agent';
+  /// The MCP key's name, which is also how the row finds its active key again. The suffix keeps a
+  /// key someone named "Muse" or "Agent" on the web from being mistaken for one this screen made.
+  String get keyName => '${brandName ?? 'Agent'} (Omi app)';
 }
 
 bool isLiveGrant(Map<String, dynamic> grant) => grant['revoked_at'] == null && grant['status'] != 'revoked';
@@ -112,15 +113,27 @@ class AgentConnectService {
 
   /// Creates a key named for [agent], seals it in a one-time link, and returns the prompt that
   /// carries the link. If the link cannot be made, the new key is deleted again.
+  ///
+  /// One live key per agent: once the new link exists, every older key with the agent's name is
+  /// revoked. Replacing only after success means a failed attempt never cuts off a working agent,
+  /// and a list that missed a key (a failed reload) cannot leave a forgotten one behind.
   Future<PreparedAgentPrompt> preparePrompt(ComputerAgent agent) async {
     final created = await _createKey(agent.keyName);
+    final PreparedAgentPrompt prepared;
     try {
       final share = await _share(created.key);
-      return PreparedAgentPrompt(prompt: buildMcpKeyPrompt(_base, share.agentLink), keyId: created.id);
+      prepared = PreparedAgentPrompt(prompt: buildMcpKeyPrompt(_base, share.agentLink), keyId: created.id);
     } catch (_) {
       await _deleteKey(created.id).catchError((_) {});
       rethrow;
     }
+    try {
+      final older = (await _loadKeys()).where((key) => key.name == agent.keyName && key.id != created.id);
+      await Future.wait(older.map((key) => _deleteKey(key.id)));
+    } catch (_) {
+      // Best effort: the prompt is ready either way, and the next link for this agent retries.
+    }
+    return prepared;
   }
 
   String get _base => _apiBase ?? Env.apiBaseUrl ?? 'https://api.omi.me/';

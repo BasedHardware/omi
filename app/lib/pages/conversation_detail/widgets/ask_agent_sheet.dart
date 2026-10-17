@@ -89,69 +89,71 @@ class _AskAgentSheetState extends State<AskAgentSheet> {
     final suggestions = [l10n.askSuggestFollowUp, l10n.askSuggestCommitments, l10n.askSuggestDoc];
     final connected = _chatGptConnected;
     final hasQuestion = _question.text.trim().isNotEmpty;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(l10n.askAboutConversationSubtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-        const SizedBox(height: OmiSpacing.lg),
-        TextField(
-          key: const ValueKey('ask_agent_question'),
-          controller: _question,
-          minLines: 2,
-          maxLines: 4,
-          textCapitalization: TextCapitalization.sentences,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(labelText: l10n.askYourQuestion),
-        ),
-        const SizedBox(height: OmiSpacing.md),
-        Wrap(
-          spacing: OmiSpacing.sm,
-          runSpacing: OmiSpacing.sm,
-          children: [
-            for (final suggestion in suggestions)
-              OmiFilterChip(
-                label: suggestion,
-                selected: _question.text == suggestion,
-                onSelected: () => setState(() => _question.text = suggestion),
-              ),
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(l10n.askAboutConversationSubtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          const SizedBox(height: OmiSpacing.lg),
+          TextField(
+            key: const ValueKey('ask_agent_question'),
+            controller: _question,
+            minLines: 2,
+            maxLines: 4,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(labelText: l10n.askYourQuestion),
+          ),
+          const SizedBox(height: OmiSpacing.md),
+          Wrap(
+            spacing: OmiSpacing.sm,
+            runSpacing: OmiSpacing.sm,
+            children: [
+              for (final suggestion in suggestions)
+                OmiFilterChip(
+                  label: suggestion,
+                  selected: _question.text == suggestion,
+                  onSelected: () => setState(() => _question.text = suggestion),
+                ),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          if (connected == null)
+            const Center(child: OmiSpinner())
+          else if (connected)
+            OmiButton(
+              key: const ValueKey('ask_agent_chatgpt'),
+              label: l10n.askInChatGpt,
+              icon: Icons.open_in_new,
+              expand: true,
+              onPressed: hasQuestion ? _askChatGpt : null,
+            )
+          else ...[
+            Text(
+              l10n.askConnectChatGptFirst,
+              textAlign: TextAlign.center,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+            OmiButton(
+              key: const ValueKey('ask_agent_connect_chatgpt'),
+              label: l10n.connectChatGptTitle,
+              expand: true,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
           ],
-        ),
-        const SizedBox(height: OmiSpacing.xl),
-        if (connected == null)
-          const Center(child: OmiSpinner())
-        else if (connected)
-          OmiButton(
-            key: const ValueKey('ask_agent_chatgpt'),
-            label: l10n.askInChatGpt,
-            icon: Icons.open_in_new,
-            expand: true,
-            onPressed: hasQuestion ? _askChatGpt : null,
-          )
-        else ...[
-          Text(
-            l10n.askConnectChatGptFirst,
-            textAlign: TextAlign.center,
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
           const SizedBox(height: OmiSpacing.sm),
-          OmiButton(
-            key: const ValueKey('ask_agent_connect_chatgpt'),
-            label: l10n.connectChatGptTitle,
+          OmiButton.secondary(
+            key: const ValueKey('ask_agent_copy'),
+            label: l10n.copyForAnyApp,
+            icon: Icons.copy,
             expand: true,
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: hasQuestion ? () => OmiClipboard.copy(context, _prompt(), what: l10n.prompt) : null,
           ),
+          const SizedBox(height: OmiSpacing.md),
         ],
-        const SizedBox(height: OmiSpacing.sm),
-        OmiButton.secondary(
-          key: const ValueKey('ask_agent_copy'),
-          label: l10n.copyForAnyApp,
-          icon: Icons.copy,
-          expand: true,
-          onPressed: hasQuestion ? () => OmiClipboard.copy(context, _prompt(), what: l10n.prompt) : null,
-        ),
-        const SizedBox(height: OmiSpacing.md),
-      ],
+      ),
     );
   }
 }

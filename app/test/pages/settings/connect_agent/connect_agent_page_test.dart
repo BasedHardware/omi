@@ -49,22 +49,23 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('agent_key_copy_prompt')));
     await settle(tester);
-    expect(backend.created, ['Instinct']);
-    expect(find.text('Key “Instinct” created'), findsOneWidget);
+    expect(backend.created, ['Instinct (Omi app)']);
+    expect(find.text('Key “Instinct (Omi app)” created'), findsOneWidget);
     expect(copied.single, contains(fakeAgentLink));
     expect(copied.single, isNot(contains('omi_mcp_secret')));
 
     // Copying again reuses the same key and link.
     await tester.tap(find.byKey(const ValueKey('agent_key_copy_prompt')));
     await settle(tester);
-    expect(backend.created, ['Instinct']);
+    expect(backend.created, ['Instinct (Omi app)']);
     expect(copied, hasLength(2));
 
-    // A new link replaces the key instead of adding a second one.
+    // A new link replaces the key instead of adding a second one, once the new one exists.
     await tester.tap(find.byKey(const ValueKey('agent_key_new_link')));
     await settle(tester);
-    expect(backend.created, ['Instinct', 'Instinct']);
-    expect(backend.revokedKeys, ['key-Instinct-1']);
+    expect(backend.created, ['Instinct (Omi app)', 'Instinct (Omi app)']);
+    expect(backend.revokedKeys, ['key-new-1']);
+    expect(backend.keys.keys, ['key-new-2']);
   });
 
   testWidgets('an active agent can be revoked after confirming', (tester) async {

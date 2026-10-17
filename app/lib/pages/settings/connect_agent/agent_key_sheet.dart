@@ -42,15 +42,9 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
     await _makeAndCopy();
   }
 
-  /// A fresh link replaces the previous key, so retrying never leaves a second key behind.
-  Future<void> _newLink() async {
-    final previous = _prepared;
-    setState(() => _working = true);
-    if (previous != null) await widget.service.revokeKey(previous.keyId).catchError((_) {});
-    if (!mounted) return;
-    setState(() => _prepared = null);
-    await _makeAndCopy();
-  }
+  /// A fresh link replaces the previous key once it exists ([AgentConnectService.preparePrompt]);
+  /// if making it fails, the previous prompt and key stay as they were.
+  Future<void> _newLink() => _makeAndCopy();
 
   Future<void> _makeAndCopy() async {
     final l10n = context.l10n;
@@ -76,85 +70,87 @@ class _AgentKeySheetState extends State<AgentKeySheet> {
     final agent = widget.agent;
     final name = agent.brandName;
     final prepared = _prepared;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: OmiSpacing.sm),
-        Row(
-          children: [
-            name == null
-                ? const AgentMonogram('', icon: Icons.terminal, size: 48)
-                : AgentMonogram(name.substring(0, 2), size: 48),
-            const SizedBox(width: OmiSpacing.md),
-            Expanded(
-              child: Column(
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: OmiSpacing.sm),
+          Row(
+            children: [
+              name == null
+                  ? const AgentMonogram('', icon: Icons.terminal, size: 48)
+                  : AgentMonogram(name.substring(0, 2), size: 48),
+              const SizedBox(width: OmiSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name == null ? l10n.connectAgentOtherAgent : l10n.connectAgentNamed(name),
+                      style: OmiType.title3,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      name == null ? l10n.connectAgentGenericPromptSubtitle : l10n.connectAgentPromptSubtitle(name),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+          if (prepared != null) ...[
+            Container(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              decoration: BoxDecoration(color: OmiColors.successSurface, borderRadius: OmiRadius.mdAll),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name == null ? l10n.connectAgentOtherAgent : l10n.connectAgentNamed(name),
-                    style: OmiType.title3,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    name == null ? l10n.connectAgentGenericPromptSubtitle : l10n.connectAgentPromptSubtitle(name),
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                  Icon(Icons.lock_outline, size: 20, color: OmiColors.success),
+                  const SizedBox(width: OmiSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.connectAgentKeyCreated(agent.keyName),
+                          style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(l10n.connectAgentKeyCreatedBody, style: OmiType.footnote),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: OmiSpacing.md),
           ],
-        ),
-        const SizedBox(height: OmiSpacing.lg),
-        if (prepared != null) ...[
-          Container(
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            decoration: BoxDecoration(color: OmiColors.successSurface, borderRadius: OmiRadius.mdAll),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.lock_outline, size: 20, color: OmiColors.success),
-                const SizedBox(width: OmiSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.connectAgentKeyCreated(agent.keyName),
-                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(l10n.connectAgentKeyCreatedBody, style: OmiType.footnote),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          OmiSectionHeader(l10n.prompt),
+          AgentPromptPreview(prompt: prepared?.prompt ?? widget.service.previewPrompt()),
+          const SizedBox(height: OmiSpacing.lg),
+          OmiButton(
+            key: const ValueKey('agent_key_copy_prompt'),
+            label: l10n.copyPrompt,
+            icon: Icons.copy,
+            expand: true,
+            isLoading: _working,
+            onPressed: _working ? null : _copy,
           ),
+          if (prepared != null) ...[
+            const SizedBox(height: OmiSpacing.xs),
+            OmiButton.tertiary(
+              key: const ValueKey('agent_key_new_link'),
+              label: l10n.connectAgentNewLink,
+              expand: true,
+              onPressed: _working ? null : _newLink,
+            ),
+          ],
           const SizedBox(height: OmiSpacing.md),
         ],
-        OmiSectionHeader(l10n.prompt),
-        AgentPromptPreview(prompt: prepared?.prompt ?? widget.service.previewPrompt()),
-        const SizedBox(height: OmiSpacing.lg),
-        OmiButton(
-          key: const ValueKey('agent_key_copy_prompt'),
-          label: l10n.copyPrompt,
-          icon: Icons.copy,
-          expand: true,
-          isLoading: _working,
-          onPressed: _working ? null : _copy,
-        ),
-        if (prepared != null) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          OmiButton.tertiary(
-            key: const ValueKey('agent_key_new_link'),
-            label: l10n.connectAgentNewLink,
-            expand: true,
-            onPressed: _working ? null : _newLink,
-          ),
-        ],
-        const SizedBox(height: OmiSpacing.md),
-      ],
+      ),
     );
   }
 }
@@ -223,46 +219,48 @@ class _ActiveAgentSheetState extends State<ActiveAgentSheet> {
     final l10n = context.l10n;
     final lastUsed = widget.lastUsedAt;
     final brand = widget.agent.brandName;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: OmiSpacing.sm),
-        Row(
-          children: [
-            brand == null
-                ? const AgentMonogram('', icon: Icons.terminal, size: 48)
-                : AgentMonogram(brand.substring(0, 2), size: 48),
-            const SizedBox(width: OmiSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.connectAgentActiveTitle(_name), style: OmiType.title3),
-                  const SizedBox(height: 2),
-                  Text(
-                    lastUsed == null
-                        ? l10n.connectAgentKeyActive
-                        : l10n.connectAgentLastUsed(OmiDateFormat.of(context).timestamp(lastUsed.toLocal())),
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                  ),
-                ],
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: OmiSpacing.sm),
+          Row(
+            children: [
+              brand == null
+                  ? const AgentMonogram('', icon: Icons.terminal, size: 48)
+                  : AgentMonogram(brand.substring(0, 2), size: 48),
+              const SizedBox(width: OmiSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.connectAgentActiveTitle(_name), style: OmiType.title3),
+                    const SizedBox(height: 2),
+                    Text(
+                      lastUsed == null
+                          ? l10n.connectAgentKeyActive
+                          : l10n.connectAgentLastUsed(OmiDateFormat.of(context).timestamp(lastUsed.toLocal())),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: OmiSpacing.lg),
-        Text(l10n.connectAgentActiveBody(_name), style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-        const SizedBox(height: OmiSpacing.xl),
-        OmiButton.destructive(
-          key: const ValueKey('agent_key_revoke'),
-          label: l10n.revoke,
-          expand: true,
-          isLoading: _revoking,
-          onPressed: _revoking ? null : _revoke,
-        ),
-        const SizedBox(height: OmiSpacing.md),
-      ],
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+          Text(l10n.connectAgentActiveBody(_name), style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton.destructive(
+            key: const ValueKey('agent_key_revoke'),
+            label: l10n.revoke,
+            expand: true,
+            isLoading: _revoking,
+            onPressed: _revoking ? null : _revoke,
+          ),
+          const SizedBox(height: OmiSpacing.md),
+        ],
+      ),
     );
   }
 }

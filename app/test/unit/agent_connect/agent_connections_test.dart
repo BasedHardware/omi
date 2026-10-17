@@ -41,9 +41,12 @@ void main() {
 
     test('an agent is active when a key carries its name', () {
       final connections = AgentConnections.from(grants: const [], keys: [
-        key('k1', 'Muse'),
-        key('k2', 'Agent'),
+        key('k1', 'Muse (Omi app)'),
+        key('k2', 'Agent (Omi app)'),
         key('k3', 'Claude Code'),
+        // A key someone named on the web is not mistaken for one this screen made.
+        key('k4', 'Agent'),
+        key('k5', 'Instinct'),
       ]);
       expect(connections.agentKeys.keys, unorderedEquals([ComputerAgent.muse, ComputerAgent.other]));
       expect(connections.agentKeys[ComputerAgent.muse]!.id, 'k1');
@@ -65,11 +68,44 @@ void main() {
         },
       );
       final prepared = await service.preparePrompt(ComputerAgent.instinct);
-      expect(names, ['Instinct']);
+      expect(names, ['Instinct (Omi app)']);
       expect(prepared.keyId, 'k9');
       expect(prepared.prompt, contains('https://zkr.scalingforever.com/a/x#v1.K.T'));
       expect(prepared.prompt, contains('Server: https://api.example.test/v1/mcp'));
       expect(prepared.prompt, isNot(contains('omi_mcp_secretvalue')));
+    });
+
+    test('a new link replaces older keys of the agent only after it exists', () async {
+      final deleted = <String>[];
+      final service = AgentConnectService(
+        apiBase: 'https://api.example.test/',
+        createKey: (name) async => created('k-new', name),
+        share: (_) async {
+          // Nothing is revoked while the replacement is still being made.
+          expect(deleted, isEmpty);
+          return const ZkrShare(id: 'x', agentLink: 'https://zkr.scalingforever.com/a/x#v1.K.T');
+        },
+        loadKeys: () async => [
+          key('k-new', 'Muse (Omi app)'),
+          key('k-old', 'Muse (Omi app)'),
+          key('k-other', 'Instinct (Omi app)'),
+        ],
+        deleteKey: (id) async => deleted.add(id),
+      );
+      await service.preparePrompt(ComputerAgent.muse);
+      expect(deleted, ['k-old']);
+    });
+
+    test('a failed new link leaves the existing key alone', () async {
+      final deleted = <String>[];
+      final service = AgentConnectService(
+        createKey: (name) async => created('k-new', name),
+        share: (_) async => throw const ZkrShareException('down'),
+        loadKeys: () async => [key('k-old', 'Muse (Omi app)')],
+        deleteKey: (id) async => deleted.add(id),
+      );
+      await expectLater(service.preparePrompt(ComputerAgent.muse), throwsA(isA<ZkrShareException>()));
+      expect(deleted, ['k-new']);
     });
 
     test('a failed link deletes the key it just made', () async {

@@ -32,46 +32,48 @@ class ChatGptConnectSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: OmiSpacing.sm),
-        const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AgentMonogram('omi', size: 56),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-              child: Icon(Icons.sync_alt, semanticLabel: null),
-            ),
-            AgentMonogram('GPT', size: 56),
-          ],
-        ),
-        const SizedBox(height: OmiSpacing.lg),
-        Text(l10n.connectChatGptTitle, style: OmiType.title2, textAlign: TextAlign.center),
-        const SizedBox(height: OmiSpacing.xs),
-        Text(
-          l10n.connectChatGptSubtitle,
-          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: OmiSpacing.xl),
-        AgentSetupStep(number: 1, title: l10n.connectChatGptStepOpen, body: l10n.connectChatGptStepOpenBody),
-        const SizedBox(height: OmiSpacing.md),
-        AgentSetupStep(number: 2, title: l10n.connectChatGptStepApprove, body: l10n.connectChatGptStepApproveBody),
-        const SizedBox(height: OmiSpacing.md),
-        AgentSetupStep(number: 3, title: l10n.connectChatGptStepReturn, body: l10n.connectChatGptStepReturnBody),
-        const SizedBox(height: OmiSpacing.xl),
-        OmiButton(
-          key: const ValueKey('connect_chatgpt_open'),
-          label: l10n.openChatGpt,
-          icon: Icons.open_in_new,
-          expand: true,
-          onPressed: () => _open(context),
-        ),
-        const SizedBox(height: OmiSpacing.md),
-      ],
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: OmiSpacing.sm),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AgentMonogram('omi', size: 56),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                child: Icon(Icons.sync_alt, semanticLabel: null),
+              ),
+              AgentMonogram('GPT', size: 56),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+          Text(l10n.connectChatGptTitle, style: OmiType.title2, textAlign: TextAlign.center),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(
+            l10n.connectChatGptSubtitle,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          AgentSetupStep(number: 1, title: l10n.connectChatGptStepOpen, body: l10n.connectChatGptStepOpenBody),
+          const SizedBox(height: OmiSpacing.md),
+          AgentSetupStep(number: 2, title: l10n.connectChatGptStepApprove, body: l10n.connectChatGptStepApproveBody),
+          const SizedBox(height: OmiSpacing.md),
+          AgentSetupStep(number: 3, title: l10n.connectChatGptStepReturn, body: l10n.connectChatGptStepReturnBody),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton(
+            key: const ValueKey('connect_chatgpt_open'),
+            label: l10n.openChatGpt,
+            icon: Icons.open_in_new,
+            expand: true,
+            onPressed: () => _open(context),
+          ),
+          const SizedBox(height: OmiSpacing.md),
+        ],
+      ),
     );
   }
 }

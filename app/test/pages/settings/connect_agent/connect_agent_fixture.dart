@@ -18,7 +18,7 @@ class FakeAgentBackend {
           for (final entry in keys.entries)
             'key-${entry.key}': McpApiKey.fromJson({
               'id': 'key-${entry.key}',
-              'name': entry.key,
+              'name': '${entry.key} (Omi app)',
               'key_prefix': 'omi_mcp_ab',
               'created_at': '2026-10-14T09:00:00Z',
               if (entry.value != null) 'last_used_at': entry.value!.toUtc().toIso8601String(),
@@ -47,7 +47,7 @@ class FakeAgentBackend {
         loadKeys: () async => keys.values.toList(),
         createKey: (name) async {
           created.add(name);
-          final id = 'key-$name-${created.length}';
+          final id = 'key-new-${created.length}';
           keys[id] = McpApiKey.fromJson({
             'id': id,
             'name': name,
