@@ -339,3 +339,6 @@ class TestCalendarSearchRecentMatches(unittest.IsolatedAsyncioTestCase):
         assert mock_get_events.call_args_list[1].kwargs.get("newest_first") is True
         assert "1:1 with Andy #19" in result
 
+
+if __name__ == "__main__":
+    unittest.main()
