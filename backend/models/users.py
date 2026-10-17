@@ -261,7 +261,7 @@ class UserSubscriptionResponse(BaseModel):
 
     def model_dump(self, **kwargs: Any) -> dict[str, Any]:
         data = super().model_dump(**kwargs)
-        if isinstance(data, dict) and data.get('held_audio') is None:
+        if data.get('held_audio') is None:
             data.pop('held_audio', None)
         return data
 

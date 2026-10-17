@@ -93,6 +93,8 @@ def client_held_audio(
         allowance = funded_allowance(uid)
     retain_live = not getattr(allowance, 'managed', True)
     injected_rows = rows is not None
+    total = 0
+    count = 0
     if summary is None and not injected_rows:
         summary = _load_summary(uid)
     if summary is not None:
