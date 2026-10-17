@@ -128,7 +128,8 @@ def main():
     uid = os.getenv(args.owner_env, '')
     require(bool(uid) and '/' not in uid, 'owner_pin_required')
     cutoff_time = datetime.fromisoformat(args.quarantined_before.replace('Z', '+00:00'))
-    require(cutoff_time.utcoffset() is not None and cutoff_time.utcoffset().total_seconds() == 0, 'utc_cutoff_required')
+    offset = cutoff_time.utcoffset()
+    require(offset is not None and offset.total_seconds() == 0, 'utc_cutoff_required')
     cutoff = cutoff_time.timestamp()
     secret = os.getenv('ENCRYPTION_SECRET', '').encode()
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
@@ -215,7 +216,7 @@ def main():
         outcomes = Counter()
         # Always the same sorted prefix. Increasing the limit includes receipts
         # from the canary; it never silently selects one extra unattempted unit.
-        for sid, key, decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
+        for sid, key, _decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
             job = checked_job(read_store, sid, uid, key)
             outcomes[redrive_one(store, artifacts, sid, uid, digest, job['recovery'])] += 1
         output['outcomes'] = dict(outcomes)
