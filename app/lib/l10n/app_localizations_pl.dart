@@ -13538,4 +13538,179 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';
+
+  @override
+  String get connectAgentHeadline => 'Korzystaj z pamięci Omi w ChatGPT i swoich agentach AI';
+
+  @override
+  String get connectAgentIntro => 'Połącz raz. Potem pytaj je o swoje rozmowy, wspomnienia i zadania.';
+
+  @override
+  String get connectAgentOneTap => 'Jednym dotknięciem';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenci z własnym komputerem';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Skopiuj jeden prompt. Omi tworzy klucz tylko dla tego agenta i bezpiecznie go wysyła.';
+
+  @override
+  String get connectAgentOtherAgent => 'Inny agent';
+
+  @override
+  String get connectAgentKeyActive => 'Klucz aktywny';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Ostatnio użyto: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'Klucze MCP i API dla programistów';
+
+  @override
+  String get connectAgentLoadFailed => 'Nie udało się wczytać Twoich połączeń.';
+
+  @override
+  String get connectAgentActionFailed => 'Coś poszło nie tak. Spróbuj ponownie.';
+
+  @override
+  String get connectChatGptTitle => 'Połącz ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Zajmuje około 30 sekund. Zatwierdzasz to w ChatGPT i działa na telefonie oraz komputerze.';
+
+  @override
+  String get connectChatGptStepOpen => 'Otwieramy Omi w ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT otworzy się od razu na stronie aplikacji Omi.';
+
+  @override
+  String get connectChatGptStepApprove => 'Dotknij „Połącz”, a potem zaloguj się do Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Użyj tego samego konta, którego używasz tutaj.';
+
+  @override
+  String get connectChatGptStepReturn => 'Wróć do Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Sprawdzimy połączenie automatycznie.';
+
+  @override
+  String get openChatGpt => 'Otwórz ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Połączono na telefonie i komputerze';
+
+  @override
+  String get tryAskingChatGpt => 'Zapytaj ChatGPT na przykład';
+
+  @override
+  String get tryAskingChatGptFooter => 'Dotknij jednego, aby otworzyć ChatGPT z gotowym pytaniem.';
+
+  @override
+  String get chatGptExampleMeetings => 'Na co się zgodziłem na wczorajszych spotkaniach?';
+
+  @override
+  String get chatGptExampleTasks => 'Zamień moje otwarte zadania w Omi w plan na ten tydzień.';
+
+  @override
+  String get chatGptExampleGoals => 'Co Omi wie o moich celach?';
+
+  @override
+  String get disconnectChatGpt => 'Rozłącz ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Rozłączyć ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT nie będzie już mieć dostępu do Twoich wspomnień, rozmów ani zadań w Omi.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Połącz $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Wklej jeden prompt. $name sam skonfiguruje Omi na swoim komputerze.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Wklej jeden prompt. Twój agent sam skonfiguruje Omi na swoim komputerze.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Utworzono klucz „$name”';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Prompt zawiera jednorazowy link, a nie sam klucz. Otwiera się tylko raz i wygasa po 1 godzinie. Klucz możesz tu unieważnić w dowolnej chwili.';
+
+  @override
+  String get connectAgentPreparing => 'Tworzenie klucza i bezpiecznego linku…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Nie udało się utworzyć klucza. Sprawdź połączenie i spróbuj ponownie.';
+
+  @override
+  String get copyPrompt => 'Kopiuj prompt';
+
+  @override
+  String get connectAgentNewLink => 'Link wygasł? Utwórz nowy';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name jest połączony';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name ma klucz Omi. Unieważnij go, aby odciąć dostęp. Możesz połączyć ponownie w dowolnej chwili.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Unieważnić klucz $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name natychmiast straci dostęp do Twojej pamięci Omi.';
+  }
+
+  @override
+  String get askAboutConversation => 'Zapytaj o tę rozmowę';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Otwiera ChatGPT z gotowym pytaniem. Znajduje rozmowę przez Omi, więc nie musisz wklejać transkrypcji.';
+
+  @override
+  String get askYourQuestion => 'Twoje pytanie';
+
+  @override
+  String get askSuggestFollowUp => 'Przygotuj szkic e-maila podsumowującego tę rozmowę.';
+
+  @override
+  String get askSuggestCommitments => 'Do czego zobowiązałem się w tej rozmowie?';
+
+  @override
+  String get askSuggestDoc => 'Zamień tę rozmowę w krótki dokument.';
+
+  @override
+  String get askInChatGpt => 'Zapytaj ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopiuj do dowolnej aplikacji';
+
+  @override
+  String get askConnectChatGptFirst => 'Połącz ChatGPT raz, aby pytać go o swoje rozmowy.';
 }

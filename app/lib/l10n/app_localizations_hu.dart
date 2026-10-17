@@ -13551,4 +13551,181 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
+
+  @override
+  String get connectAgentHeadline => 'Használd az Omi-memóriádat a ChatGPT-ben és az AI-ügynökeidben';
+
+  @override
+  String get connectAgentIntro =>
+      'Csatlakoztasd egyszer. Utána kérdezd őket a beszélgetéseidről, emlékeidről és feladataidról.';
+
+  @override
+  String get connectAgentOneTap => 'Egy koppintással';
+
+  @override
+  String get connectAgentComputerAgents => 'Saját számítógéppel rendelkező ügynökök';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Másolj ki egy promptot. Az Omi csak annak az ügynöknek készít kulcsot, és biztonságosan elküldi.';
+
+  @override
+  String get connectAgentOtherAgent => 'Másik ügynök';
+
+  @override
+  String get connectAgentKeyActive => 'Kulcs aktív';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Utoljára használva: $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP- és API-kulcsok fejlesztőknek';
+
+  @override
+  String get connectAgentLoadFailed => 'Nem sikerült betölteni a kapcsolataidat.';
+
+  @override
+  String get connectAgentActionFailed => 'Hiba történt. Próbáld újra.';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPT csatlakoztatása';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Körülbelül 30 másodperc. A ChatGPT-ben hagyod jóvá, és a telefonodon és a számítógépeden is működik.';
+
+  @override
+  String get connectChatGptStepOpen => 'Megnyitjuk az Omit a ChatGPT-ben';
+
+  @override
+  String get connectChatGptStepOpenBody => 'A ChatGPT közvetlenül az Omi alkalmazás oldalán nyílik meg.';
+
+  @override
+  String get connectChatGptStepApprove => 'Koppints a „Csatlakozás” gombra, majd jelentkezz be az Omiba';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Ugyanazt a fiókot használd, mint itt.';
+
+  @override
+  String get connectChatGptStepReturn => 'Térj vissza az Omiba';
+
+  @override
+  String get connectChatGptStepReturnBody => 'A kapcsolatot automatikusan ellenőrizzük.';
+
+  @override
+  String get openChatGpt => 'ChatGPT megnyitása';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Csatlakoztatva telefonon és számítógépen';
+
+  @override
+  String get tryAskingChatGpt => 'Próbáld megkérdezni a ChatGPT-t';
+
+  @override
+  String get tryAskingChatGptFooter => 'Koppints egyre, és a ChatGPT kitöltve nyílik meg vele.';
+
+  @override
+  String get chatGptExampleMeetings => 'Mibe egyeztem bele a tegnapi megbeszéléseken?';
+
+  @override
+  String get chatGptExampleTasks => 'Készíts a nyitott Omi-feladataimból tervet erre a hétre.';
+
+  @override
+  String get chatGptExampleGoals => 'Mit tud az Omi a céljaimról?';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPT leválasztása';
+
+  @override
+  String get disconnectChatGptQuestion => 'Leválasztod a ChatGPT-t?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'A ChatGPT többé nem fogja tudni olvasni az Omi-emlékeidet, -beszélgetéseidet és -feladataidat.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$name csatlakoztatása';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Illessz be egy promptot. A(z) $name beállítja az Omit a saját számítógépén.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Illessz be egy promptot. Az ügynököd beállítja az Omit a saját számítógépén.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '„$name” kulcs létrehozva';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'A prompt egy egyszer használatos linket tartalmaz, nem magát a kulcsot. Csak egyszer nyílik meg, és 1 óra múlva lejár. A kulcsot itt bármikor visszavonhatod.';
+
+  @override
+  String get connectAgentPreparing => 'Kulcs és biztonságos link készítése…';
+
+  @override
+  String get connectAgentPrepareFailed =>
+      'Nem sikerült létrehozni a kulcsot. Ellenőrizd a kapcsolatot, és próbáld újra.';
+
+  @override
+  String get copyPrompt => 'Prompt másolása';
+
+  @override
+  String get connectAgentNewLink => 'Lejárt a link? Készíts újat';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name csatlakoztatva';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return 'A(z) $name Omi-kulccsal rendelkezik. Vond vissza a hozzáférés megszüntetéséhez. Bármikor újra csatlakoztathatod.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Visszavonod a(z) $name kulcsát?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return 'A(z) $name azonnal elveszíti a hozzáférést az Omi-memóriádhoz.';
+  }
+
+  @override
+  String get askAboutConversation => 'Kérdezz erről a beszélgetésről';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Megnyitja a ChatGPT-t a kész kérdéseddel. A beszélgetést az Omin keresztül keresi meg, így nem kell beillesztened az átiratot.';
+
+  @override
+  String get askYourQuestion => 'A kérdésed';
+
+  @override
+  String get askSuggestFollowUp => 'Írj egy követő e-mail-tervezetet ebből a beszélgetésből.';
+
+  @override
+  String get askSuggestCommitments => 'Mit vállaltam ebben a beszélgetésben?';
+
+  @override
+  String get askSuggestDoc => 'Készíts ebből a beszélgetésből egy rövid dokumentumot.';
+
+  @override
+  String get askInChatGpt => 'Kérdezd a ChatGPT-t';
+
+  @override
+  String get copyForAnyApp => 'Másolás bármely alkalmazáshoz';
+
+  @override
+  String get askConnectChatGptFirst => 'Csatlakoztasd egyszer a ChatGPT-t, hogy a beszélgetéseidről kérdezhesd.';
 }

@@ -13505,4 +13505,180 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
+
+  @override
+  String get connectAgentHeadline => 'ChatGPT आणि तुमच्या AI एजंट्समध्ये तुमची Omi स्मृती वापरा';
+
+  @override
+  String get connectAgentIntro =>
+      'एकदा कनेक्ट करा. मग त्यांना तुमच्या संभाषणांबद्दल, स्मृतींबद्दल आणि कार्यांबद्दल विचारा.';
+
+  @override
+  String get connectAgentOneTap => 'एका टॅपमध्ये';
+
+  @override
+  String get connectAgentComputerAgents => 'स्वतःचा संगणक असलेले एजंट';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'एक प्रॉम्प्ट कॉपी करा. Omi फक्त त्या एजंटसाठी एक की तयार करते आणि ती सुरक्षितपणे पाठवते.';
+
+  @override
+  String get connectAgentOtherAgent => 'इतर एजंट';
+
+  @override
+  String get connectAgentKeyActive => 'की सक्रिय';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'शेवटचा वापर $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'डेव्हलपर्ससाठी MCP आणि API की';
+
+  @override
+  String get connectAgentLoadFailed => 'तुमची कनेक्शन लोड करता आली नाहीत.';
+
+  @override
+  String get connectAgentActionFailed => 'काहीतरी चुकले. पुन्हा प्रयत्न करा.';
+
+  @override
+  String get connectChatGptTitle => 'ChatGPT कनेक्ट करा';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'सुमारे 30 सेकंद लागतात. तुम्ही ChatGPT मध्येच मंजुरी देता आणि ते तुमच्या फोन व संगणकावर चालते.';
+
+  @override
+  String get connectChatGptStepOpen => 'आम्ही ChatGPT मध्ये Omi उघडतो';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT थेट Omi अ‍ॅप पेजवर उघडते.';
+
+  @override
+  String get connectChatGptStepApprove => '\"कनेक्ट करा\" वर टॅप करा, मग Omi मध्ये साइन इन करा';
+
+  @override
+  String get connectChatGptStepApproveBody => 'इथे वापरता तेच खाते वापरा.';
+
+  @override
+  String get connectChatGptStepReturn => 'Omi वर परत या';
+
+  @override
+  String get connectChatGptStepReturnBody => 'आम्ही कनेक्शन आपोआप तपासतो.';
+
+  @override
+  String get openChatGpt => 'ChatGPT उघडा';
+
+  @override
+  String get chatGptConnectedEverywhere => 'फोन आणि संगणकावर कनेक्ट केलेले';
+
+  @override
+  String get tryAskingChatGpt => 'ChatGPT ला विचारून पाहा';
+
+  @override
+  String get tryAskingChatGptFooter => 'कोणत्याही एकावर टॅप करा, ChatGPT तो प्रश्न भरून उघडेल.';
+
+  @override
+  String get chatGptExampleMeetings => 'कालच्या मीटिंग्समध्ये मी कशाला संमती दिली?';
+
+  @override
+  String get chatGptExampleTasks => 'माझी प्रलंबित Omi कार्ये या आठवड्याच्या योजनेत बदल.';
+
+  @override
+  String get chatGptExampleGoals => 'Omi ला माझ्या उद्दिष्टांबद्दल काय माहीत आहे?';
+
+  @override
+  String get disconnectChatGpt => 'ChatGPT डिस्कनेक्ट करा';
+
+  @override
+  String get disconnectChatGptQuestion => 'ChatGPT डिस्कनेक्ट करायचे?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT ला यापुढे तुमच्या Omi स्मृती, संभाषणे किंवा कार्ये वाचता येणार नाहीत.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '$name कनेक्ट करा';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'एक प्रॉम्प्ट पेस्ट करा. $name स्वतःच्या संगणकावर Omi सेट अप करते.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'एक प्रॉम्प्ट पेस्ट करा. तुमचा एजंट स्वतःच्या संगणकावर Omi सेट अप करतो.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '“$name” की तयार केली';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'प्रॉम्प्टमध्ये की नसते, फक्त एकदाच वापरता येणारी लिंक असते. ती एकदाच उघडते आणि 1 तासात कालबाह्य होते. की इथून कधीही रद्द करा.';
+
+  @override
+  String get connectAgentPreparing => 'की आणि सुरक्षित लिंक तयार होत आहे…';
+
+  @override
+  String get connectAgentPrepareFailed => 'की तयार करता आली नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get copyPrompt => 'प्रॉम्प्ट कॉपी करा';
+
+  @override
+  String get connectAgentNewLink => 'लिंक कालबाह्य झाली? नवीन तयार करा';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name कनेक्ट आहे';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name कडे Omi की आहे. प्रवेश थांबवण्यासाठी ती रद्द करा. तुम्ही कधीही पुन्हा कनेक्ट करू शकता.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '$name ची की रद्द करायची?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name चा तुमच्या Omi स्मृतीचा प्रवेश लगेच बंद होतो.';
+  }
+
+  @override
+  String get askAboutConversation => 'या संभाषणाबद्दल विचारा';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'तुमचा प्रश्न तयार ठेवून ChatGPT उघडते. ते Omi द्वारे संभाषण शोधते, त्यामुळे तुम्हाला ट्रान्सक्रिप्ट पेस्ट करावे लागत नाही.';
+
+  @override
+  String get askYourQuestion => 'तुमचा प्रश्न';
+
+  @override
+  String get askSuggestFollowUp => 'या संभाषणावरून फॉलो-अप ईमेलचा मसुदा तयार कर.';
+
+  @override
+  String get askSuggestCommitments => 'या संभाषणात मी काय करण्याचे वचन दिले?';
+
+  @override
+  String get askSuggestDoc => 'या संभाषणाचा एक छोटा दस्तऐवज बनव.';
+
+  @override
+  String get askInChatGpt => 'ChatGPT ला विचारा';
+
+  @override
+  String get copyForAnyApp => 'कोणत्याही अ‍ॅपसाठी कॉपी करा';
+
+  @override
+  String get askConnectChatGptFirst => 'तुमच्या संभाषणांबद्दल विचारण्यासाठी एकदा ChatGPT कनेक्ट करा.';
 }

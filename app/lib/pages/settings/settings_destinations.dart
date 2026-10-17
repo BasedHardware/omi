@@ -12,6 +12,7 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/pages/settings/connect_agent/connect_agent_page.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
@@ -34,6 +35,7 @@ import 'package:omi/pages/settings/sign_out.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/voice_settings_page.dart';
+import 'package:omi/services/experiments/connect_agent_gate.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -112,7 +114,7 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
     case SettingsDestination.developer:
       await routeToPage(context, const DeveloperSettingsPage());
     case SettingsDestination.connectAgent:
-      await openDeveloperHome();
+      await openConnectAgent(context);
     case SettingsDestination.feedback:
       final url = Uri.parse('https://feedback.omi.me/');
       if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -128,8 +130,19 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
   }
 }
 
-/// The web developer home: copy-paste agent setup prompts plus MCP and Developer API keys. Every
-/// client sends people here rather than keeping its own copy of agent setup.
+/// Connect an Agent: the in-app screen when `mobile-connect-agent-hub` is on, otherwise the web
+/// developer home.
+Future<void> openConnectAgent(BuildContext context) async {
+  if (await ConnectAgentGate.isEnabled()) {
+    PlatformManager.instance.analytics.settingsPageOpened(pageName: 'connect_agent');
+    if (context.mounted) await routeToPage(context, const ConnectAgentPage());
+    return;
+  }
+  await openDeveloperHome();
+}
+
+/// The web developer home: copy-paste agent setup prompts plus MCP and Developer API keys. With the
+/// in-app screen off, every client sends people here for agent setup.
 final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
 
 Future<void> openDeveloperHome() async {
