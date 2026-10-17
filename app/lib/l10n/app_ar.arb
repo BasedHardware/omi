@@ -4139,5 +4139,8 @@
     "activityNewItem": "جديد",
     "activityNeedsAttention": "يحتاج إلى انتباه",
     "activityRetryAll": "إعادة محاولة الكل",
-    "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة"
+    "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة",
+    "dateRangeStart": "تاريخ البدء",
+    "dateRangeEnd": "تاريخ الانتهاء",
+    "openInMaps": "فتح في الخرائط"
 }

@@ -5,6 +5,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_button_projection.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart' show AudioWavePainter;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -15,6 +17,8 @@ import 'package:omi/utils/logger.dart';
 import 'guided_voice_controller.dart';
 import 'guided_voice_io.dart';
 import 'guided_voice_payoff.dart';
+
+part 'native_speech_profile.dart';
 
 /// A bounded introduction: user-paced prompts, independent voice enrollment,
 /// and explicit review before any personal statement becomes a memory.
@@ -56,6 +60,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   bool _reportedBusy = false;
   String? _lastError;
   OmiPermissionStatus _micStatus = OmiPermissionStatus.askable;
+
+  void _editNativeAnswer(int index, String value) => setState(() => flow.edit(index, value));
 
   @override
   void initState() {
@@ -670,7 +676,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
           final reviewing = flow.promptIndex >= GuidedVoiceController.promptCount;
           return PopScope(
             canPop: !flow.saving,
-            child: ColoredBox(
+            child: _nativeVoice(ColoredBox(
               color: OmiColors.surface0,
               child: SafeArea(
                 child: LayoutBuilder(
@@ -701,7 +707,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                           ],
                         )),
               ),
-            ),
+            )),
           );
         },
       );

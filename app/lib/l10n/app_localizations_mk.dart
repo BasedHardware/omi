@@ -13560,4 +13560,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
+
+  @override
+  String get dateRangeStart => 'Датум на почеток';
+
+  @override
+  String get dateRangeEnd => 'Датум на завршување';
+
+  @override
+  String get openInMaps => 'Отвори во Мапи';
 }

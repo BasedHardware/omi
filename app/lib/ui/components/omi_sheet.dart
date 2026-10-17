@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+
 import 'package:omi/ui/components/omi_nav_buttons.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
@@ -26,6 +28,7 @@ import 'package:omi/ui/omi_tokens.dart';
 Future<T?> showOmiSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
+  WidgetBuilder? nativeBuilder,
   String? title,
   bool showCloseButton = true,
   bool isScrollControlled = true,
@@ -35,7 +38,22 @@ Future<T?> showOmiSheet<T>({
   bool useRootNavigator = false,
   EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
   RouteSettings? routeSettings,
-}) {
+}) async {
+  final native = nativeBuilder != null && iosSwiftUiEnabled && await supportsIosSwiftUi();
+  if (!context.mounted) return null;
+  if (native) {
+    return showOmiSurfaceSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: useSafeArea,
+      isDismissible: isDismissible,
+      enableDrag: enableDrag,
+      showDragHandle: false,
+      useRootNavigator: useRootNavigator,
+      routeSettings: routeSettings,
+      builder: (sheetContext) => FractionallySizedBox(heightFactor: 0.9, child: Builder(builder: nativeBuilder)),
+    );
+  }
   return showOmiSurfaceSheet<T>(
     context: context,
     isScrollControlled: isScrollControlled,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/pages/announcements/announcement_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -77,7 +78,7 @@ class _FeatureScreenState extends State<FeatureScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       body: SafeArea(
         child: Column(
@@ -89,6 +90,85 @@ class _FeatureScreenState extends State<FeatureScreen> {
         ),
       ),
     );
+    if (!nativePresentationEnabled) return classic;
+    return _buildNative(classic);
+  }
+
+  /// One native section per visible step: the paged mode shows the current step and a page picker,
+  /// the list modes every step, numbered. The toolbar closes it or moves on: Continue in the paged
+  /// mode, Got It on the last page. A host that cannot draw it keeps the complete [classic] screen.
+  Widget _buildNative(Widget classic) {
+    final l10n = context.l10n;
+    final isLastStep = !_usePagedMode || _currentPage >= steps.length - 1;
+    final numbered = !_usePagedMode && steps.length > 1;
+    return IosNativeSurface(
+      title: content.title,
+      fallback: classic,
+      toolbar: [
+        NativeRow('feature_close', l10n.close, symbol: 'xmark', action: (_) => _nativeComplete()),
+        isLastStep
+            ? NativeRow('feature_done', l10n.gotIt, action: (_) => _nativeComplete())
+            : NativeRow('feature_next', l10n.continueAction, symbol: 'arrow.right', action: (_) => _nativeNext()),
+      ],
+      sections: [
+        if (_usePagedMode && steps.length > 1)
+          NativeSection('feature_pages', [
+            NativeRow('feature_page', content.title,
+                kind: 'segmented',
+                value: '$_currentPage',
+                options: {for (var i = 0; i < steps.length; i++) '$i': '${i + 1}'},
+                action: (value) => _setNativePage(int.parse(value as String))),
+          ]),
+        for (var i = 0; i < steps.length; i++)
+          if (!_usePagedMode || i == _currentPage) NativeSection('feature_step_$i', _nativeStep(i, numbered: numbered)),
+      ],
+    );
+  }
+
+  List<NativeRow> _nativeStep(int index, {required bool numbered}) {
+    final step = steps[index];
+    final image = nativeAnnouncementImageBlock(step.imageUrl);
+    return [
+      // The Flutter placeholder is a bare play glyph; the heading below already names the step.
+      if (step.videoUrl != null) NativeRow('feature_video_$index', '', kind: 'label', symbol: 'play.rectangle'),
+      NativeRow('feature_step_body_$index', step.title, kind: 'rich_text', blocks: [
+        if (image != null) image,
+        {
+          'kind': 'heading',
+          'text': nativeMarkdownLiteral(step.title),
+          'level': 2,
+          'indent': 0,
+          'prefix': numbered ? '${index + 1}.' : '',
+        },
+        {'kind': 'text', 'text': nativeFeatureDescription(step), 'indent': 0, 'prefix': ''},
+      ]),
+    ];
+  }
+
+  void _nativeNext() {
+    if (_usePagedMode && _currentPage < steps.length - 1) {
+      _setNativePage(_currentPage + 1);
+    } else {
+      _nativeComplete();
+    }
+  }
+
+  /// The pager is not attached while the native surface shows; a fresh controller keeps the
+  /// Flutter fallback on the same page should the host refuse a later snapshot.
+  void _setNativePage(int page) {
+    setState(() {
+      _currentPage = page;
+      if (!_pageController.hasClients) {
+        _pageController.dispose();
+        _pageController = PageController(initialPage: page);
+      }
+    });
+  }
+
+  /// Completes once: a second command during the closing transition must not pop the route beneath.
+  void _nativeComplete() {
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    _complete();
   }
 
   Widget _buildContent() {
@@ -458,4 +538,28 @@ class _FeatureScreenState extends State<FeatureScreen> {
       ),
     );
   }
+}
+
+/// A step's description as literal Markdown with its highlight, the first occurrence as on the
+/// Flutter screen, in bold. Surrounding spaces stay outside the emphasis so it always closes.
+String nativeFeatureDescription(FeatureStep step) {
+  final description = step.description;
+  final highlight = step.highlightText;
+  final core = highlight?.trim() ?? '';
+  if (highlight == null || core.isEmpty || !description.contains(highlight)) {
+    return nativeMarkdownLiteral(description);
+  }
+  final start = description.indexOf(highlight) + highlight.indexOf(core);
+  final end = start + core.length;
+  // CommonMark opens '**' before punctuation only after a space, punctuation or the start, and closes
+  // it after punctuation only before one; otherwise the stars would show, so the text stays plain.
+  bool loose(String? char) => char == null || RegExp(r'[\s\p{P}\p{S}]', unicode: true).hasMatch(char);
+  bool punctuation(String char) => RegExp(r'[\p{P}\p{S}]', unicode: true).hasMatch(char);
+  final before = start == 0 ? null : description[start - 1];
+  final after = end == description.length ? null : description[end];
+  if (punctuation(core[0]) && !loose(before) || punctuation(core[core.length - 1]) && !loose(after)) {
+    return nativeMarkdownLiteral(description);
+  }
+  return '${nativeMarkdownLiteral(description.substring(0, start))}**${nativeMarkdownLiteral(core)}**'
+      '${nativeMarkdownLiteral(description.substring(end))}';
 }

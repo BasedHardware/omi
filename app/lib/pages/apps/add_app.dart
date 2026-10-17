@@ -23,6 +23,9 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/prompt_text_field.dart';
+import 'widgets/native_app_owner_form.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 class AddAppPage extends StatefulWidget {
   final bool presetForConversationAnalysis;
@@ -43,6 +46,7 @@ class _AddAppPageState extends State<AddAppPage> {
   void initState() {
     showSubmitAppConfirmation = SharedPreferencesUtil().showSubmitAppConfirmation;
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+      if (!mounted) return;
       await Provider.of<AddAppProvider>(context, listen: false).init(
         presetForConversationAnalysis: widget.presetForConversationAnalysis,
         presetExternalIntegration: widget.presetExternalIntegration,
@@ -51,47 +55,29 @@ class _AddAppPageState extends State<AddAppPage> {
     super.initState();
   }
 
-  Future<void> _startEarningSheet(BuildContext context) async {
-    final l10n = context.l10n;
-    await showOmiSheet<void>(
-      context: context,
-      showCloseButton: false,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(l10n.startEarning, style: OmiType.title2),
-            const SizedBox(height: OmiSpacing.sm),
-            Text(
-              l10n.connectStripeOrPayPal,
-              textAlign: TextAlign.center,
-              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            ),
-            const SizedBox(height: OmiSpacing.xl),
-            OmiButton(
-              label: l10n.connectNow,
-              expand: true,
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                routeToPage(context, const PaymentsPage());
-              },
-            ),
-            const SizedBox(height: OmiSpacing.xs),
-            OmiButton.tertiary(
-              label: l10n.notNow,
-              expand: true,
-              onPressed: () => Navigator.pop(sheetContext),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Future<void> _startEarningSheet(BuildContext context) => showStartEarningPrompt(context);
 
   Future<void> _confirmAndSubmit(BuildContext context, AddAppProvider provider) async {
     final l10n = context.l10n;
     if (!provider.validateForm()) return;
+    final result = await showIosNativeModal(context, title: l10n.submitAppQuestion, sections: [
+      NativeSection('submit_confirmation', [
+        NativeRow('submit_description',
+            provider.makeAppPublic ? l10n.submitAppPublicDescription : l10n.submitAppPrivateDescription,
+            kind: 'label'),
+        NativeRow('submit_hide_confirmation', l10n.dontShowAgain, kind: 'toggle', value: !showSubmitAppConfirmation),
+      ])
+    ], actions: [
+      NativeRow('cancel', l10n.cancel),
+      NativeRow('submit', l10n.submitApp, symbol: 'checkmark')
+    ]);
+    if (!context.mounted) return;
+    if (result != null) {
+      if (result.action != 'submit') return;
+      showSubmitAppConfirmation = result.values['submit_hide_confirmation'] != true;
+      await _submitConfirmed(context, provider);
+      return;
+    }
     await showDialog(
       context: context,
       builder: (ctx) {
@@ -107,39 +93,8 @@ class _AddAppPageState extends State<AddAppPage> {
             });
           },
           onConfirm: () async {
-            if (provider.makeAppPublic) {
-              PlatformManager.instance.analytics.publicAppSubmitted({
-                'app_name': provider.appNameController.text,
-                'app_category': provider.appCategory,
-                'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                'is_paid': provider.isPaid,
-              });
-            } else {
-              PlatformManager.instance.analytics.privateAppSubmitted({
-                'app_name': provider.appNameController.text,
-                'app_category': provider.appCategory,
-                'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                'is_paid': provider.isPaid,
-              });
-            }
-            SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
-            Navigator.pop(context);
-            String? appId = await provider.submitApp();
-            App? app;
-            if (appId != null && context.mounted) {
-              app = await context.read<AppProvider>().getAppFromId(appId);
-            }
-            var paymentProvider = PaymentMethodProvider();
-            await paymentProvider.getPaymentMethodsStatus();
-
-            if (app != null && mounted && context.mounted) {
-              if (app.isPaid && paymentProvider.activeMethod == null) {
-                await _startEarningSheet(context);
-              } else {
-                Navigator.pop(context);
-                routeToPage(context, AppDetailPage(app: app));
-              }
-            }
+            Navigator.pop(ctx);
+            await _submitConfirmed(context, provider);
           },
           onCancel: () {
             Navigator.pop(context);
@@ -149,12 +104,47 @@ class _AddAppPageState extends State<AddAppPage> {
     );
   }
 
+  Future<void> _submitConfirmed(BuildContext context, AddAppProvider provider) async {
+    if (provider.makeAppPublic) {
+      PlatformManager.instance.analytics.publicAppSubmitted({
+        'app_name': provider.appNameController.text,
+        'app_category': provider.appCategory,
+        'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+        'is_paid': provider.isPaid,
+      });
+    } else {
+      PlatformManager.instance.analytics.privateAppSubmitted({
+        'app_name': provider.appNameController.text,
+        'app_category': provider.appCategory,
+        'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+        'is_paid': provider.isPaid,
+      });
+    }
+    SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
+    String? appId = await provider.submitApp();
+    App? app;
+    if (appId != null && context.mounted) {
+      app = await context.read<AppProvider>().getAppFromId(appId);
+    }
+    var paymentProvider = PaymentMethodProvider();
+    await paymentProvider.getPaymentMethodsStatus();
+
+    if (app != null && mounted && context.mounted) {
+      if (app.isPaid && paymentProvider.activeMethod == null) {
+        await _startEarningSheet(context);
+      } else {
+        Navigator.pop(context);
+        routeToPage(context, AppDetailPage(app: app));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Consumer<AddAppProvider>(
       builder: (context, provider, child) {
-        return Scaffold(
+        final classic = Scaffold(
           backgroundColor: OmiColors.surface0,
           appBar: AppBar(
             leading: const OmiBackButton(),
@@ -422,7 +412,67 @@ class _AddAppPageState extends State<AddAppPage> {
                   ),
                 ),
         );
+        return nativeAppOwnerForm(context, provider, classic,
+            updating: false,
+            onSave: () => _confirmAndSubmit(context, provider),
+            onDocs: () {
+              PlatformManager.instance.analytics.pageOpened('App Submission Help');
+              launchUrl(Uri.parse(_docsUrl));
+            });
       },
     );
   }
+}
+
+/// Offers payouts after a paid app is submitted without an active payout method. The native prompt
+/// and the classic sheet both route Connect to [PaymentsPage]; Not now leaves the user here.
+@visibleForTesting
+Future<void> showStartEarningPrompt(BuildContext context) async {
+  final l10n = context.l10n;
+  // An alert keeps both choices as labelled buttons, as the classic sheet does.
+  final result = await showIosNativeModal(context, title: l10n.startEarning, alert: true, sections: [
+    NativeSection('start_earning', [NativeRow('start_earning_message', l10n.connectStripeOrPayPal, kind: 'label')]),
+  ], actions: [
+    NativeRow('cancel', l10n.notNow),
+    NativeRow('connect', l10n.connectNow, symbol: 'creditcard'),
+  ]);
+  if (!context.mounted) return;
+  if (result != null) {
+    if (result.action == 'connect') routeToPage(context, const PaymentsPage());
+    return;
+  }
+  await showOmiSheet<void>(
+    context: context,
+    showCloseButton: false,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.startEarning, style: OmiType.title2),
+          const SizedBox(height: OmiSpacing.sm),
+          Text(
+            l10n.connectStripeOrPayPal,
+            textAlign: TextAlign.center,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton(
+            label: l10n.connectNow,
+            expand: true,
+            onPressed: () {
+              Navigator.pop(sheetContext);
+              routeToPage(context, const PaymentsPage());
+            },
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          OmiButton.tertiary(
+            label: l10n.notNow,
+            expand: true,
+            onPressed: () => Navigator.pop(sheetContext),
+          ),
+        ],
+      ),
+    ),
+  );
 }

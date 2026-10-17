@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -86,7 +88,14 @@ enum _Effect { alot, counts, little, barely, against, needed, none }
 
 /// "Why Likely?": the evidence behind a person's confidence, what each piece is worth in plain words,
 /// and the cheapest way up.
-Future<void> showPersonConfidenceSheet(BuildContext context, Person person) {
+Future<void> showPersonConfidenceSheet(BuildContext context, Person person) async {
+  final sheet = _ConfidenceSheet(person: person);
+  final native = await showIosNativeModal(context,
+      title: context.l10n.confidenceSheetTitle,
+      sections: sheet.nativeSections(context),
+      cancelId: 'close',
+      actions: [NativeRow('close', context.l10n.close, symbol: 'xmark')]);
+  if (native != null || !context.mounted) return;
   return showOmiSheet<void>(
     context: context,
     title: context.l10n.confidenceSheetTitle,
@@ -121,6 +130,53 @@ class _ConfidenceSheet extends StatelessWidget {
       rows.add((Icons.help_outline, l10n.evidenceNothing, _Effect.none));
     }
     return rows;
+  }
+
+  List<NativeSection> nativeSections(BuildContext context) {
+    final l10n = context.l10n;
+    final summary = switch (person.confidence) {
+      'confirmed' => l10n.confidenceSummaryConfirmed(person.name),
+      'likely' => l10n.confidenceSummaryLikely(person.name),
+      'unverified' => l10n.confidenceSummaryUnverified(person.name),
+      _ => l10n.unknown,
+    };
+    final evidence =
+        person.confidence == 'unknown' ? [(Icons.help_outline, l10n.unknown, _Effect.none)] : _evidence(context);
+    return [
+      NativeSection('confidence_summary', [
+        NativeRow('confidence_band', confidenceLabel(context, person.confidence),
+            subtitle: summary, level: confidenceLevel(person.confidence), kind: 'label')
+      ]),
+      NativeSection(
+          'confidence_evidence',
+          [
+            for (final (index, entry) in evidence.indexed)
+              NativeRow('confidence_evidence_$index', entry.$2,
+                  kind: 'label',
+                  subtitle: switch (entry.$3) {
+                    _Effect.alot => l10n.effectCountsALot,
+                    _Effect.counts => l10n.effectCounts,
+                    _Effect.little => l10n.effectCountsALittle,
+                    _Effect.barely => l10n.effectBarelyCounts,
+                    _Effect.against => l10n.effectCountsAgainst,
+                    _Effect.needed => l10n.effectNeeded,
+                    _Effect.none => '',
+                  })
+          ],
+          title: l10n.confidenceEvidenceHeader),
+      NativeSection(
+          'confidence_next',
+          [
+            if (person.confidence == 'confirmed')
+              NativeRow('confidence_confirmed', l10n.confidenceIsConfirmed(person.name), kind: 'label'),
+            if (person.confidence != 'confirmed' && (person.labelsToConfirm ?? 0) > 0)
+              NativeRow('confidence_labels', l10n.confidenceNextLabels(person.labelsToConfirm!), kind: 'label'),
+            if (person.confidence != 'unknown' && person.confidence != 'confirmed' && person.voiceReadiness != 'ready')
+              NativeRow('confidence_voice', l10n.confidenceNextVoice(person.name), kind: 'label'),
+          ],
+          title: l10n.confidenceToReachConfirmed,
+          footer: l10n.confidenceFootnote),
+    ];
   }
 
   @override

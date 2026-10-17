@@ -4139,5 +4139,8 @@
     "activityNewItem": "Baharu",
     "activityNeedsAttention": "Perlu perhatian",
     "activityRetryAll": "Cuba semua semula",
-    "attentionSummaryFailed": "Perbualan ini tidak dapat diringkaskan"
+    "attentionSummaryFailed": "Perbualan ini tidak dapat diringkaskan",
+    "dateRangeStart": "Tarikh mula",
+    "dateRangeEnd": "Tarikh tamat",
+    "openInMaps": "Buka dalam Peta"
 }

@@ -9,7 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/developer_api_keys_page.dart';
 import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
+import 'package:omi/pages/settings/developer_mcp_page.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
@@ -18,11 +20,18 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+
+part 'developer_native.dart';
 
 /// Developer Settings: developer tools only (D4) — creator payouts, debug logs, API keys, MCP,
 /// webhooks, experiments and custom firmware. Everyday settings live in top-level Settings.
@@ -91,6 +100,15 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       return;
     }
     File? selected = files.length == 1 ? files.first : null;
+    if (selected == null) {
+      final native = await chooseDebugLogFileNatively(context, files);
+      if (!mounted) return;
+      // A native cancellation ends here; null means the native chooser was not used.
+      if (native != null) {
+        selected = native.file;
+        if (selected == null) return;
+      }
+    }
     selected ??= await showOmiSheet<File>(
       context: context,
       title: l10n.selectLogFile,
@@ -339,7 +357,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return Consumer<DeveloperModeProvider>(
       builder: (context, provider, child) {
         final dirty = provider.hasUnsavedWebhookChanges;
-        return PopScope(
+        final classic = PopScope(
           canPop: !dirty,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
@@ -411,9 +429,30 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             ),
           ),
         );
+        return _nativeDeveloperSurface(provider, classic);
       },
     );
   }
+
+  void _nativeRebuild(VoidCallback update) {
+    if (mounted) setState(update);
+  }
+}
+
+/// Offers [files] (two or more) as a native alert with a 'log_file_<index>' action each, indexed into
+/// the list as it was when the alert opened. Null when no native alert was shown (the caller keeps its
+/// Flutter sheet); otherwise the chosen file, or a null file when the person cancelled.
+@visibleForTesting
+Future<({File? file})?> chooseDebugLogFileNatively(BuildContext context, List<File> files) async {
+  final choices = List<File>.of(files);
+  final result = await showIosNativeModal(context, title: context.l10n.selectLogFile, alert: true, actions: [
+    NativeRow('cancel', context.l10n.cancel),
+    for (final (index, file) in choices.indexed) NativeRow('log_file_$index', file.uri.pathSegments.last),
+  ]);
+  if (result == null) return null;
+  final action = result.action;
+  final index = action != null && action.startsWith('log_file_') ? int.tryParse(action.substring(9)) : null;
+  return (file: index != null && index >= 0 && index < choices.length ? choices[index] : null);
 }
 
 class _DeveloperTextField extends StatelessWidget {

@@ -4139,5 +4139,8 @@
     "activityNewItem": "Jauns",
     "activityNeedsAttention": "Nepieciešama uzmanība",
     "activityRetryAll": "Mēģināt visu vēlreiz",
-    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot"
+    "attentionSummaryFailed": "Šo sarunu neizdevās apkopot",
+    "dateRangeStart": "Sākuma datums",
+    "dateRangeEnd": "Beigu datums",
+    "openInMaps": "Atvērt Kartēs"
 }

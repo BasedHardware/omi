@@ -4174,5 +4174,8 @@
     "activityNewItem": "Yeni",
     "activityNeedsAttention": "İlgi gerekiyor",
     "activityRetryAll": "Tümünü yeniden dene",
-    "attentionSummaryFailed": "Bu konuşma özetlenemedi"
+    "attentionSummaryFailed": "Bu konuşma özetlenemedi",
+    "dateRangeStart": "Başlangıç tarihi",
+    "dateRangeEnd": "Bitiş tarihi",
+    "openInMaps": "Haritalar'da aç"
 }

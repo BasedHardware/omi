@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nauja",
     "activityNeedsAttention": "Reikia dėmesio",
     "activityRetryAll": "Bandyti visus iš naujo",
-    "attentionSummaryFailed": "Nepavyko apibendrinti šio pokalbio"
+    "attentionSummaryFailed": "Nepavyko apibendrinti šio pokalbio",
+    "dateRangeStart": "Pradžios data",
+    "dateRangeEnd": "Pabaigos data",
+    "openInMaps": "Atidaryti „Žemėlapiuose“"
 }

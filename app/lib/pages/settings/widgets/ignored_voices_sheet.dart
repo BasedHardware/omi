@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/speaker_tag_prompts.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -19,13 +20,15 @@ Future<void> showIgnoredVoicesSheet(
       context: context,
       title: context.l10n.ignoredVoicesTitle,
       builder: (_) => _IgnoredVoices(load: load, restore: restore),
+      nativeBuilder: (_) => _IgnoredVoices(load: load, restore: restore, native: true),
     );
 
 class _IgnoredVoices extends StatefulWidget {
-  const _IgnoredVoices({required this.load, required this.restore});
+  const _IgnoredVoices({required this.load, required this.restore, this.native = false});
 
   final IgnoredVoicesLoader load;
   final IgnoredVoiceRestorer restore;
+  final bool native;
 
   @override
   State<_IgnoredVoices> createState() => _IgnoredVoicesState();
@@ -73,6 +76,41 @@ class _IgnoredVoicesState extends State<_IgnoredVoices> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final voices = _voices;
+    if (widget.native) {
+      final dates = OmiDateFormat.of(context);
+      return IosNativeSurface(
+        title: l10n.ignoredVoicesTitle,
+        loading: voices == null && !_failed,
+        failed: _failed,
+        empty: l10n.ignoredVoicesEmpty,
+        fallback: OmiSheetScaffold(title: l10n.ignoredVoicesTitle, child: _classic(context)),
+        onRefresh: (_) => _load(),
+        toolbar: [
+          NativeRow('ignored_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop())
+        ],
+        sections: [
+          NativeSection(
+              'ignored_voices',
+              [
+                for (final voice in voices ?? <GeneratedIgnoredVoice>[])
+                  NativeRow('ignored_${voice.conversationId}_${voice.speakerId}',
+                      voice.conversationTitle.isEmpty ? l10n.untitledConversation : voice.conversationTitle,
+                      subtitle:
+                          '${dates.timestamp(voice.conversationStartedAt ?? voice.ignoredAt)} · ${l10n.restoreAction}',
+                      enabled: !_restoring.contains('${voice.conversationId}:${voice.speakerId}'),
+                      symbol: 'arrow.uturn.backward',
+                      action: (_) => _restore(voice)),
+              ],
+              footer: l10n.ignoredVoicesSubtitle)
+        ],
+      );
+    }
+    return _classic(context);
+  }
+
+  Widget _classic(BuildContext context) {
     final l10n = context.l10n;
     final voices = _voices;
     if (_failed) {

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-native-list-generic-type-quarantine",
+  "violated_contract": "A persisted string-list preference decoded by a native platform codec must be validated by its elements, not by its Dart generic runtime type. StandardMessageCodec returns an untyped list of valid strings, and treating it as corrupt can quarantine device history, caches or pending-upload identifiers after a cold launch.",
+  "canonical_prevention": "Validate every decoded list element before making a typed copy. Use the same element validation for boot settings and lazy preference reads; retain quarantine for mixed or invalid values. Exercise real StandardMessageCodec round trips, cold loading, reload and copy isolation in the persisted-state contract test.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/boot_persisted_state_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/preferences.dart",
+    "app/test/unit/boot_persisted_state_test.dart"
+  ],
+  "status": "open"
+}

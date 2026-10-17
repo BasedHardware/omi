@@ -13583,4 +13583,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
+
+  @override
+  String get dateRangeStart => 'Ημερομηνία έναρξης';
+
+  @override
+  String get dateRangeEnd => 'Ημερομηνία λήξης';
+
+  @override
+  String get openInMaps => 'Άνοιγμα στους Χάρτες';
 }

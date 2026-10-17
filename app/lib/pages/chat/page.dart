@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_chat_voice.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,6 +24,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/chat/widgets/chat_message_native.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
@@ -94,6 +99,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   String? _selectedContext;
   bool _quotaSheetShown = false;
+  late final Future<bool> _nativeSupport = supportsNativePresentation();
+  late final _nativeTranscript = ChatNativeTranscript(onChanged: () {
+    if (mounted) setState(() {});
+  });
   ChatPageContext? _chatScope;
 
   @override
@@ -210,6 +219,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     _messageProvider?.readAloud.active = false;
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
+    _nativeTranscript.dispose();
     _latestJumpIdleTimer?.cancel();
     _cancelPendingScrolls();
     textController.dispose();
@@ -257,68 +267,273 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       child: Consumer2<MessageProvider, ConnectivityProvider>(
         builder: (context, provider, connectivityProvider, child) {
           _observeMessagesForAutoScroll(provider);
-          // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
-          // is a transcript it turns solid so long answers stay readable.
-          final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOut,
-            color: isGlass ? Colors.transparent : OmiColors.surface0,
-            child: Scaffold(
-              key: scaffoldKey,
-              backgroundColor: Colors.transparent,
-              appBar: ChatHeader(provider: provider),
-              endDrawer: ChatAppsDrawer(
-                onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
-                onEnableApps: _navigateToChatAppsPage,
-                onDisableApp: _disableChatApp,
-                onClearChat: _showClearChatDialog,
-              ),
-              onEndDrawerChanged: (isOpened) {
-                if (isOpened) {
-                  // Unfocus text field when drawer opens
-                  textFieldFocusNode.unfocus();
-                }
-              },
-              body: GestureDetector(
-                onTap: () {
-                  // Hide keyboard when tapping outside textfield
-                  FocusScope.of(context).unfocus();
+          // Build the classic transcript/composer only when the renderer needs its fallback.
+          final classic = Builder(builder: (context) {
+            // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
+            // is a transcript it turns solid so long answers stay readable.
+            final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOut,
+              color: isGlass ? Colors.transparent : OmiColors.surface0,
+              child: Scaffold(
+                key: scaffoldKey,
+                backgroundColor: Colors.transparent,
+                appBar: ChatHeader(provider: provider),
+                endDrawer: _chatAppsDrawer(),
+                onEndDrawerChanged: (isOpened) {
+                  if (isOpened) {
+                    // Unfocus text field when drawer opens
+                    textFieldFocusNode.unfocus();
+                  }
                 },
-                child: Column(
-                  children: [
-                    if (provider.historyProblem != null)
-                      OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: provider.refreshMessages),
-                    if (provider.hasOlderMessages)
-                      TextButton(
-                        key: const Key('chat_load_older'),
-                        onPressed: provider.loadingOlderMessages || !provider.canSwitchChat
-                            ? null
-                            : () => _loadOlderMessages(provider),
-                        child: provider.loadingOlderMessages
-                            ? const OmiSpinner(size: OmiSpinnerSize.small)
-                            : Text(context.l10n.showMore),
+                body: GestureDetector(
+                  onTap: () {
+                    // Hide keyboard when tapping outside textfield
+                    FocusScope.of(context).unfocus();
+                  },
+                  child: Column(
+                    children: [
+                      if (provider.historyProblem != null)
+                        OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: provider.refreshMessages),
+                      if (provider.hasOlderMessages)
+                        TextButton(
+                          key: const Key('chat_load_older'),
+                          onPressed: provider.loadingOlderMessages || !provider.canSwitchChat
+                              ? null
+                              : () => _loadOlderMessages(provider),
+                          child: provider.loadingOlderMessages
+                              ? const OmiSpinner(size: OmiSpinnerSize.small)
+                              : Text(context.l10n.showMore),
+                        ),
+                      // Messages area - takes up remaining space
+                      Expanded(
+                        child: provider.isLoadingMessages && !provider.hasCachedMessages
+                            ? OmiLoadingState(label: provider.firstTimeLoadingText)
+                            : provider.isClearingChat
+                                ? OmiLoadingState(label: context.l10n.deletingMessages)
+                                : (provider.messages.isEmpty)
+                                    ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
+                                    : _buildTranscript(provider),
                       ),
-                    // Messages area - takes up remaining space
-                    Expanded(
-                      child: provider.isLoadingMessages && !provider.hasCachedMessages
-                          ? OmiLoadingState(label: provider.firstTimeLoadingText)
-                          : provider.isClearingChat
-                              ? OmiLoadingState(label: context.l10n.deletingMessages)
-                              : (provider.messages.isEmpty)
-                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
-                                  : _buildTranscript(provider),
-                    ),
-                    _buildComposer(context, provider, connectivityProvider),
-                  ],
+                      _buildComposer(context, provider, connectivityProvider),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            );
+          });
+          if (!nativePresentationEnabled) return classic;
+          // Native rows, and the provider reads they watch, exist only once the renderer is supported.
+          return FutureBuilder<bool>(
+            future: _nativeSupport,
+            builder: (context, support) {
+              if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
+              if (support.data != true) return classic;
+              final voice = context.watch<VoiceRecorderProvider>();
+              final latest = provider.messages.lastOrNull;
+              final followup = latest?.sender == MessageSender.ai &&
+                      !provider.chatMutationInProgress &&
+                      !provider.isReplyFailed(latest!) &&
+                      connectivityProvider.isConnected &&
+                      !voice.isActive &&
+                      !provider.isUploadingFiles
+                  ? latest.followUpQuestion
+                  : null;
+              final l10n = context.l10n;
+              final greeting = DateTime.now().hour < 12
+                  ? l10n.greetingMorning
+                  : DateTime.now().hour < 18
+                      ? l10n.greetingAfternoon
+                      : l10n.greetingEvening;
+              return IosNativeSurface(
+                title: context.watch<AppProvider>().getSelectedApp()?.getName() ?? l10n.askOmi,
+                fallback: classic,
+                nativeOwner: voice.isActive
+                    ? NativeChatVoiceOwner(
+                        onTranscriptReady: (transcript, autoSend) {
+                          if (!mounted) return;
+                          setState(() => textController.text = transcript);
+                          voice.close();
+                          provider.setNextMessageOriginIsVoice(true);
+                          if (autoSend && transcript.trim().isNotEmpty) _sendMessageUtil(transcript.trim());
+                        },
+                        onClose: voice.close,
+                      )
+                    : null,
+                loading: provider.isLoadingMessages || provider.isClearingChat,
+                failed: provider.historyProblem != null,
+                empty: l10n.greetingWithName(greeting, prefs.givenName),
+                onRefresh: (_) => provider.refreshMessages(),
+                sections: [
+                  NativeSection('chat_messages', [
+                    if (provider.hasOlderMessages)
+                      NativeRow(
+                        'chat_older',
+                        l10n.showMore,
+                        enabled: !provider.loadingOlderMessages && provider.canSwitchChat,
+                        action: (_) => provider.loadOlderMessages(),
+                      ),
+                    ..._nativeTranscript.rows(
+                      context,
+                      provider,
+                      ChatNativeActions(
+                        send: _sendMessageUtil,
+                        askOmi: (text) => setState(() => _selectedContext = text),
+                        retry: _retryReply,
+                        setMessageNps: provider.setMessageNps,
+                        updateConversation: (conversation) =>
+                            context.read<ConversationProvider>().updateConversation(conversation),
+                      ),
+                    ),
+                    for (final file in provider.selectedFiles)
+                      NativeRow(
+                        'chat_selected_file_${file.path}',
+                        file.uri.pathSegments.last,
+                        kind: 'menu',
+                        imageUri: provider.selectedFileTypes[provider.selectedFiles.indexOf(file)] == 'image'
+                            ? file.uri.toString()
+                            : null,
+                        subtitle: provider.isFileUploading(file.path) ? l10n.loading : l10n.removeAttachment,
+                        options: {'remove': l10n.removeAttachment},
+                        action: (_) => provider.clearSelectedFile(
+                          provider.selectedFiles.indexOf(file),
+                        ),
+                      ),
+                    if (_chatScope != null)
+                      NativeRow(
+                        'chat_scope',
+                        l10n.chatScopeAbout(
+                          _chatScope!.title ?? l10n.conversationTab,
+                        ),
+                        action: (_) => setState(() => _chatScope = null),
+                      ),
+                    if (_selectedContext != null)
+                      NativeRow(
+                        'chat_context',
+                        _selectedContext!,
+                        action: (_) => setState(() => _selectedContext = null),
+                      ),
+                    if (provider.messages.isEmpty && connectivityProvider.isConnected) ...[
+                      for (final prompt in [
+                        l10n.askSuggestDecide,
+                        l10n.askSuggestOwe,
+                        l10n.askSuggestNotice,
+                      ])
+                        NativeRow(
+                          'chat_prompt_$prompt',
+                          prompt,
+                          action: (_) => setState(() => textController.text = prompt),
+                        ),
+                    ],
+                  ]),
+                ],
+                toolbar: [
+                  NativeRow(
+                    'chat_close',
+                    l10n.close,
+                    symbol: 'xmark',
+                    action: (_) => Navigator.of(context).pop(),
+                  ),
+                  NativeRow(
+                    'chat_options',
+                    l10n.chatAppsTitle,
+                    symbol: 'ellipsis',
+                    action: (_) => _openNativeChatOptions(),
+                  ),
+                ],
+                chat: NativeChat(
+                  draft: textController.text,
+                  placeholder: l10n.askOmi,
+                  streaming: provider.chatMutationInProgress,
+                  followup: followup ?? '',
+                  actions: [
+                    if (voice.isActive) ...nativeVoiceRows(context, voice),
+                    if (!voice.isActive) ...[
+                      NativeRow(
+                        'chat_draft',
+                        l10n.askOmi,
+                        kind: 'text',
+                        value: textController.text,
+                        action: (value) => setState(() => textController.text = value as String),
+                      ),
+                      NativeRow(
+                        'chat_attach',
+                        l10n.chatAddAttachment,
+                        kind: 'menu',
+                        symbol: 'paperclip',
+                        options: {
+                          'camera': l10n.takePhoto,
+                          'photos': l10n.photoLibrary,
+                          'file': l10n.chooseFile,
+                        },
+                        enabled: connectivityProvider.isConnected &&
+                            !provider.chatMutationInProgress &&
+                            provider.selectedFiles.length < 4,
+                        action: (value) {
+                          switch (value) {
+                            case 'camera':
+                              provider.captureImage();
+                            case 'photos':
+                              provider.selectImage();
+                            case 'file':
+                              provider.selectFile();
+                          }
+                        },
+                      ),
+                      if (textController.text.trim().isEmpty)
+                        NativeRow(
+                          'chat_voice',
+                          l10n.startVoiceRecording,
+                          symbol: 'mic',
+                          enabled: connectivityProvider.isConnected && !provider.chatMutationInProgress,
+                          action: (_) => voice.startRecording(),
+                        ),
+                      NativeRow(
+                        'chat_send',
+                        l10n.chatSendMessage,
+                        symbol: 'arrow.up',
+                        enabled: textController.text.trim().isNotEmpty &&
+                            connectivityProvider.isConnected &&
+                            !provider.chatMutationInProgress &&
+                            !provider.isUploadingFiles &&
+                            !provider.isLoadingMessages,
+                        action: (_) => _sendMessageUtil(textController.text.trim()),
+                      ),
+                      if (followup != null)
+                        NativeRow(
+                          'chat_followup',
+                          followup,
+                          symbol: 'sparkles',
+                          action: (_) => _sendMessageUtil(followup),
+                        ),
+                    ],
+                  ],
+                ),
+              );
+            },
           );
         },
       ),
     );
   }
+
+  Future<void> _openNativeChatOptions() => showOmiSheet<void>(
+        context: context,
+        builder: (_) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * .8,
+          child: _chatAppsDrawer(),
+        ),
+        nativeBuilder: (_) => _chatAppsDrawer(sheet: true),
+      );
+
+  ChatAppsDrawer _chatAppsDrawer({bool sheet = false}) => ChatAppsDrawer(
+        onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
+        onEnableApps: _navigateToChatAppsPage,
+        onDisableApp: _disableChatApp,
+        onClearChat: _showClearChatDialog,
+        sheet: sheet,
+      );
 
   Future<void> _loadOlderMessages(MessageProvider provider) async {
     final before = scrollController.hasClients ? scrollController.position.maxScrollExtent : 0.0;
@@ -756,6 +971,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       title: title,
       padding: EdgeInsets.zero,
       builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
+      // Natively, PlansSheet projects its own surface with its own close row, and the hero animations
+      // stay stopped beneath it; a surface that falls back gets the sheet scaffold and its title back.
+      nativeBuilder: (_) => TickerMode(
+        enabled: false,
+        child: NativeNavigationChrome(
+          wrapFallback: (fallback) => OmiSheetScaffold(title: title, padding: EdgeInsets.zero, child: fallback),
+          child: const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
+        ),
+      ),
     );
   }
 

@@ -13504,4 +13504,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
+
+  @override
+  String get dateRangeStart => 'Startdatum';
+
+  @override
+  String get dateRangeEnd => 'Slutdatum';
+
+  @override
+  String get openInMaps => 'Öppna i Kartor';
 }

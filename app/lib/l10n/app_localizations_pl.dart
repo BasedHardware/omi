@@ -13538,4 +13538,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';
+
+  @override
+  String get dateRangeStart => 'Data początkowa';
+
+  @override
+  String get dateRangeEnd => 'Data końcowa';
+
+  @override
+  String get openInMaps => 'Otwórz w Mapach';
 }

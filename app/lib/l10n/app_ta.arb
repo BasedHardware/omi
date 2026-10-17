@@ -11562,5 +11562,8 @@
     "activityNewItem": "புதியது",
     "activityNeedsAttention": "கவனம் தேவை",
     "activityRetryAll": "அனைத்தையும் மீண்டும் முயலவும்",
-    "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை"
+    "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை",
+    "dateRangeStart": "தொடக்கத் தேதி",
+    "dateRangeEnd": "முடிவுத் தேதி",
+    "openInMaps": "வரைபடங்களில் திறக்க"
 }

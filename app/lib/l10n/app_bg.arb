@@ -4139,5 +4139,8 @@
     "activityNewItem": "Ново",
     "activityNeedsAttention": "Изисква внимание",
     "activityRetryAll": "Опитай всички отново",
-    "attentionSummaryFailed": "Този разговор не можа да бъде обобщен"
+    "attentionSummaryFailed": "Този разговор не можа да бъде обобщен",
+    "dateRangeStart": "Начална дата",
+    "dateRangeEnd": "Крайна дата",
+    "openInMaps": "Отваряне в „Карти“"
 }

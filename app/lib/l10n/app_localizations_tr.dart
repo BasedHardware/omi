@@ -13512,4 +13512,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
+
+  @override
+  String get dateRangeStart => 'Başlangıç tarihi';
+
+  @override
+  String get dateRangeEnd => 'Bitiş tarihi';
+
+  @override
+  String get openInMaps => 'Haritalar\'da aç';
 }

@@ -4139,5 +4139,8 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Trenger oppmerksomhet",
     "activityRetryAll": "Prøv alle på nytt",
-    "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen"
+    "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen",
+    "dateRangeStart": "Startdato",
+    "dateRangeEnd": "Sluttdato",
+    "openInMaps": "Åpne i Kart"
 }

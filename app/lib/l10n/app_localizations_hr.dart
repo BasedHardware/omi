@@ -13533,4 +13533,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Ovaj razgovor nije bilo moguće sažeti';
+
+  @override
+  String get dateRangeStart => 'Datum početka';
+
+  @override
+  String get dateRangeEnd => 'Datum završetka';
+
+  @override
+  String get openInMaps => 'Otvori u Kartama';
 }

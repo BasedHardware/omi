@@ -11562,5 +11562,8 @@
     "activityNewItem": "Novo",
     "activityNeedsAttention": "Potrebna je pozornost",
     "activityRetryAll": "Poskusi vse znova",
-    "attentionSummaryFailed": "Tega pogovora ni bilo mogoče povzeti"
+    "attentionSummaryFailed": "Tega pogovora ni bilo mogoče povzeti",
+    "dateRangeStart": "Datum začetka",
+    "dateRangeEnd": "Datum konca",
+    "openInMaps": "Odpri v Zemljevidih"
 }

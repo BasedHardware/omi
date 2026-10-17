@@ -22,7 +22,11 @@ void main() {
   });
 
   tearDown(() async {
-    if (await dir.exists()) await dir.delete(recursive: true);
+    try {
+      await dir.delete(recursive: true);
+    } on PathNotFoundException {
+      // Background directory cleanup may finish between the test and teardown.
+    }
   });
 
   Future<List<String>> listFor(String uid) async {

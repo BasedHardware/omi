@@ -11562,5 +11562,8 @@
     "activityNewItem": "جدید",
     "activityNeedsAttention": "نیاز به توجه",
     "activityRetryAll": "تلاش دوباره برای همه",
-    "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد"
+    "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد",
+    "dateRangeStart": "تاریخ شروع",
+    "dateRangeEnd": "تاریخ پایان",
+    "openInMaps": "باز کردن در نقشه‌ها"
 }

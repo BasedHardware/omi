@@ -22,6 +22,10 @@ import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/native_plan_projection.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/plan_pricing.dart';
@@ -31,6 +35,135 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
+
+/// Asks the native alert first; when it is not used (null) the existing dialog asks instead. Resolves
+/// true only when the reader chose [confirmLabel].
+Future<bool> _confirmPlanChange(
+  BuildContext context, {
+  required String title,
+  required String heading,
+  required List<String> lines,
+  required String confirmLabel,
+  required bool destructive,
+  required Widget Function(BuildContext dialogContext) dialog,
+}) async {
+  final native = await showIosNativeModal(context, title: title, alert: true, actions: [
+    NativeRow('cancel', context.l10n.cancel, symbol: 'xmark'),
+    NativeRow('confirm', confirmLabel, destructive: destructive),
+  ], sections: [
+    NativeSection('confirmation', [
+      NativeRow('message', [heading, for (final line in lines) '• $line'].join('\n'), kind: 'label'),
+    ]),
+  ]);
+  if (native != null) return native.action == 'confirm';
+  if (!context.mounted) return false;
+  return await showDialog<bool>(context: context, builder: dialog) == true;
+}
+
+/// Confirms a switch to the free (on-device) plan, listing what the reader loses.
+Future<bool> confirmFreemiumDowngrade(BuildContext context) {
+  final l10n = context.l10n;
+  return _confirmPlanChange(
+    context,
+    title: l10n.downgradeToFreemiumTitle,
+    heading: l10n.downgradeLimitationsHeading,
+    lines: [
+      l10n.downgradeLimitBattery,
+      l10n.downgradeLimitQuality,
+      l10n.downgradeLimitDelay,
+      l10n.downgradeLimitSpeakers
+    ],
+    confirmLabel: l10n.downgradeAnyway,
+    destructive: true,
+    dialog: (ctx) => OmiAlertDialog(
+      title: l10n.downgradeToFreemiumTitle,
+      content: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.downgradeLimitationsHeading, textAlign: TextAlign.start, style: OmiType.subhead),
+            const SizedBox(height: OmiSpacing.xs),
+            PlanDialogLine(
+              icon: FontAwesomeIcons.carBattery,
+              text: l10n.downgradeLimitBattery,
+              color: OmiColors.danger,
+            ),
+            PlanDialogLine(
+              icon: FontAwesomeIcons.triangleExclamation,
+              text: l10n.downgradeLimitQuality,
+              color: OmiColors.danger,
+            ),
+            PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.downgradeLimitDelay, color: OmiColors.danger),
+            PlanDialogLine(
+              icon: FontAwesomeIcons.userSlash,
+              text: l10n.downgradeLimitSpeakers,
+              color: OmiColors.danger,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        OmiDialogAction(label: l10n.cancel, isDefault: true, onPressed: () => Navigator.of(ctx).pop(false)),
+        OmiDialogAction(
+          label: l10n.downgradeAnyway,
+          isDestructive: true,
+          onPressed: () => Navigator.of(ctx).pop(true),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Confirms a same-tier monthly-to-annual switch with its billing information.
+Future<bool> confirmAnnualPlanSwitch(BuildContext context) {
+  final l10n = context.l10n;
+  return _confirmPlanChange(
+    context,
+    title: l10n.upgradeToAnnualPlan,
+    heading: l10n.importantBillingInfo,
+    lines: [
+      l10n.monthlyPlanContinues,
+      l10n.paymentMethodCharged,
+      l10n.annualSubscriptionStarts,
+      l10n.thirteenMonthsCoverage,
+    ],
+    confirmLabel: l10n.confirmUpgrade,
+    destructive: false,
+    dialog: (ctx) => OmiAlertDialog(
+      title: l10n.upgradeToAnnualPlan,
+      content: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.importantBillingInfo,
+              textAlign: TextAlign.start,
+              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: OmiSpacing.xxs),
+            PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
+            PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
+            PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
+            const SizedBox(height: OmiSpacing.xs),
+            PlanDialogLine(
+              icon: FontAwesomeIcons.circleInfo,
+              text: l10n.thirteenMonthsCoverage,
+              color: OmiColors.success,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
+        OmiDialogAction(label: l10n.confirmUpgrade, isDefault: true, onPressed: () => Navigator.of(ctx).pop(true)),
+      ],
+    ),
+  );
+}
 
 /// The old sheet keeps "Plans & Billing". "Plans" is only the storefront title, and only while its flag is on.
 Future<String> plansSheetTitle(BuildContext context, {Future<bool> Function()? sheetEnabled}) async {
@@ -51,6 +184,14 @@ class PlansSheet extends StatefulWidget {
   final Animation<double> arrowAnimation;
   final VoidCallback? onCancelSubscription;
 
+  /// Hosted by a `showOmiSheet` nativeBuilder: the sheet chrome is native, so the complete Flutter
+  /// fallback brings its own [OmiSheetScaffold] (handle-less header with the close button).
+  final bool nativeSheet;
+
+  /// The caller leaves the hero controllers idle: the classic tree repeats them while it is mounted and
+  /// stops them when it leaves, so nothing ticks under the native sheet.
+  final bool animateHeroOnMount;
+
   /// Closed paywall `source` for the surface that opened this sheet.
   final String analyticsSource;
   final String storefrontTrigger;
@@ -67,6 +208,8 @@ class PlansSheet extends StatefulWidget {
     required this.arrowController,
     required this.arrowAnimation,
     this.onCancelSubscription,
+    this.nativeSheet = false,
+    this.animateHeroOnMount = false,
     this.analyticsSource = 'usage_page',
     this.storefrontTrigger = '',
     this.initialStorefront,
@@ -267,50 +410,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Future<void> _handleDowngradeToFreemium() async {
     // Confirm with the limitations the reader will get.
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => OmiAlertDialog(
-        title: l10n.downgradeToFreemiumTitle,
-        content: Material(
-          type: MaterialType.transparency,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l10n.downgradeLimitationsHeading, textAlign: TextAlign.start, style: OmiType.subhead),
-              const SizedBox(height: OmiSpacing.xs),
-              PlanDialogLine(
-                icon: FontAwesomeIcons.carBattery,
-                text: l10n.downgradeLimitBattery,
-                color: OmiColors.danger,
-              ),
-              PlanDialogLine(
-                icon: FontAwesomeIcons.triangleExclamation,
-                text: l10n.downgradeLimitQuality,
-                color: OmiColors.danger,
-              ),
-              PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.downgradeLimitDelay, color: OmiColors.danger),
-              PlanDialogLine(
-                icon: FontAwesomeIcons.userSlash,
-                text: l10n.downgradeLimitSpeakers,
-                color: OmiColors.danger,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          OmiDialogAction(label: l10n.cancel, isDefault: true, onPressed: () => Navigator.of(ctx).pop(false)),
-          OmiDialogAction(
-            label: l10n.downgradeAnyway,
-            isDestructive: true,
-            onPressed: () => Navigator.of(ctx).pop(true),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
+    if (!await confirmFreemiumDowngrade(context) || !mounted) return;
 
     await _handleSwitchToFreePlan();
   }
@@ -391,45 +491,7 @@ class _PlansSheetState extends State<PlansSheet> {
         isSameTier && (currentSub?.plan.isPaid ?? false) && currentSub?.status == SubscriptionStatus.active && isYearly;
 
     if (isUpgradingFromMonthlyToAnnual && currentSub?.cancelAtPeriodEnd != true) {
-      final l10n = context.l10n;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => OmiAlertDialog(
-          title: l10n.upgradeToAnnualPlan,
-          content: Material(
-            type: MaterialType.transparency,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.importantBillingInfo,
-                  textAlign: TextAlign.start,
-                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: OmiSpacing.xxs),
-                PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
-                PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
-                PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
-                const SizedBox(height: OmiSpacing.xs),
-                PlanDialogLine(
-                  icon: FontAwesomeIcons.circleInfo,
-                  text: l10n.thirteenMonthsCoverage,
-                  color: OmiColors.success,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
-            OmiDialogAction(label: l10n.confirmUpgrade, isDefault: true, onPressed: () => Navigator.of(ctx).pop(true)),
-          ],
-        ),
-      );
-
-      if (confirmed != true) {
-        return;
-      }
+      if (!await confirmAnnualPlanSwitch(context) || !mounted) return;
     }
 
     PlatformManager.instance.analytics.upgradePlanSelected(
@@ -740,7 +802,9 @@ class _PlansSheetState extends State<PlansSheet> {
         }
 
         if (_storefrontEnabled) {
-          return StorefrontPlansContent(
+          // The server-driven storefront is Flutter only (no native projection yet). Under a native sheet
+          // host the chrome is native, so the content brings the handle-less header with the close button.
+          final storefront = StorefrontPlansContent(
             storefront: _storefront,
             loading: _storefrontLoading,
             failed: _storefrontFailed,
@@ -751,6 +815,7 @@ class _PlansSheetState extends State<PlansSheet> {
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,
           );
+          return widget.nativeSheet ? OmiSheetScaffold(padding: EdgeInsets.zero, child: storefront) : storefront;
         }
 
         final l10n = context.l10n;
@@ -772,7 +837,7 @@ class _PlansSheetState extends State<PlansSheet> {
         final knownFutureEnd = periodEndAt != null && periodEndAt.isAfter(DateTime.now());
         final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
 
-        return DecoratedBox(
+        final classic = DecoratedBox(
           // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
           child: SizedBox(
@@ -1023,6 +1088,140 @@ class _PlansSheetState extends State<PlansSheet> {
             ),
           ),
         );
+        // The existing handlers retain checkout, consent, downgrade and cancellation ownership.
+        // Future additions to the opt-in program keep their full consent renderer until projected.
+        final animated = widget.animateHeroOnMount
+            ? _ClassicHeroAnimations(
+                controllers: [widget.waveController, widget.notesController],
+                reversing: [widget.arrowController],
+                child: classic,
+              )
+            : classic;
+        final fallback = widget.nativeSheet ? OmiSheetScaffold(padding: EdgeInsets.zero, child: animated) : animated;
+        if (!iosSwiftUiEnabled || _showTrainingDataOptIn) return fallback;
+        final busy = _isUpgrading || _isSwitchingToFree;
+        final statusOnly =
+            isUnlimited && !isCancelled && (hasScheduledUpgrade || _getCurrentPlanDetails()?['interval'] == 'year');
+        final planRows = !plansLoaded || statusOnly
+            ? <NativeRow>[]
+            : nativePlanRows(l10n, _buildTierPlanCards(availablePlans: provider.availablePlans!), enabled: !busy);
+        if (planRows == null) return fallback;
+        return SizedBox(
+            height: MediaQuery.sizeOf(context).height * .85,
+            child: IosNativeSurface(
+              title: hasScheduledUpgrade
+                  ? l10n.upgradeScheduled
+                  : isUnlimited
+                      ? l10n.changePlan
+                      : l10n.upgradeYourPlan,
+              fallback: fallback,
+              loading: provider.isLoadingPlans,
+              failed: !provider.isLoadingPlans && provider.availablePlans == null,
+              onRefresh: (_) => _loadAvailablePlans(),
+              toolbar: [
+                NativeRow('plans_close', l10n.close,
+                    symbol: 'xmark', enabled: !busy, action: (_) => Navigator.of(context).maybePop())
+              ],
+              sections: [
+                NativeSection('plans_summary', [
+                  NativeRow(
+                      'plans_description',
+                      hasScheduledUpgrade
+                          ? l10n.upgradeAlreadyScheduled
+                          : isUnlimited
+                              ? l10n.youAreOnAPaidPlan
+                              : l10n.planSheetChooseYourPlan,
+                      kind: 'label'),
+                  if (isUnlimited || _renewalConfirmation != null)
+                    NativeRow(
+                        'plans_renewal',
+                        _renewalConfirmation ??
+                            (isCancelled
+                                ? periodEnded
+                                    ? l10n.planEndedOn(renewalDate)
+                                    : knownFutureEnd
+                                        ? l10n.yourPlanEndsOn(
+                                            currentPlanDisplayName(context, provider.subscription), renewalDate)
+                                        : l10n.subscriptionSetToCancel
+                                : hasScheduledUpgrade
+                                    ? l10n.annualPlanStartsAutomatically
+                                    : l10n.planRenewsOn(renewalDate)),
+                        kind: 'label'),
+                  if (isUnlimited && isCancelled && _renewalConfirmation == null && knownFutureEnd)
+                    NativeRow('plans_cancel_reassurance', l10n.resubscribeNowNoChargeUntil(renewalDate), kind: 'label'),
+                  NativeRow(
+                      'plans_features',
+                      [
+                        l10n.unlimitedConversations,
+                        l10n.askOmiAnything,
+                        l10n.unlockOmiInfiniteMemory,
+                        l10n.availableOnMacMobileWeb
+                      ].join('\n'),
+                      kind: 'label'),
+                ]),
+                NativeSection('plans_choices', [
+                  if (statusOnly)
+                    NativeRow('plans_status', hasScheduledUpgrade ? l10n.upgradeScheduled : l10n.youreOnAnnualPlan,
+                        kind: 'label',
+                        subtitle: hasScheduledUpgrade ? l10n.annualPlanStartsAutomatically : l10n.alreadyBestValuePlan),
+                  ...planRows,
+                  NativeRow('plans_promo', l10n.promoCode,
+                      kind: 'text',
+                      value: _promoCodeController.text,
+                      enabled: !busy,
+                      subtitle: _promoCodeError ?? '',
+                      action: (value) => setState(() {
+                            _promoCodeController.text = value as String;
+                            _promoCodeError = null;
+                          })),
+                  if (shouldShowPlanContinueButton(
+                      isOnAnnualPlan: _getCurrentPlanDetails()?['interval'] == 'year',
+                      hasScheduledUpgrade: hasScheduledUpgrade,
+                      isCancelled: isCancelled,
+                      plansLoaded: plansLoaded,
+                      selectedTierId: selectedTierId,
+                      currentTierId: sub?.plan.wireName,
+                      currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
+                      selectedPriceIsCurrent: _selectedPriceIsCurrent(provider.availablePlans)))
+                    NativeRow('plans_upgrade', isUnlimited ? l10n.continueText : l10n.upgrade, enabled: !busy,
+                        action: (_) async {
+                      HapticFeedback.mediumImpact();
+                      await _handleUpgradeWithSelectedPlan();
+                    }),
+                  if (isCancelled && plansLoaded && !_selectionMatchesCurrentPrice(provider))
+                    NativeRow('plans_resubscribe_first', l10n.resubscribeFirstToChangePlans, kind: 'label'),
+                  if (_purchaseError != null) NativeRow('plans_purchase_error', _purchaseError!, kind: 'label'),
+                  // Resubscribe for cancelled subscriptions. Always the current price.
+                  if (isCancelled && plansLoaded)
+                    NativeRow('plans_resubscribe', l10n.resubscribe, enabled: !busy, action: (_) async {
+                      HapticFeedback.mediumImpact();
+                      await _resubscribeCurrent();
+                    }),
+                ]),
+                if (!isUnlimited)
+                  NativeSection('plans_freemium', [
+                    NativeRow('plans_freemium_limits', l10n.freemiumLimitsIntro,
+                        kind: 'label',
+                        subtitle: [
+                          l10n.downgradeLimitBattery,
+                          l10n.downgradeLimitQuality,
+                          l10n.downgradeLimitDelayNotRealTime,
+                          l10n.downgradeLimitSpeakers
+                        ].join('\n')),
+                    if (plansLoaded)
+                      NativeRow('plans_downgrade', l10n.downgradeToFreemiumAction,
+                          enabled: !busy, action: (_) => _handleDowngradeToFreemium()),
+                  ]),
+                if (isUnlimited || sub?.stripeSubscriptionId?.isNotEmpty == true)
+                  NativeSection('plans_management', [
+                    NativeRow('plans_payment', l10n.managePaymentMethod,
+                        symbol: 'creditcard', enabled: !busy, action: (_) => _openPaymentPortal()),
+                    if (isUnlimited && !isCancelled)
+                      NativeRow('plans_cancel', l10n.cancelSubscription,
+                          enabled: !busy, action: (_) => _handleCancelSubscription()),
+                  ]),
+              ],
+            ));
       },
     );
   }
@@ -1202,11 +1401,13 @@ class _PlansSheetState extends State<PlansSheet> {
   /// Fallback for single-tier plan display (old monthly/yearly cards).
   Widget _buildLegacyPlanCards({required List<Map<String, dynamic>> plans}) {
     _keepCurrentPriceSelected(plans);
+    final yearly = plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first);
+    final monthly = plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first);
     return Column(
       children: [
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'yearly',
-          planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
+          planData: yearly,
           saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
           isPopular: true,
           onTap: () {
@@ -1215,16 +1416,19 @@ class _PlansSheetState extends State<PlansSheet> {
             setState(() => selectedPlan = 'yearly');
           },
         ),
-        const SizedBox(height: 18),
-        _buildDynamicPlanOption(
-          isSelected: selectedPlan == 'monthly',
-          planData: plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            _cancelSelectionTouched = true;
-            setState(() => selectedPlan = 'monthly');
-          },
-        ),
+        // One price fills both slots with the same card (and the same keyed native row): draw it once.
+        if (!identical(monthly, yearly)) ...[
+          const SizedBox(height: 18),
+          _buildDynamicPlanOption(
+            isSelected: selectedPlan == 'monthly',
+            planData: monthly,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _cancelSelectionTouched = true;
+              setState(() => selectedPlan = 'monthly');
+            },
+          ),
+        ],
       ],
     );
   }
@@ -1252,6 +1456,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     return PlanOptionCard(
+      key: ValueKey('${planData['id']}_$interval'),
       isSelected: isSelected,
       saveTag: saveTag,
       isPopular: isPopular,
@@ -1285,4 +1490,41 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   String? _monthsFreeLabel(int? months) => months == null ? null : l10n.monthsFreeBadge(months);
+}
+
+/// Repeats the hero controllers while the classic plans tree is mounted and stops the ones it started on dispose.
+class _ClassicHeroAnimations extends StatefulWidget {
+  const _ClassicHeroAnimations({required this.controllers, required this.reversing, required this.child});
+
+  final List<AnimationController> controllers;
+  final List<AnimationController> reversing;
+  final Widget child;
+
+  @override
+  State<_ClassicHeroAnimations> createState() => _ClassicHeroAnimationsState();
+}
+
+class _ClassicHeroAnimationsState extends State<_ClassicHeroAnimations> {
+  final _started = <AnimationController>{};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in {...widget.controllers, ...widget.reversing}) {
+      if (controller.isAnimating) continue;
+      _started.add(controller);
+      controller.repeat(reverse: widget.reversing.contains(controller));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _started) {
+      controller.stop();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

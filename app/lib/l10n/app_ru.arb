@@ -4174,5 +4174,8 @@
     "activityNewItem": "Новое",
     "activityNeedsAttention": "Требует внимания",
     "activityRetryAll": "Повторить все",
-    "attentionSummaryFailed": "Не удалось подвести итоги этого разговора"
+    "attentionSummaryFailed": "Не удалось подвести итоги этого разговора",
+    "dateRangeStart": "Дата начала",
+    "dateRangeEnd": "Дата окончания",
+    "openInMaps": "Открыть в Картах"
 }

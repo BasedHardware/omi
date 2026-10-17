@@ -4139,5 +4139,8 @@
     "activityNewItem": "Uusi",
     "activityNeedsAttention": "Vaatii huomiota",
     "activityRetryAll": "Yritä kaikkia uudelleen",
-    "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää"
+    "attentionSummaryFailed": "Tätä keskustelua ei voitu tiivistää",
+    "dateRangeStart": "Alkupäivä",
+    "dateRangeEnd": "Loppupäivä",
+    "openInMaps": "Avaa Kartoissa"
 }

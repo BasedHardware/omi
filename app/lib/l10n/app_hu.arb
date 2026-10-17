@@ -4235,5 +4235,8 @@
     "activityNewItem": "Új",
     "activityNeedsAttention": "Figyelmet igényel",
     "activityRetryAll": "Összes újrapróbálása",
-    "attentionSummaryFailed": "Ezt a beszélgetést nem sikerült összefoglalni"
+    "attentionSummaryFailed": "Ezt a beszélgetést nem sikerült összefoglalni",
+    "dateRangeStart": "Kezdő dátum",
+    "dateRangeEnd": "Befejező dátum",
+    "openInMaps": "Megnyitás a Térképekben"
 }

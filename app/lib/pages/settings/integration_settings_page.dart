@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -19,6 +20,7 @@ class IntegrationSettingsPage extends StatefulWidget {
   final bool showRefresh;
   final VoidCallback? onRefresh;
   final String? infoText;
+  final List<NativeSection>? nativeSections;
 
   const IntegrationSettingsPage({
     super.key,
@@ -29,6 +31,7 @@ class IntegrationSettingsPage extends StatefulWidget {
     this.showRefresh = false,
     this.onRefresh,
     this.infoText,
+    this.nativeSections,
   });
 
   @override
@@ -83,7 +86,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.appSettings(widget.appName)),
@@ -125,5 +128,25 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
         ),
       ),
     );
+    if (widget.children.isNotEmpty && widget.nativeSections == null) return classic;
+    return IosNativeSurface(title: context.l10n.appSettings(widget.appName), fallback: classic, toolbar: [
+      NativeRow('integration_settings_back', context.l10n.back,
+          symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+      if (widget.showRefresh)
+        NativeRow('integration_settings_refresh', context.l10n.refresh,
+            symbol: 'arrow.clockwise',
+            enabled: !_disconnecting && widget.onRefresh != null,
+            action: (_) => widget.onRefresh?.call()),
+    ], sections: [
+      NativeSection('integration_settings_status', [
+        NativeRow('integration_connected', context.l10n.connectedToApp(widget.appName),
+            kind: 'label', subtitle: widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName))
+      ]),
+      ...?widget.nativeSections,
+      NativeSection('integration_settings_management', [
+        NativeRow('integration_disconnect', context.l10n.disconnect,
+            destructive: true, enabled: !_disconnecting, action: (_) => _disconnect())
+      ]),
+    ]);
   }
 }

@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
 import 'package:clock/clock.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -285,28 +288,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       return;
     }
     if (!mounted) return;
-    final send = await showDialog<bool>(
-      context: context,
-      builder: (context) => OmiAlertDialog(
-        title: context.l10n.sendToSupport,
-        content: SizedBox(
-          width: 520,
-          height: 400,
-          child: Column(
-            children: [
-              Text(context.l10n.deviceDiagnosticsUploadDescription),
-              const SizedBox(height: 12),
-              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-            ],
-          ),
-        ),
-        actions: [
-          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
-          OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
-        ],
-      ),
-    );
-    if (send != true) {
+    final native = await _reviewNatively(json);
+    // A review withdrawn by a session change or by leaving the page was never answered.
+    if (native != null && ['invalidated', 'unmounted'].contains(native.reason)) return;
+    final send = native != null ? native.action == 'send' : (mounted ? await _reviewInFlutter(json) : null);
+    if (send == null) return;
+    if (!send) {
       _trackSendFailed(DiagnosticsSendFailedFailureStage.dialogCancelled, json, bundle);
       return;
     }
@@ -347,6 +334,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
     _trackSent(json, bundle);
     if (!mounted) return;
+    if (await _showTicketNatively(ticket)) return;
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => OmiAlertDialog(
@@ -355,6 +344,66 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         actions: [OmiDialogAction(label: context.l10n.ok, isDefault: true, onPressed: () => Navigator.pop(context))],
       ),
     );
+  }
+
+  /// The native review's outcome, or null to review in Flutter: the native presentation is
+  /// unavailable, or the bundle is too large to show natively.
+  Future<NativeModalResult?> _reviewNatively(String json) async {
+    if (utf8.encode(json).length > maxNativeDiagnosticsReviewBytes) return null;
+    final l10n = context.l10n;
+    return showIosNativeModal(
+      context,
+      title: l10n.sendToSupport,
+      actions: [NativeRow('cancel', l10n.cancel), NativeRow('send', l10n.send)],
+      sections: [
+        NativeSection('diagnostics_review', [
+          NativeRow('diagnostics_review_description', l10n.deviceDiagnosticsUploadDescription, kind: 'label'),
+          NativeRow('diagnostics_review_bundle', l10n.deviceDiagnostics, kind: 'rich_text', blocks: [
+            {'kind': 'code', 'text': json, 'indent': 0, 'prefix': ''},
+          ]),
+        ]),
+      ],
+    );
+  }
+
+  Future<bool> _reviewInFlutter(String json) async {
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (context) => OmiAlertDialog(
+        title: context.l10n.sendToSupport,
+        content: SizedBox(
+          width: 520,
+          height: 400,
+          child: Column(
+            children: [
+              Text(context.l10n.deviceDiagnosticsUploadDescription),
+              const SizedBox(height: 12),
+              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+            ],
+          ),
+        ),
+        actions: [
+          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
+          OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
+        ],
+      ),
+    );
+    return send == true;
+  }
+
+  /// Shows the support ticket in a native sheet; false when the caller should show its Flutter dialog.
+  Future<bool> _showTicketNatively(String ticket) async {
+    final l10n = context.l10n;
+    final result = await showIosNativeModal(
+      context,
+      title: l10n.deviceDiagnosticsTicket,
+      cancelId: 'ok',
+      actions: [NativeRow('ok', l10n.ok)],
+      sections: [
+        NativeSection('diagnostics_ticket', [NativeRow('diagnostics_ticket_id', ticket, kind: 'label')]),
+      ],
+    );
+    return result != null;
   }
 
   void _onRssiUpdate(int rssi) {
@@ -387,7 +436,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.deviceDiagnostics),
@@ -426,6 +475,113 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               ),
             ),
     );
+    final l10n = context.l10n;
+    final battery = context.watch<DeviceProvider>().batteryLevel;
+    final latest = _rssiPoints.isEmpty ? null : _rssiPoints.last.rssi;
+    final summary = _summary;
+    final windowed = _countersSinceMs != null;
+    final now = clock.now().millisecondsSinceEpoch;
+    final window = _batteryDayView ? 24 * 3600000 : 7 * 24 * 3600000;
+    final batteryPoints = {
+      for (final point in _batteryHistory.where((point) => point.timestamp >= now - window)) point.timestamp: point
+    };
+    final signalPoints = {
+      for (final point in _rssiPoints.where((point) => point.time.millisecondsSinceEpoch >= now - 60000))
+        point.time.millisecondsSinceEpoch: point
+    };
+    final history = _diagnostics?.disconnectHistory ?? [];
+    return IosNativeSurface(
+        title: l10n.deviceDiagnostics,
+        fallback: classic,
+        loading: _isLoading,
+        onRefresh: (_) => _loadAll(),
+        toolbar: [
+          NativeRow('diagnostics_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+          NativeRow('diagnostics_support', l10n.sendToSupport,
+              symbol: 'person.crop.circle.badge.questionmark', enabled: !_isSending, action: (_) => _sendToSupport()),
+          NativeRow('diagnostics_share', l10n.share,
+              symbol: 'square.and.arrow.up', action: (_) => _exportDiagnostics()),
+        ],
+        sections: [
+          NativeSection('diagnostics_now', [
+            NativeRow('diagnostics_uptime', l10n.diagnosticsConnectedFor,
+                kind: 'label', subtitle: _formatUptime(_diagnostics?.connectedAt ?? 0)),
+            NativeRow('diagnostics_battery', l10n.battery, kind: 'label', subtitle: battery >= 0 ? '$battery%' : '--'),
+            NativeRow('diagnostics_signal', l10n.signal,
+                kind: 'label', subtitle: latest == null ? '--' : '$latest dBm · ${_rssiQuality(latest)}'),
+          ]),
+          NativeSection(
+              'diagnostics_week',
+              [
+                NativeRow('diagnostics_verdict',
+                    summary.hasTrouble ? l10n.diagnosticsVerdictTrouble : l10n.diagnosticsVerdictReconnects,
+                    kind: 'label',
+                    subtitle: summary.hasTrouble
+                        ? l10n.diagnosticsVerdictTroubleDetail(summary.failedLast24h)
+                        : summary.medianReconnectMs == null
+                            ? l10n.diagnosticsVerdictNoDrops
+                            : l10n.diagnosticsVerdictReconnectsDetail(_formatDurationMs(summary.medianReconnectMs!))),
+                NativeRow('diagnostics_drops', l10n.diagnosticsDrops,
+                    kind: 'label',
+                    subtitle: windowed
+                        ? '${summary.drops}'
+                        : l10n.diagnosticsCountSincePairing(_diagnostics?.reconnectionCount ?? 0)),
+                NativeRow('diagnostics_longest', l10n.diagnosticsLongestGap,
+                    kind: 'label',
+                    subtitle: summary.longestGapMs == null ? '--' : _formatDurationMs(summary.longestGapMs!)),
+                NativeRow('diagnostics_failed', l10n.failedConnections,
+                    kind: 'label',
+                    subtitle: windowed
+                        ? '${summary.failed}'
+                        : l10n.diagnosticsCountSincePairing(_diagnostics?.failToConnectCount ?? 0)),
+              ],
+              title: l10n.diagnosticsLast7Days,
+              footer: windowed
+                  ? l10n.diagnosticsSincePairingSummary(
+                      _diagnostics?.reconnectionCount ?? 0, _diagnostics?.failToConnectCount ?? 0)
+                  : ''),
+          NativeSection('diagnostics_graphs', [
+            NativeRow('diagnostics_rssi_graph', l10n.signalStrength,
+                kind: 'chart',
+                subtitle: signalPoints.length < 2 ? l10n.collectingData : l10n.timeCompactSecs(60),
+                points: [
+                  for (final entry in signalPoints.entries)
+                    {
+                      'x': (entry.key - now) / 1000,
+                      'y': entry.value.rssi.toDouble(),
+                      'label': '${entry.value.rssi} dBm'
+                    }
+                ]),
+            NativeRow('diagnostics_range', l10n.batteryHistory,
+                kind: 'choice',
+                value: _batteryDayView ? 'day' : 'week',
+                options: {'day': l10n.day, 'week': l10n.week},
+                action: (value) => setState(() => _batteryDayView = value == 'day')),
+            NativeRow('diagnostics_battery_graph', l10n.batteryHistory,
+                kind: 'chart',
+                subtitle: batteryPoints.length < 2 ? l10n.noBatteryDataYet : l10n.timeCompactHours(1),
+                points: [
+                  for (final entry in batteryPoints.entries)
+                    {
+                      'x': (entry.key - now) / 3600000,
+                      'y': entry.value.level.toDouble(),
+                      'label': '${entry.value.level}%'
+                    }
+                ]),
+          ]),
+          NativeSection(
+              'diagnostics_history',
+              [
+                if (history.isEmpty) NativeRow('diagnostics_no_events', l10n.noDisconnectsRecorded, kind: 'label'),
+                for (final (index, event) in history.reversed.indexed)
+                  NativeRow('diagnostics_event_$index', _formatReason(event.reason),
+                      kind: 'label',
+                      subtitle:
+                          '${_formatEventTime(DateTime.fromMillisecondsSinceEpoch(event.timestamp))}\n${_eventMetadata(event).join(' · ')}'),
+              ],
+              title: l10n.disconnectHistory,
+              footer: l10n.lastNEvents(history.length)),
+        ]);
   }
 
   Widget _buildRightNow() {
@@ -843,6 +999,15 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return (dates.use24HourFormat ? format.add_Hms() : format.add_jms()).format(time);
   }
 
+  List<String> _eventMetadata(BleDisconnectEvent event) => [
+        if (event.rssiTrend.isNotEmpty) event.rssiTrend,
+        if (event.lastRssi != 0) '${event.lastRssi} dBm',
+        if (event.connectionDurationMs > 0) _formatDurationMs(event.connectionDurationMs),
+        if (event.appState.isNotEmpty) event.appState,
+        if (event.timeToReconnectMs > 0)
+          context.l10n.diagnosticsReconnectedIn(_formatDurationMs(event.timeToReconnectMs)),
+      ];
+
   Widget _buildDisconnectRow(BleDisconnectEvent event) {
     final l10n = context.l10n;
     final timeStr = _formatEventTime(DateTime.fromMillisecondsSinceEpoch(event.timestamp));
@@ -856,14 +1021,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final recentFail = isFail && event.timestamp >= clock.now().millisecondsSinceEpoch - 24 * 3600 * 1000;
     final Color dot = recentFail ? OmiColors.danger : (isFail ? OmiColors.warning : OmiColors.textTertiary);
 
-    final metaParts = <String>[];
-    if (event.rssiTrend.isNotEmpty) metaParts.add(event.rssiTrend);
-    if (event.lastRssi != 0) metaParts.add('${event.lastRssi} dBm');
-    if (event.connectionDurationMs > 0) metaParts.add(_formatDurationMs(event.connectionDurationMs));
-    if (event.appState.isNotEmpty) metaParts.add(event.appState);
-    if (event.timeToReconnectMs > 0) {
-      metaParts.add(l10n.diagnosticsReconnectedIn(_formatDurationMs(event.timeToReconnectMs)));
-    }
+    final metaParts = _eventMetadata(event);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
@@ -948,6 +1106,11 @@ class _RssiPoint {
 
   _RssiPoint(this.time, this.rssi);
 }
+
+/// The largest support bundle (UTF-8 bytes) the native review shows; a larger one keeps the
+/// Flutter review dialog.
+@visibleForTesting
+const maxNativeDiagnosticsReviewBytes = 256 * 1024;
 
 /// A failed support send whose failure event has not been emitted yet; the
 /// single catch in `_sendToSupport` emits exactly one per failure. [statusCode]

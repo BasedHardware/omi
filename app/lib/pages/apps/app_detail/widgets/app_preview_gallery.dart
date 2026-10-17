@@ -18,7 +18,7 @@ class AppPreviewGallery extends StatelessWidget {
   /// Called with the index of the screenshot the reader opened (analytics).
   final ValueChanged<int>? onImageOpened;
 
-  void _open(BuildContext context, int index) {
+  void open(BuildContext context, int index) {
     onImageOpened?.call(index);
     openAppScreenshots(context, imageUrls, index);
   }
@@ -44,7 +44,7 @@ class AppPreviewGallery extends StatelessWidget {
                 button: true,
                 label: l10n.previewImageLabel(index + 1, imageUrls.length),
                 child: GestureDetector(
-                  onTap: () => _open(context, index),
+                  onTap: () => open(context, index),
                   child: Container(
                     margin: EdgeInsets.only(
                       left: index == 0 ? OmiSpacing.md : OmiSpacing.xs,

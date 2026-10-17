@@ -4139,5 +4139,8 @@
     "activityNewItem": "Νέο",
     "activityNeedsAttention": "Χρειάζεται προσοχή",
     "activityRetryAll": "Επανάληψη όλων",
-    "attentionSummaryFailed": "Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας"
+    "attentionSummaryFailed": "Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας",
+    "dateRangeStart": "Ημερομηνία έναρξης",
+    "dateRangeEnd": "Ημερομηνία λήξης",
+    "openInMaps": "Άνοιγμα στους Χάρτες"
 }

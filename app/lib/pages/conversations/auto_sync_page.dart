@@ -17,6 +17,9 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
@@ -24,6 +27,8 @@ import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
+
+part 'auto_sync_native.dart';
 
 /// The Manage Storage clear actions, each paired with the storage re-read.
 ///
@@ -60,6 +65,111 @@ import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
   );
 }
 
+/// The Manage Storage sheet's actions, shared by its Flutter and native presentations. Each clear
+/// pops the sheet through `sheetContext`, confirms on [context], clears with the storage re-read and
+/// confirms with a toast. The auto-remove switch persists its preference, applies the retention at
+/// once when enabled, then calls [onRetentionChanged] while [context] is still mounted.
+typedef ManageStorageActions = ({
+  Future<void> Function(BuildContext sheetContext) clearSynced,
+  Future<void> Function(BuildContext sheetContext) clearPending,
+  Future<void> Function(BuildContext sheetContext) clearAll,
+  Future<void> Function(bool value) toggleAutoRemove,
+});
+
+ManageStorageActions buildManageStorageActions(
+  BuildContext context,
+  SyncProvider provider, {
+  required Future<void> Function() refreshDeviceStorage,
+  required VoidCallback onRetentionChanged,
+}) {
+  // Built before the sheet's async callbacks run, so the clear handlers do not
+  // reach through a BuildContext across an await — and so every action is
+  // paired with the storage re-read at a single construction site.
+  final clearActions = buildStorageClearActions(
+    clearSynced: provider.deleteAllSyncedWals,
+    clearPending: provider.deleteAllPendingWals,
+    clearAll: provider.deleteAllClearableWals,
+    refreshDeviceStorage: refreshDeviceStorage,
+  );
+  Future<void> confirmThenClear(
+    BuildContext sheetContext, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required Future<void> Function() clear,
+    required String done,
+  }) async {
+    Navigator.of(sheetContext).pop();
+    final confirmed = await showOmiConfirm(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      destructive: true,
+    );
+    if (confirmed && context.mounted) {
+      await clear();
+      if (context.mounted) {
+        OmiFeedback.confirm(context, done);
+      }
+    }
+  }
+
+  return (
+    clearSynced: (sheetContext) => confirmThenClear(
+          sheetContext,
+          title: context.l10n.deleteSyncedFiles,
+          message: context.l10n.deleteSyncedFilesMessage,
+          confirmLabel: context.l10n.clear,
+          clear: clearActions.synced,
+          done: context.l10n.syncedFilesDeleted,
+        ),
+    clearPending: (sheetContext) => confirmThenClear(
+          sheetContext,
+          title: context.l10n.deletePendingFiles,
+          message: context.l10n.deletePendingFilesWarning,
+          confirmLabel: context.l10n.clear,
+          clear: clearActions.pending,
+          done: context.l10n.pendingFilesDeleted,
+        ),
+    clearAll: (sheetContext) => confirmThenClear(
+          sheetContext,
+          title: context.l10n.deleteAllFiles,
+          message: context.l10n.deleteAllFilesWarning,
+          confirmLabel: context.l10n.clearAll,
+          clear: clearActions.all,
+          done: context.l10n.allFilesDeleted,
+        ),
+    toggleAutoRemove: (value) async {
+      SharedPreferencesUtil().autoRemoveSyncedCopies = value;
+      if (value) {
+        // Apply immediately: expired copies should not wait for the next
+        // sync pass or app restart.
+        await context.read<SyncProvider>().applySyncedCopyRetention();
+      }
+      if (context.mounted) onRetentionChanged();
+    },
+  );
+}
+
+/// The status card's content, projected once per build for the Flutter card and the native status
+/// section. Every amount is audio length. [barStep] and [barFraction] drive the step bar (a null
+/// fraction is a started step with nothing measurable yet), [created] the conversations link, and
+/// [actionKey] keeps the Flutter pill's widget key for tests.
+typedef _OfflineStatus = ({
+  String title,
+  String? subtitle,
+  Color color,
+  bool spinner,
+  SyncStep? barStep,
+  double? barFraction,
+  int created,
+  VoidCallback? action,
+  String? actionLabel,
+  Color actionColor,
+  Key? actionKey,
+});
+
 class AutoSyncPage extends StatefulWidget {
   const AutoSyncPage({super.key});
 
@@ -72,6 +182,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // user), and what already has. Landing on To sync shows the small actionable
   // set; the list below is sliver-lazy, so Synced is safe with thousands.
   WalDisplayFilter _filter = WalDisplayFilter.pending;
+  void _updateNativeSync(VoidCallback update) => setState(update);
+
+  /// How many recordings the native list projects; it grows by [_nativeWalPage] as the end comes
+  /// into view. Presentation only, so snapshots stay small while an active sync notifies often.
+  static const _nativeWalPage = 200;
+  int _nativeWalWindow = _nativeWalPage;
 
   final SyncRunTracker _runTracker = SyncRunTracker();
 
@@ -110,7 +226,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ? syncProvider.walsForDisplayFilter(WalDisplayFilter.synced)
                 : toSync;
 
-        return Scaffold(
+        final toSyncSeconds = walSeconds(toSync.where(walIsSyncable));
+        final status = _offlineStatus(syncProvider, syncState);
+        final classic = Scaffold(
           // One name for the device-storage sync screen everywhere: "Offline Sync", as Settings calls it.
           // No app bar actions: "How syncing works" lives in Sync details, Manage Storage in the Storage group.
           appBar: AppBar(
@@ -124,7 +242,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 sliver: SliverList(
                   delegate: SliverChildListDelegate.fixed([
                     const SizedBox(height: 8),
-                    _buildOverallStatusCard(syncProvider, syncState),
+                    _buildOverallStatusCard(status),
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
                     if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
@@ -135,7 +253,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     _buildStorageSettings(userProvider, syncProvider),
                     if (hasAnyRecording) ...[
                       const SizedBox(height: 32),
-                      _buildFilterChips(walSeconds(toSync.where(walIsSyncable))),
+                      _buildFilterChips(toSyncSeconds),
                       const SizedBox(height: 4),
                     ],
                   ]),
@@ -145,6 +263,15 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               const SliverToBoxAdapter(child: SizedBox(height: 48)),
             ],
           ),
+        );
+        return _nativeOfflineSync(
+          syncProvider,
+          userProvider,
+          deviceProvider,
+          filteredWals,
+          status,
+          toSyncSeconds,
+          classic,
         );
       },
     );
@@ -156,7 +283,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
   /// Every amount on this card is audio length. File, upload-part and server-job
   /// counts used to leak through ("Processing 0/5914"); they are in Sync details now.
-  Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
+  ///
+  /// Called once per build, from [build]: [_runTracker] snapshots a run's totals
+  /// the first time it sees each step, so both presentations read one projection.
+  _OfflineStatus _offlineStatus(SyncProvider p, SyncState s) {
     final l = context.l10n;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
     final step = _runTracker.update(s, p.allWals);
@@ -176,12 +306,21 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     String title;
     String? subtitle;
     Color titleColor = OmiColors.textPrimary;
-    Widget? action;
+    VoidCallback? action;
+    String? actionLabel;
+    Color actionColor = OmiColors.accent;
+    Key? actionKey;
     SyncStep? barStep;
     double? barFraction;
 
     Future<void> startSync() async {
       if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
+    }
+
+    void offerCancel() {
+      actionLabel = l.cancel;
+      actionColor = Colors.redAccent;
+      action = () => _confirmCancel(context, p);
     }
 
     if (isActive && step != null && step.step != SyncStep.transcribe) {
@@ -203,7 +342,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       }
       // Live-capture uploads run before the device drain: the bar stays on the device step, unfilled.
       if (barStep != step.step) barFraction = 0;
-      action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+      offerCancel();
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
@@ -216,7 +355,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           : l.syncProcessingBackgroundHint;
       barStep = SyncStep.transcribe;
       barFraction = job.tracked && job.doneSeconds > 0 ? job.doneSeconds / job.totalSeconds : null;
-      if (isActive) action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+      if (isActive) offerCancel();
     } else if (attentionWals.isNotEmpty) {
       title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
@@ -224,19 +363,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // others are terminal, and a plain Sync skipped both kinds. Offer the
       // button only when it can do something.
       if (p.retryableAttentionWals.isNotEmpty) {
-        action = KeyedSubtree(
-          key: const Key('offline_sync_card_retry_attention'),
-          child: statusActionPill(l.retry, OmiColors.accent, () async {
-            if (await confirmSyncForCustomStt(context) && context.mounted) p.retryNeedsAttentionWals();
-          }),
-        );
+        actionLabel = l.retry;
+        actionKey = const Key('offline_sync_card_retry_attention');
+        action = () async {
+          if (await confirmSyncForCustomStt(context) && context.mounted) p.retryNeedsAttentionWals();
+        };
       }
     } else if (readyWals.isNotEmpty) {
       final seconds = walSeconds(readyWals);
       title = seconds > 0
           ? l.syncCardReadyAmount(dur(seconds))
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
-      action = statusActionPill(l.sync, OmiColors.accent, startSync);
+      actionLabel = l.sync;
+      action = startSync;
     } else {
       // All synced, or nothing recorded yet: the same calm baseline, so the card never pops in/out.
       title = l.syncCardAllBackedUp;
@@ -245,6 +384,36 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     // Independent of the branch above: a sync that created conversations can
     // still leave jobs processing or a recording that needs the user.
     final created = p.syncCompleted ? p.syncedConversationsPointers.length : 0;
+
+    return (
+      title: title,
+      subtitle: subtitle,
+      color: titleColor,
+      spinner: showSpinner,
+      barStep: barStep,
+      barFraction: barFraction,
+      created: created,
+      action: action,
+      actionLabel: actionLabel,
+      actionColor: actionColor,
+      actionKey: actionKey,
+    );
+  }
+
+  Widget _buildOverallStatusCard(_OfflineStatus status) {
+    final l = context.l10n;
+    final title = status.title;
+    final subtitle = status.subtitle;
+    final titleColor = status.color;
+    final showSpinner = status.spinner;
+    final barStep = status.barStep;
+    final barFraction = status.barFraction;
+    final created = status.created;
+    Widget? action;
+    if (status.action != null) {
+      final pill = statusActionPill(status.actionLabel!, status.actionColor, status.action!);
+      action = status.actionKey == null ? pill : KeyedSubtree(key: status.actionKey, child: pill);
+    }
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 15, 16, 4),
@@ -423,6 +592,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
+  /// The To sync segment carries its audio length, on the Flutter chips and the native control alike.
+  String _pendingLabel(int toSyncSeconds) => toSyncSeconds > 0
+      ? '${context.l10n.pending} · ${OmiDuration.compact(toSyncSeconds, context.l10n)}'
+      : context.l10n.pending;
+
   Widget _buildFilterChips(int toSyncSeconds) {
     Widget chip(WalDisplayFilter f, String label) {
       final selected = _filter == f;
@@ -453,9 +627,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       );
     }
 
-    final pendingLabel = toSyncSeconds > 0
-        ? '${context.l10n.pending} · ${OmiDuration.compact(toSyncSeconds, context.l10n)}'
-        : context.l10n.pending;
+    final pendingLabel = _pendingLabel(toSyncSeconds);
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
@@ -684,6 +856,30 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     showOmiSheet<void>(
       context: context,
       title: _blockTitle(block),
+      nativeBuilder: (sheetContext) => ListenableBuilder(
+        listenable: sync,
+        builder: (_, __) {
+          final wals = sync.displaySortedWals.where((w) => ids.contains('${w.id}#${w.storage.name}')).toList();
+          return IosNativeSurface(
+            title: _blockTitle(block),
+            fallback: OmiSheetScaffold(
+                title: _blockTitle(block),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [for (final wal in wals) _walRow(wal)],
+                )),
+            toolbar: [
+              NativeRow('offline_block_close', context.l10n.close,
+                  symbol: 'xmark', action: (_) => Navigator.of(sheetContext).pop())
+            ],
+            sections: [
+              NativeSection('offline_block_files', [
+                for (var i = 0; i < wals.length; i++) ..._nativeWalRows(sync, wals[i], i),
+              ])
+            ],
+          );
+        },
+      ),
       // The page's provider, not a lookup from the sheet's own route.
       builder: (sheetContext) => ListenableBuilder(
         listenable: sync,
@@ -887,9 +1083,25 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Info bottom sheet
   // ─────────────────────────────────────────
 
-  void _showInfoSheet(BuildContext context) {
+  Future<void> _showInfoSheet(BuildContext context) async {
     final l = context.l10n;
-    showOmiSheet<void>(
+    final native = await showIosNativeModal(context, title: l.howSyncingWorks, cancelId: 'sync_info_done', actions: [
+      NativeRow('sync_info_done', l.done, symbol: 'checkmark')
+    ], sections: [
+      NativeSection(
+          'sync_info',
+          [
+            NativeRow('sync_info_intro', l.syncFlowIntro, kind: 'label'),
+            NativeRow('sync_info_upload', '1. ${l.syncStepUpload}', subtitle: l.syncStepUploadDesc, kind: 'label'),
+            NativeRow('sync_info_process', '2. ${l.syncStepProcess}', subtitle: l.syncStepProcessDesc, kind: 'label'),
+            NativeRow('sync_info_backed_up', '3. ${l.syncStepBackedUp}',
+                subtitle: l.syncStepBackedUpDesc, kind: 'label'),
+          ],
+          footer: l.syncFailureFootnote),
+    ]);
+    // A native result (Done, a swipe, a session change) ends here; null keeps the Flutter sheet.
+    if (native != null || !context.mounted) return;
+    await showOmiSheet<void>(
       context: context,
       title: l.howSyncingWorks,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xxs, OmiSpacing.xl, OmiSpacing.xl),
@@ -949,79 +1161,26 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // ─────────────────────────────────────────
 
   void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
-    // Built before the sheet's async callbacks run, so the clear handlers do not
-    // reach through a BuildContext across an await — and so every action is
-    // paired with the storage re-read at a single construction site.
-    final clearActions = buildStorageClearActions(
-      clearSynced: provider.deleteAllSyncedWals,
-      clearPending: provider.deleteAllPendingWals,
-      clearAll: provider.deleteAllClearableWals,
+    final actions = buildManageStorageActions(
+      context,
+      provider,
       refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
+      onRetentionChanged: () => setState(() {}),
     );
+    Widget classic(BuildContext sheetContext) => _ManageStorageSheet(
+          provider: provider,
+          onClearSynced: () => actions.clearSynced(sheetContext),
+          onClearPending: () => actions.clearPending(sheetContext),
+          onClearAll: () => actions.clearAll(sheetContext),
+          onToggleAutoRemove: actions.toggleAutoRemove,
+        );
+
     showOmiSheet<void>(
       context: context,
       title: context.l10n.manageStorage,
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
-      builder: (sheetContext) => _ManageStorageSheet(
-        provider: provider,
-        onClearSynced: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteSyncedFiles,
-            message: context.l10n.deleteSyncedFilesMessage,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await clearActions.synced();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
-            }
-          }
-        },
-        onClearPending: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deletePendingFiles,
-            message: context.l10n.deletePendingFilesWarning,
-            confirmLabel: context.l10n.clear,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await clearActions.pending();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
-            }
-          }
-        },
-        onClearAll: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteAllFiles,
-            message: context.l10n.deleteAllFilesWarning,
-            confirmLabel: context.l10n.clearAll,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await clearActions.all();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
-            }
-          }
-        },
-        onToggleAutoRemove: (value) async {
-          SharedPreferencesUtil().autoRemoveSyncedCopies = value;
-          if (value) {
-            // Apply immediately: expired copies should not wait for the next
-            // sync pass or app restart.
-            await context.read<SyncProvider>().applySyncedCopyRetention();
-          }
-          if (context.mounted) setState(() {});
-        },
-      ),
+      padding: _manageStoragePadding,
+      builder: classic,
+      nativeBuilder: (sheetContext) => ManageStorageNativeSheet(actions: actions, fallback: classic(sheetContext)),
     );
   }
 
@@ -1041,6 +1200,67 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (confirmed) {
       syncProvider.cancelSync();
     }
+  }
+}
+
+const _manageStoragePadding = EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl);
+
+/// Manage Storage as a native list (the sheet's `showOmiSheet` nativeBuilder). Counts follow
+/// [SyncProvider] live; every row runs [actions], exactly as the Flutter sheet does. [fallback] is
+/// the complete Flutter sheet body.
+class ManageStorageNativeSheet extends StatefulWidget {
+  const ManageStorageNativeSheet({super.key, required this.actions, required this.fallback});
+
+  final ManageStorageActions actions;
+  final Widget fallback;
+
+  @override
+  State<ManageStorageNativeSheet> createState() => _ManageStorageNativeSheetState();
+}
+
+class _ManageStorageNativeSheetState extends State<ManageStorageNativeSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final actions = widget.actions;
+    return Consumer<SyncProvider>(builder: (context, provider, _) {
+      final l = context.l10n;
+      final synced = provider.syncedWals.length;
+      final pending = provider.pendingDeletableWals.length;
+      final total = provider.clearableWalsCount;
+      return IosNativeSurface(
+        title: l.manageStorage,
+        fallback: OmiSheetScaffold(title: l.manageStorage, padding: _manageStoragePadding, child: widget.fallback),
+        toolbar: [
+          NativeRow('storage_close', l.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        ],
+        sections: [
+          NativeSection('storage_categories', [
+            NativeRow('storage_synced', l.synced, kind: 'label', subtitle: '${l.safelyBackedUp} · $synced'),
+            NativeRow('storage_clear_synced', l.clear,
+                enabled: synced > 0, action: (_) => actions.clearSynced(context)),
+            NativeRow('storage_pending', l.pending, kind: 'label', subtitle: '${l.notYetSynced} · $pending'),
+            NativeRow('storage_clear_pending', l.clear,
+                enabled: pending > 0, action: (_) => actions.clearPending(context)),
+          ]),
+          NativeSection('storage_retention', [
+            NativeRow('storage_auto_remove', l.autoRemoveSyncedCopiesTitle,
+                kind: 'toggle',
+                value: SharedPreferencesUtil().autoRemoveSyncedCopies,
+                subtitle: l.autoRemoveSyncedCopiesDays(SharedPreferencesUtil().autoRemoveSyncedCopiesDays),
+                action: (value) async {
+              // The preference is written before the retention pass, so the switch reflects it at once.
+              final applied = actions.toggleAutoRemove(value as bool);
+              if (mounted) setState(() {});
+              await applied;
+            }),
+          ]),
+          if (total > 0)
+            NativeSection('storage_clear', [
+              NativeRow('storage_clear_all', l.clearAll, destructive: true, action: (_) => actions.clearAll(context)),
+            ]),
+        ],
+      );
+    });
   }
 }
 

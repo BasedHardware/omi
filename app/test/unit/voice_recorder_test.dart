@@ -527,7 +527,14 @@ void main() {
       await provider.retry();
 
       provider.close();
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      // close() starts asynchronous disk and preference cleanup. Check its
+      // completion instead of assuming those writes finish within 10 ms.
+      final deadline = DateTime.now().add(const Duration(seconds: 2));
+      while (
+          (wavFile.existsSync() || SharedPreferencesUtil().getString('voice_recorder_pending_wav_path').isNotEmpty) &&
+              DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
 
       expect(provider.state, equals(VoiceRecorderState.idle));
       expect(wavFile.existsSync(), isFalse);

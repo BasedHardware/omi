@@ -13311,4 +13311,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'この会話を要約できませんでした';
+
+  @override
+  String get dateRangeStart => '開始日';
+
+  @override
+  String get dateRangeEnd => '終了日';
+
+  @override
+  String get openInMaps => 'マップで開く';
 }

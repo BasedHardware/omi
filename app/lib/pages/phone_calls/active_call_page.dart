@@ -10,6 +10,8 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/phone_calls/call_duration_format.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_phone_projection.dart';
 
 class ActiveCallPage extends StatefulWidget {
   const ActiveCallPage({super.key});
@@ -47,9 +49,9 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
     }
   }
 
-  void _showDtmfDialpad(BuildContext context, PhoneCallProvider provider) {
+  Future<void> _showDtmfDialpad(BuildContext context, PhoneCallProvider provider) async {
     PlatformManager.instance.analytics.phoneCallDialpadOpened();
-    showOmiSheet<void>(
+    await showOmiSheet<void>(
       context: context,
       showCloseButton: false,
       builder: (_) => _DtmfDialpadSheet(
@@ -58,13 +60,20 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
           provider.sendDtmf(digit);
         },
       ),
+      nativeBuilder: (_) => _DtmfDialpadSheet(
+        native: true,
+        onDigitPressed: (digit) {
+          PlatformManager.instance.analytics.phoneCallDialpadDigitPressed(digit);
+          provider.sendDtmf(digit);
+        },
+      ),
     );
   }
 
-  void _showAudioRoutePicker(BuildContext context, PhoneCallProvider provider) async {
+  Future<void> _showAudioRoutePicker(BuildContext context, PhoneCallProvider provider) async {
     await provider.loadAudioRoutes();
     if (!context.mounted) return;
-    showOmiSheet<void>(
+    await showOmiSheet<void>(
       context: context,
       title: context.l10n.audioOutput,
       builder: (sheetContext) => _AudioRouteSheet(
@@ -74,6 +83,31 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
           provider.selectAudioRoute(route);
           Navigator.of(sheetContext).pop();
         },
+      ),
+      nativeBuilder: (sheetContext) => IosNativeSurface(
+        title: context.l10n.audioOutput,
+        toolbar: [
+          NativeRow('audio_route_close', context.l10n.close,
+              symbol: 'xmark', action: (_) => Navigator.of(sheetContext).pop())
+        ],
+        sections: [
+          NativeSection('routes', [
+            for (final route in provider.availableRoutes)
+              NativeRow('audio_route_${route.id}', route.name,
+                  symbol: provider.selectedRoute?.id == route.id ? 'checkmark' : _audioRouteSymbol(route.type),
+                  action: (_) {
+                provider.selectAudioRoute(route);
+                Navigator.of(sheetContext).pop();
+              }),
+          ])
+        ],
+        fallback: _AudioRouteSheet(
+            routes: provider.availableRoutes,
+            selectedRoute: provider.selectedRoute,
+            onRouteSelected: (route) {
+              provider.selectAudioRoute(route);
+              Navigator.of(sheetContext).pop();
+            }),
       ),
     );
   }
@@ -86,7 +120,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
-        return Scaffold(
+        final classic = Scaffold(
           // A pushed page: the leading back control minimizes the call by stepping back one page,
           // exactly like system back and the iOS edge swipe (the call keeps running and the call
           // banner returns here). Hidden once the call is over, when the page closes itself.
@@ -136,6 +170,68 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
               ],
             ),
           ),
+        );
+        final active = provider.callState == PhoneCallState.active || provider.callState == PhoneCallState.ringing;
+        final status = _transcriptionLabel(context, provider.transcriptionStatus);
+        final segments = provider.transcriptSegments;
+        return IosNativeSurface(
+          title: context.l10n.phonePageTitle,
+          toolbar: [
+            if (isCallInProgress)
+              NativeRow('call_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+                PlatformManager.instance.analytics.track('Phone Call Minimized');
+                Navigator.of(context).maybePop();
+              }),
+          ],
+          sections: [
+            NativeSection('call_info', [
+              NativeRow('call_contact', provider.contactName ?? provider.remoteNumber ?? '',
+                  kind: 'label', subtitle: provider.contactName != null ? provider.remoteNumber ?? '' : ''),
+              NativeRow(
+                  'call_state',
+                  _CallInfoHeader(
+                          contactName: provider.contactName,
+                          phoneNumber: provider.remoteNumber ?? '',
+                          duration: provider.callDuration,
+                          state: provider.callState)
+                      ._stateLabel(context),
+                  kind: 'label',
+                  destructive: provider.callState == PhoneCallState.failed),
+              if (provider.callState == PhoneCallState.active && status != null)
+                NativeRow('call_transcription_status', status, kind: 'label'),
+            ]),
+            NativeSection('call_transcript', [
+              for (final (index, segment) in segments.indexed)
+                NativeRow('call_segment_$index', segment.text,
+                    kind: segment.isUser ? 'message_user' : 'message_ai',
+                    plainText: true,
+                    subtitle:
+                        [provider.getSpeakerLabel(segment), ...segment.translations.map((t) => t.text)].join('\n')),
+            ]),
+          ],
+          empty: provider.transcriptionStatus == TranscriptionStatus.noAudio
+              ? context.l10n.transcriptionNoAudio
+              : context.l10n.transcriptPlaceholder,
+          chat: NativeChat(draft: '', placeholder: '', actions: [
+            NativeRow('call_mute', provider.isMuted ? context.l10n.phoneUnmute : context.l10n.phoneMute,
+                symbol: provider.isMuted ? 'mic.slash.fill' : 'mic.fill',
+                enabled: active,
+                action: (_) => provider.toggleMute()),
+            NativeRow('call_keypad', context.l10n.phoneKeypad,
+                symbol: 'circle.grid.3x3.fill', enabled: active, action: (_) => _showDtmfDialpad(context, provider)),
+            NativeRow('call_end', context.l10n.phoneEndCall,
+                symbol: 'phone.down.fill',
+                destructive: true,
+                enabled: provider.callState != PhoneCallState.ended,
+                action: (_) => provider.endCall()),
+            NativeRow('call_speaker', context.l10n.phoneSpeaker,
+                symbol: provider.isSpeakerOn ? 'speaker.wave.3.fill' : 'speaker.fill',
+                enabled: active,
+                action: (_) => provider.toggleSpeaker()),
+            NativeRow('call_audio_route', context.l10n.audioOutput,
+                symbol: 'airplay.audio', enabled: active, action: (_) => _showAudioRoutePicker(context, provider)),
+          ]),
+          fallback: classic,
         );
       },
     );
@@ -487,8 +583,9 @@ class _EndCallButton extends StatelessWidget {
 
 class _DtmfDialpadSheet extends StatefulWidget {
   final void Function(String digit) onDigitPressed;
+  final bool native;
 
-  const _DtmfDialpadSheet({required this.onDigitPressed});
+  const _DtmfDialpadSheet({required this.onDigitPressed, this.native = false});
 
   @override
   State<_DtmfDialpadSheet> createState() => _DtmfDialpadSheetState();
@@ -512,7 +609,7 @@ class _DtmfDialpadSheetState extends State<_DtmfDialpadSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final classic = Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -558,8 +655,49 @@ class _DtmfDialpadSheetState extends State<_DtmfDialpadSheet> {
         ],
       ),
     );
+    if (!widget.native) return classic;
+    return IosNativeSurface(
+      title: context.l10n.phoneKeypad,
+      sections: [
+        NativeSection('dtmf', [
+          nativePhoneKeypad(
+            id: 'call_dtmf',
+            title: context.l10n.phoneKeypad,
+            digits: _digits,
+            dtmf: true,
+            action: (value) {
+              HapticFeedback.lightImpact();
+              widget.onDigitPressed(value as String);
+              setState(() => _digits += value);
+            },
+          )
+        ])
+      ],
+      toolbar: [
+        NativeRow('call_hide_keypad', context.l10n.phoneHideKeypad,
+            symbol: 'xmark', action: (_) => Navigator.of(context).pop())
+      ],
+      fallback: classic,
+    );
   }
 }
+
+String? _transcriptionLabel(BuildContext context, TranscriptionStatus status) => switch (status) {
+      TranscriptionStatus.connecting => context.l10n.transcriptionConnecting,
+      TranscriptionStatus.reconnecting => context.l10n.transcriptionReconnecting,
+      TranscriptionStatus.failed => context.l10n.transcriptionUnavailable,
+      TranscriptionStatus.noAudio => context.l10n.transcriptionNoAudio,
+      _ => null,
+    };
+
+String _audioRouteSymbol(AudioRouteType type) => switch (type) {
+      AudioRouteType.iPhone => 'iphone',
+      AudioRouteType.speaker => 'speaker.wave.2',
+      AudioRouteType.airPods => 'airpods',
+      AudioRouteType.bluetoothHeadset || AudioRouteType.headphones => 'headphones',
+      AudioRouteType.carPlay => 'car',
+      AudioRouteType.unknown => 'speaker',
+    };
 
 class _DtmfKey extends StatelessWidget {
   final String digit;

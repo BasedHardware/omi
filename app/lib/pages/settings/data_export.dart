@@ -12,6 +12,7 @@ import 'package:omi/pages/settings/data_export_files.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -152,22 +153,25 @@ class DataExport {
       return closingSheet ??= closeCapturedSheet();
     }
 
+    Widget progressSheet(BuildContext ctx) {
+      if (!sheetReady.isCompleted) sheetReady.complete(ctx);
+      sheetRoute ??= ModalRoute.of(ctx);
+      sheetNavigator ??= Navigator.of(ctx);
+      return _ExportProgressContent(
+        bytesReceived: bytesReceived,
+        onCancel: () {
+          cancelled = true;
+          if (!abort.isCompleted) abort.complete();
+          unawaited(closeSheet());
+        },
+      );
+    }
+
     sheetDone = showOmiSheet<void>(
       context: context,
       title: exportTitle,
-      builder: (ctx) {
-        if (!sheetReady.isCompleted) sheetReady.complete(ctx);
-        sheetRoute ??= ModalRoute.of(ctx);
-        sheetNavigator ??= Navigator.of(ctx);
-        return _ExportProgressContent(
-          bytesReceived: bytesReceived,
-          onCancel: () {
-            cancelled = true;
-            if (!abort.isCompleted) abort.complete();
-            unawaited(closeSheet());
-          },
-        );
-      },
+      builder: progressSheet,
+      nativeBuilder: progressSheet,
     );
     unawaited(
       sheetDone.then((_) {
@@ -490,7 +494,7 @@ class _ExportProgressContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Column(
+    final classic = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -510,5 +514,14 @@ class _ExportProgressContent extends StatelessWidget {
         ),
       ],
     );
+    return ValueListenableBuilder<int>(
+        valueListenable: bytesReceived,
+        builder: (context, bytes, _) => IosNativeSurface(title: l10n.exportAllData, fallback: classic, sections: [
+              NativeSection('export_status', [
+                NativeRow('export_loading', l10n.exportingAllData, kind: 'label'),
+                NativeRow('export_bytes', '${l10n.downloading} ${WavBytesUtil.formatBytes(bytes)}', kind: 'label'),
+                NativeRow('export_cancel', l10n.cancel, symbol: 'xmark', action: (_) => onCancel())
+              ])
+            ]));
   }
 }

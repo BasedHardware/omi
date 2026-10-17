@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 enum _VerifyStatus { calling, inProgress, missedCall, verified, timedOut }
@@ -106,7 +107,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
@@ -150,6 +151,40 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
           ),
         ),
       ),
+    );
+    final l10n = context.l10n;
+    final status = switch (_status) {
+      _VerifyStatus.calling => l10n.statusCalling,
+      _VerifyStatus.inProgress => l10n.statusCallInProgress,
+      _VerifyStatus.missedCall => l10n.statusCallMissed,
+      _VerifyStatus.verified => l10n.statusVerifiedLabel,
+      _VerifyStatus.timedOut => l10n.statusTimedOut,
+    };
+    return IosNativeSurface(
+      title: l10n.verifyYourNumber,
+      fallback: classic,
+      toolbar: [
+        NativeRow('phone_verify_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+      ],
+      sections: [
+        NativeSection('phone_verification', [
+          NativeRow('phone_verify_status', status,
+              kind: 'label', symbol: _status == _VerifyStatus.verified ? 'checkmark.circle' : 'phone'),
+          NativeRow('phone_verify_caller', l10n.answerTheCallFrom, kind: 'label', subtitle: '+1 (415) 723-4000'),
+          NativeRow('phone_verify_code', l10n.onTheCallEnterThisCode,
+              kind: 'label',
+              subtitle: widget.validationCode?.isNotEmpty == true
+                  ? widget.validationCode!.split('').join(' ')
+                  : l10n.followTheVoiceInstructions),
+          NativeRow('phone_verify_number', widget.phoneNumber, kind: 'label'),
+          if (_status == _VerifyStatus.missedCall || _status == _VerifyStatus.timedOut)
+            NativeRow('phone_verify_retry', l10n.phoneTryAgain, action: (_) {
+              OmiHaptics.medium();
+              return _retry();
+            }),
+        ])
+      ],
     );
   }
 

@@ -13591,4 +13591,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
+
+  @override
+  String get dateRangeStart => 'தொடக்கத் தேதி';
+
+  @override
+  String get dateRangeEnd => 'முடிவுத் தேதி';
+
+  @override
+  String get openInMaps => 'வரைபடங்களில் திறக்க';
 }

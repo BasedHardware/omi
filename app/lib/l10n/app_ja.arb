@@ -4139,5 +4139,8 @@
     "activityNewItem": "新着",
     "activityNeedsAttention": "要対応",
     "activityRetryAll": "すべて再試行",
-    "attentionSummaryFailed": "この会話を要約できませんでした"
+    "attentionSummaryFailed": "この会話を要約できませんでした",
+    "dateRangeStart": "開始日",
+    "dateRangeEnd": "終了日",
+    "openInMaps": "マップで開く"
 }

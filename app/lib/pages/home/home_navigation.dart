@@ -19,21 +19,26 @@ typedef HomeRouteOpener = Future<bool> Function(String route, {bool Function()? 
 /// deep link, let Home push the destination on top of itself — parent before child.
 abstract final class HomeNavigation {
   static HomeRouteOpener? _opener;
+  static VoidCallback? _selectHome;
   static void Function()? onHomeMounted;
 
   /// Whether a Home shell is mounted (it is the first route of the root navigator).
   static bool get isHomeMounted => _opener != null;
 
   /// Called by the Home page in `initState` / `dispose`.
-  static void register(HomeRouteOpener opener) {
+  static void register(HomeRouteOpener opener, {VoidCallback? selectHome}) {
     _opener = opener;
+    _selectHome = selectHome;
     final callback = onHomeMounted;
     if (callback != null) scheduleMicrotask(callback);
   }
 
   static void unregister(HomeRouteOpener opener) {
     // `==`, not identical: two tear-offs of the same method are equal but not identical.
-    if (_opener == opener) _opener = null;
+    if (_opener == opener) {
+      _opener = null;
+      _selectHome = null;
+    }
   }
 
   /// Leaves the current flow and shows Home: pops to the existing Home when there is one, otherwise
@@ -42,6 +47,7 @@ abstract final class HomeNavigation {
     final navigator = Navigator.of(context, rootNavigator: true);
     if (isHomeMounted) {
       navigator.popUntil((route) => route.isFirst);
+      _selectHome?.call();
       return;
     }
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const HomePageWrapper()), (_) => false);

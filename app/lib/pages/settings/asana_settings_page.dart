@@ -7,6 +7,7 @@ import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AsanaSettingsPage extends StatefulWidget {
@@ -150,10 +151,14 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
   Widget build(BuildContext context) {
     if (_isLoadingWorkspaces) {
       // Give the first load the same header as the loaded page, so it can always be left.
-      return Scaffold(
+      final classic = Scaffold(
         appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.appSettings('Asana'))),
         body: const OmiLoadingState(),
       );
+      return IosNativeSurface(title: context.l10n.appSettings('Asana'), fallback: classic, loading: true, toolbar: [
+        NativeRow('asana_back', context.l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+      ], sections: const []);
     }
 
     return IntegrationSettingsPage(
@@ -162,6 +167,41 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       disconnectService: _asanaService.disconnect,
       showRefresh: true,
       onRefresh: _initializeAsana,
+      nativeSections: [
+        if (_asanaService.currentUserGid != null)
+          NativeSection('asana_identity', [
+            NativeRow('asana_connected_user', context.l10n.connectedAsUser(_asanaService.currentUserGid!),
+                kind: 'label')
+          ]),
+        NativeSection(
+            'asana_workspaces',
+            [
+              for (final workspace in _workspaces)
+                NativeRow('asana_workspace_${workspace['gid']}', workspace['name'] as String,
+                    symbol: _selectedWorkspaceGid == workspace['gid'] ? 'checkmark.circle.fill' : 'circle',
+                    action: (_) => _selectWorkspace(workspace)),
+            ],
+            title: context.l10n.defaultWorkspace,
+            footer: context.l10n.tasksCreatedInWorkspace),
+        if (_selectedWorkspaceGid != null)
+          NativeSection(
+              'asana_projects',
+              [
+                if (_selectedProjectGid != null)
+                  NativeRow('asana_project_clear', context.l10n.clear, action: (_) => _clearProject()),
+                if (_isLoadingProjects)
+                  NativeRow('asana_projects_loading', context.l10n.loading, kind: 'label')
+                else if (_projects.isEmpty)
+                  NativeRow('asana_projects_empty', context.l10n.noProjectsInWorkspace, kind: 'label')
+                else
+                  for (final project in _projects)
+                    NativeRow('asana_project_${project['gid']}', project['name'] as String,
+                        symbol: _selectedProjectGid == project['gid'] ? 'checkmark.circle.fill' : 'circle',
+                        action: (_) => _selectProject(project)),
+              ],
+              title: context.l10n.defaultProjectOptional,
+              footer: context.l10n.leaveUnselectedTasks),
+      ],
       children: [
         if (_asanaService.currentUserGid != null)
           IntegrationConnectedBanner(context.l10n.connectedAsUser(_asanaService.currentUserGid!)),

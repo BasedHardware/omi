@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nieuw",
     "activityNeedsAttention": "Vraagt aandacht",
     "activityRetryAll": "Alles opnieuw proberen",
-    "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat"
+    "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat",
+    "dateRangeStart": "Startdatum",
+    "dateRangeEnd": "Einddatum",
+    "openInMaps": "Openen in Kaarten"
 }

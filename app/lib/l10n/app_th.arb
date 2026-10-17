@@ -4139,5 +4139,8 @@
     "activityNewItem": "ใหม่",
     "activityNeedsAttention": "ต้องดำเนินการ",
     "activityRetryAll": "ลองใหม่ทั้งหมด",
-    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้"
+    "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้",
+    "dateRangeStart": "วันที่เริ่มต้น",
+    "dateRangeEnd": "วันที่สิ้นสุด",
+    "openInMaps": "เปิดในแผนที่"
 }

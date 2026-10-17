@@ -11562,5 +11562,8 @@
     "activityNewItem": "Novo",
     "activityNeedsAttention": "Potrebna pažnja",
     "activityRetryAll": "Pokušaj sve ponovo",
-    "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti"
+    "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti",
+    "dateRangeStart": "Datum početka",
+    "dateRangeEnd": "Datum završetka",
+    "openInMaps": "Otvori u Mapama"
 }

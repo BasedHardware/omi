@@ -13538,4 +13538,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get dateRangeStart => 'ಪ್ರಾರಂಭ ದಿನಾಂಕ';
+
+  @override
+  String get dateRangeEnd => 'ಅಂತಿಮ ದಿನಾಂಕ';
+
+  @override
+  String get openInMaps => 'ನಕ್ಷೆಗಳಲ್ಲಿ ತೆರೆಯಿರಿ';
 }

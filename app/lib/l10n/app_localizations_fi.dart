@@ -13504,4 +13504,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
+
+  @override
+  String get dateRangeStart => 'Alkupäivä';
+
+  @override
+  String get dateRangeEnd => 'Loppupäivä';
+
+  @override
+  String get openInMaps => 'Avaa Kartoissa';
 }

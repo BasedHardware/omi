@@ -13568,4 +13568,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
+
+  @override
+  String get dateRangeStart => 'Data d\'inici';
+
+  @override
+  String get dateRangeEnd => 'Data de finalització';
+
+  @override
+  String get openInMaps => 'Obre a Mapes';
 }

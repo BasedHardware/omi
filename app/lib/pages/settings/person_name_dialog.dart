@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -16,6 +18,38 @@ Future<void> showPersonNameDialog(BuildContext context, PeopleProvider provider,
     ConnectivityProvider.showNoInternetDialog(context);
     return;
   }
+
+  var nativeName = person?.name ?? '';
+  String? nativeError;
+  while (true) {
+    if (!context.mounted) return;
+    final native = await showIosNativeModal(context,
+        title: person == null ? context.l10n.addNewPerson : context.l10n.editPerson,
+        guardEdits: true,
+        actions: [
+          NativeRow('cancel', context.l10n.cancel, symbol: 'xmark'),
+          NativeRow('save', person == null ? context.l10n.add : context.l10n.save)
+        ],
+        sections: [
+          NativeSection('person_name', [
+            NativeRow('name', context.l10n.name, kind: 'text', value: nativeName, maximumLength: 40),
+            if (nativeError != null) NativeRow('validation', nativeError, kind: 'label'),
+          ])
+        ]);
+    if (native == null) break;
+    if (native.action != 'save' || !context.mounted) return;
+    nativeName = native.values['name'] as String;
+    nativeError = _nameValidator(context)(nativeName);
+    if (nativeError != null) continue;
+    final name = nativeName[0].toUpperCase() + nativeName.substring(1);
+    if (person == null) {
+      await provider.createPersonProvider(name);
+    } else {
+      await provider.updatePersonProvider(person, name);
+    }
+    return;
+  }
+  if (!context.mounted) return;
 
   final nameController = TextEditingController(text: person?.name ?? '');
   final formKey = GlobalKey<FormState>();

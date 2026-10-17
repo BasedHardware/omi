@@ -14,6 +14,21 @@ import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_main_navigation.dart';
+import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/home/device.dart';
+import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
+import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/omiglass_ota_update.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
@@ -71,6 +86,8 @@ import 'home_deep_links.dart';
 import 'home_navigation.dart';
 import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
+
+part 'native_home_presentation.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -146,6 +163,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final GlobalKey<HomeContentPageState> _homeContentPageKey = GlobalKey<HomeContentPageState>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
+  final _nativeHomeKey = GlobalKey<IosNativeHomeState>();
+  final _nativeRecordKey = GlobalKey<HomeRecordButtonState>();
+  late final Future<bool> _nativeSupport = supportsIosSwiftUi();
+
+  /// Swift refused the native Home, so the complete classic shell presents every tab instead.
+  bool _nativeHomeRejected = false;
+  void _restoreClassicShell() => setState(() => _nativeHomeRejected = true);
   // Keep the IndexedStack slots stable, but defer constructing non-selected
   // tabs until the user visits them. Once created, a tab remains in the stack
   // so its scroll position and other state are preserved.
@@ -234,7 +258,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _scrollToTop(int pageIndex) {
     switch (pageIndex) {
       case HomeProvider.homeTab:
-        _homeContentPageKey.currentState?.scrollToTop();
+        final native = iosSwiftUiEnabled && Platform.isIOS ? _nativeHomeKey.currentState : null;
+        if (native != null) {
+          native.scrollToTop();
+        } else {
+          _homeContentPageKey.currentState?.scrollToTop();
+        }
         break;
       case HomeProvider.tasksTab:
         final actionItemsState = _actionItemsPageKey.currentState;
@@ -449,6 +478,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _prewarmRemainingTabs(homePageIdx);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (iosSwiftUiEnabled && Platform.isIOS && mounted) {
+        unawaited(context.read<SpeakerTagPromptsProvider>().loadIfDue());
+      }
       // Android needs a foreground service to keep capture/location work alive.
       // On iOS this plugin boots a second Flutter engine; conversation location
       // is captured directly at recording start and first transcript instead.
@@ -480,7 +512,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       await openHomeDeepLink(context, initialLink, openSettings: _openSettings, openSearch: _openSearch);
     });
 
-    HomeNavigation.register(_openRoute);
+    HomeNavigation.register(_openRoute,
+        selectHome: iosSwiftUiEnabled && Platform.isIOS
+            ? () => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)
+            : null);
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
@@ -761,12 +796,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           return child!;
         },
-        child: Selector<HomeProvider, int>(
-          selector: (_, homeProvider) => homeProvider.selectedIndex,
-          builder: (context, selectedIndex, _) {
+        child: Selector<HomeProvider, (int, int)>(
+          selector: (_, homeProvider) => (homeProvider.selectedIndex, homeProvider.navigationRevision),
+          builder: (context, selection, _) {
+            final (selectedIndex, navigationRevision) = selection;
             final onHome = selectedIndex == HomeProvider.homeTab;
             // D6: Android back on Tasks returns to Home before it leaves the app.
-            return PopScope(
+            final classic = PopScope(
               canPop: onHome,
               onPopInvokedWithResult: (didPop, _) {
                 if (didPop || onHome) return;
@@ -860,6 +896,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 ),
               ),
             );
+            if (!iosSwiftUiEnabled || !Platform.isIOS || _nativeHomeRejected) return classic;
+            return FutureBuilder<bool>(
+                future: _nativeSupport,
+                builder: (context, support) {
+                  if (support.hasError || support.data == false) return classic;
+                  if (support.connectionState != ConnectionState.done) {
+                    return const Scaffold(body: Center(child: OmiSpinner()));
+                  }
+                  return Scaffold(
+                      body: Stack(children: [
+                    IosNativeMainShell(
+                      homeIndex: selectedIndex,
+                      navigationRevision: navigationRevision,
+                      onHomeTabSelected: context.read<HomeProvider>().setIndex,
+                      onHomeReselected: () => _scrollToTop(HomeProvider.homeTab),
+                      pages: {
+                        'home': _buildNativeHome,
+                        // The native Tasks list has its own selection bar; its Flutter fallback mounts the classic one.
+                        'tasks': (_) => ActionItemsPage(key: _actionItemsPageKey, selectionBarInFallback: true),
+                        'memories': (_) => const MemoriesPage(asRoot: true),
+                        'apps': (_) => const AppsPage(),
+                        'settings': (_) => const SettingsDrawer(asRoot: true),
+                      },
+                    ),
+                    Offstage(child: HomeRecordButton(key: _nativeRecordKey)),
+                  ]));
+                });
           },
         ),
       ),

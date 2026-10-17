@@ -13547,4 +13547,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';
+
+  @override
+  String get dateRangeStart => 'Начална дата';
+
+  @override
+  String get dateRangeEnd => 'Крайна дата';
+
+  @override
+  String get openInMaps => 'Отваряне в „Карти“';
 }

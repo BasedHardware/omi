@@ -13433,4 +13433,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'ไม่สามารถสรุปบทสนทนานี้ได้';
+
+  @override
+  String get dateRangeStart => 'วันที่เริ่มต้น';
+
+  @override
+  String get dateRangeEnd => 'วันที่สิ้นสุด';
+
+  @override
+  String get openInMaps => 'เปิดในแผนที่';
 }

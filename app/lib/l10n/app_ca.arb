@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nou",
     "activityNeedsAttention": "Cal atenció",
     "activityRetryAll": "Torna-ho a provar tot",
-    "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa"
+    "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa",
+    "dateRangeStart": "Data d'inici",
+    "dateRangeEnd": "Data de finalització",
+    "openInMaps": "Obre a Mapes"
 }

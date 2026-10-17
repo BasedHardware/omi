@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -25,7 +26,7 @@ class _AuthComponentState extends State<AuthComponent> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, provider, child) {
-        return OnboardingStep(
+        final classic = OnboardingStep(
           card: OnboardingCard(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 26, OmiSpacing.xxl, OmiSpacing.xs),
             content: [
@@ -173,6 +174,34 @@ class _AuthComponentState extends State<AuthComponent> {
             ],
           ),
         );
+        if (provider.isLocalDevProfile) return classic;
+        return IosNativeSurface(
+            title: context.l10n.omiAppName,
+            publicSurface: true,
+            fallback: classic,
+            loading: provider.loading,
+            sections: [
+              NativeSection(
+                  'auth_intro', [NativeRow('auth_intro_text', context.l10n.speakTranscribeSummarize, kind: 'label')]),
+              NativeSection('auth_methods', [
+                if (Platform.isIOS || Platform.isAndroid)
+                  NativeRow('auth_apple', context.l10n.signInWithApple,
+                      enabled: !provider.loading, action: (_) => provider.onAppleSignIn(widget.onSignIn)),
+                NativeRow('auth_google', context.l10n.signInWithGoogle,
+                    enabled: !provider.loading, action: (_) => provider.onGoogleSignIn(widget.onSignIn)),
+              ]),
+              NativeSection(
+                  'auth_legal',
+                  [
+                    NativeRow('auth_privacy', context.l10n.privacyPolicy, action: (_) {
+                      provider.openPrivacyPolicy();
+                    }),
+                    NativeRow('auth_terms', context.l10n.termsOfUse, action: (_) {
+                      provider.openTermsOfService();
+                    }),
+                  ],
+                  footer: context.l10n.byContinuingAgree),
+            ]);
       },
     );
   }

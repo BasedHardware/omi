@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -144,7 +145,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
   @override
   Widget build(BuildContext context) {
     final watch = widget.showWatch ?? Theme.of(context).platform == TargetPlatform.iOS;
-    return ColoredBox(
+    final classic = ColoredBox(
         color: OmiColors.surface0,
         child: FirstCaptureLayout(content: [
           Icon(Icons.mic_none, size: 64, color: OmiColors.textPrimary),
@@ -194,6 +195,26 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
               label: context.l10n.firstCaptureSkip,
               onPressed: _routing ? null : _skip),
         ]));
+    // The same first-capture choices as rows; a route in flight disables them as it does the buttons.
+    return IosNativeSurface(
+      title: context.l10n.firstCaptureTitle,
+      publicSurface: true,
+      fallback: classic,
+      sections: [
+        NativeSection('first_capture', [
+          NativeRow('first_capture_description', context.l10n.firstCaptureDescription, kind: 'label'),
+          NativeRow('first_capture_omi', context.l10n.firstCaptureOmi,
+              symbol: 'dot.radiowaves.left.and.right', enabled: !_routing, action: (_) => _omi()),
+          if (watch)
+            NativeRow('first_capture_watch', context.l10n.firstCaptureWatch,
+                symbol: 'applewatch', enabled: !_routing, action: (_) => _watch()),
+          NativeRow('first_capture_phone', context.l10n.firstCapturePhone,
+              symbol: 'iphone', enabled: !_routing, action: (_) => _phone()),
+          NativeRow('onboarding_complete_start', context.l10n.firstCaptureSkip,
+              enabled: !_routing, action: (_) => _skip()),
+        ]),
+      ],
+    );
   }
 }
 

@@ -1,24 +1,217 @@
 import 'package:flutter/material.dart';
 
-import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/components/omi_icon_button.dart';
+import 'package:omi/ui/components/omi_sheet.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 
-/// Where a review card is rendered. Carried into analytics verbatim.
-enum MemoryReviewSource {
-  chatBlock('chat_block'),
-  dailySummaryDetail('daily_summary_detail');
+import 'memory_review_controller.dart';
 
-  final String analyticsValue;
+export 'memory_review_controller.dart' show MemoryReviewController, MemoryReviewRowState, MemoryReviewSource;
 
-  const MemoryReviewSource(this.analyticsValue);
+/// Presents [MemoryReviewCard] in the app's sheet. The signature is a frozen seam shared across
+/// screens: the daily recap opens its review through it. With the native preview the same review
+/// renders as native rows over the same controller and provider.
+Future<void> showMemoryReviewSheet(
+  BuildContext context, {
+  required List<MemoryReviewItem> items,
+  required MemoryReviewSource source,
+  String? impressionKey,
+  String? title,
+}) {
+  return showOmiSheet<void>(
+    context: context,
+    builder: (_) => SingleChildScrollView(
+      child: MemoryReviewCard(items: items, source: source, impressionKey: impressionKey, title: title),
+    ),
+    nativeBuilder: (_) =>
+        _NativeMemoryReviewSheet(items: items, source: source, impressionKey: impressionKey, title: title),
+  );
+}
+
+/// The native review sheet: the same rows as the chat transcript, over one controller that its
+/// Flutter fallback shares, so a refused snapshot keeps every optimistic and settled row.
+class _NativeMemoryReviewSheet extends StatefulWidget {
+  const _NativeMemoryReviewSheet({required this.items, required this.source, this.impressionKey, this.title});
+
+  final List<MemoryReviewItem> items;
+  final MemoryReviewSource source;
+  final String? impressionKey;
+  final String? title;
+
+  @override
+  State<_NativeMemoryReviewSheet> createState() => _NativeMemoryReviewSheetState();
+}
+
+class _NativeMemoryReviewSheetState extends State<_NativeMemoryReviewSheet> {
+  late final MemoryReviewController _controller =
+      MemoryReviewController(items: widget.items, source: widget.source, impressionKey: widget.impressionKey);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_changed);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = mounted ? _readProvider(context) : null;
+      if (provider != null) _controller.startHydrationIfNeeded(provider);
+    });
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_changed);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final title = widget.title ?? l10n.memoryReviewTitle;
+    return IosNativeSurface(
+      title: title,
+      fallback: OmiSheetScaffold(
+        child: SingleChildScrollView(
+          child: MemoryReviewCard(
+            items: widget.items,
+            source: widget.source,
+            impressionKey: widget.impressionKey,
+            title: widget.title,
+            controller: _controller,
+          ),
+        ),
+      ),
+      toolbar: [
+        NativeRow('memory_review_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+      ],
+      sections: [
+        NativeSection('memory_review',
+            nativeMemoryReviewRows(context, _controller, id: (part, index) => 'memory_${part}_$index')),
+      ],
+    );
+  }
+}
+
+MemoriesProvider? _readProvider(BuildContext context, {bool listen = false}) {
+  try {
+    return listen ? context.watch<MemoriesProvider>() : context.read<MemoriesProvider>();
+  } on ProviderNotFoundException {
+    return null;
+  }
+}
+
+/// The review rows for [controller]: one per item, a menu with Right, Wrong and Fix while it waits
+/// for a verdict, and a label with its status once it has one. [id] names each row from a part and
+/// an index, never from a memory id. A [header] adds the card title as a first label row. Without a
+/// MemoriesProvider there is no mutation owner, so every row is a plain label.
+List<NativeRow> nativeMemoryReviewRows(
+  BuildContext context,
+  MemoryReviewController controller, {
+  required String Function(String part, int index) id,
+  String? header,
+}) {
+  final l10n = context.l10n;
+  final provider = _readProvider(context, listen: true);
+  if (provider != null && controller.shouldRetryHydration(provider)) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.startHydrationIfNeeded(provider));
+  }
+  return [
+    if (header != null && controller.rows.isNotEmpty) NativeRow(id('reviewtitle', 0), header, kind: 'label'),
+    for (final (index, item) in controller.rows.indexed)
+      () {
+        final memory = provider == null ? null : controller.memoryFor(provider, item.memoryId);
+        final state = controller.stateFor(provider, memory, item.memoryId);
+        final content = controller.contentOf(item, memory);
+        final failed = controller.isFailed(item.memoryId) ? l10n.memoryReviewSaveFailed : '';
+        if (provider == null || state != MemoryReviewRowState.pending) {
+          return NativeRow(
+            id('review', index),
+            content,
+            kind: 'label',
+            symbol: switch (state) {
+              MemoryReviewRowState.confirmed => 'checkmark.circle',
+              MemoryReviewRowState.dropped => 'xmark.circle',
+              MemoryReviewRowState.updated => 'pencil',
+              MemoryReviewRowState.pending => null,
+            },
+            subtitle: [
+              switch (state) {
+                MemoryReviewRowState.confirmed => l10n.memoryReviewConfirmed,
+                MemoryReviewRowState.dropped => l10n.memoryReviewDropped,
+                MemoryReviewRowState.updated => l10n.memoryReviewUpdated,
+                MemoryReviewRowState.pending => '',
+              },
+              item.categoryLabel,
+              failed,
+            ].where((line) => line.isNotEmpty).join('\n'),
+          );
+        }
+        return NativeRow(
+          id('review', index),
+          content,
+          kind: 'menu',
+          subtitle: [item.categoryLabel, failed].where((line) => line.isNotEmpty).join('\n'),
+          options: {'right': l10n.memoryReviewRight, 'wrong': l10n.memoryReviewWrong, 'fix': l10n.memoryReviewFix},
+          enabled: !controller.isInFlight(item.memoryId),
+          action: (value) => switch (value) {
+            'right' => controller.review(provider, item, memory, true),
+            'wrong' => controller.review(provider, item, memory, false),
+            _ => _fix(context, controller, provider, item, memory),
+          },
+        );
+      }(),
+  ];
+}
+
+/// Fix: a guarded native editor prefilled with the row's text. Only Save writes, through the
+/// controller; Cancel or a dismissal writes nothing. A text the editor cannot carry opens the Flutter
+/// card for the row instead.
+Future<void> _fix(BuildContext context, MemoryReviewController controller, MemoriesProvider provider,
+    MemoryReviewItem item, Memory? memory) async {
+  final l10n = context.l10n;
+  controller.clearFailed(item.memoryId);
+  final result = await showIosNativeModal(
+    context,
+    title: l10n.memoryReviewFix,
+    guardEdits: true,
+    actions: [NativeRow('cancel', l10n.cancel), NativeRow('save', l10n.save)],
+    sections: [
+      NativeSection('memory_fix', [
+        NativeRow(
+          'memory_fix_text',
+          l10n.memoryReviewFix,
+          kind: 'text',
+          value: controller.contentOf(item, memory),
+          maximumLength: 10000,
+        ),
+      ]),
+    ],
+  );
+  if (result == null) {
+    if (!context.mounted) return;
+    await showOmiSheet<void>(
+      context: context,
+      builder: (_) => SingleChildScrollView(
+        child: MemoryReviewCard(items: [item], source: controller.source, controller: controller),
+      ),
+    );
+    return;
+  }
+  if (result.action != 'save') return;
+  final value = result.values['memory_fix_text'];
+  if (value is! String) return;
+  await controller.saveEdit(provider, item, memory, value.trim());
 }
 
 /// "Things I learned today" — up to three memories Omi stored, each with
@@ -41,6 +234,7 @@ class MemoryReviewCard extends StatefulWidget {
     required this.source,
     this.impressionKey,
     this.title,
+    this.controller,
   });
 
   final List<MemoryReviewItem> items;
@@ -54,40 +248,36 @@ class MemoryReviewCard extends StatefulWidget {
   /// Defaults to the localized "Things I learned today".
   final String? title;
 
+  /// The review state of a native presentation this card stands in for. The card then shares it
+  /// instead of owning one, and records no second impression.
+  final MemoryReviewController? controller;
+
   @override
   State<MemoryReviewCard> createState() => _MemoryReviewCardState();
 }
 
-enum _RowState { pending, confirmed, dropped, updated }
-
 class _MemoryReviewCardState extends State<MemoryReviewCard> {
-  final Map<String, _RowState> _optimistic = {};
-  final Set<String> _inFlight = {};
-  final Set<String> _failed = {};
+  late final MemoryReviewController _review = widget.controller ??
+      MemoryReviewController(items: widget.items, source: widget.source, impressionKey: widget.impressionKey);
   final Map<String, TextEditingController> _editors = {};
-
-  /// The text a persisted correction submitted, per row. A knowledge-ledger
-  /// correction appends a new row under a *new* id, so the id this card
-  /// references stops resolving in the provider; without this the row would
-  /// fall back to the original learned text under an "Updated." status.
-  final Map<String, String> _settledEdits = {};
-
-  /// Card identities already counted as shown in this process.
-  static final Set<String> _seenImpressions = {};
 
   List<MemoryReviewItem> get _rows => widget.items.take(MemoryReviewCardBlock.maxItems).toList(growable: false);
 
   @override
   void initState() {
     super.initState();
-    final impressionKey = widget.impressionKey;
-    if (_rows.isNotEmpty && (impressionKey == null || _seenImpressions.add('${widget.source.name}:$impressionKey'))) {
-      PlatformManager.instance.analytics.memoryReviewCardShown(
-        itemCount: _rows.length,
-        source: widget.source.analyticsValue,
-      );
-    }
+    _review.addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureMemoriesLoaded());
+  }
+
+  @override
+  void didUpdateWidget(MemoryReviewCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller == null) _review.updateItems(widget.items);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -95,23 +285,15 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     for (final controller in _editors.values) {
       controller.dispose();
     }
+    _review.removeListener(_changed);
+    if (widget.controller == null) _review.dispose();
     super.dispose();
   }
 
-  MemoriesProvider? _memoriesProvider({required bool listen}) {
-    try {
-      return listen ? context.watch<MemoriesProvider>() : context.read<MemoriesProvider>();
-    } on ProviderNotFoundException {
-      return null;
-    }
-  }
+  MemoriesProvider? _memoriesProvider({required bool listen}) => _readProvider(context, listen: listen);
 
-  /// A memory referenced by the card may not be in the provider's list (cold
-  /// provider, truncated bulk list, or an id this client never paged in).
-  /// There is no by-id read on this client, so ask the provider — the single
-  /// owner of memory state — to load its list. Hydration is best-effort: the
-  /// controls act by id regardless, and only settled verdicts need the live
-  /// row.
+  /// Hydration is best-effort: the controls act by id regardless (see
+  /// [MemoryReviewController.startHydrationIfNeeded]).
   void _ensureMemoriesLoaded() {
     _startHydrationIfNeeded();
   }
@@ -120,161 +302,40 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     if (!mounted) return;
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
-    // A fetch the provider owns is already in flight (memories page, an
-    // earlier card); when it settles the rows re-read whatever it loaded.
-    // A never-loaded provider reports `loading == true` before any request
-    // exists, so that alone must not read as "a fetch is in flight".
-    if (provider.loading && provider.hasLoaded) return;
-    final eligible = _rows
-        .where((item) => _memoryFor(provider, item.memoryId) == null)
-        .map((item) => item.memoryId)
-        // The provider owns the attempt budget (session-scoped, reset on user
-        // data clear), so a State rebuilt by scrolling does not re-count and
-        // a failing backend is not retried forever.
-        .where(provider.consumeHydrationAsk)
-        .toList(growable: false);
-    if (eligible.isEmpty) return;
-    provider.loadMemories();
+    _review.startHydrationIfNeeded(provider);
   }
 
-  Memory? _memoryFor(MemoriesProvider provider, String memoryId) {
-    return provider.memories.firstWhereOrNull((memory) => memory.id == memoryId);
-  }
+  Memory? _memoryFor(MemoriesProvider provider, String memoryId) => _review.memoryFor(provider, memoryId);
 
-  /// Live state first: an optimistic verdict only survives until its request
-  /// returns, after which `userReview`/`edited` on the memory are authoritative.
-  _RowState _stateFor(MemoriesProvider? provider, Memory? memory, String memoryId) {
-    final optimistic = _optimistic[memoryId];
-    if (optimistic != null) return optimistic;
-    if (memory == null) {
-      // A correction that appended a replacement row leaves this id
-      // unresolvable; that is settled, not unknown — but only while nothing
-      // live answers for the id, so a later refresh or another device still
-      // wins. A verdict this card persisted while unresolved settles the row
-      // the same way; anything else is pending, because the controls act by
-      // id and no verdict has been read.
-      if (_settledEdits.containsKey(memoryId)) return _RowState.updated;
-      final settled = provider?.settledReviewFor(memoryId);
-      if (settled != null) return settled ? _RowState.confirmed : _RowState.dropped;
-      return _RowState.pending;
-    }
-    if (memory.userReview == false) return _RowState.dropped;
-    if (memory.userReview == true) return _RowState.confirmed;
-    if (memory.edited) return _RowState.updated;
-    return _RowState.pending;
-  }
-
-  String _statusText(_RowState state) {
+  String _statusText(MemoryReviewRowState state) {
     final l10n = context.l10n;
     switch (state) {
-      case _RowState.confirmed:
+      case MemoryReviewRowState.confirmed:
         return l10n.memoryReviewConfirmed;
-      case _RowState.dropped:
+      case MemoryReviewRowState.dropped:
         return l10n.memoryReviewDropped;
-      case _RowState.updated:
+      case MemoryReviewRowState.updated:
         return l10n.memoryReviewUpdated;
-      case _RowState.pending:
+      case MemoryReviewRowState.pending:
         return '';
     }
   }
 
-  Future<void> _review(MemoryReviewItem item, Memory? memory, bool accepted) async {
-    if (_inFlight.contains(item.memoryId)) return;
+  Future<void> _reviewRow(MemoryReviewItem item, Memory? memory, bool accepted) async {
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
-    setState(() {
-      _inFlight.add(item.memoryId);
-      _failed.remove(item.memoryId);
-      _optimistic[item.memoryId] = accepted ? _RowState.confirmed : _RowState.dropped;
-    });
-
-    // A row the provider never loaded still mutates: the requests are
-    // id-addressed, and the item carries the identity to address it with.
-    final persisted = await provider.reviewMemory(memory ?? _standInMemory(item), accepted);
-    if (!mounted) return;
-    setState(() {
-      _inFlight.remove(item.memoryId);
-      // Drop the optimistic paint either way: on success the provider has
-      // already applied the verdict to the memory this row reads, and when no
-      // live memory answers for the id the settled verdict below does.
-      _optimistic.remove(item.memoryId);
-      if (!persisted) {
-        _failed.add(item.memoryId);
-      }
-    });
-    PlatformManager.instance.analytics.memoryReviewAction(
-      source: widget.source.analyticsValue,
-      action: accepted ? 'accept' : 'reject',
-      outcome: persisted ? 'ok' : 'error',
-      memoryCategory: _categoryOf(item, memory),
-    );
+    await _review.review(provider, item, memory, accepted);
   }
 
   Future<void> _saveEdit(MemoryReviewItem item, Memory? memory) async {
     final controller = _editors[item.memoryId];
     final value = controller?.text.trim() ?? '';
-    if (value.isEmpty || _inFlight.contains(item.memoryId)) return;
+    if (value.isEmpty || _review.isInFlight(item.memoryId)) return;
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
-    setState(() {
-      _inFlight.add(item.memoryId);
-      _failed.remove(item.memoryId);
-      _optimistic[item.memoryId] = _RowState.updated;
-    });
-
-    final persisted = await provider.editMemory(memory ?? _standInMemory(item), value);
-    if (!mounted) return;
-    setState(() {
-      _inFlight.remove(item.memoryId);
-      // Drop the optimistic paint either way. What the row shows next is
-      // derived state: the live memory when the id still resolves, otherwise
-      // the correction recorded below.
-      _optimistic.remove(item.memoryId);
-      if (persisted) {
-        _editors.remove(item.memoryId)?.dispose();
-        // A knowledge-ledger correction appends a new row under a new id, so
-        // the memory this reference points at can stop resolving. Remember what
-        // was submitted so the row shows the corrected text under "Updated."
-        // rather than the original learned text under a disabled control.
-        _settledEdits[item.memoryId] = value;
-      } else {
-        _failed.add(item.memoryId);
-      }
-    });
-    PlatformManager.instance.analytics.memoryReviewAction(
-      source: widget.source.analyticsValue,
-      action: 'edit',
-      outcome: persisted ? 'ok' : 'error',
-      memoryCategory: _categoryOf(item, memory),
-    );
-  }
-
-  String _categoryOf(MemoryReviewItem item, Memory? memory) {
-    if (item.category.trim().isNotEmpty) return item.category.trim();
-    return memory?.category.name ?? '';
-  }
-
-  /// The mutation carrier for a row whose live memory has not been loaded:
-  /// identity (the id) plus the recap text. Only the id-addressed review and
-  /// edit requests consume it; no list-mutating provider path reads anything
-  /// else off it.
-  Memory _standInMemory(MemoryReviewItem item) {
-    return Memory(
-      id: item.memoryId,
-      uid: '',
-      content: item.content,
-      category: MemoryCategory.system,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      visibility: MemoryVisibility.private,
-    );
-  }
-
-  /// What a row displays: the live memory when it resolves, otherwise the
-  /// last correction this card persisted, otherwise the recap text.
-  String _contentOf(MemoryReviewItem item, Memory? memory) {
-    final live = memory?.content.trim() ?? '';
-    return live.isNotEmpty ? live : (_settledEdits[item.memoryId] ?? item.content);
+    final persisted = await _review.saveEdit(provider, item, memory, value);
+    if (!mounted || !persisted) return;
+    setState(() => _editors.remove(item.memoryId)?.dispose());
   }
 
   @override
@@ -285,7 +346,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     // A load that already settled in failure is the card's cue to spend its
     // capped retry: the initState ask started this load, and only a rebuild
     // observes how it settled.
-    if (provider != null && provider.hasLoaded && provider.loadFailed) {
+    if (provider != null && _review.shouldRetryHydration(provider)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _startHydrationIfNeeded());
     }
 
@@ -306,10 +367,10 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
 
   Widget _buildRow(MemoryReviewItem item, MemoriesProvider? provider, Memory? memory) {
     final interactive = provider != null;
-    final state = _stateFor(provider, memory, item.memoryId);
+    final state = _review.stateFor(provider, memory, item.memoryId);
     final editing = _editors.containsKey(item.memoryId);
-    final dimmed = state == _RowState.dropped;
-    final content = _contentOf(item, memory);
+    final dimmed = state == MemoryReviewRowState.dropped;
+    final content = _review.contentOf(item, memory);
 
     return Container(
       key: Key('memory_review_row_${item.memoryId}'),
@@ -347,7 +408,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
               ],
             ),
           ),
-          if (_failed.contains(item.memoryId))
+          if (_review.isFailed(item.memoryId))
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
@@ -380,7 +441,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     );
   }
 
-  Widget _buildTrailing(MemoryReviewItem item, Memory? memory, _RowState state, bool editing) {
+  Widget _buildTrailing(MemoryReviewItem item, Memory? memory, MemoryReviewRowState state, bool editing) {
     if (editing) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -395,13 +456,13 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
             key: Key('memory_review_save_${item.memoryId}'),
             label: context.l10n.save,
             emphasized: true,
-            onTap: _inFlight.contains(item.memoryId) ? null : () => _saveEdit(item, memory),
+            onTap: _review.isInFlight(item.memoryId) ? null : () => _saveEdit(item, memory),
           ),
         ],
       );
     }
 
-    if (state != _RowState.pending) {
+    if (state != MemoryReviewRowState.pending) {
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -414,21 +475,21 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
 
     // Actionable by identity, not by list membership: the requests are
     // id-addressed and the item carries the id, so a row the provider never
-    // loaded stays tappable. `_inFlight` only disables its own write.
-    final enabled = !_inFlight.contains(item.memoryId);
+    // loaded stays tappable. An in-flight write only disables its own row.
+    final enabled = !_review.isInFlight(item.memoryId);
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         _control(
           key: Key('memory_review_accept_${item.memoryId}'),
           label: context.l10n.memoryReviewRight,
-          onTap: enabled ? () => _review(item, memory, true) : null,
+          onTap: enabled ? () => _reviewRow(item, memory, true) : null,
         ),
         const SizedBox(width: 8),
         _control(
           key: Key('memory_review_reject_${item.memoryId}'),
           label: context.l10n.memoryReviewWrong,
-          onTap: enabled ? () => _review(item, memory, false) : null,
+          onTap: enabled ? () => _reviewRow(item, memory, false) : null,
         ),
         const SizedBox(width: 8),
         _control(
@@ -436,8 +497,8 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
           label: context.l10n.memoryReviewFix,
           onTap: enabled
               ? () => setState(() {
-                    _failed.remove(item.memoryId);
-                    _editors[item.memoryId] = TextEditingController(text: _contentOf(item, memory));
+                    _review.clearFailed(item.memoryId);
+                    _editors[item.memoryId] = TextEditingController(text: _review.contentOf(item, memory));
                   })
               : null,
         ),

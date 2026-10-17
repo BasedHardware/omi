@@ -119,6 +119,20 @@ void main() {
       expect(retries, 1);
     });
 
+    testWidgets('returnHome selects the Home tab in the existing native shell', (tester) async {
+      final navigatorKey = GlobalKey<NavigatorState>();
+      var selectedHome = 0;
+      await tester.pumpWidget(MaterialApp(navigatorKey: navigatorKey, home: const Text('home')));
+      HomeNavigation.register(_record, selectHome: () => selectedHome++);
+      navigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => const Text('settings detail')));
+      await tester.pumpAndSettle();
+      HomeNavigation.returnHome(tester.element(find.text('settings detail')));
+      await tester.pumpAndSettle();
+      expect(find.text('home'), findsOneWidget);
+      expect(selectedHome, 1);
+      expect(navigatorKey.currentState!.canPop(), false);
+    });
+
     testWidgets('openRoute pops to the existing Home and lets it open the page', (tester) async {
       final navigatorKey = GlobalKey<NavigatorState>();
       await tester.pumpWidget(MaterialApp(navigatorKey: navigatorKey, home: const Text('home')));

@@ -13551,4 +13551,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
+
+  @override
+  String get dateRangeStart => 'Kezdő dátum';
+
+  @override
+  String get dateRangeEnd => 'Befejező dátum';
+
+  @override
+  String get openInMaps => 'Megnyitás a Térképekben';
 }

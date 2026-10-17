@@ -4139,5 +4139,8 @@
     "activityNewItem": "नया",
     "activityNeedsAttention": "ध्यान देने की ज़रूरत",
     "activityRetryAll": "सभी को फिर से आज़माएँ",
-    "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका"
+    "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका",
+    "dateRangeStart": "शुरू होने की तारीख",
+    "dateRangeEnd": "समाप्त होने की तारीख",
+    "openInMaps": "मानचित्र में खोलें"
 }

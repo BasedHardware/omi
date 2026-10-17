@@ -13484,4 +13484,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
+
+  @override
+  String get dateRangeStart => 'Start date';
+
+  @override
+  String get dateRangeEnd => 'End date';
+
+  @override
+  String get openInMaps => 'Open in Maps';
 }

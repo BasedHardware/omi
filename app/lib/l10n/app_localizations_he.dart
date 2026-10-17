@@ -13406,4 +13406,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
+
+  @override
+  String get dateRangeStart => 'תאריך התחלה';
+
+  @override
+  String get dateRangeEnd => 'תאריך סיום';
+
+  @override
+  String get openInMaps => 'פתיחה במפות';
 }

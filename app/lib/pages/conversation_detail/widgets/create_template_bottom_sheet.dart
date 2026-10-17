@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -23,7 +24,10 @@ import 'package:omi/ui/ui.dart';
 class CreateTemplateBottomSheet extends StatefulWidget {
   final String? conversationId;
 
-  const CreateTemplateBottomSheet({super.key, this.conversationId});
+  /// Presents natively, with this sheet's Flutter form as the fallback.
+  final bool native;
+
+  const CreateTemplateBottomSheet({super.key, this.conversationId, this.native = false});
 
   @override
   State<CreateTemplateBottomSheet> createState() => _CreateTemplateBottomSheetState();
@@ -85,8 +89,39 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
     return file;
   }
 
+  String? _nameError(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return context.l10n.pleaseEnterAppName;
+    }
+    if (value.trim().length < 3) {
+      return context.l10n.nameMustBeAtLeast3Characters;
+    }
+    return null;
+  }
+
+  String? _promptError(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return context.l10n.pleaseEnterAppPrompt;
+    }
+    if (value.trim().length < 10) {
+      return context.l10n.promptMustBeAtLeast10Characters;
+    }
+    return null;
+  }
+
+  /// The native form shows its first error after a create attempt, like the Flutter form, and
+  /// re-checks it in Dart on every edit.
+  bool _nativeValidationShown = false;
+  String? get _nativeValidation => _nameError(_nameController.text) ?? _promptError(_promptController.text);
+
+  bool _validate() {
+    if (!widget.native || _formKey.currentState != null) return _formKey.currentState!.validate();
+    setState(() => _nativeValidationShown = true);
+    return _nativeValidation == null;
+  }
+
   Future<void> _createTemplate() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isCreating || !_validate()) return;
 
     setState(() {
       _isCreating = true;
@@ -240,8 +275,71 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
             Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500)),
       );
 
+  static const _maximumNameLength = 100;
+  static const _maximumPromptLength = 10000;
+
   @override
   Widget build(BuildContext context) {
+    if (!widget.native) return _buildClassic(context);
+    final l10n = context.l10n;
+    final validation = _nativeValidationShown ? _nativeValidation : null;
+    return PopScope(
+      // Leaving while the template is being created would orphan the request's result.
+      canPop: !_isCreating,
+      child: IosNativeSurface(
+        title: l10n.createCustomTemplate,
+        // The creation stages show as the surface's activity row; the toolbar action is icon-only.
+        loading: _isCreating,
+        loadingLabel: _isCreating && _statusMessage.isNotEmpty ? _statusMessage : null,
+        fallback: OmiSheetScaffold(title: l10n.createCustomTemplate, child: _buildClassic(context)),
+        toolbar: [
+          NativeRow('template_form_close', l10n.close,
+              symbol: 'xmark', enabled: !_isCreating, action: (_) => Navigator.of(context).maybePop()),
+          NativeRow('template_form_create', _isCreating ? _statusMessage : l10n.createApp,
+              symbol: 'checkmark', enabled: !_isCreating, action: (_) => _createTemplate()),
+        ],
+        sections: [
+          // A text row's title is its placeholder, so each field's label heads its own section.
+          NativeSection(
+              'template_name_field',
+              [
+                NativeRow('template_name', l10n.templateNameHint,
+                    kind: 'text',
+                    value: _nameController.text,
+                    maximumLength: _maximumNameLength,
+                    enabled: !_isCreating,
+                    action: (value) => setState(() => _nameController.text = value as String)),
+              ],
+              title: l10n.templateName),
+          NativeSection(
+              'template_prompt_field',
+              [
+                NativeRow('template_prompt', l10n.conversationPromptHint,
+                    kind: 'text',
+                    value: _promptController.text,
+                    maximumLength: _maximumPromptLength,
+                    enabled: !_isCreating,
+                    action: (value) => setState(() => _promptController.text = value as String)),
+                if (validation != null)
+                  NativeRow('template_validation', validation,
+                      kind: 'label', symbol: 'exclamationmark.circle', destructive: true),
+              ],
+              title: l10n.conversationPrompt),
+          NativeSection('template_visibility', [
+            NativeRow('template_public', l10n.makePublic,
+                kind: 'toggle',
+                subtitle: _isPublic ? l10n.anyoneCanDiscoverTemplate : l10n.onlyYouCanUseTemplate,
+                symbol: _isPublic ? 'globe' : 'lock',
+                value: _isPublic,
+                enabled: !_isCreating,
+                action: (value) => setState(() => _isPublic = value as bool)),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassic(BuildContext context) {
     return PopScope(
       // Leaving while the template is being created would orphan the request's result.
       canPop: !_isCreating,
@@ -260,15 +358,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                   enabled: !_isCreating,
                   style: OmiType.subhead,
                   decoration: _fieldDecoration(context.l10n.templateNameHint),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return context.l10n.pleaseEnterAppName;
-                    }
-                    if (value.trim().length < 3) {
-                      return context.l10n.nameMustBeAtLeast3Characters;
-                    }
-                    return null;
-                  },
+                  validator: _nameError,
                 ),
                 const SizedBox(height: OmiSpacing.lg),
                 _fieldLabel(context.l10n.conversationPrompt),
@@ -278,15 +368,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                   style: OmiType.subhead,
                   maxLines: 4,
                   decoration: _fieldDecoration(context.l10n.conversationPromptHint),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return context.l10n.pleaseEnterAppPrompt;
-                    }
-                    if (value.trim().length < 10) {
-                      return context.l10n.promptMustBeAtLeast10Characters;
-                    }
-                    return null;
-                  },
+                  validator: _promptError,
                 ),
                 const SizedBox(height: OmiSpacing.lg),
                 Container(
@@ -342,5 +424,6 @@ void showCreateTemplateBottomSheet(BuildContext context, {String? conversationId
     context: context,
     title: context.l10n.createCustomTemplate,
     builder: (_) => CreateTemplateBottomSheet(conversationId: conversationId),
+    nativeBuilder: (_) => CreateTemplateBottomSheet(conversationId: conversationId, native: true),
   );
 }

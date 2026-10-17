@@ -13554,4 +13554,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
+
+  @override
+  String get dateRangeStart => 'Data de început';
+
+  @override
+  String get dateRangeEnd => 'Data de sfârșit';
+
+  @override
+  String get openInMaps => 'Deschide în Hărți';
 }

@@ -13534,4 +13534,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';
+
+  @override
+  String get dateRangeStart => 'Дата пачатку';
+
+  @override
+  String get dateRangeEnd => 'Дата завяршэння';
+
+  @override
+  String get openInMaps => 'Адкрыць у Картах';
 }

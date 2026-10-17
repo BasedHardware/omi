@@ -13545,4 +13545,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
+
+  @override
+  String get dateRangeStart => 'Дата начала';
+
+  @override
+  String get dateRangeEnd => 'Дата окончания';
+
+  @override
+  String get openInMaps => 'Открыть в Картах';
 }

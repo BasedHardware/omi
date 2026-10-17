@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_graph.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +13,7 @@ import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -18,6 +21,8 @@ import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'widgets/memory_dialog.dart';
 import 'widgets/memory_edit_sheet.dart';
+import 'widgets/memory_graph_controller.dart';
+import 'widgets/memory_graph_native.dart';
 import 'widgets/memory_graph_page.dart';
 import 'widgets/memory_history_status_banner.dart';
 import 'widgets/memory_item.dart';
@@ -25,7 +30,9 @@ import 'widgets/memory_management_sheet.dart';
 import 'widgets/memories_load_error.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key, this.showMindMap = true, this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph});
+  const MemoriesPage(
+      {super.key, this.asRoot = false, this.showMindMap = true, this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph});
+  final bool asRoot;
 
   /// The live graph preview at the top. The graph needs a real canvas and network, so harnesses
   /// that pump the page without them turn it off.
@@ -39,7 +46,7 @@ class MemoriesPage extends StatefulWidget {
   State<MemoriesPage> createState() => MemoriesPageState();
 }
 
-class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
+class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -49,6 +56,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   bool _isInitialLoad = true;
   String? _highlightedMemoryId;
   Timer? _highlightTimer;
+
+  /// The native mind map card's graph; the classic card owns its own.
+  MemoryGraphController? _graph;
+  Future<void>? _graphSupport;
 
   Future<void> _createMemory(MemoriesProvider provider) async {
     final existingIds = provider.memories.map((m) => m.id).toSet();
@@ -65,6 +76,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   @override
   void dispose() {
+    if (nativePresentationEnabled) WidgetsBinding.instance.removeObserver(this);
+    _graph
+      ?..removeListener(_onGraphChanged)
+      ..dispose();
+    _graph = null;
     _highlightTimer?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
@@ -74,6 +90,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
+    if (nativePresentationEnabled) WidgetsBinding.instance.addObserver(this);
     (() async {
       final provider = context.read<MemoriesProvider>();
       try {
@@ -89,6 +106,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         }
       }
     }).withPostFrameCallback();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The card reloads quietly on resume, as the classic card does.
+    if (state == AppLifecycleState.resumed) _graph?.load(silent: true);
   }
 
   Widget _buildHeader(MemoriesProvider provider, {required bool loading}) {
@@ -180,9 +203,12 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         // memory. Take it once per build: reading it per row made each row
         // built during a scroll cost O(all memories).
         final visibleMemories = provider.filteredMemories;
-        return Scaffold(
+        final classic = Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.memories)),
+          appBar: AppBar(
+              automaticallyImplyLeading: !widget.asRoot,
+              leading: widget.asRoot ? null : const OmiBackButton(),
+              title: Text(context.l10n.memories)),
           body: Stack(
             children: [
               RefreshIndicator(
@@ -279,8 +305,161 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             ],
           ),
         );
+        if (!nativePresentationEnabled) return classic;
+        return _buildNative(context, provider, classic, visibleMemories);
       },
     );
+  }
+
+  /// The Memories list as one native surface over the same provider and handlers.
+  Widget _buildNative(BuildContext context, MemoriesProvider provider, Widget classic, List<Memory> visibleMemories) {
+    final l10n = context.l10n;
+    final loading = provider.loading && _isInitialLoad;
+    final searching = provider.searchQuery.isNotEmpty;
+    final filtered = provider.memories.isNotEmpty || provider.filterThisDeviceOnly;
+    final showGraph = widget.showMindMap && !searching && provider.memories.isNotEmpty;
+    // Locked rows name the upgrade only where the plan page offers one.
+    context.watch<UsageProvider>();
+    void onEdit(BuildContext context, Memory memory, MemoriesProvider provider) {
+      PlatformManager.instance.analytics.memoryListItemClicked(memory);
+      _showQuickEditSheet(context, memory, provider);
+    }
+
+    return IosNativeSurface(
+        title: l10n.memories,
+        fallback: classic,
+        loading: loading,
+        failed: provider.showLoadError,
+        errorMessage: l10n.couldNotLoadMemories,
+        empty: searching ? l10n.noMemoriesFound : l10n.noMemoriesYet,
+        searchValue: provider.searchQuery,
+        searchPlaceholder: l10n.searchMemories,
+        search: (value) => _onNativeSearch(provider, value as String),
+        onRefresh: (_) => provider.init(),
+        toolbar: [
+          if (!widget.asRoot)
+            NativeRow('memories_back', l10n.back, symbol: 'chevron.left', action: (_) {
+              Navigator.of(context).pop();
+            }),
+          if (!_showsFirstMemoryAction(provider))
+            NativeRow('memories_add', l10n.createMemoryTooltip, symbol: 'plus', action: (_) {
+              _createMemory(provider);
+              PlatformManager.instance.analytics.memoriesPageCreateMemoryBtn();
+            }),
+          NativeRow('memories_manage', l10n.memoryManagement, symbol: 'line.3.horizontal.decrease', enabled: !loading,
+              action: (_) {
+            _showMemoryManagementSheet(context, provider);
+          }),
+        ],
+        sections: [
+          if (showGraph) NativeSection('memory_graph', _graphPreviewRows(context)),
+          if (provider.showPartialLoadError)
+            NativeSection('memory_partial', [
+              NativeRow('memory_partial_label', l10n.couldNotLoadMemories, kind: 'label'),
+              NativeRow('memory_partial_retry', l10n.tryAgain, action: (_) => provider.loadMemories()),
+            ]),
+          if (provider.memoryBeliefEnabled &&
+              provider.showHistory &&
+              (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
+            NativeSection('memory_history', [
+              NativeRow('memory_history_label', l10n.memoryHistoryPartial, kind: 'label'),
+              if (provider.ledgerHistoryHasMore)
+                NativeRow('memory_history_more', l10n.showMore, action: (_) => provider.loadMoreHistory()),
+            ]),
+          NativeSection('memories', [
+            for (final memory in visibleMemories) memoryNativeRow(context, memory, provider, onEdit: onEdit),
+          ]),
+          // The Flutter empty state and its one action: clear the search, reset the filters, or add
+          // the first memory.
+          if (!loading && !provider.showLoadError && visibleMemories.isEmpty)
+            NativeSection('memory_empty', [
+              NativeRow(
+                  'memory_empty_label',
+                  searching
+                      ? l10n.noMemoriesFound
+                      : filtered
+                          ? l10n.noMemoriesInCategories
+                          : l10n.noMemoriesYet,
+                  kind: 'label'),
+              if (searching)
+                NativeRow('memory_clear_search', l10n.clearSearch, action: (_) {
+                  // As the classic empty state: no search-cleared event, which only the field's clear sends.
+                  _searchController.clear();
+                  provider.setSearchQuery('');
+                })
+              else if (filtered)
+                NativeRow('memory_reset_filters', l10n.resetFilters, action: (_) {
+                  provider.clearCategoryFilter();
+                  provider.setFilterThisDeviceOnly(false);
+                  provider.setCollectionView(MemoryCollectionView.all);
+                })
+              else
+                NativeRow('memory_add_first', l10n.addFirstMemory, action: (_) => _createMemory(provider)),
+            ]),
+        ]);
+  }
+
+  /// Native search keeps the classic field and its analytics in step: clearing a query reports the
+  /// clear as the field's clear button does. The bridge has no submit event (see the batch report).
+  void _onNativeSearch(MemoriesProvider provider, String value) {
+    final cleared = value.isEmpty && provider.searchQuery.isNotEmpty;
+    if (_searchController.text != value) _searchController.text = value;
+    provider.setSearchQuery(value);
+    if (cleared) PlatformManager.instance.analytics.memorySearchCleared(provider.memories.length);
+  }
+
+  /// Starts the card's own graph owner once the native renderer is confirmed, so an unsupported
+  /// system (which shows the classic card with its own graph) never loads the graph twice.
+  void _startGraphPreview() {
+    _graphSupport ??= supportsNativePresentation().then((supported) {
+      if (!supported || !mounted || _graph != null) return;
+      final controller = MemoryGraphController(loadGraph: widget.loadGraph, localizations: () => context.l10n)
+        ..addListener(_onGraphChanged);
+      _graph = controller;
+      controller.load();
+    }, onError: (_) {});
+  }
+
+  void _onGraphChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _openGraph(Object? _) =>
+      routeToPage(context, MemoryGraphPage(trackOpenEvent: false, loadGraph: widget.loadGraph));
+
+  /// The mind map card: a placeholder while loading, the zoomed-out graph once loaded, two lines
+  /// for an empty graph and one Try Again on failure. A graph the native renderer cannot take
+  /// becomes a plain row, so the list itself never falls back because of the graph.
+  List<NativeRow> _graphPreviewRows(BuildContext context) {
+    final l10n = context.l10n;
+    final graph = _graph;
+    if (graph == null || graph.isLoading) {
+      if (graph == null) _startGraphPreview();
+      return [
+        NativeRow('memory_graph_preview', l10n.memoryGraph,
+            kind: 'graph',
+            graph: NativeGraph.placeholder(layout: 'card', height: 140, accent: memoryGraphAccentHex()),
+            action: _openGraph),
+      ];
+    }
+    final error = graph.error;
+    if (error != null) {
+      return [
+        NativeRow('memory_graph_error', error, kind: 'label'),
+        NativeRow('memory_graph_retry', l10n.tryAgain, symbol: 'arrow.clockwise', action: (_) => graph.load()),
+      ];
+    }
+    if (graph.isEmpty) {
+      return [
+        NativeRow('memory_graph_preview', l10n.noKnowledgeGraphYet,
+            kind: 'navigation', subtitle: l10n.knowledgeGraphWillBuildAutomatically, action: _openGraph),
+      ];
+    }
+    final projection = projectNativeGraph(graph, layout: 'card', height: 140, interactive: false, zoom: 0.6);
+    if (projection == null) {
+      return [NativeRow('memory_graph_open', l10n.mindMap, kind: 'navigation', action: _openGraph)];
+    }
+    return [NativeRow('memory_graph_preview', l10n.memoryGraph, kind: 'graph', graph: projection, action: _openGraph)];
   }
 
   Widget _buildShimmerMemoryList() {
@@ -320,6 +499,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       title: context.l10n.memoryManagement,
       padding: EdgeInsets.zero,
       builder: (context) => MemoryManagementSheet(provider: provider),
+      nativeBuilder: (context) => MemoryManagementSheet(provider: provider, native: true),
     );
   }
 }
@@ -344,7 +524,7 @@ class MemoryMindMapPreview extends StatelessWidget {
         trackOpenEvent: false,
         initialZoom: 0.6,
         loadGraph: loadGraph,
-        onOpen: () => routeToPage(context, const MemoryGraphPage(trackOpenEvent: false)),
+        onOpen: () => routeToPage(context, MemoryGraphPage(trackOpenEvent: false, loadGraph: loadGraph)),
       ),
     );
   }

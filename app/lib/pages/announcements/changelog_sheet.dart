@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -9,8 +10,12 @@ class ChangelogSheet extends StatefulWidget {
   final List<Announcement>? changelogs;
   final Future<List<Announcement>> Function()? changelogsFuture;
 
-  const ChangelogSheet({super.key, this.changelogs, this.changelogsFuture})
+  const ChangelogSheet({super.key, this.changelogs, this.changelogsFuture, this.native = false})
       : assert(changelogs != null || changelogsFuture != null);
+
+  /// Draws the same state as one native surface (the sheet's nativeBuilder); the Flutter sheet stays
+  /// its fallback.
+  final bool native;
 
   /// Show the changelog sheet as a modal bottom sheet with pre-loaded data.
   static Future<void> show(BuildContext context, List<Announcement> changelogs) {
@@ -21,6 +26,7 @@ class ChangelogSheet extends StatefulWidget {
       showCloseButton: false,
       padding: EdgeInsets.zero,
       builder: (context) => ChangelogSheet(changelogs: changelogs),
+      nativeBuilder: (context) => ChangelogSheet(changelogs: changelogs, native: true),
     );
   }
 
@@ -30,6 +36,7 @@ class ChangelogSheet extends StatefulWidget {
       showCloseButton: false,
       padding: EdgeInsets.zero,
       builder: (context) => ChangelogSheet(changelogsFuture: fetchChangelogs),
+      nativeBuilder: (context) => ChangelogSheet(changelogsFuture: fetchChangelogs, native: true),
     );
   }
 
@@ -89,6 +96,14 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     }
   }
 
+  Future<void> _retry() {
+    setState(() {
+      _isLoading = true;
+      _failed = false;
+    });
+    return _loadChangelogs();
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -97,6 +112,77 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.native) {
+      return _buildNative(OmiSheetScaffold(showCloseButton: false, padding: EdgeInsets.zero, child: _buildClassic()));
+    }
+    return _buildClassic();
+  }
+
+  /// The loading, failed and loaded states as one native surface: the version picker (a segmented
+  /// control for up to five versions, otherwise previous/next around the version label) and one row
+  /// per change. Retry reloads through the same loader.
+  Widget _buildNative(Widget fallback) {
+    final l10n = context.l10n;
+    final loaded = !_isLoading && !_failed && _orderedChangelogs.isNotEmpty;
+    final page = loaded ? _currentPage.clamp(0, _orderedChangelogs.length - 1) : 0;
+    final count = _orderedChangelogs.length;
+    String version(int index) => _orderedChangelogs[index].appVersion ?? '';
+    return IosNativeSurface(
+      title: loaded ? l10n.whatsNewInVersion(version(page)) : l10n.whatsNew,
+      loading: _isLoading,
+      failed: _failed,
+      errorMessage: l10n.couldNotLoadWhatsNew,
+      // Retry exists only for a failed load, as on the Flutter sheet; loaded content is never reloaded.
+      onRefresh: _failed && widget.changelogsFuture != null ? (_) => _retry() : null,
+      fallback: fallback,
+      toolbar: [
+        NativeRow('changelog_close', l10n.close, symbol: 'xmark', action: (_) {
+          // A repeated close during the closing transition must not pop the route beneath.
+          if (ModalRoute.of(context)?.isCurrent == false) return;
+          Navigator.of(context).maybePop();
+        }),
+      ],
+      sections: [
+        if (loaded && count > 1)
+          NativeSection('changelog_versions', [
+            if (count <= 5)
+              NativeRow('changelog_version', l10n.whatsNew,
+                  kind: 'segmented',
+                  value: '$page',
+                  options: {for (var i = 0; i < count; i++) '$i': l10n.versionLabel(version(i))},
+                  action: (value) => _showVersion(int.parse(value as String)))
+            else ...[
+              NativeRow('changelog_previous', MaterialLocalizations.of(context).previousPageTooltip,
+                  symbol: 'chevron.left', enabled: page > 0, action: (_) => _showVersion(page - 1)),
+              NativeRow('changelog_version_label', l10n.versionLabel(version(page)), kind: 'label'),
+              NativeRow('changelog_next', MaterialLocalizations.of(context).nextPageTooltip,
+                  symbol: 'chevron.right', enabled: page < count - 1, action: (_) => _showVersion(page + 1)),
+            ],
+          ]),
+        if (loaded && _orderedChangelogs[page].changelogContent.changes.isNotEmpty)
+          NativeSection('changelog_changes', [
+            for (final (index, item) in _orderedChangelogs[page].changelogContent.changes.indexed)
+              NativeRow('changelog_item_$index', '${item.icon ?? '✨'} ${item.title}',
+                  kind: 'label', subtitle: item.description),
+          ]),
+      ],
+    );
+  }
+
+  /// Shows version [index]; the pager is not attached while the native surface shows, so a fresh
+  /// controller keeps the Flutter fallback on the same version.
+  void _showVersion(int index) {
+    if (index < 0 || index >= _orderedChangelogs.length) return;
+    setState(() {
+      _currentPage = index;
+      if (!_pageController.hasClients) {
+        _pageController.dispose();
+        _pageController = PageController(initialPage: index);
+      }
+    });
+  }
+
+  Widget _buildClassic() {
     // The sheet shell (showOmiSheet) owns the surface, corners and drag handle; the title changes
     // with the version on screen, so the header row lives here.
     return SizedBox(
@@ -110,13 +196,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                 : _failed
                     ? OmiErrorState(
                         message: context.l10n.couldNotLoadWhatsNew,
-                        onRetry: () {
-                          setState(() {
-                            _isLoading = true;
-                            _failed = false;
-                          });
-                          return _loadChangelogs();
-                        },
+                        onRetry: _retry,
                       )
                     : PageView.builder(
                         controller: _pageController,

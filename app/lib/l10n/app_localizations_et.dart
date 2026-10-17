@@ -13493,4 +13493,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
+
+  @override
+  String get dateRangeStart => 'Alguskuupäev';
+
+  @override
+  String get dateRangeEnd => 'Lõppkuupäev';
+
+  @override
+  String get openInMaps => 'Ava kaardirakenduses';
 }

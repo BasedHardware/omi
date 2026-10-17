@@ -11562,5 +11562,8 @@
     "activityNewItem": "نیا",
     "activityNeedsAttention": "توجہ درکار ہے",
     "activityRetryAll": "سب دوبارہ کوشش کریں",
-    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا"
+    "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا",
+    "dateRangeStart": "شروع ہونے کی تاریخ",
+    "dateRangeEnd": "ختم ہونے کی تاریخ",
+    "openInMaps": "نقشے میں کھولیں"
 }

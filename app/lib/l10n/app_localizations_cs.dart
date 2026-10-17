@@ -13501,4 +13501,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';
+
+  @override
+  String get dateRangeStart => 'Počáteční datum';
+
+  @override
+  String get dateRangeEnd => 'Koncové datum';
+
+  @override
+  String get openInMaps => 'Otevřít v Mapách';
 }

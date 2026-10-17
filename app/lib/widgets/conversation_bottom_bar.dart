@@ -20,6 +20,9 @@ import 'package:omi/utils/audio/conversation_playback_controller.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+
+part 'conversation_playback_native.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
@@ -76,6 +79,10 @@ class ConversationBottomBar extends StatefulWidget {
   /// and records the reader's pending wall position across bar remounts.
   final ConversationPlaybackController? playbackController;
 
+  /// Presentation only. The same player, timeline mapper and retry owner service
+  /// native controls; callbacks are published after layout and must be idempotent.
+  final ValueChanged<List<NativeRow>>? onNativePresentation;
+
   const ConversationBottomBar({
     super.key,
     required this.mode,
@@ -89,6 +96,7 @@ class ConversationBottomBar extends StatefulWidget {
     this.onAskOmi,
     this.fetchAudioUrls,
     this.playbackController,
+    this.onNativePresentation,
   });
 
   @override
@@ -165,6 +173,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// Stable tear-off for attach/detach — a fresh `_seekWall` tear-off is equal
   /// but not guaranteed identical, which detach keys on.
   late final ConversationPlaybackSeekHandler _seekWallHandler = _seekWall;
+  bool _nativePresentationScheduled = false;
 
   List<AudioFile> _getSortedAudioFiles() {
     if (widget.conversation == null) return [];
@@ -176,6 +185,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     super.initState();
     _audioSourceSnapshot = _audioSourceFingerprint();
     _calculateTotalDuration();
+    _artifactPosition.addListener(_publishNativePresentation);
     widget.playbackController?.attachSeekHandler(_seekWallHandler);
     // Provide the seek function to parent widget
     widget.onSeekFunctionReady?.call(seekToTranscriptSegment);
@@ -255,6 +265,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   @override
   void dispose() {
+    _artifactPosition.removeListener(_publishNativePresentation);
     widget.playbackController?.detachSeekHandler(_seekWallHandler);
     _teardownPlayer(report: false);
     widget.playbackController?.playerDetached(notify: false);
@@ -844,6 +855,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   @override
   Widget build(BuildContext context) {
+    _publishNativePresentation();
     if (!widget.hasSegments) {
       return const SizedBox();
     }

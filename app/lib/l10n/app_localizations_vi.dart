@@ -13497,4 +13497,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
+
+  @override
+  String get dateRangeStart => 'Ngày bắt đầu';
+
+  @override
+  String get dateRangeEnd => 'Ngày kết thúc';
+
+  @override
+  String get openInMaps => 'Mở trong Bản đồ';
 }

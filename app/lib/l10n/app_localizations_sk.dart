@@ -13495,4 +13495,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Tento rozhovor sa nepodarilo zhrnúť';
+
+  @override
+  String get dateRangeStart => 'Počiatočný dátum';
+
+  @override
+  String get dateRangeEnd => 'Koncový dátum';
+
+  @override
+  String get openInMaps => 'Otvoriť v Mapách';
 }

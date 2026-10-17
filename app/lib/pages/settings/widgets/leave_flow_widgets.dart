@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -104,6 +106,72 @@ class LeaveFlowStepScaffold extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The native presentation of one leave-flow step, with the complete [fallback] (its
+/// [LeaveFlowStepScaffold]) kept for flag-off builds and for any snapshot Swift refuses.
+///
+/// The header shows the step progress, [title] and [subtitle] above the step's [sections]; the
+/// toolbar Back pops this step only when [canPop]. While the native view shows, a [PopScope] carries
+/// [canPop] and [onPopInvoked] (the abandon analytics) exactly like the fallback's own.
+Widget nativeLeaveStep(
+  BuildContext context, {
+  required int step,
+  required int stepCount,
+  required String title,
+  String? subtitle,
+  required List<NativeSection> sections,
+  List<NativeRow> toolbar = const [],
+  required bool canPop,
+  void Function(bool didPop)? onPopInvoked,
+  required Widget fallback,
+}) {
+  if (!nativePresentationEnabled) return fallback;
+  final l10n = context.l10n;
+  final count = stepCount < 1 ? 1 : stepCount;
+  final current = step.clamp(0, count - 1) + 1;
+  return IosNativeSurface(
+    title: title,
+    fallback: fallback,
+    nativeWrapper: (view) => PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, _) => onPopInvoked?.call(didPop),
+      child: view,
+    ),
+    toolbar: [
+      NativeRow('leave_back', l10n.back,
+          symbol: 'chevron.left', enabled: canPop, action: (_) => Navigator.of(context).maybePop()),
+      ...toolbar,
+    ],
+    sections: [
+      NativeSection('leave_header', [
+        NativeRow('leave_step', l10n.leaveFlowStepOf(current, count),
+            kind: 'progress', value: current.toDouble(), maximumValue: count.toDouble()),
+        NativeRow('leave_title', title, kind: 'label'),
+        if (subtitle != null && subtitle.isNotEmpty) NativeRow('leave_subtitle', subtitle, kind: 'label'),
+      ]),
+      ...sections,
+    ],
+  );
+}
+
+/// A blocking native activity with [label] while a leave flow's owner request runs, or null when the
+/// native host cannot show one (flag off, unsupported, or a host without the handler). It never throws,
+/// so the caller's own busy state and error handling always run.
+Future<NativeActivity?> leaveFlowActivity(BuildContext context, String label) async {
+  if (!nativePresentationEnabled) return null;
+  try {
+    return await showIosNativeActivity(context, label: label);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [text] cut to at most [maximumLength] characters, so a native text row never carries a value
+/// longer than the limit it declares.
+String nativeLeaveText(String text, int maximumLength) {
+  final characters = text.characters;
+  return characters.length <= maximumLength ? text : characters.take(maximumLength).toString();
 }
 
 class _StepIndicator extends StatelessWidget {

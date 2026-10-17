@@ -3,13 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:share_plus/share_plus.dart';
-
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/share_sheet.dart';
+
+import 'message_action_commands.dart';
+
+export 'message_action_commands.dart';
 
 /// Why a reply was rated down. [key] is the wire value the backend stores.
 enum FeedbackReason {
@@ -34,10 +35,15 @@ enum FeedbackReason {
 
 /// The body of the "What went wrong?" sheet shown for a thumbs-down: a reason (required), an
 /// optional comment and Submit. Present it with [showFeedbackBottomSheet].
+///
+/// [native] projects the same sheet as a native surface: one button per reason, the comment field
+/// (500 characters, like the Flutter field) and Close plus Submit, which stays disabled until a
+/// reason is chosen. Submit reports the same (key, comment) pair; Close submits nothing.
 class FeedbackBottomSheet extends StatefulWidget {
   final Function(String reason, String? comment) onSubmit;
+  final bool native;
 
-  const FeedbackBottomSheet({super.key, required this.onSubmit});
+  const FeedbackBottomSheet({super.key, required this.onSubmit, this.native = false});
 
   @override
   State<FeedbackBottomSheet> createState() => _FeedbackBottomSheetState();
@@ -62,8 +68,50 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
     Navigator.pop(context);
   }
 
+  Widget _native(BuildContext context) {
+    final l10n = context.l10n;
+    return IosNativeSurface(
+      title: l10n.whatWentWrong,
+      fallback: OmiSheetScaffold(title: l10n.whatWentWrong, child: FeedbackBottomSheet(onSubmit: widget.onSubmit)),
+      toolbar: [
+        NativeRow('feedback_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow(
+          'feedback_submit',
+          l10n.submit,
+          enabled: _selectedReason != null,
+          action: (_) => _submit(),
+        ),
+      ],
+      sections: [
+        NativeSection('feedback_reasons', title: l10n.selectAReason, [
+          for (final reason in FeedbackReason.values)
+            NativeRow(
+              'feedback_reason_${reason.key}',
+              reason.label(l10n),
+              symbol: _selectedReason == reason ? 'checkmark.circle.fill' : 'circle',
+              action: (_) {
+                OmiHaptics.selection();
+                setState(() => _selectedReason = reason);
+              },
+            ),
+        ]),
+        NativeSection('feedback_comment', title: l10n.additionalFeedbackOptional, [
+          NativeRow(
+            'feedback_comment_text',
+            l10n.tellUsMoreWhatWentWrong,
+            kind: 'text',
+            value: _commentController.text,
+            maximumLength: 500,
+            action: (value) => setState(() => _commentController.text = value as String),
+          ),
+        ]),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.native) return _native(context);
     final l10n = context.l10n;
     return SingleChildScrollView(
       child: Column(
@@ -137,6 +185,7 @@ Future<void> showFeedbackBottomSheet(
     context: context,
     title: context.l10n.whatWentWrong,
     builder: (context) => FeedbackBottomSheet(onSubmit: onSubmit),
+    nativeBuilder: (context) => FeedbackBottomSheet(onSubmit: onSubmit, native: true),
   );
 }
 
@@ -153,30 +202,35 @@ class MessageActionBar extends StatefulWidget {
 }
 
 class _MessageActionBarState extends State<MessageActionBar> {
-  int? _selectedNps;
+  late final MessageActionCommands _commands = MessageActionCommands(
+    messageText: widget.messageText,
+    setMessageNps: widget.setMessageNps,
+    currentNps: widget.currentNps,
+    onChanged: () {
+      if (mounted) setState(() {});
+    },
+  );
   bool _copied = false;
   Timer? _copyTimer;
+
+  int? get _selectedNps => _commands.selectedNps;
 
   @override
   void dispose() {
     _copyTimer?.cancel();
+    _commands.dispose();
     super.dispose();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedNps = widget.currentNps;
   }
 
   @override
   void didUpdateWidget(MessageActionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _commands
+      ..messageText = widget.messageText
+      ..setMessageNps = widget.setMessageNps;
     // Update local state if the widget's currentNps changed (e.g., from server fetch)
     if (oldWidget.currentNps != widget.currentNps) {
-      setState(() {
-        _selectedNps = widget.currentNps;
-      });
+      setState(() => _commands.syncCurrentNps(widget.currentNps));
     }
   }
 
@@ -184,28 +238,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
   void _showThumbsDownReasonPicker() {
     showFeedbackBottomSheet(
       context,
-      onSubmit: (reason, comment) async {
-        final previous = _selectedNps;
-        setState(() {
-          _selectedNps = -1;
-        });
-        // Combine reason and comment for the API call
-        String feedbackReason = reason;
-        if (comment != null && comment.isNotEmpty) {
-          feedbackReason = '$reason: $comment';
-        }
-        final saved = await widget.setMessageNps?.call(-1, reason: feedbackReason);
-        if (saved == false) {
-          if (mounted) setState(() => _selectedNps = previous);
-          return;
-        }
-        if (mounted) OmiFeedback.confirm(context, context.l10n.thanksForYourFeedback);
-      },
+      onSubmit: (reason, comment) => _commands.submitNotHelpful(context, reason, comment),
     );
   }
-
-  /// Analytics get the shape of the message, never its words.
-  Map<String, Object> get _messageAnalytics => {'message_length': widget.messageText.length};
 
   @override
   Widget build(BuildContext context) {
@@ -220,9 +255,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             label: _copied ? l10n.copied : l10n.copyMessage,
             onTap: () async {
               OmiHaptics.light();
-              final copied = await OmiClipboard.copy(context, widget.messageText);
-              if (!copied) return;
-              PlatformManager.instance.analytics.track('Chat Message Copied', properties: _messageAnalytics);
+              if (!await _commands.copy(context)) return;
               if (!mounted) return;
               _copyTimer?.cancel();
               setState(() => _copied = true);
@@ -235,29 +268,20 @@ class _MessageActionBarState extends State<MessageActionBar> {
             icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
             label: l10n.helpful,
             isSelected: _selectedNps == 1,
-            onTap: () async {
+            onTap: () {
               OmiHaptics.light();
-              final previous = _selectedNps;
-              setState(() {
-                _selectedNps = _selectedNps == 1 ? null : 1;
-              });
-              final saved = await widget.setMessageNps?.call(_selectedNps ?? 0);
-              if (saved == false && mounted) setState(() => _selectedNps = previous);
+              _commands.toggleHelpful();
             },
           ),
           _buildActionButton(
             icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
             label: l10n.notHelpful,
             isSelected: _selectedNps == -1,
-            onTap: () async {
+            onTap: () {
               OmiHaptics.light();
               if (_selectedNps == -1) {
                 // Already thumbs down, toggle off
-                setState(() {
-                  _selectedNps = null;
-                });
-                final saved = await widget.setMessageNps?.call(0);
-                if (saved == false && mounted) setState(() => _selectedNps = -1);
+                _commands.clearNotHelpful();
               } else {
                 _showThumbsDownReasonPicker();
               }
@@ -269,10 +293,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               if (widget.messageText.isEmpty) return;
               OmiHaptics.light();
-              await SharePlus.instance.share(
-                ShareParams(text: widget.messageText, sharePositionOrigin: shareSheetOrigin()),
-              );
-              PlatformManager.instance.analytics.track('Chat Message Shared', properties: _messageAnalytics);
+              await _commands.share();
             },
           ),
         ],

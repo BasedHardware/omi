@@ -4139,5 +4139,8 @@
     "activityNewItem": "Neu",
     "activityNeedsAttention": "Braucht Aufmerksamkeit",
     "activityRetryAll": "Alle erneut versuchen",
-    "attentionSummaryFailed": "Diese Unterhaltung konnte nicht zusammengefasst werden"
+    "attentionSummaryFailed": "Diese Unterhaltung konnte nicht zusammengefasst werden",
+    "dateRangeStart": "Startdatum",
+    "dateRangeEnd": "Enddatum",
+    "openInMaps": "In Karten öffnen"
 }

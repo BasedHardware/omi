@@ -13292,4 +13292,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get dateRangeStart => '开始日期';
+
+  @override
+  String get dateRangeEnd => '结束日期';
+
+  @override
+  String get openInMaps => '在地图中打开';
 }

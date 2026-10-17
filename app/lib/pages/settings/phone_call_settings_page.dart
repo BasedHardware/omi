@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -30,7 +31,7 @@ class _PhoneCallSettingsPageState extends State<PhoneCallSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.phoneCallSettingsTitle)),
       body: Consumer<PhoneCallProvider>(
         builder: (context, provider, _) {
@@ -72,6 +73,36 @@ class _PhoneCallSettingsPageState extends State<PhoneCallSettingsPage> {
           );
         },
       ),
+    );
+    final provider = context.watch<PhoneCallProvider>();
+    return IosNativeSurface(
+      title: l10n.phoneCallSettingsTitle,
+      fallback: classic,
+      loading: !provider.numbersLoaded,
+      toolbar: [
+        NativeRow('phone_settings_back', l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+      ],
+      sections: [
+        NativeSection(
+            'phone_verified_numbers',
+            [
+              if (provider.numbersLoaded && provider.verifiedNumbers.isEmpty) ...[
+                NativeRow('phone_numbers_empty', l10n.phoneNoVerifiedNumbersTitle,
+                    kind: 'label', subtitle: l10n.phoneNoVerifiedNumbersMessage),
+                NativeRow('phone_numbers_setup', l10n.phoneGetStarted,
+                    action: (_) => routeToPage(context, const PhoneSetupIntroPage())),
+              ],
+              for (final number in provider.verifiedNumbers)
+                NativeRow('phone_number_${number.id}', number.phoneNumber,
+                    destructive: true,
+                    subtitle: _formatVerifiedAt(context, number.verifiedAt),
+                    symbol: 'trash',
+                    action: (_) => _confirmDelete(context, provider, number.id, number.phoneNumber)),
+            ],
+            title: l10n.yourVerifiedNumbers,
+            footer: l10n.verifiedNumbersDescription)
+      ],
     );
   }
 

@@ -13528,4 +13528,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
+
+  @override
+  String get dateRangeStart => 'Sākuma datums';
+
+  @override
+  String get dateRangeEnd => 'Beigu datums';
+
+  @override
+  String get openInMaps => 'Atvērt Kartēs';
 }

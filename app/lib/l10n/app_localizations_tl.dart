@@ -13604,4 +13604,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
+
+  @override
+  String get dateRangeStart => 'Petsa ng simula';
+
+  @override
+  String get dateRangeEnd => 'Petsa ng pagtatapos';
+
+  @override
+  String get openInMaps => 'Buksan sa Maps';
 }

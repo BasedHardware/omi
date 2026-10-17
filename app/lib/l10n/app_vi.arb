@@ -4139,5 +4139,8 @@
     "activityNewItem": "Mới",
     "activityNeedsAttention": "Cần chú ý",
     "activityRetryAll": "Thử lại tất cả",
-    "attentionSummaryFailed": "Không thể tóm tắt cuộc trò chuyện này"
+    "attentionSummaryFailed": "Không thể tóm tắt cuộc trò chuyện này",
+    "dateRangeStart": "Ngày bắt đầu",
+    "dateRangeEnd": "Ngày kết thúc",
+    "openInMaps": "Mở trong Bản đồ"
 }

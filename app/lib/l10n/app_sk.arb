@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nové",
     "activityNeedsAttention": "Vyžaduje pozornosť",
     "activityRetryAll": "Skúsiť všetko znova",
-    "attentionSummaryFailed": "Tento rozhovor sa nepodarilo zhrnúť"
+    "attentionSummaryFailed": "Tento rozhovor sa nepodarilo zhrnúť",
+    "dateRangeStart": "Počiatočný dátum",
+    "dateRangeEnd": "Koncový dátum",
+    "openInMaps": "Otvoriť v Mapách"
 }

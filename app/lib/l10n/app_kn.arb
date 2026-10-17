@@ -11562,5 +11562,8 @@
     "activityNewItem": "ಹೊಸದು",
     "activityNeedsAttention": "ಗಮನ ಅಗತ್ಯವಿದೆ",
     "activityRetryAll": "ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
-    "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ"
+    "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "dateRangeStart": "ಪ್ರಾರಂಭ ದಿನಾಂಕ",
+    "dateRangeEnd": "ಅಂತಿಮ ದಿನಾಂಕ",
+    "openInMaps": "ನಕ್ಷೆಗಳಲ್ಲಿ ತೆರೆಯಿರಿ"
 }

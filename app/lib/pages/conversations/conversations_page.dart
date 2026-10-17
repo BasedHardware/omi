@@ -1,5 +1,11 @@
 import 'dart:async';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/search/global_search.dart';
+import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
+import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,12 +34,14 @@ import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart'
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
 
@@ -77,6 +85,7 @@ typedef _ConversationPageSnapshot = ({
   int recordingIdentitySignature,
   int pendingDeleteCount,
   HomeEmptyExplanation homeEmptyExplanation,
+  int nativeSignature,
 });
 
 int _identitySignature(Iterable<Object> values) => Object.hashAll(values.map(identityHashCode));
@@ -115,8 +124,9 @@ String conversationLoadMoreFilterKey({
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
-  LocalRecordingsProvider recordings,
-) {
+  LocalRecordingsProvider recordings, {
+  bool native = false,
+}) {
   return (
     conversations: conversations.conversations,
     groupedConversations: conversations.groupedConversations,
@@ -138,8 +148,18 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     recordingIdentitySignature: _identitySignature(recordings.recordings),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
+    nativeSignature: native ? _nativeLibrarySignature(conversations) : 0,
   );
 }
+
+/// What a native library row shows beyond the list's identity: the selection, merges in flight and
+/// the mutable fields a row's title, subtitle and menu read. Flutter rows select these themselves.
+int _nativeLibrarySignature(ConversationProvider provider) => Object.hash(
+      Object.hashAllUnordered(provider.selectedConversationIds),
+      Object.hashAllUnordered(provider.mergingConversationIds),
+      Object.hashAll(provider.conversations.map((c) => Object.hash(c.id, c.starred, c.structured.title, c.status,
+          c.discarded, c.isLocked, c.summaryRetryable, c.captureGroup?.revision))),
+    );
 
 List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
@@ -274,12 +294,22 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps, this.pendingWork});
+  const ConversationsPage({
+    super.key,
+    this.requestInitialLoad = true,
+    this.loadRecaps,
+    this.pendingWork,
+    this.nativeLibrary = false,
+  });
 
   /// Production stays true. Widget tests that already call
   /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
   /// false so initState does not queue loopback I/O on the fake-async clock.
   final bool requestInitialLoad;
+
+  /// Home's list as the native Library page: the same rows projected into a SwiftUI list, with the
+  /// classic tree behind a back button as the fallback.
+  final bool nativeLibrary;
 
   /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
   final RecentRecapsLoader? loadRecaps;
@@ -433,7 +463,191 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       timer.cancel();
     }
     _scrollController.dispose();
+    // The native library shares Home's provider: selection mode never outlives its route. Leaving it
+    // notifies listeners, which must not happen while the tree is being finalized.
+    final provider = _nativeProvider;
+    if (provider != null) {
+      unawaited(Future.microtask(() {
+        if (provider.isSelectionModeActive) provider.exitSelectionMode();
+      }));
+    }
     super.dispose();
+  }
+
+  /// The provider the native library projected, kept so disposal can end its selection mode.
+  ConversationProvider? _nativeProvider;
+
+  /// Conversations whose "Summary failed · Retry" is running, so a second tap does not repeat it.
+  final Set<String> _retryingSummaries = {};
+
+  Widget _nativeLibrary(
+    BuildContext context,
+    ConversationProvider provider,
+    Widget fallback, {
+    required List<DateTime> mergedDates,
+    required Map<DateTime, List<LocalRecording>> recordingsByDate,
+    required bool showPending,
+    required bool loading,
+    required ApiViewPhase apiPhase,
+    required HomeEmptyExplanation emptyExplanation,
+  }) {
+    final l10n = context.l10n;
+    final dates = OmiDateFormat.of(context);
+    final denied = apiPhase == ApiViewPhase.authenticationRequired || apiPhase == ApiViewPhase.terminal;
+    final selecting = provider.isSelectionModeActive;
+    // Home's one row for work that is not a conversation yet, by [HomePendingRow]'s rules: it sits in
+    // Today, where the conversations will land, and opens the On the Way page. Conversations still
+    // processing draw no card of their own, so slow work never reads as a problem.
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sectionDates = showPending && !mergedDates.contains(today) ? [today, ...mergedDates] : mergedDates;
+    NativeRow? pendingRow;
+    if (showPending) {
+      final sync = context.read<SyncProvider>();
+      final title = SyncPendingWork.isLargeBacklog(sync) ? l10n.homePendingCatchingUp : l10n.homePendingTitle;
+      // Recordings say where they are; with none, what is left is conversations being processed.
+      final subtitle = SyncPendingWork.shouldShow(sync) ? SyncPendingWork.stageLabel(sync, l10n) : l10n.processing;
+      pendingRow = NativeRow('library_pending', title,
+          kind: 'navigation', subtitle: subtitle, action: (_) => routeToPage(context, const OnTheWayPage()));
+    }
+    // An empty library explains itself the way Home's hero does: why the last recording made no
+    // conversation. A filtered list is empty for its own reason.
+    final emptyMessage = switch (emptyExplanation) {
+      HomeEmptyExplanation.tooShort when !_hasActiveFilter(provider) => l10n.tooShortDesc,
+      HomeEmptyExplanation.discardedOnly when !_hasActiveFilter(provider) => l10n.discardedOnlyRecording,
+      _ => l10n.noConversationsYet,
+    };
+    final projected = [
+      if (!denied)
+        for (final date in mergedDates) ...?provider.groupedConversations[date],
+    ];
+    String rowId(ServerConversation conversation) => 'library_conversation_${conversation.id}';
+    final eligible = {
+      for (final conversation in projected)
+        if (provider.isConversationEligibleForMerge(conversation.id)) rowId(conversation): conversation.id,
+    };
+    final count = provider.selectedConversationIds.length;
+
+    NativeRow conversationRow(ServerConversation conversation, int index) {
+      if (!selecting) {
+        return nativeConversationRow(context, provider, conversation,
+            id: rowId(conversation), index: index, onRetrySummary: () => _retrySummary(context, conversation));
+      }
+      final canSelect = eligible.containsKey(rowId(conversation));
+      return NativeRow(
+          rowId(conversation), conversation.isLocked ? l10n.conversations : conversationRowTitle(context, conversation),
+          kind: 'navigation',
+          subtitle: canSelect
+              ? dates.timestamp(conversation.startedAt ?? conversation.createdAt)
+              : l10n.conversationCannotBeMerged,
+          action: (_) => canSelect
+              ? provider.toggleConversationSelection(conversation.id)
+              : OmiFeedback.info(context, l10n.conversationCannotBeMerged));
+    }
+
+    return IosNativeSurface(
+        title: selecting ? l10n.selectedCount(count) : l10n.conversations,
+        fallback: fallback,
+        loading: loading,
+        failed: apiPhase == ApiViewPhase.error || denied,
+        empty: emptyMessage,
+        onRefresh: (_) async {
+          unawaited(_pendingWork.refresh());
+          context.read<CaptureProvider>().refreshInProgressConversations();
+          await Future.wait([provider.getInitialConversations(), context.read<LocalRecordingsProvider>().refresh()]);
+        },
+        toolbar: selecting
+            ? [NativeRow('library_cancel', l10n.cancel, symbol: 'xmark', action: (_) => provider.exitSelectionMode())]
+            : [
+                NativeRow('library_back', l10n.back,
+                    symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+                NativeRow('library_search', l10n.search,
+                    symbol: 'magnifyingglass', action: (_) => showGlobalSearch(context)),
+                if (eligible.isNotEmpty)
+                  NativeRow('library_select', l10n.selectOption,
+                      symbol: 'checkmark.circle', action: (_) => provider.enterSelectionMode()),
+              ],
+        selection: selecting
+            ? NativeSelection(
+                selectable: eligible.keys.toSet(),
+                selected: {
+                  for (final entry in eligible.entries)
+                    if (provider.selectedConversationIds.contains(entry.value)) entry.key,
+                },
+                action: (value) => _applyNativeSelection(provider, eligible, value as List<String>))
+            : null,
+        bottomBar: selecting
+            ? [
+                NativeRow('library_selected_count', l10n.selectedCount(count), kind: 'label'),
+                NativeRow('library_move', l10n.moveToFolder,
+                    symbol: 'folder', enabled: count > 0, action: (_) => moveSelectedConversationsToFolder(context)),
+                NativeRow('library_delete', l10n.delete,
+                    symbol: 'trash',
+                    destructive: true,
+                    enabled: count > 0,
+                    action: (_) => confirmAndDeleteSelectedConversations(context)),
+                NativeRow('library_merge', l10n.merge,
+                    symbol: 'arrow.triangle.merge',
+                    enabled: provider.canMerge,
+                    action: (_) => mergeSelectedConversations(context)),
+              ]
+            : const [],
+        sections: [
+          if (!denied) ...[
+            for (final date in sectionDates)
+              NativeSection(
+                  'library_${date.toIso8601String()}',
+                  [
+                    // The pending row sits right under Today's header, as it does in the classic list.
+                    if (pendingRow != null && date == today) pendingRow,
+                    for (final (index, conversation)
+                        in (provider.groupedConversations[date] ?? <ServerConversation>[]).indexed)
+                      conversationRow(conversation, index),
+                    for (final recording in recordingsByDate[date] ?? <LocalRecording>[])
+                      NativeRow('library_recording_${recording.id}', l10n.recordings,
+                          subtitle: dates.timestamp(DateTime.fromMillisecondsSinceEpoch(recording.timerStart * 1000)),
+                          action: (_) => showRecordingDetailSheet(context, recording)),
+                  ],
+                  title: dates.dayHeader(date)),
+            if (provider.hasMoreConversations)
+              NativeSection('library_paging', [
+                NativeRow('library_more', l10n.showMore,
+                    enabled: !provider.isLoadingConversations,
+                    onVisible: (_) => _requestMoreIfNeeded(provider),
+                    action: (_) => _requestMoreIfNeeded(provider)),
+              ]),
+          ]
+        ]);
+  }
+
+  /// Applies Swift's desired selection: every projected, eligible row whose membership differs is toggled
+  /// once. Additions go first, so swapping the last selected row never leaves selection mode on the way.
+  void _applyNativeSelection(ConversationProvider provider, Map<String, String> eligible, List<String> desired) {
+    final wanted = {
+      for (final id in desired)
+        if (eligible[id] case final conversationId?) conversationId,
+    };
+    final current = provider.selectedConversationIds;
+    final added = [
+      for (final id in eligible.values)
+        if (wanted.contains(id) && !current.contains(id)) id
+    ];
+    final removed = [
+      for (final id in eligible.values)
+        if (!wanted.contains(id) && current.contains(id)) id
+    ];
+    for (final id in [...added, ...removed]) {
+      provider.toggleConversationSelection(id);
+    }
+  }
+
+  Future<void> _retrySummary(BuildContext context, ServerConversation conversation) async {
+    if (!_retryingSummaries.add(conversation.id)) return;
+    try {
+      await retryConversationSummary(context, conversation);
+    } finally {
+      _retryingSummaries.remove(conversation.id);
+    }
   }
 
   /// One day's skeleton. Without [showHeader] it continues a day already headed above it.
@@ -522,9 +736,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     // Placing the pending row reads the clock and reshapes the top of the list: redo it whenever the
     // row appears or goes away, not only when the conversation list changes.
     final syncPendingVisible = context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
+    final native = widget.nativeLibrary && nativePresentationEnabled;
+    // The native library labels the pending row itself, so it follows every sync change the way
+    // HomePendingRow's own Consumer does.
+    if (native) context.watch<SyncProvider>();
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
-          _conversationPageSnapshot(conversationProvider, recordingsProvider),
+          _conversationPageSnapshot(conversationProvider, recordingsProvider, native: native),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
@@ -581,7 +799,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // No list yet (loading, empty, a status): the row opens Today itself, where the list's Today lands.
         final pendingOpensToday = showPending && listRows.isEmpty;
 
-        return RefreshIndicator(
+        final classic = RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
@@ -753,6 +971,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ],
           ),
         );
+        if (!widget.nativeLibrary) return classic;
+        final l10n = context.l10n;
+        final fallback = Scaffold(
+            appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.conversations)),
+            body: Stack(children: [
+              Positioned.fill(child: classic),
+              const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar())
+            ]));
+        if (!native) return fallback;
+        _nativeProvider = convoProvider;
+        return _nativeLibrary(context, convoProvider, fallback,
+            mergedDates: mergedDates,
+            recordingsByDate: recordingsByDate,
+            showPending: showPending,
+            loading: isShowingConversationSkeleton,
+            apiPhase: apiPhase,
+            emptyExplanation: snapshot.homeEmptyExplanation);
       },
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
@@ -40,7 +41,9 @@ class AnnouncementDialog extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.black87,
-      builder: (context) => AnnouncementDialog(announcement: announcement),
+      builder: (context) => nativePresentationEnabled
+          ? NativeAnnouncementDialog(announcement: announcement)
+          : AnnouncementDialog(announcement: announcement),
     );
     return outcome ?? AnnouncementOutcome.none;
   }
@@ -123,7 +126,7 @@ class AnnouncementDialog extends StatelessWidget {
                           expand: true,
                           onPressed: () {
                             Navigator.pop(context, AnnouncementOutcome.cta);
-                            _openAction(content.cta!.action);
+                            _openAnnouncementAction(content.cta!.action);
                           },
                         ),
                       ],
@@ -142,21 +145,94 @@ class AnnouncementDialog extends StatelessWidget {
       ),
     );
   }
+}
 
-  Future<void> _openAction(String action) async {
-    switch (AnnouncementAction.parse(action)) {
-      case AnnouncementRoute(:final route):
-        // An in-app destination opens inside the existing Home (ux-contract §1).
-        await HomeNavigation.openRoute(route);
-      case AnnouncementUrl(:final uri):
-        try {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        } catch (e) {
-          debugPrint('Failed to open URL: $e');
-        }
-      case null:
-        debugPrint('Unsupported announcement action: $action');
-    }
+Future<void> _openAnnouncementAction(String action) async {
+  switch (AnnouncementAction.parse(action)) {
+    case AnnouncementRoute(:final route):
+      // An in-app destination opens inside the existing Home (ux-contract §1).
+      await HomeNavigation.openRoute(route);
+    case AnnouncementUrl(:final uri):
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        debugPrint('Failed to open URL: $e');
+      }
+    case null:
+      debugPrint('Unsupported announcement action: $action');
+  }
+}
+
+/// [text] as literal inline Markdown: the native renderer reads rich text blocks as Markdown, so
+/// server-written copy escapes every punctuation mark that could start emphasis, code, a link, an
+/// entity or HTML. A link the renderer still detects is discarded: the row's link whitelist is empty.
+String nativeMarkdownLiteral(String text) =>
+    text.replaceAllMapped(RegExp(r'[\\`*_\[\]<>~!&]'), (match) => '\\${match[0]}');
+
+/// The native rich-text image block for a server image: HTTPS only, otherwise no block at all.
+Map<String, Object>? nativeAnnouncementImageBlock(String? url) {
+  // Only a URL already in its normalized spelling: Swift's stricter parser must accept exactly what
+  // Dart checked, or one odd image would cost the whole native surface.
+  if (url == null || !url.startsWith('https://') || Uri.tryParse(url)?.toString() != url) return null;
+  if (nativeImageUri(url) == null) return null;
+  return {'kind': 'image', 'text': '', 'uri': url, 'indent': 0, 'prefix': ''};
+}
+
+/// The announcement as one native surface in the same non-dismissible dialog route: the close X
+/// (closed), the image, title and body, the call to action (cta, then the existing action owner)
+/// and Not Now (notNow). System back still pops without an answer (none). A host that cannot draw
+/// it keeps the complete [AnnouncementDialog].
+class NativeAnnouncementDialog extends StatelessWidget {
+  const NativeAnnouncementDialog({super.key, required this.announcement});
+
+  final Announcement announcement;
+
+  /// Answers once: a second command during the closing transition must not pop the route beneath.
+  static void _answer(BuildContext context, AnnouncementOutcome outcome) {
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    Navigator.of(context).pop(outcome);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final content = announcement.announcementContent;
+    final cta = content.cta;
+    final image = nativeAnnouncementImageBlock(content.imageUrl);
+    final height = MediaQuery.sizeOf(context).height;
+    return IosNativeSurface(
+      title: '',
+      fallback: AnnouncementDialog(announcement: announcement),
+      nativeWrapper: (view) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: 40),
+        clipBehavior: Clip.antiAlias,
+        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.xlAll),
+        child: SizedBox(width: 360, height: height * 0.8, child: view),
+      ),
+      toolbar: [
+        NativeRow('announcement_close', l10n.close,
+            symbol: 'xmark', action: (_) => _answer(context, AnnouncementOutcome.closed)),
+      ],
+      sections: [
+        NativeSection('announcement', [
+          NativeRow('announcement_body', content.title, kind: 'rich_text', blocks: [
+            if (image != null) image,
+            {'kind': 'heading', 'text': nativeMarkdownLiteral(content.title), 'level': 1, 'indent': 0, 'prefix': ''},
+            {'kind': 'text', 'text': nativeMarkdownLiteral(content.body), 'indent': 0, 'prefix': ''},
+          ]),
+        ]),
+        NativeSection('announcement_actions', [
+          if (cta != null)
+            NativeRow('announcement_cta', cta.text, action: (_) {
+              if (ModalRoute.of(context)?.isCurrent != true) return;
+              Navigator.of(context).pop(AnnouncementOutcome.cta);
+              _openAnnouncementAction(cta.action);
+            }),
+          NativeRow('announcement_not_now', l10n.notNow, action: (_) => _answer(context, AnnouncementOutcome.notNow)),
+        ]),
+      ],
+    );
   }
 }
 

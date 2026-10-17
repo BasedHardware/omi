@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/chat_content_block.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'chat_block_chrome.dart';
@@ -33,37 +34,28 @@ class AgentCompletionBlock extends StatelessWidget {
 
   final AgentCompletionContentBlock block;
 
-  /// Only the explicit successful terminal states may present as completed.
-  /// New, timed-out, or orphaned states must remain visibly non-successful.
-  bool get _completed {
-    final status = block.status.trim().toLowerCase();
-    return status == 'completed' || status == 'succeeded' || status == 'success';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final status = block.status.trim().toLowerCase();
-    final completed = _completed;
-    final cancelled = status == 'cancelled' || status == 'canceled' || status == 'stopped';
-    final timedOut = status == 'timed_out' || status == 'timedout' || status == 'timeout';
-    return _AgentRunCard(
-      icon: completed
-          ? Icons.check_circle_outline
-          : cancelled
-              ? Icons.cancel_outlined
-              : Icons.error_outline,
-      label: completed
-          ? l10n.statusCompleted
-          : cancelled
-              ? l10n.cancelled
-              : timedOut
-                  ? l10n.statusTimedOut
-                  : l10n.statusFailed,
-      title: block.title,
-      body: block.output,
-    );
+    final status = agentCompletionStatus(context.l10n, block.status);
+    return _AgentRunCard(icon: status.icon, label: status.label, title: block.title, body: block.output);
   }
+}
+
+/// How a finished agent run reads, shared with the native transcript. Only the explicit successful
+/// terminal states present as completed; new, timed-out or orphaned states stay visibly
+/// non-successful.
+({IconData icon, String symbol, String label}) agentCompletionStatus(AppLocalizations l10n, String rawStatus) {
+  final status = rawStatus.trim().toLowerCase();
+  final completed = status == 'completed' || status == 'succeeded' || status == 'success';
+  final cancelled = status == 'cancelled' || status == 'canceled' || status == 'stopped';
+  final timedOut = status == 'timed_out' || status == 'timedout' || status == 'timeout';
+  if (completed) return (icon: Icons.check_circle_outline, symbol: 'checkmark.circle', label: l10n.statusCompleted);
+  if (cancelled) return (icon: Icons.cancel_outlined, symbol: 'xmark.circle', label: l10n.cancelled);
+  return (
+    icon: Icons.error_outline,
+    symbol: 'exclamationmark.circle',
+    label: timedOut ? l10n.statusTimedOut : l10n.statusFailed,
+  );
 }
 
 class _AgentRunCard extends StatelessWidget {

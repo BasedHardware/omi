@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nuevo",
     "activityNeedsAttention": "Requiere atención",
     "activityRetryAll": "Reintentar todo",
-    "attentionSummaryFailed": "No se pudo resumir esta conversación"
+    "attentionSummaryFailed": "No se pudo resumir esta conversación",
+    "dateRangeStart": "Fecha de inicio",
+    "dateRangeEnd": "Fecha de finalización",
+    "openInMaps": "Abrir en Mapas"
 }

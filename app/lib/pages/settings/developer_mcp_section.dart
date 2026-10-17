@@ -15,6 +15,12 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 const _mono = 'Ubuntu Mono';
 
+/// The MCP docs page.
+const developerMcpDocsUrl = 'https://docs.omi.me/doc/developer/MCP';
+
+/// The header an MCP client sends with an API key; `<key>` is a placeholder, never a key.
+const mcpAuthHeaderTemplate = 'Authorization: Bearer <key>';
+
 /// A compact "Docs" button that opens [url] (developer section headers).
 class DeveloperDocsButton extends StatelessWidget {
   const DeveloperDocsButton({super.key, required this.url, required this.analyticsLabel});
@@ -22,15 +28,18 @@ class DeveloperDocsButton extends StatelessWidget {
   final String url;
   final String analyticsLabel;
 
+  /// Opens [url] and records the '<analyticsLabel> Docs' page visit.
+  static void open(String url, String analyticsLabel) {
+    launchUrl(Uri.parse(url));
+    PlatformManager.instance.analytics.pageOpened('$analyticsLabel Docs');
+  }
+
   @override
   Widget build(BuildContext context) {
     return OmiButton.secondary(
       label: context.l10n.docs,
       size: OmiButtonSize.compact,
-      onPressed: () {
-        launchUrl(Uri.parse(url));
-        PlatformManager.instance.analytics.pageOpened('$analyticsLabel Docs');
-      },
+      onPressed: () => open(url, analyticsLabel),
     );
   }
 }
@@ -52,7 +61,7 @@ class DeveloperMcpSection extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const DeveloperDocsButton(url: 'https://docs.omi.me/doc/developer/MCP', analyticsLabel: 'MCP'),
+              const DeveloperDocsButton(url: developerMcpDocsUrl, analyticsLabel: 'MCP'),
               const SizedBox(width: OmiSpacing.xs),
               OmiButton.secondary(
                 label: l10n.createKey,
@@ -124,7 +133,7 @@ class DeveloperMcpSection extends StatelessWidget {
                   const SizedBox(height: OmiSpacing.lg),
                   _Label(l10n.apiKeyAuth),
                   const SizedBox(height: OmiSpacing.xs),
-                  _KeyValue(label: l10n.header, value: 'Authorization: Bearer <key>'),
+                  _KeyValue(label: l10n.header, value: mcpAuthHeaderTemplate),
                   const SizedBox(height: OmiSpacing.lg),
                   _Label(l10n.oAuth),
                   const SizedBox(height: OmiSpacing.xs),

@@ -4181,5 +4181,8 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Kræver opmærksomhed",
     "activityRetryAll": "Prøv alle igen",
-    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres"
+    "attentionSummaryFailed": "Samtalen kunne ikke opsummeres",
+    "dateRangeStart": "Startdato",
+    "dateRangeEnd": "Slutdato",
+    "openInMaps": "Åbn i Kort"
 }

@@ -13505,4 +13505,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
+
+  @override
+  String get dateRangeStart => 'सुरुवातीची तारीख';
+
+  @override
+  String get dateRangeEnd => 'समाप्तीची तारीख';
+
+  @override
+  String get openInMaps => 'नकाशात उघडा';
 }

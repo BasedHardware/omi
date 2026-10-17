@@ -13508,4 +13508,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Овај разговор није могуће сажети';
+
+  @override
+  String get dateRangeStart => 'Датум почетка';
+
+  @override
+  String get dateRangeEnd => 'Датум завршетка';
+
+  @override
+  String get openInMaps => 'Отвори у Мапама';
 }

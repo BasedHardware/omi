@@ -4139,5 +4139,8 @@
     "activityNewItem": "새 항목",
     "activityNeedsAttention": "확인 필요",
     "activityRetryAll": "모두 다시 시도",
-    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다"
+    "attentionSummaryFailed": "이 대화를 요약하지 못했습니다",
+    "dateRangeStart": "시작일",
+    "dateRangeEnd": "종료일",
+    "openInMaps": "지도에서 열기"
 }

@@ -1,5 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -50,7 +51,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationDisplay)),
       body: Consumer<ConversationProvider>(
         builder: (context, provider, child) {
@@ -112,6 +113,50 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
         },
       ),
     );
+    final provider = context.watch<ConversationProvider>();
+    return IosNativeSurface(title: context.l10n.conversationDisplay, fallback: classic, toolbar: [
+      NativeRow('display_back', context.l10n.back, symbol: 'chevron.left', action: (_) {
+        Navigator.of(context).pop();
+      })
+    ], sections: [
+      NativeSection(
+          'visibility',
+          [
+            NativeRow('display_short', context.l10n.showShortConversations,
+                subtitle: context.l10n.showShortConversationsDesc,
+                kind: 'toggle',
+                value: provider.showShortConversations, action: (_) {
+              provider.toggleShortConversations();
+              PlatformManager.instance.analytics.showShortConversationsToggled(provider.showShortConversations);
+            }),
+            NativeRow('display_discarded', context.l10n.showDiscardedConversations,
+                subtitle: context.l10n.showDiscardedConversationsDesc,
+                kind: 'toggle',
+                value: provider.showDiscardedConversations, action: (_) {
+              provider.toggleDiscardConversations();
+              PlatformManager.instance.analytics.showDiscardedConversationsToggled(provider.showDiscardedConversations);
+            }),
+          ],
+          title: context.l10n.visibility,
+          footer: context.l10n.visibilitySubtitle),
+      NativeSection(
+          'threshold',
+          [
+            NativeRow('display_threshold', context.l10n.durationThreshold,
+                subtitle: context.l10n.durationThresholdDesc,
+                kind: 'choice',
+                value: '${provider.shortConversationThreshold}',
+                options: {
+                  for (final seconds in [60, 120, 180, 240, 300]) '$seconds': context.l10n.minLabel(seconds ~/ 60)
+                }, action: (value) {
+              final seconds = int.parse(value as String);
+              provider.setShortConversationThreshold(seconds);
+              PlatformManager.instance.analytics.shortConversationThresholdChanged(seconds);
+            })
+          ],
+          title: context.l10n.shortConversationThreshold,
+          footer: context.l10n.shortConversationThresholdSubtitle),
+    ]);
   }
 }
 

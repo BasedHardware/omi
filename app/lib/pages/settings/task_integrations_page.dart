@@ -13,6 +13,7 @@ import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
@@ -342,6 +343,35 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     );
   }
 
+  VoidCallback? _appTap(TaskIntegrationApp app, bool isLoading) {
+    final provider = context.read<TaskIntegrationProvider>();
+    final isSelected = provider.selectedApp == app;
+    final isConnected = _isAppConnected(app);
+    // Apple Reminders has no backend status; a failed status read offers a refresh instead.
+    final statusError = app != TaskIntegrationApp.appleReminders && provider.hasLoadError;
+    if (!app.isAvailable || isLoading) return null;
+    return () {
+      if (statusError) {
+        _loadFromBackend(forceRefresh: true);
+        return;
+      }
+      // If already connected and selected, open settings
+      if (isConnected && isSelected) {
+        if (app == TaskIntegrationApp.asana) {
+          routeToPage(context, const AsanaSettingsPage());
+        } else if (app == TaskIntegrationApp.clickup) {
+          routeToPage(context, const ClickUpSettingsPage());
+        } else if (app == TaskIntegrationApp.todoist) {
+          routeToPage(context, const TodoistSettingsPage());
+        } else if (app == TaskIntegrationApp.googleTasks) {
+          routeToPage(context, const GoogleTasksSettingsPage());
+        }
+      } else {
+        _selectApp(app);
+      }
+    };
+  }
+
   Widget _buildAppTile(TaskIntegrationApp app, bool isLoading) {
     final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
     final isAvailable = app.isAvailable;
@@ -349,28 +379,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final statusError =
         app != TaskIntegrationApp.appleReminders && context.read<TaskIntegrationProvider>().hasLoadError;
 
-    final VoidCallback? onTap = isAvailable && !isLoading
-        ? () {
-            if (statusError) {
-              _loadFromBackend(forceRefresh: true);
-              return;
-            }
-            // If already connected and selected, open settings
-            if (isConnected && isSelected) {
-              if (app == TaskIntegrationApp.asana) {
-                routeToPage(context, const AsanaSettingsPage());
-              } else if (app == TaskIntegrationApp.clickup) {
-                routeToPage(context, const ClickUpSettingsPage());
-              } else if (app == TaskIntegrationApp.todoist) {
-                routeToPage(context, const TodoistSettingsPage());
-              } else if (app == TaskIntegrationApp.googleTasks) {
-                routeToPage(context, const GoogleTasksSettingsPage());
-              }
-            } else {
-              _selectApp(app);
-            }
-          }
-        : null;
+    final onTap = _appTap(app, isLoading);
 
     final Widget trailing;
     if (!isAvailable) {
@@ -450,7 +459,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final provider = context.watch<TaskIntegrationProvider>();
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.taskIntegrations),
@@ -516,6 +525,54 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           ),
         ),
       ),
+    );
+    return IosNativeSurface(
+      title: context.l10n.taskIntegrations,
+      fallback: classic,
+      loading: isLoading,
+      toolbar: [
+        NativeRow('task_integrations_back', context.l10n.back,
+            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+        if (_shouldShowSettingsIcon())
+          NativeRow('task_integrations_settings', context.l10n.configureSettings,
+              symbol: 'gearshape', action: (_) => _openSelectedAppSettings()),
+      ],
+      sections: [
+        // The classic column shows a failed status read as a live-region banner and a pending browser
+        // auth as a notice with a retry; this leading section is the native counterpart of both.
+        if (provider.hasLoadError || _pendingAuthApp != null)
+          NativeSection('task_integrations_status', [
+            if (provider.hasLoadError)
+              NativeRow('task_integrations_status_error', context.l10n.connectionErrorDesc,
+                  kind: 'label', symbol: 'exclamationmark.triangle', destructive: true),
+            if (_pendingAuthApp != null) ...[
+              NativeRow('task_integrations_pending_auth', context.l10n.completeAuthBrowser, kind: 'label'),
+              NativeRow('task_integrations_pending_retry', context.l10n.tryAgain,
+                  symbol: 'arrow.clockwise', enabled: !isLoading, action: (_) => _loadFromBackend(forceRefresh: true)),
+            ],
+          ]),
+        NativeSection(
+            'task_integrations',
+            [
+              for (final app in TaskIntegrationApp.values
+                  .where((app) => app != TaskIntegrationApp.appleReminders || PlatformService.isApple))
+                NativeRow('task_integration_${app.name}', app.displayName,
+                    symbol: provider.selectedApp == app && _isAppConnected(app) ? 'checkmark.circle.fill' : null,
+                    // Same precedence as the classic tile's chip: a failed status read offers a refresh.
+                    subtitle: !app.isAvailable
+                        ? context.l10n.comingSoon
+                        : isLoading
+                            ? context.l10n.loading
+                            : app != TaskIntegrationApp.appleReminders && provider.hasLoadError
+                                ? context.l10n.tryAgain
+                                : !_isAppConnected(app)
+                                    ? context.l10n.connect
+                                    : '',
+                    enabled: _appTap(app, isLoading) != null,
+                    action: (_) => _appTap(app, isLoading)?.call()),
+            ],
+            footer: context.l10n.tasksExportedOneApp)
+      ],
     );
   }
 }

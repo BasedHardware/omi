@@ -1,11 +1,25 @@
 import 'package:flutter/material.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
-
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+
+/// The name the editor starts from: the saved given name, else the signed-in account's display name.
+String initialGivenName() => SharedPreferencesUtil().givenName.isNotEmpty
+    ? SharedPreferencesUtil().givenName
+    : AuthService.instance.getFirebaseUser()?.displayName ?? '';
+
+/// Saves [name] through the existing owners and confirms it. A blank name saves nothing and answers
+/// false.
+bool saveGivenName(BuildContext context, String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return false;
+  SharedPreferencesUtil().givenName = trimmed;
+  AuthService.instance.updateGivenName(trimmed);
+  OmiFeedback.confirm(context, context.l10n.nameUpdatedSuccessfully);
+  return true;
+}
 
 /// The "Edit Name" dialog, shown with `showDialog(builder: (_) => const ChangeNameWidget())`.
 class ChangeNameWidget extends StatefulWidget {
@@ -17,15 +31,11 @@ class ChangeNameWidget extends StatefulWidget {
 
 class _ChangeNameWidgetState extends State<ChangeNameWidget> {
   late TextEditingController nameController;
-  User? user;
   bool isSaving = false;
 
   @override
   void initState() {
-    user = AuthService.instance.getFirebaseUser();
-    nameController = TextEditingController(
-      text: SharedPreferencesUtil().givenName.isNotEmpty ? SharedPreferencesUtil().givenName : user?.displayName ?? '',
-    );
+    nameController = TextEditingController(text: initialGivenName());
     nameController.addListener(_onNameChanged);
     super.initState();
   }
@@ -45,9 +55,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
     final name = nameController.text.trim();
     if (name.isEmpty) return;
     setState(() => isSaving = true);
-    SharedPreferencesUtil().givenName = name;
-    AuthService.instance.updateGivenName(name);
-    OmiFeedback.confirm(context, context.l10n.nameUpdatedSuccessfully);
+    saveGivenName(context, name);
     Navigator.of(context).pop();
   }
 

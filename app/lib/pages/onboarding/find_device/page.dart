@@ -10,10 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/connection_guide_sheet.dart';
+import 'device_discovery_controller.dart';
 import 'found_devices.dart';
 
 class FindDevicesPage extends StatefulWidget {
@@ -36,11 +36,17 @@ class FindDevicesPage extends StatefulWidget {
 
 class _FindDevicesPageState extends State<FindDevicesPage> {
   OnboardingProvider? _provider;
+  late final DeviceDiscoveryController _discovery;
 
   @override
   void initState() {
     super.initState();
     _provider = Provider.of<OnboardingProvider>(context, listen: false);
+    _discovery = DeviceDiscoveryController(
+      context: context,
+      isFromOnboarding: widget.isFromOnboarding,
+      goNext: widget.goNext,
+    );
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (widget.isFromOnboarding) {
@@ -58,23 +64,15 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
     super.dispose();
   }
 
-  /// A missing Bluetooth (or, on Android 11 and older, location) permission goes through the one
-  /// global recovery prompt, [BluetoothGuidanceListener]: "Permissions required" with Open
-  /// Settings. This page never draws its own Bluetooth dialog (onboarding-home #12).
+  /// Bluetooth recovery goes through [BluetoothGuidanceListener]; see [DeviceDiscoveryController.scan].
   Future<void> _scanDevices() async {
-    void publishGuidance() {
-      if (mounted) unawaited(BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery));
-    }
-
-    await _provider?.scanDevices(onShowDialog: publishGuidance, onShowLocationDialog: publishGuidance);
+    if (_provider == null) return;
+    await _discovery.scan();
   }
 
   Future<void> _scanAgain() async {
-    OmiHaptics.selection();
-    _provider?.cancelActiveScan();
-    _provider?.enableInstructions = false;
-    setState(() {});
-    await _scanDevices();
+    if (_provider == null) return;
+    await _discovery.rescan(onReset: () => setState(() {}));
   }
 
   void _showConnectionGuide() {

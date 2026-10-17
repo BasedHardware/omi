@@ -11562,5 +11562,8 @@
     "activityNewItem": "חדש",
     "activityNeedsAttention": "דורש תשומת לב",
     "activityRetryAll": "נסה הכול שוב",
-    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו"
+    "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו",
+    "dateRangeStart": "תאריך התחלה",
+    "dateRangeEnd": "תאריך סיום",
+    "openInMaps": "פתיחה במפות"
 }

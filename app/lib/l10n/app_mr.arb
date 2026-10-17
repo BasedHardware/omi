@@ -11562,5 +11562,8 @@
     "activityNewItem": "नवीन",
     "activityNeedsAttention": "लक्ष देणे आवश्यक",
     "activityRetryAll": "सर्व पुन्हा प्रयत्न करा",
-    "attentionSummaryFailed": "या संभाषणाचा सारांश तयार करता आला नाही"
+    "attentionSummaryFailed": "या संभाषणाचा सारांश तयार करता आला नाही",
+    "dateRangeStart": "सुरुवातीची तारीख",
+    "dateRangeEnd": "समाप्तीची तारीख",
+    "openInMaps": "नकाशात उघडा"
 }

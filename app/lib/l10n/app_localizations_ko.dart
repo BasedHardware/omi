@@ -13317,4 +13317,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
+
+  @override
+  String get dateRangeStart => '시작일';
+
+  @override
+  String get dateRangeEnd => '종료일';
+
+  @override
+  String get openInMaps => '지도에서 열기';
 }

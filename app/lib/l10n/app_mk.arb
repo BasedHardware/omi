@@ -11562,5 +11562,8 @@
     "activityNewItem": "Ново",
     "activityNeedsAttention": "Потребно е внимание",
     "activityRetryAll": "Обиди ги сите повторно",
-    "attentionSummaryFailed": "Овој разговор не можеше да се сумира"
+    "attentionSummaryFailed": "Овој разговор не можеше да се сумира",
+    "dateRangeStart": "Датум на почеток",
+    "dateRangeEnd": "Датум на завршување",
+    "openInMaps": "Отвори во Мапи"
 }

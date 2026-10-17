@@ -6,14 +6,14 @@ import 'package:omi/pages/entities/entity_page.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Tasks grouped under the project each belongs to (a task's workstream is its project), largest
-/// project first and tasks without one last. Each project header opens that project's page.
-List<Widget> projectTaskSections({
-  required BuildContext context,
-  required List<ActionItemWithMetadata> items,
-  required Map<String, EntityRef> projects,
-  required Widget Function(ActionItemWithMetadata item, List<ActionItemWithMetadata> group) buildRow,
-}) {
+/// [items] grouped by project, in display order: a task's workstream is its project when [projects]
+/// knows it, otherwise it joins the no-project group (a null id), which always comes last. Projects run
+/// largest first, ties by name ignoring case; within one, soonest due first, undated after, then the
+/// user's own order. The classic sliver list and the native projection both show exactly this.
+List<(String?, List<ActionItemWithMetadata>)> groupTasksByProject(
+  List<ActionItemWithMetadata> items,
+  Map<String, EntityRef> projects,
+) {
   final groups = <String?, List<ActionItemWithMetadata>>{};
   for (final item in items) {
     final id = item.workstreamId;
@@ -34,15 +34,28 @@ List<Widget> projectTaskSections({
       return bySize != 0 ? bySize : projects[a]!.name.toLowerCase().compareTo(projects[b]!.name.toLowerCase());
     });
   return [
-    for (final id in [...ordered, if (groups.containsKey(null)) null])
+    for (final id in [...ordered, if (groups.containsKey(null)) null]) (id, groups[id]!)
+  ];
+}
+
+/// Tasks grouped under the project each belongs to (a task's workstream is its project), largest
+/// project first and tasks without one last. Each project header opens that project's page.
+List<Widget> projectTaskSections({
+  required BuildContext context,
+  required List<ActionItemWithMetadata> items,
+  required Map<String, EntityRef> projects,
+  required Widget Function(ActionItemWithMetadata item, List<ActionItemWithMetadata> group) buildRow,
+}) {
+  return [
+    for (final (id, group) in groupTasksByProject(items, projects))
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.sm),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ProjectHeader(project: id == null ? null : projects[id], count: groups[id]!.length),
-              for (final item in groups[id]!) buildRow(item, groups[id]!),
+              _ProjectHeader(project: id == null ? null : projects[id], count: group.length),
+              for (final item in group) buildRow(item, group),
             ],
           ),
         ),

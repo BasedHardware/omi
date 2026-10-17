@@ -64,6 +64,8 @@ class FreemiumSwitchHandler {
           title: title,
           padding: EdgeInsets.zero,
           builder: (_) => const _PlansSheetWrapper(),
+          // The same sheet with native chrome; its Flutter fallback keeps the sheet scaffold.
+          nativeBuilder: (_) => const _PlansSheetWrapper(nativeSheet: true),
         );
       },
     );
@@ -94,7 +96,9 @@ class FreemiumSwitchHandler {
 
 /// Wrapper widget to create animation controllers for PlansSheet
 class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
+  const _PlansSheetWrapper({this.nativeSheet = false});
+
+  final bool nativeSheet;
 
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
@@ -108,10 +112,9 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
   @override
   void initState() {
     super.initState();
-    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
-
-    _arrowController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this)
-      ..repeat(reverse: true);
+    // PlansSheet starts these only when its classic tree mounts, so they stay idle under the native sheet.
+    _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this);
+    _arrowController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
 
     _arrowAnimation = Tween<double>(
       begin: 0,
@@ -133,6 +136,8 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _waveController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
+      nativeSheet: widget.nativeSheet,
+      animateHeroOnMount: true,
       analyticsSource: 'freemium_switch',
     );
   }

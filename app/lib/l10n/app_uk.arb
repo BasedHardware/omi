@@ -4139,5 +4139,8 @@
     "activityNewItem": "Нове",
     "activityNeedsAttention": "Потребує уваги",
     "activityRetryAll": "Повторити все",
-    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову"
+    "attentionSummaryFailed": "Не вдалося підсумувати цю розмову",
+    "dateRangeStart": "Дата початку",
+    "dateRangeEnd": "Дата закінчення",
+    "openInMaps": "Відкрити в Картах"
 }

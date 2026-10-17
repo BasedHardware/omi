@@ -4139,5 +4139,8 @@
     "activityNewItem": "Uus",
     "activityNeedsAttention": "Vajab tähelepanu",
     "activityRetryAll": "Proovi kõiki uuesti",
-    "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta"
+    "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta",
+    "dateRangeStart": "Alguskuupäev",
+    "dateRangeEnd": "Lõppkuupäev",
+    "openInMaps": "Ava kaardirakenduses"
 }

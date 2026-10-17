@@ -13570,4 +13570,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Impossibile riassumere questa conversazione';
+
+  @override
+  String get dateRangeStart => 'Data di inizio';
+
+  @override
+  String get dateRangeEnd => 'Data di fine';
+
+  @override
+  String get openInMaps => 'Apri in Mappe';
 }

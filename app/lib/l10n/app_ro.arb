@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nou",
     "activityNeedsAttention": "Necesită atenție",
     "activityRetryAll": "Reîncearcă tot",
-    "attentionSummaryFailed": "Conversația nu a putut fi rezumată"
+    "attentionSummaryFailed": "Conversația nu a putut fi rezumată",
+    "dateRangeStart": "Data de început",
+    "dateRangeEnd": "Data de sfârșit",
+    "openInMaps": "Deschide în Hărți"
 }

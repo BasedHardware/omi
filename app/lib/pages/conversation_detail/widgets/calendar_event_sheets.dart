@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 const _googleCalendarLogo = 'assets/integration_app_logos/google-calendar.png';
@@ -34,6 +35,7 @@ Future<void> showLinkEventSheet(BuildContext context) {
     context: context,
     title: context.l10n.linkEvent,
     padding: EdgeInsets.zero,
+    nativeBuilder: (_) => const CalendarEventPickerSheet(),
     builder: (_) => const CalendarEventPickerSheet(),
   );
 }
@@ -47,6 +49,7 @@ Future<void> showCalendarEventDetailsSheet(
   return showOmiSheet<void>(
     context: context,
     title: calendarEvent.title,
+    nativeBuilder: (_) => CalendarEventDetailsSheet(calendarEvent: calendarEvent, onUnlink: onUnlink),
     builder: (_) => CalendarEventDetailsSheet(calendarEvent: calendarEvent, onUnlink: onUnlink),
   );
 }
@@ -257,10 +260,29 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
         },
       );
     }
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6),
-      child: body,
-    );
+    final classic =
+        ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.6), child: body);
+    final dates = OmiDateFormat.of(context);
+    return IosNativeSurface(
+        title: context.l10n.linkEvent,
+        fallback: classic,
+        loading: _isLoading,
+        empty: context.l10n.noCalendarEventsNearby,
+        toolbar: [
+          NativeRow('calendar_picker_close', context.l10n.close,
+              symbol: 'xmark', enabled: !_isLinking, action: (_) => Navigator.of(context).maybePop())
+        ],
+        sections: [
+          NativeSection('calendar_events', [
+            for (final event in _events)
+              NativeRow('calendar_event:${event.eventId}', event.title,
+                  symbol: event.eventId == _suggestedEventId ? 'star' : 'calendar',
+                  subtitle: '${dates.dayHeader(event.startTime)}, ${dates.timeRange(event.startTime, event.endTime)}'
+                      '${event.attendees.isEmpty ? '' : ' · ${formatAttendeesLabel(event.attendees)}'}',
+                  enabled: !_isLinking,
+                  action: (_) => _linkEvent(event)),
+          ])
+        ]);
   }
 }
 
@@ -290,7 +312,7 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
     final event = widget.calendarEvent;
     final dates = OmiDateFormat.of(context);
     final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
-    return Padding(
+    final classic = Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -330,16 +352,44 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
               label: context.l10n.unlinkCalendarEvent,
               color: OmiColors.danger,
               loading: _unlinking,
-              onTap: () async {
-                setState(() => _unlinking = true);
-                await widget.onUnlink!();
-                if (!context.mounted) return;
-                Navigator.pop(context);
-              },
+              onTap: _unlink,
             ),
         ],
       ),
     );
+    return IosNativeSurface(title: event.title, fallback: classic, toolbar: [
+      NativeRow('calendar_details_close', context.l10n.close,
+          symbol: 'xmark', enabled: !_unlinking, action: (_) => Navigator.of(context).maybePop())
+    ], sections: [
+      NativeSection('calendar_details', [
+        NativeRow('calendar_when', dates.timeRange(event.startTime, event.endTime), kind: 'label', symbol: 'calendar'),
+        if (event.attendees.isNotEmpty)
+          NativeRow('calendar_attendees', event.attendees.map(formatAttendeeName).join(', '),
+              kind: 'label', symbol: 'person.2'),
+        if (event.htmlLink != null)
+          NativeRow('calendar_open', context.l10n.openInGoogleCalendar,
+              symbol: 'arrow.up.right.square',
+              action: (_) => launchUrl(Uri.parse(event.htmlLink!), mode: LaunchMode.externalApplication)),
+        if (event.attendeeEmails.isNotEmpty)
+          NativeRow('calendar_share', context.l10n.shareWithAttendees,
+              symbol: 'square.and.arrow.up', action: (_) => _shareWithAttendees()),
+        if (widget.onUnlink != null)
+          NativeRow('calendar_unlink', context.l10n.unlinkCalendarEvent,
+              destructive: true, enabled: !_unlinking, action: (_) => _unlink()),
+      ])
+    ]);
+  }
+
+  Future<void> _unlink() async {
+    if (_unlinking || widget.onUnlink == null) return;
+    setState(() => _unlinking = true);
+    try {
+      await widget.onUnlink!();
+      if (!mounted) return;
+      Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _unlinking = false);
+    }
   }
 }
 

@@ -11,18 +11,18 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// disconnected device reports none of them); firmware and device id still say "Unknown".
 ///
 /// For Ray-Ban Meta glasses the firmware row is replaced by microphone and camera readiness
-/// ([rayBanCameraStatus] resolves to 'granted', 'unavailable' or another permission state).
+/// ([rayBanCameraLabel] is the resolved camera readiness, or null while it is still being checked).
 class DeviceInfoGroups extends StatelessWidget {
   const DeviceInfoGroups({
     super.key,
     required this.pairedDevice,
     required this.isDeviceConnected,
-    this.rayBanCameraStatus,
+    this.rayBanCameraLabel,
   });
 
   final BtDevice? pairedDevice;
   final bool isDeviceConnected;
-  final Future<String>? rayBanCameraStatus;
+  final String? rayBanCameraLabel;
 
   static String _truncate(String value) {
     if (value.length > 12) return '${value.substring(0, 5)}•••${value.substring(value.length - 4)}';
@@ -85,24 +85,10 @@ class DeviceInfoGroups extends StatelessWidget {
                 title: l10n.microphone,
                 value: isDeviceConnected ? l10n.raybanMetaMicrophoneReady : l10n.disconnected,
               ),
-              FutureBuilder<String>(
-                future: rayBanCameraStatus,
-                builder: (context, snapshot) {
-                  final status = snapshot.data;
-                  final String label;
-                  if (status == 'granted') {
-                    label = l10n.raybanMetaImageCaptureReady;
-                  } else if (status == 'unavailable') {
-                    label = l10n.raybanMetaImageCaptureUnavailable;
-                  } else {
-                    label = l10n.raybanMetaAllowCamera;
-                  }
-                  return OmiSettingsRow(
-                    leading: const FaIcon(FontAwesomeIcons.camera),
-                    title: l10n.raybanMetaCamera,
-                    value: snapshot.hasData ? label : null,
-                  );
-                },
+              OmiSettingsRow(
+                leading: const FaIcon(FontAwesomeIcons.camera),
+                title: l10n.raybanMetaCamera,
+                value: rayBanCameraLabel,
               ),
             ] else
               _copyRow(context, icon: FontAwesomeIcons.code, title: l10n.firmware, value: device?.firmwareRevision),
@@ -130,4 +116,13 @@ class DeviceInfoGroups extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The camera readiness shown for Ray-Ban Meta glasses, from the connection's permission
+/// [status]: 'granted', 'unavailable' or another permission state.
+String rayBanCameraLabel(BuildContext context, String status) {
+  final l10n = context.l10n;
+  if (status == 'granted') return l10n.raybanMetaImageCaptureReady;
+  if (status == 'unavailable') return l10n.raybanMetaImageCaptureUnavailable;
+  return l10n.raybanMetaAllowCamera;
 }

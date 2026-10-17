@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/proactivity.dart';
 import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/proactivity/proactivity_outbox.dart';
 import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
@@ -22,10 +25,15 @@ Future<ApiResult<GeneratedProactivityFeedResponse>> _loadFeed(String cursor) {
 
 /// A quiet, optional Home surface. The server owns availability and content.
 class HomeForYou extends StatefulWidget {
-  const HomeForYou({super.key, this.load = _loadFeed, this.outbox, this.open});
+  const HomeForYou({super.key, this.load = _loadFeed, this.outbox, this.open, this.nativeBuilder});
   final ProactivityFeedLoader load;
   final ProactivityOutbox? outbox;
   final ProactivityTargetOpener? open;
+
+  /// Native Home: the feed becomes Home actions that this builder places, instead of Flutter cards.
+  /// Every card action (open, Helpful, Not Helpful, Dismiss, Stop These) and the impression record
+  /// stay with this State and its outbox.
+  final Widget Function(BuildContext context, List<NativeHomeAction> feed)? nativeBuilder;
 
   @override
   State<HomeForYou> createState() => HomeForYouState();
@@ -106,17 +114,87 @@ class HomeForYouState extends State<HomeForYou> with WidgetsBindingObserver {
     if (_outbox.isCurrent(epoch)) _opening.remove(item.id);
   }
 
+  /// The cards the Flutter feed would show.
+  List<GeneratedProactivityFeedItem> get _visibleItems => _items
+      .where(
+        (i) =>
+            !i.dismissed &&
+            !_outbox.dismissed.contains(i.id) &&
+            !_outbox.disabledProducers.contains(i.producer) &&
+            proactivityTargetRoute(i.target) != null,
+      )
+      .toList();
+
+  /// Each card as Home actions identified by the item id, so a changed feed never redirects a tap.
+  /// An empty or repeated id would duplicate a Home control id, which Swift refuses for the whole Home.
+  List<NativeHomeAction> _nativeFeed(BuildContext context, List<GeneratedProactivityFeedItem> items) {
+    final seen = <String>{};
+    return [
+      for (final item in items)
+        if (item.id.isNotEmpty && seen.add(item.id)) ..._nativeCard(context, item, _ownerEpoch),
+    ];
+  }
+
+  List<NativeHomeAction> _nativeCard(BuildContext context, GeneratedProactivityFeedItem item, int ownerEpoch) {
+    final l10n = context.l10n;
+    void record(ProactivityAction action, {String? producer}) {
+      if (_outbox.isCurrent(ownerEpoch)) unawaited(_outbox.record(item.id, action, producer: producer));
+    }
+
+    final feedback = _outbox.feedback[item.id] ?? item.feedback;
+    return [
+      // Home alerts have no section heading, so the open row carries it, and each action names its card.
+      NativeHomeAction(
+          'feed_open:${item.id}',
+          [l10n.forYou, item.title].join(' · ') + (item.body.isEmpty ? '' : '\n${item.body}'),
+          'sparkles',
+          () => _open(item, ownerEpoch)),
+      NativeHomeAction('feed_up:${item.id}', '${l10n.helpful} · ${item.title}',
+          feedback == 'thumbs_up' ? 'hand.thumbsup.fill' : 'hand.thumbsup', () async {
+        if (feedback != 'thumbs_up') record(ProactivityAction.thumbsUp);
+      }),
+      NativeHomeAction('feed_down:${item.id}', '${l10n.notHelpful} · ${item.title}',
+          feedback == 'thumbs_down' ? 'hand.thumbsdown.fill' : 'hand.thumbsdown', () async {
+        if (feedback != 'thumbs_down') record(ProactivityAction.thumbsDown);
+      }),
+      NativeHomeAction('feed_dismiss:${item.id}', '${l10n.dismiss} · ${item.title}', 'xmark', () async {
+        record(ProactivityAction.dismissed);
+      }),
+      NativeHomeAction('feed_stop:${item.id}', '${l10n.stopThese} · ${item.title}', 'nosign', () async {
+        record(ProactivityAction.producerDisabled, producer: item.producer);
+      }),
+    ];
+  }
+
+  /// Native Home shows the projected cards at the top of its list, so they count as shown once
+  /// projected while Home's route is current and the app is in the foreground (the outbox records
+  /// each item once).
+  void _recordNativeShown(List<GeneratedProactivityFeedItem> items) {
+    final ownerEpoch = _ownerEpoch;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (!mounted ||
+          !_outbox.isCurrent(ownerEpoch) ||
+          !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          (context.read<HomeProvider?>()?.selectedIndex ?? HomeProvider.homeTab) != HomeProvider.homeTab ||
+          !(lifecycle == null || lifecycle == AppLifecycleState.resumed)) {
+        return;
+      }
+      for (final item in items) {
+        unawaited(_outbox.record(item.id, ProactivityAction.shown));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final items = _items
-        .where(
-          (i) =>
-              !i.dismissed &&
-              !_outbox.dismissed.contains(i.id) &&
-              !_outbox.disabledProducers.contains(i.producer) &&
-              proactivityTargetRoute(i.target) != null,
-        )
-        .toList();
+    final nativeBuilder = widget.nativeBuilder;
+    if (nativeBuilder != null) {
+      final items = _outbox.isCurrent(_ownerEpoch) ? _visibleItems : const <GeneratedProactivityFeedItem>[];
+      if (items.isNotEmpty) _recordNativeShown(items);
+      return nativeBuilder(context, _nativeFeed(context, items));
+    }
+    final items = _visibleItems;
     if (!_outbox.isCurrent(_ownerEpoch) || items.isEmpty) return const SizedBox.shrink();
     final current = ModalRoute.of(context)?.isCurrent ?? true;
     final ownerEpoch = _ownerEpoch;

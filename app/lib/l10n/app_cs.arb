@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nové",
     "activityNeedsAttention": "Vyžaduje pozornost",
     "activityRetryAll": "Zkusit vše znovu",
-    "attentionSummaryFailed": "Tuto konverzaci se nepodařilo shrnout"
+    "attentionSummaryFailed": "Tuto konverzaci se nepodařilo shrnout",
+    "dateRangeStart": "Počáteční datum",
+    "dateRangeEnd": "Koncové datum",
+    "openInMaps": "Otevřít v Mapách"
 }

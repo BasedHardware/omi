@@ -4174,5 +4174,8 @@
     "activityNewItem": "Nowe",
     "activityNeedsAttention": "Wymaga uwagi",
     "activityRetryAll": "Ponów wszystkie",
-    "attentionSummaryFailed": "Nie udało się podsumować tej rozmowy"
+    "attentionSummaryFailed": "Nie udało się podsumować tej rozmowy",
+    "dateRangeStart": "Data początkowa",
+    "dateRangeEnd": "Data końcowa",
+    "openInMaps": "Otwórz w Mapach"
 }

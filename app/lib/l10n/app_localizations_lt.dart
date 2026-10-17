@@ -13523,4 +13523,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
+
+  @override
+  String get dateRangeStart => 'Pradžios data';
+
+  @override
+  String get dateRangeEnd => 'Pabaigos data';
+
+  @override
+  String get openInMaps => 'Atidaryti „Žemėlapiuose“';
 }

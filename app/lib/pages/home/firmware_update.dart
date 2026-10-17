@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
@@ -16,7 +17,12 @@ class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
   final bool isRollback;
 
-  const FirmwareUpdate({super.key, this.device, this.isRollback = false});
+  /// Test seam: answers the latest (or, for a rollback, the stable) firmware details in place of the
+  /// backend request. Production passes nothing.
+  @visibleForTesting
+  final Future<Map> Function()? firmwareDetailsLoader;
+
+  const FirmwareUpdate({super.key, this.device, this.isRollback = false, this.firmwareDetailsLoader});
 
   @override
   State<FirmwareUpdate> createState() => _FirmwareUpdateState();
@@ -41,7 +47,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       });
 
       if (widget.isRollback) {
-        await getStableVersion(deviceModelNumber: device.modelNumber);
+        await getStableVersion(deviceModelNumber: device.modelNumber, fetch: widget.firmwareDetailsLoader);
         if (mounted) {
           setState(() {
             shouldUpdate = latestFirmwareDetails.isNotEmpty && latestFirmwareDetails['version'] != null;
@@ -55,6 +61,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           firmwareRevision: device.firmwareRevision,
           hardwareRevision: device.hardwareRevision,
           manufacturerName: device.manufacturerName,
+          fetch: widget.firmwareDetailsLoader,
         );
         var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
         if (mounted) {
@@ -454,35 +461,167 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     );
   }
 
+  /// Server changelog entries as literal text: Markdown punctuation is escaped, never interpreted.
+  static Map<String, Object> _changeBlock(String change) => {
+        'kind': 'text',
+        'text': change.replaceAllMapped(RegExp(r'[\\`*_\[\]<~&]'), (match) => '\\${match[0]}'),
+        'indent': 0,
+        'prefix': '•',
+      };
+
+  /// The same states as the classic page, drawn natively. Every action calls this State's existing
+  /// handlers; the zip URL and the device address never enter the projection.
+  List<NativeSection> _nativeSections(bool busy, FirmwareUpdateFailure? failure) {
+    final l10n = context.l10n;
+    if (isLoading) return const [];
+    if (busy) {
+      final progress = (isInstalling ? installProgress : downloadProgress).clamp(0, 100);
+      return [
+        NativeSection('fw_status', [
+          NativeRow('fw_progress', isDownloading ? l10n.downloadingFirmware : l10n.installingFirmware,
+              kind: 'progress', subtitle: '$progress%', value: progress.toDouble(), maximumValue: 100),
+          NativeRow('fw_warning', l10n.firmwareUpdateWarning, kind: 'label', symbol: 'exclamationmark.triangle'),
+        ]),
+      ];
+    }
+    if (isInstalled) {
+      return [
+        NativeSection('fw_result', [
+          NativeRow('fw_success', l10n.firmwareUpdated,
+              kind: 'label',
+              subtitle: l10n.restartDeviceToComplete(widget.device?.name ?? 'Omi'),
+              symbol: 'checkmark.circle'),
+          NativeRow('fw_done', l10n.done, symbol: 'checkmark', action: (_) {
+            Provider.of<DeviceProvider>(context, listen: false).resetFirmwareUpdateState();
+            // Back to the Home underneath, not a second Home on top of the stack.
+            HomeNavigation.returnHome(context);
+          }),
+        ]),
+      ];
+    }
+    if (failure != null) {
+      return [
+        NativeSection('fw_result', [
+          NativeRow('fw_failed', l10n.firmwareUpdateFailedTitle,
+              kind: 'label',
+              subtitle: switch (failure) {
+                FirmwareUpdateFailure.download => l10n.firmwareDownloadFailedMessage,
+                FirmwareUpdateFailure.install => l10n.firmwareUpdateFailedMessage,
+              },
+              symbol: 'xmark.circle',
+              destructive: true),
+          NativeRow('fw_retry', l10n.tryAgain, symbol: 'arrow.counterclockwise', action: (_) {
+            clearFirmwareFailure();
+            return _startUpdate();
+          }),
+          NativeRow('fw_support', l10n.contactSupportAction,
+              symbol: 'questionmark.bubble', action: (_) => IntercomManager.instance.intercom.displayMessenger()),
+        ]),
+      ];
+    }
+    final deviceProvider = context.watch<DeviceProvider>();
+    final batteryTooLow = _batteryTooLow(deviceProvider);
+    final changelog = latestFirmwareDetails['changelog'];
+    final changes = changelog is List ? changelog.map((change) => '$change').toList() : const <String>[];
+    final latest = latestFirmwareDetails['version'];
+    return [
+      NativeSection('fw_versions', [
+        if (!shouldUpdate)
+          NativeRow(
+              'fw_up_to_date',
+              widget.isRollback
+                  ? l10n.alreadyOnStableFirmware
+                  : widget.device!.firmwareRevision.isEmpty
+                      ? l10n.unableToDetermineFirmwareVersion
+                      : l10n.yourDeviceIsUpToDate,
+              kind: 'label',
+              symbol: 'checkmark.circle'),
+        NativeRow('fw_current', l10n.currentVersion,
+            kind: 'label', subtitle: widget.device!.firmwareRevision, symbol: 'cpu', destructive: shouldUpdate),
+        if (shouldUpdate && latest != null)
+          NativeRow('fw_latest', l10n.latestVersion,
+              kind: 'label', subtitle: '$latest', symbol: 'icloud.and.arrow.down'),
+      ]),
+      if (changes.isNotEmpty)
+        NativeSection(
+            'fw_changelog',
+            [
+              NativeRow('fw_changes', changes.join('\n'),
+                  kind: 'rich_text', blocks: [for (final change in changes) _changeBlock(change)]),
+            ],
+            title: l10n.whatsNew),
+      NativeSection('fw_actions', [
+        if (shouldUpdate && firmwareUpdatePolicy.allowsOmiFirmwareUpdate) ...[
+          if (batteryTooLow)
+            NativeRow('fw_battery', l10n.firmwareBatteryTooLow(deviceProvider.batteryLevel),
+                kind: 'label', symbol: 'battery.25', destructive: true),
+          NativeRow(
+              'fw_start',
+              widget.isRollback
+                  ? l10n.installStableFirmware
+                  : otaUpdateSteps.isEmpty
+                      ? l10n.installUpdate
+                      : l10n.updateNow,
+              symbol: 'arrow.down.circle',
+              enabled: !batteryTooLow,
+              action: (_) => _startUpdate()),
+        ],
+        if (!shouldUpdate)
+          NativeRow('fw_guide', l10n.updateGuide,
+              symbol: 'questionmark.circle', action: (_) => IntercomManager.instance.displayFirmwareUpdateArticle()),
+      ]),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final busy = isDownloading || isInstalling;
     final failure = updateFailure;
-    return PopScope(
-      canPop: !busy,
-      child: Scaffold(
-        backgroundColor: OmiColors.surface0,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          // No way back while the device is being written; the PopScope blocks system back too.
-          leading: busy ? null : const OmiBackButton(),
-          title: Text(widget.isRollback ? context.l10n.stableFirmware : context.l10n.firmwareUpdate),
-        ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
-            child: isLoading
-                ? _buildLoadingSection()
-                : busy
-                    ? _buildProgressSection()
-                    : isInstalled
-                        ? _buildSuccessSection()
-                        : failure != null
-                            ? _buildFailedSection(failure)
-                            : _buildUpdateSection(),
-          ),
+    final title = widget.isRollback ? context.l10n.stableFirmware : context.l10n.firmwareUpdate;
+    final classic = Scaffold(
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        // No way back while the device is being written; the PopScope blocks system back too.
+        leading: busy ? null : const OmiBackButton(),
+        title: Text(title),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
+          child: isLoading
+              ? _buildLoadingSection()
+              : busy
+                  ? _buildProgressSection()
+                  : isInstalled
+                      ? _buildSuccessSection()
+                      : failure != null
+                          ? _buildFailedSection(failure)
+                          : _buildUpdateSection(),
         ),
       ),
+    );
+    return PopScope(
+      canPop: !busy,
+      // The native projection is built by this same State, so the DFU owner is never duplicated.
+      child: !nativePresentationEnabled
+          ? classic
+          : Scaffold(
+              body: IosNativeSurface(
+                title: title,
+                fallback: classic,
+                loading: isLoading,
+                loadingLabel:
+                    widget.isRollback ? context.l10n.fetchingStableFirmware : context.l10n.checkingFirmwareVersion,
+                toolbar: busy
+                    ? const []
+                    : [
+                        NativeRow('fw_back', context.l10n.back,
+                            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+                      ],
+                sections: _nativeSections(busy, failure),
+              ),
+            ),
     );
   }
 }

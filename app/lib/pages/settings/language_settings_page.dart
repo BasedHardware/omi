@@ -9,6 +9,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -158,25 +159,69 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   Widget build(BuildContext context) {
     PlatformManager.instance.analytics.pageOpened('Language Settings');
 
-    return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.languageTitle)),
-      body: Consumer4<HomeProvider, UserProvider, CaptureProvider, LocaleProvider>(
-        builder: (context, homeProvider, userProvider, captureProvider, localeProvider, _) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: OmiSpacing.md),
-                _buildAppInterfaceGroup(localeProvider),
-                const SizedBox(height: OmiSpacing.xl),
-                _buildSpeechTranscriptionGroup(homeProvider, userProvider, captureProvider),
-                const SizedBox(height: OmiSpacing.xxl),
+    return Consumer4<HomeProvider, UserProvider, CaptureProvider, LocaleProvider>(
+      builder: (context, homeProvider, userProvider, captureProvider, localeProvider, _) {
+        final classic = Scaffold(
+            appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.languageTitle)),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: OmiSpacing.md),
+                  _buildAppInterfaceGroup(localeProvider),
+                  const SizedBox(height: OmiSpacing.xl),
+                  _buildSpeechTranscriptionGroup(homeProvider, userProvider, captureProvider),
+                  const SizedBox(height: OmiSpacing.xxl),
+                ],
+              ),
+            ));
+        final l10n = context.l10n;
+        final locales = {
+          for (final locale in LocaleProvider.supportedLocales)
+            locale.toLanguageTag(): LocaleProvider.getDisplayName(locale)
+        };
+        return IosNativeSurface(title: l10n.languageTitle, fallback: classic, toolbar: [
+          NativeRow('language_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).pop()),
+        ], sections: [
+          NativeSection(
+              'interface',
+              [
+                NativeRow('app_locale', l10n.appLanguage,
+                    kind: 'choice',
+                    value: localeProvider.locale?.toLanguageTag() ?? 'system',
+                    options: {'system': l10n.systemDefault, ...locales},
+                    action: (value) => localeProvider.setLocale(value == 'system'
+                        ? null
+                        : LocaleProvider.supportedLocales.firstWhere((locale) => locale.toLanguageTag() == value))),
               ],
-            ),
-          );
-        },
-      ),
+              title: l10n.appInterfaceSectionTitle),
+          NativeSection(
+              'speech',
+              [
+                NativeRow('speech_locale', l10n.primaryLanguage,
+                    kind: 'choice',
+                    value: homeProvider.userPrimaryLanguage.isEmpty ? 'unset' : homeProvider.userPrimaryLanguage,
+                    options: {
+                      if (homeProvider.userPrimaryLanguage.isEmpty) 'unset': l10n.notSet,
+                      for (final entry in homeProvider.availableLanguages.entries) entry.value: entry.key,
+                    },
+                    enabled: !_isUpdatingLanguage, action: (value) async {
+                  if (value != 'unset') await _setPrimaryLanguage(homeProvider, captureProvider, value as String);
+                }),
+                NativeRow('automatic_translation', l10n.automaticTranslation,
+                    kind: 'toggle',
+                    subtitle: l10n.detectLanguages,
+                    value: !userProvider.singleLanguageMode,
+                    enabled: !userProvider.isUpdatingSingleLanguageMode, action: (value) async {
+                  final success = await userProvider.setSingleLanguageMode(!(value as bool));
+                  if (success && mounted) captureProvider.onTranscriptionSettingsChanged();
+                }),
+              ],
+              title: l10n.speechTranscriptionSectionTitle,
+              footer: l10n.languageSettingsHelperText),
+        ]);
+      },
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -15,13 +16,15 @@ class OnboardingIntroScreen extends StatefulWidget {
   State<OnboardingIntroScreen> createState() => _OnboardingIntroScreenState();
 }
 
-class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with SingleTickerProviderStateMixin {
+class _OnboardingIntroScreenState extends State<OnboardingIntroScreen>
+    with SingleTickerProviderStateMixin, DeviceTutorialNativeArtwork {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
+    // The glow runs only while the classic screen is mounted ([DeviceTutorialClassicAnimations]).
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 6));
   }
 
   @override
@@ -32,6 +35,26 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
 
   @override
   Widget build(BuildContext context) {
+    final classic = DeviceTutorialClassicAnimations(
+        onMount: () => _controller.repeat(reverse: true), onUnmount: _controller.stop, child: _buildClassic(context));
+    if (!deviceTutorialNative(context)) return classic;
+    final l10n = context.l10n;
+    final skip = widget.onSkip ?? () => Navigator.of(context).maybePop();
+    // The glow orb is decorative; the static device art and the same copy replace it natively.
+    return IosNativeSurface(title: l10n.deviceOnboardingIntroTitle, fallback: classic, sections: [
+      NativeSection('dev_tut_intro', [
+        NativeRow('dev_tut_intro_subtitle', l10n.deviceOnboardingIntroSubtitle,
+            kind: 'label', imageUri: nativeArtwork(Assets.images.omiWithoutRope.path)),
+        NativeRow('dev_tut_intro_duration', l10n.deviceOnboardingIntroDuration, kind: 'label', symbol: 'clock'),
+      ]),
+      NativeSection('dev_tut_intro_actions', [
+        NativeRow('dev_tut_start', l10n.getStarted, action: (_) => widget.onStart()),
+        NativeRow('dev_tut_skip', l10n.skip, action: (_) => skip()),
+      ]),
+    ]);
+  }
+
+  Widget _buildClassic(BuildContext context) {
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     const imageSize = 190.0;
 

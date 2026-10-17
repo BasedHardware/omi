@@ -12,6 +12,8 @@ import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/pages/settings/chat_apps/chat_apps_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
 import 'package:omi/services/integrations/gmail_service.dart';
@@ -460,36 +462,82 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final provider = context.watch<IntegrationProvider>();
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
+    final catalog = ExploreInstallPage(
+      nativeTitle: iosSwiftUiEnabled ? context.l10n.integrations : null,
+      nativeLeadingSections: [
+        NativeSection(
+            'connected_integrations',
+            [
+              if (context.watch<MessagingChannelsProvider>().showEntry)
+                NativeRow('integrations_chat_apps', context.l10n.chatAppsEntryTitle,
+                    kind: 'navigation',
+                    subtitle: context.l10n.chatAppsEntryRowSubtitle,
+                    action: (_) => routeToPage(context, const ChatAppsPage())),
+              for (final app in IntegrationApp.values)
+                NativeRow('integration_${app.name}', app.displayName,
+                    // Same precedence as the classic tile's chip: a failed status read offers a refresh.
+                    subtitle: isLoading
+                        ? context.l10n.loading
+                        : provider.hasStatusError(app)
+                            ? context.l10n.tryAgain
+                            : !app.isAvailable
+                                ? context.l10n.comingSoon
+                                : _isAppConnected(app)
+                                    ? context.l10n.disconnect
+                                    : context.l10n.connect,
+                    enabled: app.isAvailable && !isLoading,
+                    destructive: app != IntegrationApp.appleHealth &&
+                        !provider.hasStatusError(app) &&
+                        _isAppConnected(app), action: (_) {
+                  if (provider.hasStatusError(app)) {
+                    _loadFromBackend();
+                  } else if (app == IntegrationApp.appleHealth) {
+                    _openAppleHealthDetail();
+                  } else if (_isAppConnected(app)) {
+                    _disconnectApp(app);
+                  } else {
+                    _connectApp(app);
+                  }
+                }),
+              NativeRow('integrations_create', context.l10n.createYourOwnApp,
+                  symbol: 'plus',
+                  action: (_) => routeToPage(context, const AddAppPage(presetExternalIntegration: true))),
+              NativeRow('integrations_mcp', context.l10n.addMcpServer, symbol: 'cable.connector', action: (_) {
+                PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+                routeToPage(context, const AddMcpServerPage());
+              }),
+            ],
+            // The classic list shows a failed status read as a live-region banner above the rows; the
+            // section footer is the native counterpart, and each affected row offers "Try again".
+            footer: provider.hasLoadError ? context.l10n.connectionErrorDesc : '')
+      ],
+      leadingSlivers: [
+        const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
+        SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+            sliver: SliverList.list(children: [
+              if (provider.hasLoadError)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                    child: Semantics(
+                        liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
+              const ChatAppsIntegrationsEntry(),
+              ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+                  child: Divider(color: OmiColors.border, thickness: 1)),
+              _buildCreateYourOwnAppTile(),
+              _buildAddMcpServerTile(),
+            ])),
+        const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),
+      ],
+    );
+    if (iosSwiftUiEnabled) return catalog;
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
       body: SafeArea(
         bottom: false,
-        child: ExploreInstallPage(
-          leadingSlivers: [
-            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-              sliver: SliverList.list(
-                children: [
-                  if (provider.hasLoadError)
-                    Padding(
-                        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-                        child: Semantics(
-                            liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
-                  const ChatAppsIntegrationsEntry(),
-                  ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
-                    child: Divider(color: OmiColors.border, thickness: 1),
-                  ),
-                  _buildCreateYourOwnAppTile(),
-                  _buildAddMcpServerTile(),
-                ],
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),
-          ],
-        ),
+        child: catalog,
       ),
     );
   }

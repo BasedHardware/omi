@@ -9,6 +9,8 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
@@ -180,53 +182,145 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
     return _day.year == now.year && _day.month == now.month && _day.day == now.day;
   }
 
+  /// Conversations whose "Summary failed · Retry" is running, so a second tap does not repeat it.
+  final Set<String> _retryingSummaries = {};
+
+  Future<void> _retrySummary(BuildContext context, ServerConversation conversation) async {
+    if (!_retryingSummaries.add(conversation.id)) return;
+    try {
+      await retryConversationSummary(context, conversation);
+    } finally {
+      _retryingSummaries.remove(conversation.id);
+    }
+  }
+
+  /// The Flutter calendar's first day.
+  static final DateTime _firstDay = DateTime(2020);
+
+  /// Native: the day's date in a system picker. Null (no native presentation) keeps the Flutter calendar.
+  Future<void> _pickDayNatively(BuildContext context) async {
+    final l10n = context.l10n;
+    final result = await showIosNativeModal(context, title: l10n.filterByDate, actions: [
+      NativeRow('cancel', l10n.cancel, symbol: 'xmark'),
+      NativeRow('apply', l10n.done),
+    ], sections: [
+      NativeSection('day_pick', [
+        NativeRow('day_pick_date', l10n.filterByDate,
+            kind: 'date',
+            value: '${(_day.isBefore(_firstDay) ? _firstDay : _day).millisecondsSinceEpoch}',
+            minimumDate: '${_firstDay.millisecondsSinceEpoch}'),
+      ]),
+    ]);
+    if (!mounted) return;
+    if (result == null) return _pickDay();
+    if (result.action != 'apply') return;
+    final picked = DateTime.fromMillisecondsSinceEpoch(int.parse(result.values['day_pick_date'] as String));
+    // The calendar ends today; a later day has no conversations to show.
+    final now = DateTime.now();
+    _goToDay(picked.isAfter(now) ? now : picked);
+  }
+
+  Widget _nativeDay(BuildContext context, Widget fallback) {
+    final l10n = context.l10n;
+    final dates = OmiDateFormat.of(context);
+    final conversations = _provider.displayedConversations;
+    return IosNativeSurface(
+      title: dates.dayHeader(_day),
+      fallback: fallback,
+      loading: _loading,
+      failed: _failed || (_truncated && conversations.isEmpty),
+      errorMessage: l10n.somethingWentWrong,
+      empty: l10n.noConversationsOnDate(dates.date(_day)),
+      onRefresh: (_) => _loadDay(),
+      toolbar: [
+        NativeRow('day_back', l10n.back, symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('day_previous', l10n.previousDay,
+            symbol: 'arrow.backward', action: (_) => _goToDay(DateTime(_day.year, _day.month, _day.day - 1))),
+        NativeRow('day_next', l10n.nextDay,
+            symbol: 'arrow.forward',
+            enabled: !_isToday,
+            action: (_) => _goToDay(DateTime(_day.year, _day.month, _day.day + 1))),
+        NativeRow('day_pick', l10n.filterByDate, symbol: 'calendar', action: (_) => _pickDayNatively(context)),
+      ],
+      sections: [
+        if (_refreshFailed)
+          NativeSection('day_refresh_failed', [
+            NativeRow('day_refresh_failed_label', l10n.somethingWentWrong, kind: 'label'),
+            NativeRow('day_refresh_retry', l10n.retry, action: (_) => _loadDay()),
+          ]),
+        NativeSection('day_conversations', [
+          for (final (index, conversation) in conversations.indexed)
+            nativeConversationRow(context, _provider, conversation,
+                id: 'day_conversation_${conversation.id}',
+                index: index,
+                allowSelection: false,
+                onRetrySummary: () => _retrySummary(context, conversation)),
+        ]),
+        if (conversations.isNotEmpty)
+          NativeSection('day_footer', [
+            if (_loadMoreFailed)
+              NativeRow('day_load_more_retry', l10n.tryAgain, action: (_) => _loadMore())
+            else if (_truncated) ...[
+              NativeRow('day_partial', l10n.searchPartialFailure, kind: 'label'),
+              NativeRow('day_partial_retry', l10n.tryAgain, action: (_) => _loadDay()),
+            ] else if (_hasMore || _loadingMore)
+              NativeRow('day_more', _loadingMore ? l10n.loading : l10n.showMore,
+                  enabled: !_loadingMore, onVisible: (_) => _loadMore(), action: (_) => _loadMore()),
+          ]),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
-    return ChangeNotifierProvider<ConversationProvider>.value(
-      value: _provider,
-      child: Scaffold(
+    final scaffold = Scaffold(
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
         backgroundColor: OmiColors.surface0,
-        appBar: AppBar(
-          backgroundColor: OmiColors.surface0,
-          elevation: 0,
-          leading: Center(child: OmiBackButton.circled(fillColor: OmiColors.surface3)),
-          title: Text(dates.dayHeader(_day), style: OmiType.headline),
-          actions: [
-            OmiIconButton.filled(
-              key: const ValueKey('day_previous'),
-              icon: const Icon(Icons.navigate_before),
-              label: l10n.previousDay,
-              fillColor: OmiColors.surface3,
-              onPressed: () => _goToDay(DateTime(_day.year, _day.month, _day.day - 1)),
-            ),
-            OmiIconButton.filled(
-              key: const ValueKey('day_next'),
-              icon: const Icon(Icons.navigate_next),
-              label: l10n.nextDay,
-              fillColor: OmiColors.surface3,
-              onPressed: _isToday ? null : () => _goToDay(DateTime(_day.year, _day.month, _day.day + 1)),
-            ),
-            OmiIconButton.filled(
-              key: const ValueKey('day_calendar'),
-              icon: const Icon(Icons.calendar_month_outlined, size: 18),
-              label: l10n.filterByDate,
-              fillColor: OmiColors.surface3,
-              onPressed: _pickDay,
-            ),
-            const SizedBox(width: OmiSpacing.xs),
-          ],
-        ),
-        body: RefreshIndicator(
-          color: OmiColors.textPrimary,
-          onRefresh: _loadDay,
-          child: ListenableBuilder(
-            listenable: _provider,
-            builder: (context, _) => _buildBody(context, l10n, dates),
+        elevation: 0,
+        leading: Center(child: OmiBackButton.circled(fillColor: OmiColors.surface3)),
+        title: Text(dates.dayHeader(_day), style: OmiType.headline),
+        actions: [
+          OmiIconButton.filled(
+            key: const ValueKey('day_previous'),
+            icon: const Icon(Icons.navigate_before),
+            label: l10n.previousDay,
+            fillColor: OmiColors.surface3,
+            onPressed: () => _goToDay(DateTime(_day.year, _day.month, _day.day - 1)),
           ),
+          OmiIconButton.filled(
+            key: const ValueKey('day_next'),
+            icon: const Icon(Icons.navigate_next),
+            label: l10n.nextDay,
+            fillColor: OmiColors.surface3,
+            onPressed: _isToday ? null : () => _goToDay(DateTime(_day.year, _day.month, _day.day + 1)),
+          ),
+          OmiIconButton.filled(
+            key: const ValueKey('day_calendar'),
+            icon: const Icon(Icons.calendar_month_outlined, size: 18),
+            label: l10n.filterByDate,
+            fillColor: OmiColors.surface3,
+            onPressed: _pickDay,
+          ),
+          const SizedBox(width: OmiSpacing.xs),
+        ],
+      ),
+      body: RefreshIndicator(
+        color: OmiColors.textPrimary,
+        onRefresh: _loadDay,
+        child: ListenableBuilder(
+          listenable: _provider,
+          builder: (context, _) => _buildBody(context, l10n, dates),
         ),
       ),
+    );
+    return ChangeNotifierProvider<ConversationProvider>.value(
+      value: _provider,
+      child: nativePresentationEnabled
+          ? ListenableBuilder(listenable: _provider, builder: (context, _) => _nativeDay(context, scaffold))
+          : scaffold,
     );
   }
 

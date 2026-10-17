@@ -13551,4 +13551,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
+
+  @override
+  String get dateRangeStart => 'ప్రారంభ తేదీ';
+
+  @override
+  String get dateRangeEnd => 'ముగింపు తేదీ';
+
+  @override
+  String get openInMaps => 'మ్యాప్స్‌లో తెరవండి';
 }

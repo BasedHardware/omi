@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 
 import 'package:provider/provider.dart';
 
@@ -228,7 +229,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   @override
   Widget build(BuildContext context) {
     final hasSelection = selectedLanguageName != null;
-    return OnboardingStep(
+    final classic = OnboardingStep(
       card: OnboardingCard(
         content: [
           Semantics(
@@ -288,5 +289,31 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
         ],
       ),
     );
+    final languages = context.watch<HomeProvider>().availableLanguages;
+    return IosNativeSurface(title: context.l10n.whatsYourPrimaryLanguage, fallback: classic, sections: [
+      NativeSection(
+          'language',
+          [
+            NativeRow('onboarding_language', context.l10n.selectPrimaryLanguage,
+                kind: 'choice',
+                value: selectedLanguage ?? '_none',
+                options: {
+                  '_none': context.l10n.selectYourLanguage,
+                  if (selectedLanguage != null && !languages.containsValue(selectedLanguage))
+                    selectedLanguage!: selectedLanguageName ?? selectedLanguage!,
+                  for (final entry in languages.entries) entry.value: entry.key
+                }, action: (value) {
+              if (value == '_none') return;
+              final selected = languages.entries.where((entry) => entry.value == value);
+              setState(() {
+                selectedLanguage = value as String;
+                selectedLanguageName = selected.isEmpty ? value : selected.first.key;
+              });
+            }),
+            NativeRow('onboarding_language_continue', context.l10n.continueButton,
+                enabled: selectedLanguage != null, action: (_) => _continue()),
+          ],
+          footer: context.l10n.languageBenefits),
+    ]);
   }
 }

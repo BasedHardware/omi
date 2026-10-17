@@ -17,6 +17,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart' show conversationLocalDayKey;
 import 'package:omi/ui/ui.dart' show OmiColors, OmiPalette, OmiRadius;
@@ -186,6 +187,7 @@ class _DetailHarness {
 
   final ConversationPlaybackController controller;
   Future<void> Function(double start, double end)? seekToSegment;
+  List<NativeRow> nativeControls = [];
 }
 
 class _UrlsEnv implements EnvFields {
@@ -258,6 +260,7 @@ Future<_DetailHarness> _pumpDetail(
                 fetchAudioUrls: fetch,
                 playbackController: controller,
                 onSeekFunctionReady: (fn) => harness.seekToSegment = fn,
+                onNativePresentation: (rows) => harness.nativeControls = rows,
               ),
             ],
           ),
@@ -341,6 +344,38 @@ void main() {
     await SharedPreferencesUtil.init();
     PlatformManager.initializeForLocalHarness();
     Env.init(_UrlsEnv());
+  });
+
+  testWidgets('native scrubbing and Play use the same wall mapping and single audio owner', (tester) async {
+    final fake = _FakeAudioDevice();
+    var fetches = 0;
+    final harness = await _pumpDetail(
+        tester, _conversation(segments: [_segment('first', 0, 30), _segment('later', 360, 420)]), fake: fake,
+        fetch: (_) async {
+      fetches++;
+      return ApiSuccess(_dense(const [
+        ConversationAudioSpan(fileId: 'a', wallOffset: 0, artifactOffset: 0, len: 60),
+        ConversationAudioSpan(fileId: 'b', wallOffset: 360, artifactOffset: 60, len: 60),
+      ]));
+    });
+    NativeRow control(String id) => harness.nativeControls.firstWhere((row) => row.id == id);
+    await control('detail_audio_position').action!(365.0);
+    expect(fetches, 0, reason: 'A native scrub must not create a second loader/player');
+    expect(harness.controller.pendingWallSeconds, 365);
+    await tester.runAsync(() async {
+      await control('detail_audio_play').action!(null);
+    });
+    await _flushPlatform(tester);
+    expect(fetches, 1);
+    expect(fake.calls.where((call) => call == 'load'), hasLength(1));
+    expect(_seekArtifacts(fake.calls).last, closeTo(65, 0.01));
+    fake.emit(playing: true, positionSec: 65);
+    await _flushPlatform(tester);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect((control('detail_audio_position').value as num), closeTo(365, 0.01));
+    expect(control('detail_audio_position').points.where((point) => point['label'] == 'missing'), isNotEmpty);
+    expect(harness.controller.currentSegmentId, 'later');
+    await _removeDetail(tester);
   });
 
   testWidgets('audio still loading after ~600ms shows Preparing Audio inline', (tester) async {

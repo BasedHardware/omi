@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -51,7 +53,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     final l10n = context.l10n;
     final isEnabled = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
 
-    return Scaffold(
+    final classic = Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnPhone)),
       body: ListView(
         padding: const EdgeInsets.all(OmiSpacing.md),
@@ -70,5 +72,23 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
         ],
       ),
     );
+    if (!iosSwiftUiEnabled) return classic;
+    return Scaffold(
+        body: IosNativeSurface(title: l10n.storeAudioOnPhone, fallback: classic, toolbar: [
+      NativeRow('local_storage_back', l10n.back,
+          symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop())
+    ], sections: [
+      NativeSection(
+          'local_storage',
+          [
+            NativeRow('local_storage_enabled', l10n.enableLocalStorage,
+                symbol: 'iphone',
+                kind: 'toggle',
+                value: isEnabled,
+                enabled: !_isSaving,
+                action: (value) => _toggleLocalStorage(value as bool))
+          ],
+          footer: l10n.storeAudioDescription)
+    ]));
   }
 }

@@ -11562,5 +11562,8 @@
     "activityNewItem": "Bago",
     "activityNeedsAttention": "Kailangang tingnan",
     "activityRetryAll": "Subukan muli lahat",
-    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito"
+    "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito",
+    "dateRangeStart": "Petsa ng simula",
+    "dateRangeEnd": "Petsa ng pagtatapos",
+    "openInMaps": "Buksan sa Maps"
 }

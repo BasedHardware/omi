@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -7,7 +8,10 @@ import 'package:version/version.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omiglass_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -21,7 +25,11 @@ class OmiGlassOtaUpdate extends StatefulWidget {
   final BtDevice? device;
   final Map<String, dynamic>? latestFirmwareDetails;
 
-  const OmiGlassOtaUpdate({super.key, this.device, this.latestFirmwareDetails});
+  /// Test seam: answers the device connection in place of the device service. Production passes nothing.
+  @visibleForTesting
+  final Future<DeviceConnection?> Function(String deviceId)? connect;
+
+  const OmiGlassOtaUpdate({super.key, this.device, this.latestFirmwareDetails, this.connect});
 
   @override
   State<OmiGlassOtaUpdate> createState() => _OmiGlassOtaUpdateState();
@@ -42,6 +50,14 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   OmiGlassOtaStatus? _lastOtaStatus;
   int _progress = 0;
   bool _obscurePassword = true;
+
+  /// Native password input: the saved password stays in the controller but never in a snapshot. The
+  /// row starts blank; typing or Clear marks it edited, and only an edited draft can be revealed.
+  /// Clear bumps the revision so the native field starts blank again.
+  int _nativePasswordRevision = 0;
+  bool _nativePasswordEdited = false;
+  bool _nativePasswordRevealed = false;
+  StreamSubscription<int>? _sessionEvents;
 
   StreamSubscription? _otaStatusSubscription;
   OmiGlassConnection? _connection;
@@ -66,6 +82,18 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     _ssidController.text = SharedPreferencesUtil().otaWifiSsid;
     _passwordController.text = SharedPreferencesUtil().otaWifiPassword;
     _currentVersion = widget.device?.firmwareRevision ?? '';
+    if (nativePresentationEnabled) {
+      // A revealed draft never outlives the account session it was typed in.
+      _sessionEvents = AuthService.instance.sessionGenerationEvents.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          _nativePasswordRevealed = false;
+          // The previous session's draft can no longer be revealed; the field starts blank again.
+          _nativePasswordEdited = false;
+          _nativePasswordRevision++;
+        });
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       _deviceProvider!.setOnFirmwareUpdatePage(true);
@@ -76,6 +104,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   @override
   void dispose() {
     _otaStatusSubscription?.cancel();
+    _sessionEvents?.cancel();
     _successTimer?.cancel();
     _ssidController.dispose();
     _passwordController.dispose();
@@ -89,6 +118,9 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     super.dispose();
   }
 
+  Future<DeviceConnection?> _connect(String deviceId) =>
+      widget.connect?.call(deviceId) ?? ServiceManager.instance().device.ensureConnection(deviceId, force: true);
+
   Future<void> _initializeAndCheck() async {
     setState(() {
       _isLoading = true;
@@ -97,7 +129,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
     try {
       // Check OTA support
-      final connection = await ServiceManager.instance().device.ensureConnection(widget.device!.id, force: true);
+      final connection = await _connect(widget.device!.id);
       if (connection is OmiGlassConnection) {
         _connection = connection;
         final isSupported = await connection.isOtaSupported();
@@ -195,7 +227,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
     try {
       if (_connection == null) {
-        final connection = await ServiceManager.instance().device.ensureConnection(widget.device!.id, force: true);
+        final connection = await _connect(widget.device!.id);
         if (connection is! OmiGlassConnection) {
           throw Exception('Connection type mismatch: expected OmiGlassConnection, got ${connection.runtimeType}');
         }
@@ -280,6 +312,15 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         _isSuccess = true;
       });
     }
+  }
+
+  void _retry() {
+    final wasConnectionProblem = _status == _OtaMessage.connectFailed;
+    setState(() {
+      _isFailed = false;
+      _progress = 0;
+    });
+    if (wasConnectionProblem) _initializeAndCheck();
   }
 
   Future<void> _cancelUpdate() async {
@@ -651,14 +692,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           label: context.l10n.tryAgain,
           leading: const FaIcon(FontAwesomeIcons.arrowRotateLeft),
           expand: true,
-          onPressed: () {
-            final wasConnectionProblem = _status == _OtaMessage.connectFailed;
-            setState(() {
-              _isFailed = false;
-              _progress = 0;
-            });
-            if (wasConnectionProblem) _initializeAndCheck();
-          },
+          onPressed: _retry,
         ),
         const SizedBox(height: OmiSpacing.xs),
         OmiButton.secondary(
@@ -685,24 +719,175 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     return _buildUpdateSection();
   }
 
+  List<NativeRow> _nativeUpdateRows() {
+    final l10n = context.l10n;
+    return [
+      NativeRow('ota_current', l10n.currentVersion,
+          kind: 'label', subtitle: _currentVersion, symbol: 'cpu', destructive: _hasUpdate),
+      if (_hasUpdate)
+        NativeRow('ota_latest', l10n.latestVersion,
+            kind: 'label', subtitle: _latestVersion, symbol: 'icloud.and.arrow.down'),
+      if (!_hasUpdate) NativeRow('ota_up_to_date', l10n.deviceUpToDate, kind: 'label', symbol: 'checkmark.circle'),
+    ];
+  }
+
+  /// One section per [_buildContent] branch, built from this State; every action calls its existing handler.
+  List<NativeSection> _nativeSections() {
+    final l10n = context.l10n;
+    if (_isLoading) return const [];
+    if (_isSuccess) {
+      return [
+        NativeSection('ota_result', [
+          NativeRow('ota_success', l10n.firmwareUpdated,
+              kind: 'label', subtitle: l10n.otaUpdatedMessage(_deviceName), symbol: 'checkmark.circle'),
+          // Back to the Home underneath, not a second Home on top of the stack.
+          NativeRow('ota_done', l10n.done, symbol: 'checkmark', action: (_) => HomeNavigation.returnHome(context)),
+        ]),
+      ];
+    }
+    if (_isFailed) {
+      return [
+        NativeSection('ota_result', [
+          NativeRow('ota_failed', l10n.firmwareUpdateFailedTitle,
+              kind: 'label', subtitle: _statusText(context), symbol: 'xmark.circle', destructive: true),
+          NativeRow('ota_retry', l10n.tryAgain, symbol: 'arrow.counterclockwise', action: (_) => _retry()),
+          NativeRow('ota_support', l10n.contactSupportAction,
+              symbol: 'questionmark.bubble', action: (_) => IntercomManager.instance.intercom.displayMessenger()),
+        ]),
+      ];
+    }
+    if (_isUpdating) {
+      final status = _statusText(context);
+      final progress = _progress.clamp(0, 100);
+      return [
+        NativeSection('ota_status', [
+          if (_progress > 0)
+            NativeRow('ota_progress', status,
+                kind: 'progress', subtitle: '$progress%', value: progress.toDouble(), maximumValue: 100)
+          else
+            NativeRow('ota_status_text', status, kind: 'label'),
+          NativeRow('ota_warning', l10n.firmwareUpdateWarning, kind: 'label', symbol: 'exclamationmark.triangle'),
+          NativeRow('ota_cancel', l10n.cancelUpdate,
+              symbol: 'xmark', destructive: true, action: (_) => _cancelUpdate()),
+        ]),
+      ];
+    }
+    final changes = _changelog.split('\n').where((line) => line.trim().isNotEmpty).map((line) => line.trim()).toList();
+    final password = _passwordController.text;
+    final savedUntouched = password.isNotEmpty && !_nativePasswordEdited;
+    final ssidLength = _ssidController.text.characters.length;
+    return [
+      NativeSection('ota_versions', _nativeUpdateRows()),
+      if (_hasUpdate && changes.isNotEmpty)
+        NativeSection(
+            'ota_changelog',
+            [
+              NativeRow('ota_changes', changes.join('\n'), kind: 'rich_text', blocks: [
+                for (final change in changes)
+                  {
+                    'kind': 'text',
+                    // Literal release-note text: Markdown punctuation is escaped, never interpreted.
+                    'text': change.replaceAllMapped(RegExp(r'[\\`*_\[\]<~&]'), (match) => '\\${match[0]}'),
+                    'indent': 0,
+                    'prefix': '•',
+                  },
+              ]),
+            ],
+            title: l10n.whatsNew),
+      if (_hasUpdate) ...[
+        NativeSection(
+            'ota_wifi',
+            [
+              NativeRow('ota_ssid', l10n.networkNameSsid,
+                  kind: 'text',
+                  value: _ssidController.text,
+                  subtitle: l10n.enterWifiNetworkName,
+                  // A longer saved name stays editable rather than invalidating the screen.
+                  maximumLength: math.max(128, ssidLength),
+                  action: (value) => setState(() => _ssidController.text = value as String)),
+              // A replacement is typed natively; the saved password never enters a snapshot.
+              NativeRow('ota_password:$_nativePasswordRevision', l10n.password,
+                  kind: 'text',
+                  keyboard: 'password',
+                  value: '',
+                  subtitle: savedUntouched ? l10n.saved : l10n.enterWifiPassword, action: (value) {
+                setState(() {
+                  _passwordController.text = value as String;
+                  _nativePasswordEdited = true;
+                });
+              }),
+              // The native field draws only its title, so the saved-password cue is its own row.
+              if (savedUntouched)
+                NativeRow('ota_password_saved', l10n.password, kind: 'label', subtitle: l10n.saved, symbol: 'lock'),
+              if (_nativePasswordEdited && password.isNotEmpty)
+                NativeRow('ota_password_visibility', _nativePasswordRevealed ? l10n.hidePassword : l10n.showPassword,
+                    symbol: _nativePasswordRevealed ? 'eye.slash' : 'eye',
+                    action: (_) => setState(() => _nativePasswordRevealed = !_nativePasswordRevealed)),
+              if (password.isNotEmpty)
+                NativeRow('ota_password_clear', l10n.clear,
+                    subtitle: l10n.password, symbol: 'delete.left', destructive: true, action: (_) {
+                  setState(() {
+                    _passwordController.clear();
+                    _nativePasswordEdited = true;
+                    _nativePasswordRevealed = false;
+                    _nativePasswordRevision++;
+                  });
+                }),
+              if (_nativePasswordRevealed && _nativePasswordEdited && password.isNotEmpty)
+                NativeRow('ota_password_revealed', l10n.password, kind: 'label', subtitle: password),
+            ],
+            title: l10n.wifiConfiguration,
+            footer: l10n.wifiConfigurationSubtitle),
+        NativeSection('ota_actions', [
+          NativeRow('ota_keep_nearby', l10n.otaKeepNearby, kind: 'label', symbol: 'exclamationmark.triangle'),
+          NativeRow('ota_install', l10n.installUpdate, symbol: 'arrow.down.circle', action: (_) {
+            setState(() => _nativePasswordRevealed = false);
+            // The update outlives this command; its progress arrives in later snapshots.
+            unawaited(_startOtaUpdate());
+          }),
+        ]),
+      ],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isUpdating,
-      child: Scaffold(
-        backgroundColor: OmiColors.surface0,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          leading: _isUpdating ? null : const OmiBackButton(),
-          title: Text(context.l10n.firmwareUpdate),
-        ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
-            child: _buildContent(),
-          ),
+    final classic = Scaffold(
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: _isUpdating ? null : const OmiBackButton(),
+        title: Text(context.l10n.firmwareUpdate),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
+          child: _buildContent(),
         ),
       ),
+    );
+    // Without a device report the progress branch has no percentage: the native spinner stands in.
+    final waiting = !_isLoading && !_isSuccess && !_isFailed && _isUpdating && _progress <= 0;
+    return PopScope(
+      canPop: !_isUpdating,
+      child: !nativePresentationEnabled
+          ? classic
+          : Scaffold(
+              body: IosNativeSurface(
+                title: context.l10n.firmwareUpdate,
+                fallback: classic,
+                loading: _isLoading || waiting,
+                // While waiting, the status label row already names the step.
+                loadingLabel: waiting ? context.l10n.pleaseWait : _statusText(context),
+                toolbar: _isUpdating
+                    ? const []
+                    : [
+                        NativeRow('ota_back', context.l10n.back,
+                            symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+                      ],
+                sections: _nativeSections(),
+              ),
+            ),
     );
   }
 }

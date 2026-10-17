@@ -4139,5 +4139,8 @@
     "activityNewItem": "Ny",
     "activityNeedsAttention": "Behöver uppmärksamhet",
     "activityRetryAll": "Försök igen med alla",
-    "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet"
+    "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet",
+    "dateRangeStart": "Startdatum",
+    "dateRangeEnd": "Slutdatum",
+    "openInMaps": "Öppna i Kartor"
 }

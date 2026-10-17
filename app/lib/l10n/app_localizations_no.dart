@@ -13501,4 +13501,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';
+
+  @override
+  String get dateRangeStart => 'Startdato';
+
+  @override
+  String get dateRangeEnd => 'Sluttdato';
+
+  @override
+  String get openInMaps => 'Åpne i Kart';
 }

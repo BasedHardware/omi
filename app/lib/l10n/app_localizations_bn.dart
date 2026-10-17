@@ -13496,4 +13496,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'এই কথোপকথনের সারাংশ তৈরি করা যায়নি';
+
+  @override
+  String get dateRangeStart => 'শুরুর তারিখ';
+
+  @override
+  String get dateRangeEnd => 'শেষের তারিখ';
+
+  @override
+  String get openInMaps => 'মানচিত্রে খুলুন';
 }

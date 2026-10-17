@@ -13535,4 +13535,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
+
+  @override
+  String get dateRangeStart => 'Startdatum';
+
+  @override
+  String get dateRangeEnd => 'Einddatum';
+
+  @override
+  String get openInMaps => 'Openen in Kaarten';
 }

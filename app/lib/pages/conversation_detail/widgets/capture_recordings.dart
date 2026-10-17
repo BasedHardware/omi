@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -84,6 +85,20 @@ Future<void> showCaptureRecordingsSheet(
     context: context,
     title: context.l10n.captureRecordingsSheetTitle,
     padding: EdgeInsets.zero,
+    nativeBuilder: (sheetContext) => CaptureRecordingsSheet(
+      recordings: recordings,
+      controller: controller,
+      onOpen: (recording) {
+        Navigator.pop(sheetContext);
+        onOpen(recording);
+      },
+      onSeparate: (recording) async {
+        if (!await confirmCaptureRecordingSeparation(sheetContext, recording)) return;
+        final separated = await onSeparate(recording);
+        // The page reloads behind the sheet; close it once the new membership is in.
+        if (separated && sheetContext.mounted) Navigator.pop(sheetContext);
+      },
+    ),
     builder: (sheetContext) => CaptureRecordingsSheet(
       recordings: recordings,
       controller: controller,
@@ -131,7 +146,7 @@ class CaptureRecordingsSheet extends StatelessWidget {
       child: ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
-          return Column(
+          final classic = Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -156,6 +171,24 @@ class CaptureRecordingsSheet extends StatelessWidget {
               const SizedBox(height: 12),
             ],
           );
+          return IosNativeSurface(title: context.l10n.captureRecordingsSheetTitle, fallback: classic, toolbar: [
+            NativeRow('recordings_close', context.l10n.close,
+                symbol: 'xmark', enabled: !controller.isBusy, action: (_) => Navigator.of(context).maybePop())
+          ], sections: [
+            NativeSection('recordings', [
+              for (final recording in recordings) ...[
+                NativeRow('recording_open:${recording.id}', captureRecordingLabel(context, recording),
+                    subtitle: recording.isCurrent ? context.l10n.captureRecordingViewing : '',
+                    symbol: recording.isCurrent ? 'checkmark.circle' : 'waveform',
+                    enabled: !recording.isCurrent && !controller.isBusy,
+                    action: (_) => onOpen(recording)),
+                NativeRow('recording_separate:${recording.id}', context.l10n.captureRecordingSeparate,
+                    enabled: !controller.isBusy, action: (_) => onSeparate(recording)),
+              ],
+              if (controller.phase == CaptureGroupSeparationPhase.failed)
+                NativeRow('recording_error', context.l10n.captureRecordingSeparateFailed, kind: 'label'),
+            ])
+          ]);
         },
       ),
     );

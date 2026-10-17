@@ -13523,4 +13523,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Não foi possível resumir esta conversa';
+
+  @override
+  String get dateRangeStart => 'Data de início';
+
+  @override
+  String get dateRangeEnd => 'Data de término';
+
+  @override
+  String get openInMaps => 'Abrir no Mapas';
 }

@@ -4174,5 +4174,8 @@
     "activityNewItem": "Baru",
     "activityNeedsAttention": "Perlu perhatian",
     "activityRetryAll": "Coba lagi semua",
-    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas"
+    "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas",
+    "dateRangeStart": "Tanggal mulai",
+    "dateRangeEnd": "Tanggal berakhir",
+    "openInMaps": "Buka di Peta"
 }

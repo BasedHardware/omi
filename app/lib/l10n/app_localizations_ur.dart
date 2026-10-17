@@ -13513,4 +13513,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'اس گفتگو کا خلاصہ نہیں بن سکا';
+
+  @override
+  String get dateRangeStart => 'شروع ہونے کی تاریخ';
+
+  @override
+  String get dateRangeEnd => 'ختم ہونے کی تاریخ';
+
+  @override
+  String get openInMaps => 'نقشے میں کھولیں';
 }

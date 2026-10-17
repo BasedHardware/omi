@@ -13598,4 +13598,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Diese Unterhaltung konnte nicht zusammengefasst werden';
+
+  @override
+  String get dateRangeStart => 'Startdatum';
+
+  @override
+  String get dateRangeEnd => 'Enddatum';
+
+  @override
+  String get openInMaps => 'In Karten öffnen';
 }

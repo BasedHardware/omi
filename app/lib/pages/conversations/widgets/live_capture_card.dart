@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -87,18 +88,8 @@ class LiveCaptureCard extends StatelessWidget {
     return showOmiSheet<void>(
       context: context,
       title: title,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(explanation, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
-            const SizedBox(height: OmiSpacing.lg),
-            OmiButton(label: sheetContext.l10n.gotIt, onPressed: () => Navigator.pop(sheetContext)),
-          ],
-        ),
-      ),
+      builder: (sheetContext) => CaptureDetailsSheet(explanation: explanation),
+      nativeBuilder: (sheetContext) => CaptureDetailsSheet(explanation: explanation, nativeTitle: title),
     );
   }
 
@@ -325,5 +316,48 @@ class LiveCaptureCard extends StatelessWidget {
         ]),
       ],
     ]);
+  }
+}
+
+/// What a capture problem means, opened from the live card's status ([LiveCaptureCard.showDetails]).
+class CaptureDetailsSheet extends StatelessWidget {
+  const CaptureDetailsSheet({super.key, required this.explanation, this.nativeTitle});
+
+  final String explanation;
+
+  /// Set when the sheet is presented natively: the explanation and Got It as native rows under this
+  /// title, with the complete classic sheet as the fallback.
+  final String? nativeTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (nativeTitle != null) {
+      return IosNativeSurface(
+        title: nativeTitle!,
+        fallback: OmiSheetScaffold(title: nativeTitle, child: CaptureDetailsSheet(explanation: explanation)),
+        toolbar: [
+          NativeRow('capture_details_close', context.l10n.close,
+              symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        ],
+        sections: [
+          NativeSection('capture_details', [
+            NativeRow('capture_details_explanation', explanation, kind: 'label'),
+            NativeRow('capture_details_ok', context.l10n.gotIt, action: (_) => Navigator.pop(context)),
+          ]),
+        ],
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(explanation, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
+          const SizedBox(height: OmiSpacing.lg),
+          OmiButton(label: context.l10n.gotIt, onPressed: () => Navigator.pop(context)),
+        ],
+      ),
+    );
   }
 }

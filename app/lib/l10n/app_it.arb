@@ -4139,5 +4139,8 @@
     "activityNewItem": "Nuovo",
     "activityNeedsAttention": "Richiede attenzione",
     "activityRetryAll": "Riprova tutto",
-    "attentionSummaryFailed": "Impossibile riassumere questa conversazione"
+    "attentionSummaryFailed": "Impossibile riassumere questa conversazione",
+    "dateRangeStart": "Data di inizio",
+    "dateRangeEnd": "Data di fine",
+    "openInMaps": "Apri in Mappe"
 }

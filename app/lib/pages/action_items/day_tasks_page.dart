@@ -11,6 +11,8 @@ import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/pages/conversations/day_conversations_page.dart' show dayDateBounds;
 import 'package:omi/ui/ui.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 typedef DayTasksFetcher = Future<ApiResult<ActionItemsResponse>> Function({
@@ -157,7 +159,7 @@ class _DayTasksPageState extends State<DayTasksPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
-    return Scaffold(
+    final classic = Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         backgroundColor: OmiColors.surface0,
@@ -188,6 +190,52 @@ class _DayTasksPageState extends State<DayTasksPage> {
         child: _buildBody(context, l10n, dates),
       ),
     );
+    if (!iosSwiftUiEnabled) return classic;
+    return Scaffold(
+        body: IosNativeSurface(
+            title: '${l10n.tasks} · ${dates.dayHeader(_day)}',
+            fallback: classic,
+            loading: _loading,
+            failed: _failed || _truncated && _tasks.isEmpty,
+            empty: l10n.noTasksOnDate(dates.date(_day)),
+            errorMessage: l10n.somethingWentWrong,
+            onRefresh: (_) => _loadDay(),
+            toolbar: [
+          NativeRow('day_tasks_back', l10n.back,
+              symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
+          NativeRow('day_previous', l10n.previousDay,
+              symbol: 'chevron.backward', action: (_) => _goToDay(DateTime(_day.year, _day.month, _day.day - 1))),
+          NativeRow('day_next', l10n.nextDay,
+              symbol: 'chevron.forward',
+              enabled: !_isToday,
+              action: (_) => _goToDay(DateTime(_day.year, _day.month, _day.day + 1)))
+        ],
+            sections: [
+          if (_refreshFailed)
+            NativeSection('day_tasks_refresh_error', [
+              NativeRow('day_tasks_refresh_retry', l10n.somethingWentWrong,
+                  subtitle: l10n.tryAgain, action: (_) => _loadDay())
+            ]),
+          NativeSection('day_tasks', [
+            for (final task in _tasks)
+              NativeRow('day_task:${task.id}', task.description,
+                  kind: 'navigation',
+                  symbol: task.completed ? 'checkmark.circle.fill' : 'circle',
+                  action: (_) =>
+                      showActionItemFormSheet(context, actionItem: task, onRefresh: () => unawaited(_loadDay())))
+          ]),
+          if (_loadMoreFailed || _loadingMore || _truncated || _partial || _hasMore)
+            NativeSection('day_tasks_paging', [
+              if (_truncated || _partial)
+                NativeRow('day_tasks_partial', l10n.searchPartialFailure,
+                    subtitle: l10n.tryAgain, action: (_) => _loadDay()),
+              if (_loadingMore) NativeRow('day_tasks_loading_more', l10n.loading, kind: 'label'),
+              if (!_loadingMore && !_truncated && _hasMore)
+                NativeRow(_loadMoreFailed ? 'day_tasks_retry' : 'day_tasks_load_more',
+                    _loadMoreFailed ? l10n.tryAgain : l10n.showMore,
+                    action: (_) => _loadMore())
+            ])
+        ]));
   }
 
   Widget _buildBody(BuildContext context, AppLocalizations l10n, OmiDateFormat dates) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/conversations/widgets/daily_recap_recovery_action.dart';
@@ -38,6 +39,9 @@ class _DailyRecapsPageState extends State<DailyRecapsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (iosSwiftUiEnabled) {
+      return DailySummariesList(key: _listKey, nativePage: true, fetchSummaries: widget.fetchSummaries);
+    }
     return Scaffold(
       appBar: AppBar(
         leading: const OmiBackButton(),

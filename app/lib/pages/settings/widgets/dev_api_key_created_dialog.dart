@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
+import 'package:omi/mobile/native_ui/ios_native_secret.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -11,13 +12,26 @@ class DevApiKeyCreatedSheet extends StatelessWidget {
 
   const DevApiKeyCreatedSheet({super.key, required this.apiKey});
 
+  /// Reveals the key once: natively in the sensitive sheet, otherwise in this Flutter sheet.
   static Future<void> show(BuildContext context, DevApiKeyCreated apiKey) {
-    return showOmiSheet(
-      context: context,
-      showCloseButton: false,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (_) => DevApiKeyCreatedSheet(apiKey: apiKey),
+    final l10n = context.l10n;
+    return showIosNativeSecretSheet(
+      context,
+      title: l10n.apiKeyCreated,
+      message: apiKey.name,
+      warning: l10n.saveKeyWarning,
+      secretLabel: l10n.yourApiKey,
+      secret: apiKey.key,
+      copyLabel: l10n.copyKey,
+      doneLabel: l10n.done,
+      onCopy: () => OmiClipboard.copy(context, apiKey.key, what: l10n.apiKey),
+      showClassic: () => showOmiSheet(
+        context: context,
+        showCloseButton: false,
+        isDismissible: false,
+        enableDrag: false,
+        builder: (_) => DevApiKeyCreatedSheet(apiKey: apiKey),
+      ),
     );
   }
 

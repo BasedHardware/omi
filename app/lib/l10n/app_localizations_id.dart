@@ -13509,4 +13509,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
+
+  @override
+  String get dateRangeStart => 'Tanggal mulai';
+
+  @override
+  String get dateRangeEnd => 'Tanggal berakhir';
+
+  @override
+  String get openInMaps => 'Buka di Peta';
 }
