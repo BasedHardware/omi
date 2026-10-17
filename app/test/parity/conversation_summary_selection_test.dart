@@ -17,6 +17,7 @@ void main() {
     structured.sections = [const Section(heading: 'Decision []', bodyMarkdown: 'Approved. [s01234] []')];
     final conversation = ServerConversation(
       id: 'legacy-citations',
+      appResults: [],
       createdAt: DateTime.utc(2026, 1, 1),
       structured: structured,
       transcriptSegments: [

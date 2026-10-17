@@ -31,7 +31,8 @@ def assert_visible_invariants(note):
             assert not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+', content), (field, text)
             tokens = [t for t in re.split(r'[\s,;]+', content) if t]
             assert not all(token in KNOWN for token in tokens), (field, text)
-            assert not (len(tokens) == 2 and tokens[0] in KNOWN and re.fullmatch(r'[?]?[0-9A-Za-z]{1,3}', tokens[1])), (
+            header = content.split()
+            assert not (len(header) == 2 and header[0] in KNOWN and re.fullmatch(r'[?]?[0-9A-Za-z]{1,3}', header[1])), (
                 field,
                 text,
             )

@@ -66,8 +66,9 @@ enum NoteCitationContract {
       )
       .filter { !$0.isEmpty }
       if !tokens.isEmpty && tokens.allSatisfy({ valid.contains($0) }) { return remove(tokens) }
-      if tokens.count == 2, valid.contains(tokens[0]), matches(tokens[1], #"^[?]?[0-9A-Za-z]{1,3}$"#) {
-        return remove([tokens[0]])
+      let header = content.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+      if header.count == 2, valid.contains(header[0]), matches(header[1], #"^[?]?[0-9A-Za-z]{1,3}$"#) {
+        return remove([header[0]])
       }
       if tokens.isEmpty || matches(content, #"(?i)^(?:spk|speaker)[ _]\d+:?$"#)
         || matches(content, #"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$"#)

@@ -56,8 +56,9 @@
         value.substring(1, value.length - 1).replaceAll(RegExp('[\u200b\u200c\u200d\u2060\ufeff]'), '').trim();
     final tokens = content.split(RegExp(r'[\s,;]+')).where((token) => token.isNotEmpty).toList();
     if (tokens.isNotEmpty && tokens.every(valid.contains)) return remove(tokens);
-    if (tokens.length == 2 && valid.contains(tokens[0]) && RegExp(r'^[?]?[0-9A-Za-z]{1,3}$').hasMatch(tokens[1])) {
-      return remove([tokens[0]]);
+    final header = content.split(RegExp(r'\s+'));
+    if (header.length == 2 && valid.contains(header[0]) && RegExp(r'^[?]?[0-9A-Za-z]{1,3}$').hasMatch(header[1])) {
+      return remove([header[0]]);
     }
     if (tokens.isEmpty ||
         RegExp(r'^(?:spk|speaker)[ _]\d+:?$', caseSensitive: false).hasMatch(content) ||

@@ -99,8 +99,9 @@ def _bracket_ids(content: str, valid_ids: set[str]) -> list[str]:
     tokens = [token for token in re.split(r'[\s,;]+', content.strip()) if token]
     if tokens and all(token in valid_ids for token in tokens):
         return tokens
-    if len(tokens) == 2 and tokens[0] in valid_ids and _CLUSTER_RE.fullmatch(tokens[1]):
-        return tokens[:1]
+    header = content.split()
+    if len(header) == 2 and header[0] in valid_ids and _CLUSTER_RE.fullmatch(header[1]):
+        return header[:1]
     return []
 
 

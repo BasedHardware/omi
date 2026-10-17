@@ -57,12 +57,13 @@ function repairPass(input, knownIDs) {
     const tokens = content.split(/[\s,;]+/).filter(Boolean);
     if (tokens.length && tokens.every((id) => valid.has(id)))
       return remove(tokens);
+    const header = content.split(/\s+/);
     if (
-      tokens.length === 2 &&
-      valid.has(tokens[0]) &&
-      /^[?]?[0-9A-Za-z]{1,3}$/.test(tokens[1])
+      header.length === 2 &&
+      valid.has(header[0]) &&
+      /^[?]?[0-9A-Za-z]{1,3}$/.test(header[1])
     )
-      return remove([tokens[0]]);
+      return remove([header[0]]);
     if (
       !tokens.length ||
       /^(?:spk|speaker)[ _]\d+:?$/i.test(content) ||
