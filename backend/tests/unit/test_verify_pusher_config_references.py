@@ -188,6 +188,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": "false",
         "DEMAND_PROCESSING_ENABLED": "false",
         "DEMAND_PROCESSING_LAZY_ENABLED": "false",
         "DEMAND_PROCESSING_TOOL_ENABLED": "false",
@@ -231,9 +232,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "MEMORY_OWNER_JEV_FLIP_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
-        "CAPTURE_JEV_SHADOW_ENABLED": "true",
-        "CAPTURE_JEV_SHADOW_PERCENT": "0",
-        "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "DESKTOP_PENDANT_CALL_LINK_MODE": "shadow",
         "DESKTOP_PENDANT_CALL_LINK_PERCENT": "100",

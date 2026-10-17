@@ -151,6 +151,8 @@ class ProjectionBinding:
     run_epoch: int | None = None
     privacy_generation: int = 0
     language: str | None = None
+    record_origin: bool = False
+    native_record: bool = False
 
     def __post_init__(self):
         # Firestore caps transaction writes at 500; completion reads all siblings.

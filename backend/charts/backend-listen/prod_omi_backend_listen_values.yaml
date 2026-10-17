@@ -135,11 +135,19 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
+    value: 'false'
   - name: BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_RECOVERY_ALL_ADMITTED
     value: "false"
   - name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
@@ -354,12 +362,6 @@ env:
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
-  - name: CAPTURE_JEV_SHADOW_ENABLED
-    value: "true"
-  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: CAPTURE_JEV_SHADOW_PERCENT
-    value: "0"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST

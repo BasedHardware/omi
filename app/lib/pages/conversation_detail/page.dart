@@ -50,6 +50,7 @@ import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_detail_tabs.dart';
 import 'widgets/detail_search_bar.dart';
 import 'widgets/summary_tab.dart';
+import 'widgets/ask_agent_sheet.dart';
 import 'widgets/share_to_contacts_sheet.dart';
 import 'widgets/summarized_apps_sheet.dart';
 import 'widgets/transcript_tab.dart';
@@ -897,6 +898,19 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     ];
     // Search covers both tabs (summary and transcript), so it stays in the page menu.
     final wordsGroup = <PullDownMenuEntry>[
+      // A locked conversation is refused to connectors until it is unlocked, so it is not offered.
+      if (!conversation.discarded && !conversation.isLocked)
+        PullDownMenuItem(
+          title: l10n.askAboutConversation,
+          iconWidget: const FaIcon(FontAwesomeIcons.message, size: 16),
+          onTap: () {
+            PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
+              conversationId: conversation.id,
+              action: 'ask_agent',
+            );
+            showAskAgentSheet(context, conversation);
+          },
+        ),
       PullDownMenuItem(
         title: l10n.search,
         iconWidget: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16),

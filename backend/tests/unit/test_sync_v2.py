@@ -36,6 +36,8 @@ import gc
 
 # Keep additive batch imports real before legacy fixtures replace package roots.
 from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from utils.batch_pipeline import live_projection as _batch_live_projection  # noqa: F401
+from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
 from routers import batch_pipeline as _batch_router  # noqa: F401
 from models import sync_job_status as _sync_job_status  # noqa: F401
 from fastapi.routing import APIRoute
@@ -1329,6 +1331,10 @@ class TestAsyncCoordinatorBehavioral:
     @staticmethod
     def _load_sync_module():
         """Load routers/sync.py with all heavy deps stubbed, return (module, stubs)."""
+        # Load the optional repair dependency before replacing database/google
+        # with non-package stubs. It stays real and gated off in dispatch tests.
+        from services import summary_debt_repair  # noqa: F401
+
         saved_modules = {}
         stubs = {}
         from database.sync_jobs import SyncLedgerFenceMode

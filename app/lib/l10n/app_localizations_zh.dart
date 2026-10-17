@@ -13292,4 +13292,187 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';
+
+  @override
+  String get connectAgentIntro => '只需连接一次，之后就能向它们询问你的对话、回忆和任务。';
+
+  @override
+  String get connectAgentOneTap => '一键连接';
+
+  @override
+  String get connectAgentComputerAgents => '拥有自己电脑的智能体';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle => '复制一条提示词。Omi 会为该智能体单独生成密钥并安全发送。';
+
+  @override
+  String get connectAgentOtherAgent => '其他智能体';
+
+  @override
+  String get connectAgentKeyActive => '密钥有效';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return '上次使用：$time';
+  }
+
+  @override
+  String get connectAgentDevelopers => '面向开发者的 MCP 和 API 密钥';
+
+  @override
+  String get connectAgentLoadFailed => '无法加载你的连接。';
+
+  @override
+  String get connectAgentActionFailed => '出了点问题，请重试。';
+
+  @override
+  String get connectChatGptTitle => '连接 ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle => '大约需要 30 秒。你在 ChatGPT 中批准后，手机和电脑上都能使用。';
+
+  @override
+  String get connectChatGptStepOpen => '我们会在 ChatGPT 中打开 Omi';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT 会直接打开 Omi 应用页面。';
+
+  @override
+  String get connectChatGptStepApprove => '点按“连接”，然后登录 Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => '请使用与此处相同的账号。';
+
+  @override
+  String get connectChatGptStepReturn => '返回 Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => '我们会自动检查连接。';
+
+  @override
+  String get openChatGpt => '打开 ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => '已在手机和电脑上连接';
+
+  @override
+  String get tryAskingChatGpt => '试着问问 ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => '点按其中一个，即可打开已填好问题的 ChatGPT。';
+
+  @override
+  String get chatGptExampleMeetings => '我在昨天的会议上答应了什么？';
+
+  @override
+  String get chatGptExampleTasks => '把我在 Omi 里未完成的任务整理成本周计划。';
+
+  @override
+  String get chatGptExampleGoals => 'Omi 对我的目标了解多少？';
+
+  @override
+  String get disconnectChatGpt => '断开 ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => '要断开 ChatGPT 吗？';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT 将无法再读取你在 Omi 中的回忆、对话和任务。';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '连接 $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return '粘贴一条提示词，$name 会在自己的电脑上设置好 Omi。';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => '粘贴一条提示词，你的智能体会在自己的电脑上设置好 Omi。';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '已创建密钥“$name”';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody => '提示词里是一次性链接，而不是密钥本身。链接只能打开一次，1 小时后失效。你可以随时在这里撤销密钥。';
+
+  @override
+  String get connectAgentPreparing => '正在生成密钥和安全链接…';
+
+  @override
+  String get connectAgentPrepareFailed => '无法生成密钥。请检查网络连接后重试。';
+
+  @override
+  String get copyPrompt => '复制提示词';
+
+  @override
+  String get connectAgentNewLink => '链接已过期？重新生成';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name 已连接';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name 持有一个 Omi 密钥。撤销它即可切断访问，之后随时可以重新连接。';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '要撤销 $name 的密钥吗？';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name 将立即失去对你 Omi 记忆的访问权限。';
+  }
+
+  @override
+  String get askAboutConversation => '询问这段对话';
+
+  @override
+  String get askAboutConversationSubtitle => '打开 ChatGPT 并填好你的问题。它会通过 Omi 查找这段对话，无需粘贴转录内容。';
+
+  @override
+  String get askYourQuestion => '你的问题';
+
+  @override
+  String get askSuggestFollowUp => '根据这段对话起草一封跟进邮件。';
+
+  @override
+  String get askSuggestCommitments => '我在这段对话中承诺了什么？';
+
+  @override
+  String get askSuggestDoc => '把这段对话整理成一份简短文档。';
+
+  @override
+  String get askInChatGpt => '问 ChatGPT';
+
+  @override
+  String get copyForAnyApp => '复制到任意应用';
+
+  @override
+  String get askConnectChatGptFirst => '只需连接一次 ChatGPT，即可询问你的对话。';
+
+  @override
+  String get reconnect => '重新连接';
+
+  @override
+  String get chatGptNeedsReconnect => '需要更多权限。重新连接以修复。';
+
+  @override
+  String get connectAgentWaiting => '正在等待 Agent 使用其密钥';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name 尚未连接';
+  }
 }

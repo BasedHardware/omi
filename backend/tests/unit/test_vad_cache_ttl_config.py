@@ -9,8 +9,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 EXPECTED_SERVICES = {'backend', 'backend-sync', 'backend-sync-backfill'}
 
 
+def _load_yaml(path: Path) -> dict:
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    return yaml.load(path.read_text(), Loader=loader)
+
+
 def test_sync_vad_services_keep_the_24_hour_ttl_in_dev_and_prod():
-    manifest = yaml.safe_load((REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = _load_yaml(REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml')
 
     for environment in ('dev', 'prod'):
         services = manifest['environments'][environment]['cloud_run']['services']
@@ -25,7 +30,7 @@ def test_sync_vad_cache_ttl_is_registered_as_nonsecret_config_and_documented():
     assert 'VAD_CACHE_TTL_SECONDS' in classification['kinds']['config']
     assert 'VAD_CACHE_TTL_SECONDS' not in classification['kinds']['secret']
 
-    feature_flags = yaml.safe_load((REPOSITORY_ROOT / 'config/feature-flags.yaml').read_text())
+    feature_flags = _load_yaml(REPOSITORY_ROOT / 'config/feature-flags.yaml')
     rows = [row for row in feature_flags['flags'] if row['key'] == 'VAD_CACHE_TTL_SECONDS']
     assert len(rows) == 1
     assert rows[0]['lifecycle'] == 'config_switch'

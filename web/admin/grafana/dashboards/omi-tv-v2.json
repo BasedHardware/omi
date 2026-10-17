@@ -1168,7 +1168,7 @@
     {
       "type": "timeseries",
       "title": "Activation by platform",
-      "description": "Week-one activation for weekly new-user cohorts, dated by the cohort's last day, split by the platform users first arrived on. Rates use the full cohort, including users who never qualified. The latest All point is the Activated stat. \"Other\" platform cohorts are a handful of users, so their rate is in the tooltip only.",
+      "description": "Week-one activation for weekly new-user cohorts, dated by the cohort's last day, split by the platform users first arrived on. Rates use the full cohort, including users who never qualified. The latest All point is the Activated stat. \"Other\" platform cohorts are a handful of users, so their rate is in the tooltip only. The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days after its last first-seen day, and a new one is added every day, so the line always ends 8 days back. ",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -1221,225 +1221,9 @@
               "type": "number"
             }
           ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#e8e6df"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "pointSize": 5,
-            "spanNulls": true,
-            "barAlignment": 0,
-            "axisPlacement": "left",
-            "axisLabel": "",
-            "axisSoftMin": 0,
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "lineInterpolation": "smooth",
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "noValue": "Loading\u2026",
-          "decimals": 0
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Mobile"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Mobile"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d95926"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "macOS"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "macOS"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3987e5"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Other"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Other"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#199e70"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "MCP-only"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "MCP-only"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#c98500"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "All"
-            },
-            "properties": [
-              {
-                "id": "custom.lineWidth",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Other"
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Cohort users"
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Cohort users"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "transformations": [
         {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "date": 0,
-              "All": 1,
-              "Mobile": 2,
-              "macOS": 3,
-              "Other": 4,
-              "Cohort users": 5
-            },
-            "excludeByName": {},
-            "renameByName": {}
-          }
-        }
-      ],
-      "timeFrom": "95d",
-      "hideTimeOverride": true,
-      "gridPos": {
-        "x": 5,
-        "y": 4,
-        "w": 5,
-        "h": 8
-      },
-      "id": 9
-    },
-    {
-      "type": "timeseries",
-      "title": "Week-one capture",
-      "description": "Share of each new-user cohort with a saved, non-discarded own-device or mic conversation in days 1\u20137, by first platform. The latest All point is the Saved capture stat.",
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "targets": [
-        {
-          "refId": "A",
+          "refId": "B",
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "omi-admin-api"
@@ -1452,7 +1236,7 @@
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "frames.capture",
+          "root_selector": "frames.maturing",
           "columns": [
             {
               "selector": "date",
@@ -1460,28 +1244,8 @@
               "type": "timestamp"
             },
             {
-              "selector": "total",
-              "text": "All",
-              "type": "number"
-            },
-            {
-              "selector": "mobile",
-              "text": "Mobile",
-              "type": "number"
-            },
-            {
-              "selector": "macos",
-              "text": "macOS",
-              "type": "number"
-            },
-            {
-              "selector": "other",
-              "text": "Other",
-              "type": "number"
-            },
-            {
-              "selector": "n",
-              "text": "Cohort users",
+              "selector": "maturing",
+              "text": "Maturing",
               "type": "number"
             }
           ]
@@ -1604,6 +1368,10 @@
             },
             "properties": [
               {
+                "id": "displayName",
+                "value": "All"
+              },
+              {
                 "id": "custom.lineWidth",
                 "value": 3
               }
@@ -1652,6 +1420,65 @@
                 "value": "short"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Maturing"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Maturing"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
           }
         ]
       },
@@ -1676,7 +1503,364 @@
               "Mobile": 2,
               "macOS": 3,
               "Other": 4,
-              "Cohort users": 5
+              "Cohort users": 5,
+              "Maturing": 6
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "95d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 5,
+        "y": 4,
+        "w": 5,
+        "h": 8
+      },
+      "id": 9
+    },
+    {
+      "type": "timeseries",
+      "title": "Week-one capture",
+      "description": "Share of each new-user cohort with a saved, non-discarded own-device or mic conversation in days 1\u20137, by first platform. The latest All point is the Saved capture stat. The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days after its last first-seen day, and a new one is added every day, so the line always ends 8 days back. ",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.capture",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "total",
+              "text": "All",
+              "type": "number"
+            },
+            {
+              "selector": "mobile",
+              "text": "Mobile",
+              "type": "number"
+            },
+            {
+              "selector": "macos",
+              "text": "macOS",
+              "type": "number"
+            },
+            {
+              "selector": "other",
+              "text": "Other",
+              "type": "number"
+            },
+            {
+              "selector": "n",
+              "text": "Cohort users",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.maturing",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "maturing",
+              "text": "Maturing",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": true,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": 0,
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mobile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Mobile"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d95926"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "macOS"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "macOS"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3987e5"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Other"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#199e70"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MCP-only"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "MCP-only"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c98500"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "All"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cohort users"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cohort users"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Maturing"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Maturing"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "All": 1,
+              "Mobile": 2,
+              "macOS": 3,
+              "Other": 4,
+              "Cohort users": 5,
+              "Maturing": 6
             },
             "excludeByName": {},
             "renameByName": {}
@@ -2496,7 +2680,7 @@
     {
       "type": "timeseries",
       "title": "Retention by week",
-      "description": "Established retention by week (solid) and retained-if-activated (dashed) by the cohort's last first-seen day. Retained-if-activated needs 37 days to mature, so its line ends about five weeks before Established's. Latest points are the stats.",
+      "description": "Established retention by week (solid) and retained-if-activated (dashed) by the cohort's last first-seen day. Retained-if-activated needs 37 days to mature, so its line always ends 38 days back; the violet band is the cohorts still maturing (a new one closes every day). Established ends at the last complete Mon\u2013Sun week. Latest points are the stats.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -2554,6 +2738,34 @@
             {
               "selector": "total",
               "text": "If activated",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/retention",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.retainedMaturing",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "maturing",
+              "text": "If activated: maturing",
               "type": "number"
             }
           ]
@@ -2659,6 +2871,65 @@
                 "value": 2
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "If activated: maturing"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "If activated: maturing"
+              },
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 14
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": true,
+                  "viz": false
+                }
+              }
+            ]
           }
         ]
       },
@@ -2680,7 +2951,8 @@
             "indexByName": {
               "date": 0,
               "Established": 1,
-              "If activated": 2
+              "If activated": 2,
+              "If activated: maturing": 3
             },
             "excludeByName": {},
             "renameByName": {}
@@ -4172,7 +4444,7 @@
     {
       "type": "timeseries",
       "title": "Unit economics",
-      "description": "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, weekly points. Revenue = Omi-plan MRR \u00f7 monthly users at each week end (FinOps book; the latest point is the Per user stat). Cost = all-in 30-day cost through D\u22122 \u00f7 the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ",
+      "description": "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR \u00f7 that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). Cost = all-in 30-day cost through D\u22122 \u00f7 the same window's monthly users (the latest point is the Cost / user stat). The gap between the lines is the per-user margin. A day with no book snapshot breaks the line rather than being drawn. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -4249,11 +4521,11 @@
             "gradientMode": "none",
             "showPoints": "never",
             "pointSize": 5,
-            "spanNulls": true,
+            "spanNulls": false,
             "barAlignment": 0,
             "axisPlacement": "left",
             "axisLabel": "",
-            "axisSoftMin": 0,
+            "axisSoftMin": null,
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "stacking": {
@@ -4263,7 +4535,8 @@
             "lineInterpolation": "smooth",
             "thresholdsStyle": {
               "mode": "off"
-            }
+            },
+            "insertNulls": 172800000
           },
           "noValue": "Loading\u2026",
           "decimals": 2
@@ -4306,30 +4579,6 @@
                 }
               }
             ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Revenue / user"
-            },
-            "properties": [
-              {
-                "id": "custom.showPoints",
-                "value": "always"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Cost / user"
-            },
-            "properties": [
-              {
-                "id": "custom.showPoints",
-                "value": "always"
-              }
-            ]
           }
         ]
       },
@@ -4358,7 +4607,7 @@
           }
         }
       ],
-      "timeFrom": "60d",
+      "timeFrom": "35d",
       "hideTimeOverride": true,
       "gridPos": {
         "x": 20,

@@ -13501,4 +13501,193 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';
+
+  @override
+  String get connectAgentHeadline => 'Bruk Omi-minnet ditt i ChatGPT og AI-agentene dine';
+
+  @override
+  String get connectAgentIntro => 'Koble til én gang. Spør dem deretter om samtalene, minnene og oppgavene dine.';
+
+  @override
+  String get connectAgentOneTap => 'Med ett trykk';
+
+  @override
+  String get connectAgentComputerAgents => 'Agenter med egen datamaskin';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle =>
+      'Kopier én ledetekst. Omi lager en nøkkel bare for den agenten og sender den sikkert.';
+
+  @override
+  String get connectAgentOtherAgent => 'Annen agent';
+
+  @override
+  String get connectAgentKeyActive => 'Nøkkel aktiv';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return 'Sist brukt $time';
+  }
+
+  @override
+  String get connectAgentDevelopers => 'MCP- og API-nøkler for utviklere';
+
+  @override
+  String get connectAgentLoadFailed => 'Kunne ikke laste inn tilkoblingene dine.';
+
+  @override
+  String get connectAgentActionFailed => 'Noe gikk galt. Prøv igjen.';
+
+  @override
+  String get connectChatGptTitle => 'Koble til ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle =>
+      'Tar omtrent 30 sekunder. Du godkjenner det i ChatGPT, og det fungerer på telefonen og datamaskinen din.';
+
+  @override
+  String get connectChatGptStepOpen => 'Vi åpner Omi i ChatGPT';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT åpner rett på Omi-appens side.';
+
+  @override
+  String get connectChatGptStepApprove => 'Trykk på «Koble til», og logg deretter på Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => 'Bruk den samme kontoen som du bruker her.';
+
+  @override
+  String get connectChatGptStepReturn => 'Gå tilbake til Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => 'Vi sjekker tilkoblingen automatisk.';
+
+  @override
+  String get openChatGpt => 'Åpne ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => 'Tilkoblet på telefon og datamaskin';
+
+  @override
+  String get tryAskingChatGpt => 'Prøv å spørre ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => 'Trykk på ett for å åpne ChatGPT med det utfylt.';
+
+  @override
+  String get chatGptExampleMeetings => 'Hva sa jeg ja til i gårsdagens møter?';
+
+  @override
+  String get chatGptExampleTasks => 'Gjør de åpne Omi-oppgavene mine om til en plan for denne uken.';
+
+  @override
+  String get chatGptExampleGoals => 'Hva vet Omi om målene mine?';
+
+  @override
+  String get disconnectChatGpt => 'Koble fra ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => 'Koble fra ChatGPT?';
+
+  @override
+  String get disconnectChatGptMessage =>
+      'ChatGPT vil ikke lenger kunne lese Omi-minnene, -samtalene eller -oppgavene dine.';
+
+  @override
+  String connectAgentNamed(String name) {
+    return 'Koble til $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return 'Lim inn én ledetekst. $name setter opp Omi på sin egen datamaskin.';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle =>
+      'Lim inn én ledetekst. Agenten din setter opp Omi på sin egen datamaskin.';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return 'Nøkkelen «$name» er opprettet';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody =>
+      'Ledeteksten inneholder en engangslenke, ikke selve nøkkelen. Den åpnes én gang og utløper etter 1 time. Du kan tilbakekalle nøkkelen her når som helst.';
+
+  @override
+  String get connectAgentPreparing => 'Lager en nøkkel og en sikker lenke…';
+
+  @override
+  String get connectAgentPrepareFailed => 'Kunne ikke lage nøkkelen. Sjekk tilkoblingen og prøv igjen.';
+
+  @override
+  String get copyPrompt => 'Kopier ledetekst';
+
+  @override
+  String get connectAgentNewLink => 'Har lenken utløpt? Lag en ny';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name er tilkoblet';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name har en Omi-nøkkel. Tilbakekall den for å stenge tilgangen. Du kan koble til igjen når som helst.';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return 'Tilbakekall nøkkelen til $name?';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name mister tilgangen til Omi-minnet ditt med en gang.';
+  }
+
+  @override
+  String get askAboutConversation => 'Spør om denne samtalen';
+
+  @override
+  String get askAboutConversationSubtitle =>
+      'Åpner ChatGPT med spørsmålet klart. Den slår opp samtalen via Omi, så du slipper å lime inn transkripsjonen.';
+
+  @override
+  String get askYourQuestion => 'Spørsmålet ditt';
+
+  @override
+  String get askSuggestFollowUp => 'Skriv et utkast til en oppfølgings-e-post fra denne samtalen.';
+
+  @override
+  String get askSuggestCommitments => 'Hva lovet jeg i denne samtalen?';
+
+  @override
+  String get askSuggestDoc => 'Gjør denne samtalen om til et kort dokument.';
+
+  @override
+  String get askInChatGpt => 'Spør ChatGPT';
+
+  @override
+  String get copyForAnyApp => 'Kopier for hvilken som helst app';
+
+  @override
+  String get askConnectChatGptFirst => 'Koble til ChatGPT én gang for å spørre den om samtalene dine.';
+
+  @override
+  String get reconnect => 'Koble til på nytt';
+
+  @override
+  String get chatGptNeedsReconnect => 'Trenger mer tilgang. Koble til på nytt for å fikse det.';
+
+  @override
+  String get connectAgentWaiting => 'Venter på at agenten bruker nøkkelen sin';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name er ikke tilkoblet ennå';
+  }
 }

@@ -81,7 +81,13 @@ class Scheduler:
     def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float) -> bool:
         previous = tx.get('jobs', item.segment_id)
         immutable = {**asdict(item), 'priority': int(item.priority)}
-        if previous:
+        if previous.get('state') == 'record_pending' and (
+            previous.get('owner_id') != item.owner_id
+            or previous.get('conversation_id') != item.conversation_id
+            or previous.get('privacy_generation') != item.privacy_generation
+        ):
+            raise ValueError('pending recording owner cannot change')
+        if previous and previous.get('state') != 'record_pending':
             if any(
                 previous.get(key, {'unit_kind': 'conversation', 'requires_compute_admission': False}.get(key)) != value
                 for key, value in immutable.items()

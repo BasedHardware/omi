@@ -251,3 +251,12 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
     assert 'HorizontalPodAutoscaler' not in docs
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_empty_asr_disposition_is_explicitly_dark_and_operator_enabled(enabled):
+    result = render(*enabled_arguments(), '--set', f'worker.emptyAsrDispositionEnabled={str(enabled).lower()}')
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED'] == str(enabled).lower()

@@ -40,7 +40,6 @@ from utils.conversations.overlap_shared_speech import (
     shared_speech_group_guard,
     VERSION,
 )
-from utils.conversations.capture_jev_shadow import submit_resummary, submit_same_scene
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
 
@@ -173,20 +172,6 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
             mode=speech_mode,
             legacy_ids={other.conversation_id for other in matches[:MAX_CONTENT_CHECKS]},
         )
-    # The shadow sees overlapping candidates even when source, window threshold,
-    # or content threshold kept the shipped rule from grouping them.
-    shadow_candidates = 0
-    for other in others:
-        if other.conversation_id == candidate.conversation_id:
-            continue
-        overlap = (
-            min(candidate.finished_at, other.finished_at) - max(candidate.started_at, other.started_at)
-        ).total_seconds()
-        if overlap > 0:
-            submit_same_scene(uid, candidate.conversation_id, other.conversation_id)
-            shadow_candidates += 1
-            if shadow_candidates >= MAX_CONTENT_CHECKS:
-                break
 
 
 def _segments_of(record: Any):
@@ -353,7 +338,7 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
             if containment_mode != 'off':
                 try:
                     containment = measure_capture_containment(own_row or {}, other_row or {}, mode=containment_mode)
-                    record_capture_containment(containment, mode=containment_mode, phase='rule')
+                    record_capture_containment(containment, mode=containment_mode)
                 except Exception:
                     logger.warning('capture_group_containment detector failed')
                     _record_degraded(to_mode='separate_captures')
@@ -384,25 +369,6 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                 },
             )
             record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')
-            own_group = (
-                own_row.get('capture_group')
-                if isinstance(own_row, Mapping)
-                else getattr(own_row, 'capture_group', None)
-            ) or {}
-            other_group = (
-                other_row.get('capture_group')
-                if isinstance(other_row, Mapping)
-                else getattr(other_row, 'capture_group', None)
-            ) or {}
-            if group_id and own_group.get('id') != other_group.get('id'):
-                if own_group.get('id') == group_id:
-                    submit_resummary(
-                        uid, own_group.get('primary_id') or candidate.conversation_id, other.conversation_id
-                    )
-                elif other_group.get('id') == group_id:
-                    submit_resummary(
-                        uid, other_group.get('primary_id') or other.conversation_id, candidate.conversation_id
-                    )
             if group_id and isinstance(own_row, dict):
                 primary = min((candidate, other), key=lambda row: row.primary_rank)
                 own_row['capture_group'] = {'id': group_id, 'primary_id': primary.conversation_id}

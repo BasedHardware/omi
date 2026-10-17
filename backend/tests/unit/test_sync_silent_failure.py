@@ -820,6 +820,9 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        sys.modules['database._client'].get_firestore_client = MagicMock(
+            side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
+        )
         # Segment error handling is isolated from enrollment/voiceprint loading.
         sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
         sys.modules['utils.stt.owner_profile'].validated_embedding = MagicMock(return_value=None)

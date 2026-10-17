@@ -9,6 +9,7 @@ from typing import Any
 
 from google.cloud import firestore
 
+from config.batch_pipeline import projection_contention_enabled
 from database.fsr_read_cache import writing
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
@@ -116,7 +117,7 @@ class ProjectionStore:
                 snapshot = ref.get(transaction=transaction)
                 old = snapshot.to_dict() if snapshot.exists else None
                 if receipt.get('state') == 'ready':
-                    return old or {}, True
+                    return {**(old or {}), '_wake': False}, True
                 row, result = operation(old)
                 if old is None and session.job.get('priority') != 0:
                     from utils.cloud_tasks import is_sync_backfill_routing_enabled
@@ -155,11 +156,14 @@ class ProjectionStore:
         from database._client import run_transactional
         from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
-        if os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true':
+        if (
+            not projection_contention_enabled()
+            and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
+        ):
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
-            operation,
+            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction),
             operation_name='batch_projection',
         )
 
@@ -209,6 +213,8 @@ class ProjectionStore:
             job = self.ref('jobs', sid).get().to_dict() or {}
             if job.get('priority') == 0:
                 source = 'sync_fresh'
+        if binding.native_record:
+            return {'seconds': seconds, 'source': 'realtime', 'updates': {}, 'hour': '', 'completed': True}
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
         ledger = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id).get().to_dict() or {}

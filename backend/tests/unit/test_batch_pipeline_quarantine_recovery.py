@@ -86,6 +86,7 @@ def setup(monkeypatch):
     artifacts.fetch_audio.return_value = b'synthetic-only'
     artifacts.persist_recovery_result.return_value = 'gs://synthetic/recovered'
     artifacts.find_recovery_result.return_value = None
+    artifacts.load_result.return_value = {'synthetic': True}
     stt = Mock(return_value={'synthetic': True})
     recovery = QuarantineRecovery(store, artifacts, stt=stt, clock=lambda: 100)
     return client, store, binding, artifacts, stt, recovery
@@ -342,7 +343,7 @@ def test_legacy_adapter_preserves_original_clocks_and_uses_one_sync_client_attem
     assert first['speaker'] == 'SPEAKER_01'
     assert first['id'] and first['speaker_id_scope'].startswith('sync:')
     client.return_value = ([], 'en')
-    with pytest.raises(ValueError, match='empty recovery'):
+    with pytest.raises(ValueError, match='empty_asr'):
         transcribe(item, binding, data.getvalue())
 
 
