@@ -94,9 +94,6 @@ _DEMAND_LISTEN_ONLY = frozenset(
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
         'BATCH_PIPELINE_ENABLED',
-        # Listen/finalizer reserves the owner; pusher always drains closure
-        # receipts, including during selective admission rollback.
-        'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_PERCENT',
         'BATCH_PIPELINE_SERVING_ENABLED',

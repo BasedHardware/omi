@@ -1014,6 +1014,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
     )
+    record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
         _capture_matches_server_conversation,
@@ -1021,6 +1022,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
         client_device_context.client_device_id,
+        snapshot_out=record_snapshot,
     )
     lane_decision = classify_sync_lane(
         filenames,
@@ -1175,12 +1177,14 @@ async def sync_local_files_v2(
             client_device_id=client_device_context.client_device_id,
             byok_enabled=byok_enabled,
             recording_session_id=recording_session_id,
+            loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
 
-        if record_response is RecordUploadRoute.BATCH or (
-            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
+        if not byok_enabled and (
+            record_response is RecordUploadRoute.BATCH
+            or (record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid))
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
@@ -1209,6 +1213,7 @@ async def sync_local_files_v2(
                     'capture_evidence_claims': capture_claims,
                     'raw_capture_paths': archive_paths,
                 },
+                record_router=registered_record_response,
             )
             if batch_response is not None:
                 return batch_response

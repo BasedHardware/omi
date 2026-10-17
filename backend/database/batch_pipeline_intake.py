@@ -63,8 +63,8 @@ def admit(
             expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
             if row.get('record_lane_owner') not in {None, expected}:
                 raise ValueError('record owner is immutable')
-            row['record_lane_owner'] = expected
-            tx.put('conversations', key, row)
+            if row.get('record_lane_owner') != expected:
+                tx.patch('conversations', key, {'record_lane_owner': expected})
         for item in items:
             if require_artifacts:
                 key = artifact_id(item.segment_id, item.audio_uri)

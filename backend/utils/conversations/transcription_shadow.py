@@ -23,6 +23,7 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
+from config.batch_pipeline import RecordOwnerContention, live_record_admission_enabled
 from config.transcription_final_pass import enabled_for, authoritative_for
 from utils.manual_speaker_assignments import manual_owner_reserved
 from database._client import db
@@ -140,7 +141,14 @@ async def _run_later(uid: str, conversation_id: str) -> None:
     try:
         await asyncio.sleep(max(0.0, float(os.getenv('TRANSCRIPTION_SHADOW_UPLOAD_GRACE_SECONDS', '70'))))
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_pool, _run_shadow, uid, conversation_id)
+        for attempt in range(3):
+            try:
+                await loop.run_in_executor(_pool, _run_shadow, uid, conversation_id)
+                break
+            except RecordOwnerContention:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(0.1 * (attempt + 1))
     except asyncio.CancelledError:
         raise
     except Exception as error:
@@ -454,6 +462,29 @@ def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
     SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
 
 
+def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict) -> dict | None:
+    for _ in range(3):
+        owner = raw.get('record_lane_owner')
+        if owner in {'batch_live_v1', 'batch_sync_v1'}:
+            return None
+        if owner == 'legacy_final_pass_v1' or not live_record_admission_enabled():
+            return raw
+        revision = conversations_db.claim_record_lane_owner(
+            uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
+        )
+        if revision is not None:
+            return {**raw, 'record_lane_owner': 'legacy_final_pass_v1', 'updated_at': revision}
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if not refreshed:
+            return None
+        raw = refreshed
+    if raw.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        return None
+    if raw.get('record_lane_owner') == 'legacy_final_pass_v1':
+        return raw
+    raise RecordOwnerContention('shadow owner claim remains contended after three refreshed revisions')
+
+
 def _run_shadow(uid: str, conversation_id: str) -> None:
     began = time.monotonic()
     outcome = 'failed'
@@ -463,18 +494,13 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
         raw = conversations_db.get_conversation(uid, conversation_id)
         if not raw:
             return
+        if not _enabled(uid, deserialize_conversation(raw)):
+            return
+        raw = _claim_shadow_owner(uid, conversation_id, raw)
+        if raw is None:
+            return
         conversation = deserialize_conversation(raw)
         if not _enabled(uid, conversation):
-            return
-        owner = raw.get('record_lane_owner')
-        if owner is None:
-            revision = conversations_db.claim_record_lane_owner(
-                uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
-            )
-            if revision is None:
-                return
-            raw['updated_at'], conversation.updated_at = revision, revision
-        elif owner != 'legacy_final_pass_v1':
             return
         record_result = True
         if not conversation.audio_files:
@@ -524,6 +550,10 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                                     clock_offset=metadata['comparison']['clock_offset_seconds'],
                                 )
                         _store_result(uid, conversation_id, metadata, version='v2')
+    except RecordOwnerContention:
+        # Retry ownership before reserving provider budget or doing acoustic
+        # work. A metadata race must not silently discard the selected pass.
+        raise
     except TimeoutError:
         outcome = 'timeout'
     except _BudgetExceeded:

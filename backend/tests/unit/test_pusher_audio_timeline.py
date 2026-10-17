@@ -494,8 +494,25 @@ async def test_upload_metric_counts_span_and_spanless_objects_once_each(env, mon
     assert len(env) == 2
 
 
+def _observe_record_owner(monkeypatch):
+    audio = MagicMock()
+    audio.model_dump.return_value = {'id': 'synthetic-audio'}
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *_: [audio])
+
+    def update(uid, cid, data, *, record_owner_out=None):
+        assert set(data) == {'audio_files'}  # The pre-existing metadata write.
+        if record_owner_out is not None:
+            record_owner_out[cid] = 'batch_live_v1'
+        return True
+
+    monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update)
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *_: None)
+    monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', lambda *_: None)
+
+
 async def test_record_upload_close_receipt_follows_successful_tail_flush(env, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    _observe_record_owner(monkeypatch)
     sealed = []
 
     def seal(uid, conversation):
@@ -509,12 +526,13 @@ async def test_record_upload_close_receipt_follows_successful_tail_flush(env, mo
     assert sealed == ['record']
 
 
-async def test_record_close_receipt_drains_with_admission_off_and_failed_upload_never_seals(env, monkeypatch):
+async def test_dark_unowned_close_adds_no_seal_and_failed_upload_never_seals(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     sealed = []
     monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda *args: sealed.append(args))
     ws = FakeWebSocket([_conversation('record'), _audio(100, b'\x01\x00' * RATE)])
     await _run(ws)
-    assert len(sealed) == 1
+    assert sealed == []
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
 
     def failed(*args, **kwargs):
@@ -523,11 +541,22 @@ async def test_record_close_receipt_drains_with_admission_off_and_failed_upload_
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', failed)
     ws = FakeWebSocket([_conversation('other'), _audio(100, b'\x01\x00' * RATE)])
     await _run(ws)
-    assert len(sealed) == 1
+    assert sealed == []
+
+
+async def test_owned_close_drains_when_dark_using_existing_audio_metadata_snapshot(env, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    _observe_record_owner(monkeypatch)
+    monkeypatch.setattr(pusher.conversations_db, 'get_conversation', lambda *_: pytest.fail('extra ownership read'))
+    sealed = []
+    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', lambda uid, cid: sealed.append(cid) or True)
+    await _run(FakeWebSocket([_conversation('owned'), _audio(100, b'\x01\x00' * RATE)]))
+    assert sealed == ['owned']
 
 
 async def test_failed_record_upload_does_not_block_another_durable_record(env, monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
+    _observe_record_owner(monkeypatch)
     original = pusher.upload_audio_chunks_batch
 
     def upload(chunks, uid, cid, *args, **kwargs):

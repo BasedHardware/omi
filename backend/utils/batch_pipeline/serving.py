@@ -7,6 +7,7 @@ import logging
 import os
 import time
 
+from config.batch_pipeline import live_record_admission_enabled
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.intake import artifacts_for
@@ -125,7 +126,8 @@ def start_serving_from_env():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
                 await run_blocking(sync_executor, service.reconcile, recover_quarantine=True)
-                await drain_recordings(service.store)
+                if live_record_admission_enabled():
+                    await drain_recordings(service.store)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__

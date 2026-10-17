@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections import deque
 from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
+from config.batch_pipeline import live_record_admission_enabled
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -231,6 +232,7 @@ async def _websocket_util_trigger(
     # unverifiable (a counted conflict) instead of trusted.
     v2_flushed_runs: Deque[Tuple[float, float, str]] = deque(maxlen=V2_FLUSHED_RUN_LEDGER_SIZE)
     record_close_requests: set[str] = set()
+    record_owners: dict[str, str] = {}
     record_upload_failed = False
     failed_recordings: set[str] = set()
 
@@ -372,6 +374,7 @@ async def _websocket_util_trigger(
                             uid,
                             conv_id,
                             {'audio_files': files_payload},
+                            record_owner_out=record_owners if len(record_owners) < 128 else None,
                         )
                         if applied:
                             schedule_person_voice_learning_retry(uid, conv_id)
@@ -515,7 +518,10 @@ async def _websocket_util_trigger(
                 is_shutdown = not websocket_active
                 is_size_ready = len(batch['data']) >= batch_size_threshold
                 is_age_ready = batch_age >= PRIVATE_CLOUD_BATCH_MAX_AGE
-                if is_shutdown or is_size_ready or is_age_ready or conv_id in record_close_requests:
+                owned_close = conv_id in record_close_requests and (
+                    live_record_admission_enabled() or conv_id in record_owners
+                )
+                if is_shutdown or is_size_ready or is_age_ready or owned_close:
                     conv_ids_to_flush.append(conv_id)
 
             for conv_id in conv_ids_to_flush:
@@ -529,7 +535,9 @@ async def _websocket_util_trigger(
                     and not any(b['conversation_id'] == conv_id for b in ready_batches)
                     and not any(b['conversation_id'] == conv_id for b in private_cloud_queue)
                 ):
-                    await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conv_id)
+                    if live_record_admission_enabled() or conv_id in record_owners:
+                        await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conv_id)
+                    record_owners.pop(conv_id, None)
                     record_close_requests.discard(conv_id)
 
         # Only authoritative uploaded manifests qualify. Admission is process-wide
@@ -838,7 +846,9 @@ async def _websocket_util_trigger(
                     ):
                         raise ValueError('dispatch_generation must be an integer')
                     if conversation_id:
-                        if private_cloud_sync_enabled:
+                        if private_cloud_sync_enabled and (
+                            live_record_admission_enabled() or conversation_id in record_owners
+                        ):
                             _queue_private_cloud_chunk()
                             _reset_private_cloud_buffer()
                             if len(record_close_requests) < 128:

@@ -160,6 +160,7 @@ async def test_real_wal_upload_race_and_rollback_replay_use_record_receipt(lane,
         content_id='wal-content',
         source='omi',
         client_device_id=None,
+        loaded_conversation=live,
     )
     responses = await asyncio.gather(
         *(live_upload.registered_record_response(paths=[path], **kwargs) for path in paths)
@@ -168,6 +169,7 @@ async def test_real_wal_upload_race_and_rollback_replay_use_record_receipt(lane,
     assert {json.loads(response.body)['job_id'] for response in responses} == {binding.job_id}
     assert len(list(lane.client.collection(lane.store.namespace + '_jobs').stream())) == 1
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setattr(artifacts, 'fetch_audio', lambda _: pytest.fail('replay read expired audio'))
     replay = await live_upload.registered_record_response(paths=[paths[0]], **kwargs)
     assert replay.status_code == 202 and json.loads(replay.body)['job_id'] == binding.job_id
@@ -206,14 +208,16 @@ async def test_pre_enable_capture_holds_wal_until_finalizer_reserves_owner(lane,
 
 
 @pytest.mark.parametrize('batch_enabled,owner', [(False, 'legacy_final_pass_v1'), (True, 'batch_sync_v1')])
-async def test_wal_admitted_before_enablement_prevents_later_native_twin(lane, monkeypatch, batch_enabled, owner):
+async def test_enabled_wal_routing_fences_existing_dispatcher_against_native_twin(
+    lane, monkeypatch, batch_enabled, owner
+):
     from utils.batch_pipeline import live_upload, live as admission
 
     native(lane, status='processing')
     reference = lane.user.collection('conversations').document('live-record')
     reference.update({'record_lane_owner': None, 'language': 'en'})
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', str(batch_enabled).lower())
-    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: lane.store)
     response = await live_upload.registered_record_response(
         uid=lane.uid,

@@ -17,6 +17,10 @@ class Priority(IntEnum):
 T = TypeVar('T')
 
 
+class RecordOwnerContention(RuntimeError):
+    """A loaded conversation revision lost a route-only compare-and-set."""
+
+
 def enabled_for(owner_id: str) -> bool:
     if os.getenv('BATCH_PIPELINE_ENABLED', 'false').lower() != 'true':
         return False

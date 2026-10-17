@@ -14,7 +14,12 @@ import wave
 
 from fastapi.responses import JSONResponse
 
-from config.batch_pipeline import enabled_for, live_record_enabled_for, record_capture_eligible
+from config.batch_pipeline import (
+    enabled_for,
+    live_record_admission_enabled,
+    live_record_enabled_for,
+    record_capture_eligible,
+)
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -96,8 +101,13 @@ async def registered_record_response(
     client_device_id,
     byok_enabled=False,
     recording_session_id=None,
+    loaded_conversation=None,
 ) -> JSONResponse | RecordUploadRoute | None:
     if not conversation_id and not recording_session_id:
+        return None
+    # No owner-discovery read while dark. Callers can supply ownership from a
+    # snapshot their existing provenance/privacy path already needed.
+    if not live_record_admission_enabled() and not (loaded_conversation or {}).get('record_lane_owner'):
         return None
     store = await run_blocking(db_executor, FirestoreStore, f'batch_pipeline_{current_stage()}')
 
@@ -111,10 +121,14 @@ async def registered_record_response(
             raise ValueError('invalid registered conversation identity')
         return (target, user.collection('conversations').document(target).get()) if target else (None, None)
 
-    conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
-    if snapshot is None or conversation_id is None:
-        return _pending() if live_record_enabled_for(uid) else None
-    row = snapshot.to_dict() or {}
+    snapshot = None
+    if loaded_conversation is not None:
+        row = loaded_conversation
+    else:
+        conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
+        if snapshot is None or conversation_id is None:
+            return _pending() if live_record_enabled_for(uid) else None
+        row = snapshot.to_dict() or {}
     if row.get('record_lane_owner') != OWNER:
         if row.get('record_lane_owner') == 'legacy_final_pass_v1':
             return RecordUploadRoute.LEGACY
@@ -129,11 +143,10 @@ async def registered_record_response(
             and not byok_enabled
             and record_capture_eligible(uid, row)
         )
-        if awaiting_reservation or (not snapshot.exists and live_record_enabled_for(uid)):
+        if awaiting_reservation or (snapshot is not None and not snapshot.exists and live_record_enabled_for(uid)):
             return _pending()
-        if snapshot.exists and not row.get('record_lane_owner'):
-            # Freeze earlier WAL ownership even while live admission is dark.
-            # Enabling live later must not reserve the same capture again.
+        if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
+            # Only enabled admission may establish a new dispatcher.
             owner = 'batch_sync_v1' if enabled_for(uid) and not byok_enabled else 'legacy_final_pass_v1'
             revision = await run_blocking(
                 db_executor,
@@ -148,13 +161,16 @@ async def registered_record_response(
                 return _pending()
             return RecordUploadRoute.BATCH if owner == 'batch_sync_v1' else RecordUploadRoute.LEGACY
         return None
-    if (
-        byok_enabled
-        or row.get('uses_custom_stt')
-        or row.get('deleted')
-        or row.get('source') != source
-        or row.get('client_device_id') != client_device_id
-    ):
+    if byok_enabled or row.get('uses_custom_stt'):
+        return JSONResponse(
+            status_code=409,
+            content={
+                'code': 'record_capture_byok_conflict',
+                'detail': 'BYOK audio cannot join this capture because server record processing already owns it',
+                'retryable': False,
+            },
+        )
+    if row.get('deleted') or row.get('source') != source or row.get('client_device_id') != client_device_id:
         return _pending()
     content, _ = record_identity(uid, conversation_id)
 

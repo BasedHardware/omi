@@ -14,7 +14,7 @@ import logging
 import os
 import time
 
-from config.batch_pipeline import Priority, record_capture_eligible
+from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -49,7 +49,7 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
         return None
     revision = claim_record_lane_owner(uid, conversation['id'], OWNER, conversation.get('updated_at'))
     if revision is None:
-        raise RuntimeError('record route snapshot changed; retry finalization')
+        raise RecordOwnerContention('record route snapshot changed')
     conversation.update(record_lane_owner=OWNER, updated_at=revision)
     return OWNER
 

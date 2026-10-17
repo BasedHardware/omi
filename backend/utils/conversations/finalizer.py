@@ -12,6 +12,7 @@ from typing import Any
 from enum import Enum
 
 from fastapi import HTTPException
+from config.batch_pipeline import RecordOwnerContention
 
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
@@ -107,6 +108,7 @@ class ConversationFinalizationError(RuntimeError):
 class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
+    deferred = 'deferred'
 
 
 async def finalize_persisted_conversation(
@@ -269,7 +271,8 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
+        if conversation_data.get('record_lane_owner') == 'batch_live_v1':
+            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -550,8 +553,37 @@ async def _load_admitted_conversation(
         )
         return ConversationFinalizationDisposition.fenced, None, None
 
+    for _ in range(3):
+        try:
+            owner = await run_blocking(db_executor, reserve_recording, uid, conversation_data)
+            break
+        except RecordOwnerContention:
+            # Listen may append between the existing read and CAS. Refresh in
+            # this attempt, rather than spending a processing-failure slot.
+            conversation_data = await run_blocking(
+                db_executor,
+                conversations_db.get_conversation,
+                uid,
+                conversation_id,
+                read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+                include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
+            )
+            if not conversation_data:
+                return ConversationFinalizationDisposition.fenced, None, None
+    else:
+        deferred = await run_blocking(
+            db_executor,
+            finalization_jobs_db.mark_finalization_retryable,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+            'record_owner_contention',
+            count_attempt=False,
+        )
+        if not deferred:
+            return ConversationFinalizationDisposition.fenced, None, None
+        return ConversationFinalizationDisposition.deferred, None, None
     conversation = deserialize_conversation(conversation_data)
-    owner = await run_blocking(db_executor, reserve_recording, uid, conversation_data)
     if owner:
         conversation.record_lane_owner = owner
     if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:

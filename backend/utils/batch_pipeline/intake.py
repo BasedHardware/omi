@@ -120,6 +120,7 @@ async def accept_upload(
     client_platform: str | None,
     byok_enabled: bool = False,
     intake_context: dict | None = None,
+    record_router=None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through."""
     public_job_id = JOB_PREFIX + job_id
@@ -177,6 +178,24 @@ async def accept_upload(
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
         user = snapshots['user']
         target = snapshots.get('conversations', {}).get(conversation_id) or {}
+        # Privacy authorization already loaded this row. Rollback may drain a
+        # native owner here without adding an ownership-discovery read to dark
+        # uploads, or accidentally admitting a second GPU job.
+        if target.get('record_lane_owner') == 'batch_live_v1':
+            if record_router is None:
+                return JSONResponse(status_code=503, content={'code': 'record_capture_pending'})
+            return await record_router(
+                uid=uid,
+                conversation_id=conversation_id,
+                content_id=content_id,
+                paths=paths,
+                source=source,
+                client_device_id=client_device_id,
+                byok_enabled=byok_enabled,
+                loaded_conversation=target,
+            )
+        if target.get('record_lane_owner') == 'legacy_final_pass_v1':
+            return None
         language = normalized_stt_language(target.get('language') or user.get('language'))
         if live_record_enabled_for(uid) and language not in (
             PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}

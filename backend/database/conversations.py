@@ -1736,7 +1736,9 @@ def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
 
 
 @after_write('conversations')
-def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
+def update_conversation(
+    uid: str, conversation_id: str, update_data: dict, *, record_owner_out: dict | None = None
+) -> bool:
     """Apply ``update_data`` to a conversation.
 
     Returns False when the conversation no longer exists, so callers that keep
@@ -1754,6 +1756,10 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
     if not doc_snapshot.exists:
         return False
 
+    if record_owner_out is not None:
+        owner = doc_snapshot.to_dict().get('record_lane_owner')
+        if owner in {'batch_live_v1', 'batch_sync_v1'}:
+            record_owner_out[conversation_id] = owner
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
         update_data = {
