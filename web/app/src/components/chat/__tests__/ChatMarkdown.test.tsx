@@ -31,6 +31,27 @@ describe('message-local chat citations', () => {
     expect(screen.getByText(/Unknown \[3\] and \[0\]/)).toBeInTheDocument();
   });
 
+  it('accepts whitespace and list separators from the server citation grammar', () => {
+    render(
+      <ChatMarkdown memories={memories}>
+        {'Claim [ 1 ] [# 2] 【 #1 】 [^ 2] [1, #2; 9] [1–2].'}
+      </ChatMarkdown>,
+    );
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(8);
+    expect(links.map((link) => link.textContent)).toEqual([
+      '1',
+      '2',
+      '1',
+      '2',
+      '1',
+      '2',
+      '1',
+      '2',
+    ]);
+    expect(screen.getByText(/\[9\]/)).toBeInTheDocument();
+  });
+
   it('protects code and existing links and keeps missing-memory markers inert', () => {
     const { container } = render(
       <ChatMarkdown memories={memories}>

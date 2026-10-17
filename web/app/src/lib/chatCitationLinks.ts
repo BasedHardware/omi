@@ -16,22 +16,44 @@ export function chatCitationLinks({ memories }: { memories: readonly { id: strin
           children.push(child);
           continue;
         }
-        const pattern = /\[(?:#|\^)?(\d+)\]|【(?:#|\^)?(\d+)】/g;
+        // Same marker/list separators as the server strip grammar, applied only to prose.
+        const list = String.raw`#?\s*\d+(?:\s*[,;–-]\s*#?\s*\d+)*`;
+        const pattern = new RegExp(
+          String.raw`\[\s*(?:\^\s*)?(${list})\s*\]|【\s*(${list})\s*】`,
+          'g',
+        );
         let start = 0;
         for (const match of child.value.matchAll(pattern)) {
-          const index = Number(match[1] ?? match[2]);
-          if (!Number.isSafeInteger(index) || !memories[index - 1]?.id) continue;
+          const content = match[1] ?? match[2];
+          const ordinals = [...content.matchAll(/#?\s*(\d+)/g)];
+          if (!ordinals.some((ordinal) => memories[Number(ordinal[1]) - 1]?.id)) continue;
           if (match.index > start)
             children.push({ type: 'text', value: child.value.slice(start, match.index) });
-          children.push({
-            type: 'element',
-            tagName: 'a',
-            properties: {
-              href: `/conversations?id=${encodeURIComponent(memories[index - 1].id)}`,
-              dataChatCitation: index,
-            },
-            children: [{ type: 'text', value: String(index) }],
-          });
+          let offset = 0;
+          for (const ordinal of ordinals) {
+            if (ordinal.index > offset)
+              children.push({
+                type: 'text',
+                value: content.slice(offset, ordinal.index),
+              });
+            const index = Number(ordinal[1]);
+            if (Number.isSafeInteger(index) && memories[index - 1]?.id) {
+              children.push({
+                type: 'element',
+                tagName: 'a',
+                properties: {
+                  href: `/conversations?id=${encodeURIComponent(memories[index - 1].id)}`,
+                  dataChatCitation: index,
+                },
+                children: [{ type: 'text', value: String(index) }],
+              });
+            } else {
+              children.push({ type: 'text', value: `[${ordinal[0].trim()}]` });
+            }
+            offset = ordinal.index + ordinal[0].length;
+          }
+          if (offset < content.length)
+            children.push({ type: 'text', value: content.slice(offset) });
           start = match.index + match[0].length;
         }
         if (start < child.value.length)
