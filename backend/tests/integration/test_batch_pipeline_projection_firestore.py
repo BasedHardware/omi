@@ -337,6 +337,8 @@ def test_assignment_read_contention_uses_bounded_retry_without_duplicate_receipt
             guard(transaction)
             attempts.append(1)
             if len(attempts) == 1:
+                if failure == 'expired':
+                    raise InvalidArgument('The referenced transaction has expired or is no longer valid')
                 raise Aborted('synthetic read-time contention')
 
         return original(*args, **{**kwargs, 'before_assign': flaky})
@@ -1247,8 +1249,9 @@ def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkey
 
 
 @pytest.mark.parametrize('boundary', ['projection', 'assignment'])
-def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, monkeypatch, boundary):
-    from google.api_core.exceptions import Aborted
+@pytest.mark.parametrize('failure', ['contention', 'expired'])
+def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, monkeypatch, boundary, failure):
+    from google.api_core.exceptions import Aborted, InvalidArgument
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
     monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
@@ -1285,6 +1288,8 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
             transactions.append(bytes(request.transaction))
             if not injected:
                 injected = True
+                if failure == 'expired':
+                    raise InvalidArgument('The referenced transaction has expired or is no longer valid')
                 raise Aborted('synthetic read-time contention')
         return original(request, **kwargs)
 

@@ -163,7 +163,7 @@ class ProjectionStore:
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
-            operation,
+            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction),
             operation_name='batch_projection',
         )
 

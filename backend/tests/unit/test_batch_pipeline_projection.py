@@ -301,3 +301,20 @@ def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding
     with pytest.raises(ProjectionReplay):
         projector._project('segment', asdict(item), {'result': {'outcome': 'silence'}}, binding)
     projector.store.complete.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'flag', ['SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED']
+)
+def test_contention_control_retains_existing_expired_transaction_restart(monkeypatch, flag):
+    monkeypatch.delenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
+    monkeypatch.setenv(flag, 'true')
+    client = Mock()
+    client.transaction.side_effect = [object(), object()]
+    operation = Mock(
+        side_effect=[InvalidArgument('The referenced transaction has expired or is no longer valid'), 'persisted']
+    )
+    assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
+    assert operation.call_count == client.transaction.call_count == 2
+    assert operation.call_args_list[0] != operation.call_args_list[1]

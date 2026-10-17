@@ -5219,7 +5219,7 @@ NX/300-second token lease with one-second connect/read timeouts. Token-checked r
 or Redis unavailability can allow overlap, so Firestore privacy, predecessor ordering and
 assignment receipts remain authoritative. No Firestore lookup is added. Both projection and
 batch assignment then use the existing bounded five-attempt fresh-transaction contention
-retry with jitter. Legacy assignment retains its separate `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED`
+retry with jitter, retaining the existing expired-transaction restart. Legacy assignment retains its separate `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED`
 control. No STT or admission path is changed.
 
 With the control enabled, silence persistence can discover another projector's receipt after its initial check. Resume
