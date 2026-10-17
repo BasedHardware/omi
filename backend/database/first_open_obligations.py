@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import math
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -17,6 +19,20 @@ from database.read_boundary import parse_snapshot_strict
 
 if TYPE_CHECKING:
     from models.memory_apply import MemoryControlState
+
+logger = logging.getLogger(__name__)
+
+
+def _is_valid_identifier(value: Any) -> bool:
+    """Return True if value is a valid non-empty Firestore document identifier without path traversal."""
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    if not stripped or stripped != value:
+        return False
+    if '/' in value or '\0' in value or value in ('.', '..'):
+        return False
+    return len(value.encode('utf-8')) <= 1500
 
 CONVERSATIONS_COLLECTION = 'conversations'
 # Automatic goal-progress updates are excluded from the JIT featureset: goals
@@ -91,35 +107,41 @@ def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
 
 
 def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
+    if not _is_valid_identifier(uid) or not _is_valid_identifier(conversation_id):
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
 
-    @firestore.transactional
-    def initialize(transaction):
-        snapshot = ref.get(transaction=transaction)
-        control = _authority(transaction, client, uid)
-        if not snapshot.exists or control is None:
-            return False
-        existing = (snapshot.to_dict() or {}).get('jit_first_open')
-        if existing is not None:
-            return isinstance(existing, Mapping) and _matches(existing, control)
-        transaction.update(
-            ref,
-            {
-                'jit_first_open': {
-                    'version': 1,
-                    'state': 'pending',
-                    'attempt': 0,
-                    'account_generation': control.account_generation,
-                    'source_generation': control.source_generation,
-                    'effects': {effect: {'state': 'pending'} for effect in FIRST_OPEN_EFFECTS},
-                    'updated_at': firestore.SERVER_TIMESTAMP,
-                }
-            },
-        )
-        return True
+        @firestore.transactional
+        def initialize(transaction):
+            snapshot = ref.get(transaction=transaction)
+            control = _authority(transaction, client, uid)
+            if not snapshot.exists or control is None:
+                return False
+            existing = (snapshot.to_dict() or {}).get('jit_first_open')
+            if existing is not None:
+                return isinstance(existing, Mapping) and _matches(existing, control)
+            transaction.update(
+                ref,
+                {
+                    'jit_first_open': {
+                        'version': 1,
+                        'state': 'pending',
+                        'attempt': 0,
+                        'account_generation': control.account_generation,
+                        'source_generation': control.source_generation,
+                        'effects': {effect: {'state': 'pending'} for effect in FIRST_OPEN_EFFECTS},
+                        'updated_at': firestore.SERVER_TIMESTAMP,
+                    }
+                },
+            )
+            return True
 
-    return bool(run_transactional(client, initialize))
+        return bool(run_transactional(client, initialize))
+    except Exception as err:
+        logger.warning('Failed to initialize first-open work uid=%s conversation=%s: %s', uid, conversation_id, err)
+        return False
 
 
 def _live_effect(snapshot: Any, control: Optional[MemoryControlState], token: str, effect: str) -> bool:
@@ -137,15 +159,23 @@ def _live_effect(snapshot: Any, control: Optional[MemoryControlState], token: st
 def first_open_effect_is_authorized(
     uid: str, conversation_id: str, token: str, effect: str, *, firestore_client: Any = None
 ) -> bool:
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
+    if not _is_valid_identifier(uid) or not _is_valid_identifier(conversation_id) or not isinstance(token, str):
+        return False
+    if effect not in FIRST_OPEN_EFFECTS:
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
 
-    @firestore.transactional
-    def authorize(transaction):
-        snapshot = ref.get(transaction=transaction)
-        return _live_effect(snapshot, _authority(transaction, client, uid), token, effect)
+        @firestore.transactional
+        def authorize(transaction):
+            snapshot = ref.get(transaction=transaction)
+            return _live_effect(snapshot, _authority(transaction, client, uid), token, effect)
 
-    return bool(run_transactional(client, authorize))
+        return bool(run_transactional(client, authorize))
+    except Exception as err:
+        logger.warning('Failed to check first-open effect authorization uid=%s conversation=%s: %s', uid, conversation_id, err)
+        return False
 
 
 def commit_first_open_conversation_patch(
@@ -157,20 +187,26 @@ def commit_first_open_conversation_patch(
     *,
     firestore_client: Any = None,
 ) -> bool:
-    if not patch:
+    if not patch or not _is_valid_identifier(uid) or not _is_valid_identifier(conversation_id) or not isinstance(token, str):
         return False
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
+    if effect not in FIRST_OPEN_EFFECTS:
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
 
-    @firestore.transactional
-    def commit(transaction):
-        snapshot = ref.get(transaction=transaction)
-        if not _live_effect(snapshot, _authority(transaction, client, uid), token, effect):
-            return False
-        transaction.update(ref, dict(patch))
-        return True
+        @firestore.transactional
+        def commit(transaction):
+            snapshot = ref.get(transaction=transaction)
+            if not _live_effect(snapshot, _authority(transaction, client, uid), token, effect):
+                return False
+            transaction.update(ref, dict(patch))
+            return True
 
-    return bool(run_transactional(client, commit))
+        return bool(run_transactional(client, commit))
+    except Exception as err:
+        logger.warning('Failed to commit first-open conversation patch uid=%s conversation=%s: %s', uid, conversation_id, err)
+        return False
 
 
 def commit_first_open_app_result(
@@ -183,37 +219,47 @@ def commit_first_open_app_result(
     firestore_client: Any = None,
 ) -> bool:
     """Persist an app result and its resumable receipt in one transaction."""
-    if not app_id or not patch:
+    if (
+        not patch
+        or not _is_valid_identifier(uid)
+        or not _is_valid_identifier(conversation_id)
+        or not _is_valid_identifier(app_id)
+        or not isinstance(token, str)
+    ):
         return False
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
 
-    @firestore.transactional
-    def commit(transaction):
-        snapshot = ref.get(transaction=transaction)
-        control = _authority(transaction, client, uid)
-        if not _live_effect(snapshot, control, token, 'app_fanout'):
-            return False
-        row = snapshot.to_dict() or {}
-        state = row.get('jit_first_open') or {}
-        effects = _effects(state)
-        app_effect = effects['app_fanout']
-        raw_receipts = app_effect.get('app_receipts')
-        receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
-        prior = receipts.get(app_id)
-        receipt = dict(prior) if isinstance(prior, Mapping) else {}
-        receipts[app_id] = {**receipt, 'result_persisted': True}
-        effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
-        transaction.update(
-            ref,
-            {
-                **dict(patch),
-                'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP},
-            },
-        )
-        return True
+        @firestore.transactional
+        def commit(transaction):
+            snapshot = ref.get(transaction=transaction)
+            control = _authority(transaction, client, uid)
+            if not _live_effect(snapshot, control, token, 'app_fanout'):
+                return False
+            row = snapshot.to_dict() or {}
+            state = row.get('jit_first_open') or {}
+            effects = _effects(state)
+            app_effect = effects.get('app_fanout') or {}
+            raw_receipts = app_effect.get('app_receipts')
+            receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
+            prior = receipts.get(app_id)
+            receipt = dict(prior) if isinstance(prior, Mapping) else {}
+            receipts[app_id] = {**receipt, 'result_persisted': True}
+            effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
+            transaction.update(
+                ref,
+                {
+                    **dict(patch),
+                    'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP},
+                },
+            )
+            return True
 
-    return bool(run_transactional(client, commit))
+        return bool(run_transactional(client, commit))
+    except Exception as err:
+        logger.warning('Failed to commit first-open app result uid=%s conversation=%s app=%s: %s', uid, conversation_id, app_id, err)
+        return False
 
 
 def complete_first_open_effect(
@@ -225,75 +271,101 @@ def complete_first_open_effect(
     conversation_patch: Optional[Mapping[str, Any]] = None,
     firestore_client: Any = None,
 ) -> bool:
+    if not _is_valid_identifier(uid) or not _is_valid_identifier(conversation_id) or not isinstance(token, str):
+        return False
     if effect not in FIRST_OPEN_EFFECTS:
-        raise ValueError(f'unknown first-open effect: {effect}')
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
 
-    @firestore.transactional
-    def complete(transaction):
-        snapshot = ref.get(transaction=transaction)
-        control = _authority(transaction, client, uid)
-        if not snapshot.exists or control is None:
-            return False
-        row = snapshot.to_dict() or {}
-        state = row.get('jit_first_open') or {}
-        if not _matches(state, control) or state.get('state') != 'in_flight' or state.get('lease_token') != token:
-            return False
-        effects = _effects(state)
-        if effects[effect].get('state') == 'complete':
-            return True
-        if effect == 'app_fanout':
-            raw_receipts = effects[effect].get('app_receipts')
-            receipts = raw_receipts if isinstance(raw_receipts, Mapping) else {}
-            app_results = row.get('apps_results', [])
-            if not isinstance(app_results, list):
+        @firestore.transactional
+        def complete(transaction):
+            snapshot = ref.get(transaction=transaction)
+            control = _authority(transaction, client, uid)
+            if not snapshot.exists or control is None:
                 return False
-            for result in app_results:
-                if not isinstance(result, Mapping) or not isinstance(result.get('app_id'), str):
+            row = snapshot.to_dict() or {}
+            state = row.get('jit_first_open') or {}
+            if not _matches(state, control) or state.get('state') != 'in_flight' or state.get('lease_token') != token:
+                return False
+            effects = _effects(state)
+            if effect not in effects:
+                return False
+            if effects[effect].get('state') == 'complete':
+                return True
+            if effect == 'app_fanout':
+                raw_receipts = effects[effect].get('app_receipts')
+                receipts = raw_receipts if isinstance(raw_receipts, Mapping) else {}
+                app_results = row.get('apps_results', [])
+                if not isinstance(app_results, list):
                     return False
-                receipt = receipts.get(result['app_id'])
-                if not isinstance(receipt, Mapping) or not (
-                    receipt.get('result_persisted') is True and receipt.get('usage_persisted') is True
-                ):
-                    return False
-        effects[effect] = {**effects[effect], 'state': 'complete', 'completed_at': firestore.SERVER_TIMESTAMP}
-        patch: dict[str, Any] = {
-            'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP}
-        }
-        if conversation_patch:
-            patch.update(dict(conversation_patch))
-        transaction.update(ref, patch)
-        return True
+                for result in app_results:
+                    if not isinstance(result, Mapping) or not isinstance(result.get('app_id'), str):
+                        return False
+                    receipt = receipts.get(result['app_id'])
+                    if not isinstance(receipt, Mapping) or not (
+                        receipt.get('result_persisted') is True and receipt.get('usage_persisted') is True
+                    ):
+                        return False
+            effects[effect] = {**effects[effect], 'state': 'complete', 'completed_at': firestore.SERVER_TIMESTAMP}
+            patch: dict[str, Any] = {
+                'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP}
+            }
+            if conversation_patch:
+                patch.update(dict(conversation_patch))
+            transaction.update(ref, patch)
+            return True
 
-    return bool(run_transactional(client, complete))
+        return bool(run_transactional(client, complete))
+    except Exception as err:
+        logger.warning('Failed to complete first-open effect uid=%s conversation=%s effect=%s: %s', uid, conversation_id, effect, err)
+        return False
 
 
 def commit_first_open_folder_count(
     uid: str, conversation_id: str, token: str, folder_id: str, *, firestore_client: Any = None
 ) -> bool:
-    client = firestore_client or get_firestore_client()
-    user = client.collection('users').document(uid)
-    query = FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY.build(
-        user.collection(CONVERSATIONS_COLLECTION),
-        {'folder_id': folder_id, 'discarded': False},
-        field_filter_factory=FieldFilter,
-    )
-    count = int(query.count().get()[0][0].value or 0)
-    conversation_ref = _conversation_ref(client, uid, conversation_id)
-    folder_ref = user.collection('folders').document(folder_id)
-
-    @firestore.transactional
-    def commit(transaction):
-        conversation = conversation_ref.get(transaction=transaction)
-        control = _authority(transaction, client, uid)
-        folder = folder_ref.get(transaction=transaction)
-        if not folder.exists or not _live_effect(conversation, control, token, 'folder_assignment'):
+    if (
+        not _is_valid_identifier(uid)
+        or not _is_valid_identifier(conversation_id)
+        or not _is_valid_identifier(folder_id)
+        or not isinstance(token, str)
+    ):
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        user = client.collection('users').document(uid)
+        try:
+            query = FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY.build(
+                user.collection(CONVERSATIONS_COLLECTION),
+                {'folder_id': folder_id, 'discarded': False},
+                field_filter_factory=FieldFilter,
+            )
+            count_result = query.count().get()
+            val = count_result[0][0].value if count_result and count_result[0] else 0
+            count = int(val or 0)
+        except Exception as q_err:
+            logger.warning('Failed to query first-open folder count uid=%s folder=%s: %s', uid, folder_id, q_err)
             return False
-        transaction.update(folder_ref, {'conversation_count': count})
-        return True
 
-    return bool(run_transactional(client, commit))
+        conversation_ref = _conversation_ref(client, uid, conversation_id)
+        folder_ref = user.collection('folders').document(folder_id)
+
+        @firestore.transactional
+        def commit(transaction):
+            conversation = conversation_ref.get(transaction=transaction)
+            control = _authority(transaction, client, uid)
+            folder = folder_ref.get(transaction=transaction)
+            if not folder.exists or not _live_effect(conversation, control, token, 'folder_assignment'):
+                return False
+            transaction.update(folder_ref, {'conversation_count': count})
+            return True
+
+        return bool(run_transactional(client, commit))
+    except Exception as err:
+        logger.warning('Failed to commit first-open folder count uid=%s conversation=%s: %s', uid, conversation_id, err)
+        return False
 
 
 def commit_first_open_app_usage(
@@ -305,50 +377,61 @@ def commit_first_open_app_usage(
     *,
     firestore_client: Any = None,
 ) -> bool:
-    client = firestore_client or get_firestore_client()
-    conversation_ref = _conversation_ref(client, uid, conversation_id)
-    plugin_ref = client.collection('plugins_data').document(app_id)
-    usage_ref = client.collection('plugins').document(app_id).collection('usage_history').document(conversation_id)
+    if (
+        not _is_valid_identifier(uid)
+        or not _is_valid_identifier(conversation_id)
+        or not _is_valid_identifier(app_id)
+        or not isinstance(token, str)
+    ):
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        conversation_ref = _conversation_ref(client, uid, conversation_id)
+        plugin_ref = client.collection('plugins_data').document(app_id)
+        usage_ref = client.collection('plugins').document(app_id).collection('usage_history').document(conversation_id)
 
-    @firestore.transactional
-    def commit(transaction):
-        conversation = conversation_ref.get(transaction=transaction)
-        plugin = plugin_ref.get(transaction=transaction)
-        if not _live_effect(conversation, _authority(transaction, client, uid), token, 'app_fanout'):
-            return False
-        row = conversation.to_dict() or {}
-        state = row.get('jit_first_open') or {}
-        effects = _effects(state)
-        app_effect = effects['app_fanout']
-        raw_receipts = app_effect.get('app_receipts')
-        receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
-        prior = receipts.get(app_id)
-        receipt = dict(prior) if isinstance(prior, Mapping) else {}
-        if receipt.get('result_persisted') is not True:
-            return False
-        if receipt.get('usage_persisted') is True:
+        @firestore.transactional
+        def commit(transaction):
+            conversation = conversation_ref.get(transaction=transaction)
+            plugin = plugin_ref.get(transaction=transaction)
+            if not _live_effect(conversation, _authority(transaction, client, uid), token, 'app_fanout'):
+                return False
+            row = conversation.to_dict() or {}
+            state = row.get('jit_first_open') or {}
+            effects = _effects(state)
+            app_effect = effects['app_fanout']
+            raw_receipts = app_effect.get('app_receipts')
+            receipts = dict(raw_receipts) if isinstance(raw_receipts, Mapping) else {}
+            prior = receipts.get(app_id)
+            receipt = dict(prior) if isinstance(prior, Mapping) else {}
+            if receipt.get('result_persisted') is not True:
+                return False
+            if receipt.get('usage_persisted') is True:
+                return True
+            if not plugin.exists:
+                return False
+            receipts[app_id] = {**receipt, 'usage_persisted': True}
+            effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
+            transaction.set(
+                usage_ref,
+                {
+                    'uid': uid,
+                    'memory_id': conversation_id,
+                    'message_id': None,
+                    'timestamp': firestore.SERVER_TIMESTAMP,
+                    'type': usage_type,
+                },
+            )
+            transaction.update(
+                conversation_ref,
+                {'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP}},
+            )
             return True
-        if not plugin.exists:
-            return False
-        receipts[app_id] = {**receipt, 'usage_persisted': True}
-        effects['app_fanout'] = {**app_effect, 'app_receipts': receipts}
-        transaction.set(
-            usage_ref,
-            {
-                'uid': uid,
-                'memory_id': conversation_id,
-                'message_id': None,
-                'timestamp': firestore.SERVER_TIMESTAMP,
-                'type': usage_type,
-            },
-        )
-        transaction.update(
-            conversation_ref,
-            {'jit_first_open': {**state, 'effects': effects, 'updated_at': firestore.SERVER_TIMESTAMP}},
-        )
-        return True
 
-    return bool(run_transactional(client, commit))
+        return bool(run_transactional(client, commit))
+    except Exception as err:
+        logger.warning('Failed to commit first-open app usage uid=%s conversation=%s app=%s: %s', uid, conversation_id, app_id, err)
+        return False
 
 
 def claim_first_open_work(
@@ -359,41 +442,56 @@ def claim_first_open_work(
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Optional[str]:
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
-    current_time = now or datetime.now(timezone.utc)
-    token = str(uuid.uuid4())
+    if not _is_valid_identifier(uid) or not _is_valid_identifier(conversation_id):
+        return None
+    try:
+        if isinstance(lease_seconds, float) and (math.isnan(lease_seconds) or math.isinf(lease_seconds)):
+            sec = 300
+        else:
+            sec = int(lease_seconds)
+            sec = max(30, min(sec, 86400))
+    except (TypeError, ValueError, OverflowError):
+        sec = 300
 
-    @firestore.transactional
-    def claim(transaction):
-        snapshot = ref.get(transaction=transaction)
-        control = _authority(transaction, client, uid)
-        state = (snapshot.to_dict() or {}).get('jit_first_open') or {} if snapshot.exists else {}
-        if not snapshot.exists or control is None or not _matches(state, control) or state.get('state') == 'complete':
-            return None
-        expires = state.get('lease_expires_at')
-        if state.get('state') == 'in_flight' and isinstance(expires, datetime) and expires > current_time:
-            return None
-        attempt = state.get('attempt', 0)
-        attempt = attempt if type(attempt) is int and attempt >= 0 else 0
-        transaction.update(
-            ref,
-            {
-                'jit_first_open': {
-                    **state,
-                    'version': 1,
-                    'effects': _effects(state),
-                    'state': 'in_flight',
-                    'attempt': attempt + 1,
-                    'lease_token': token,
-                    'lease_expires_at': current_time + timedelta(seconds=max(30, lease_seconds)),
-                    'updated_at': firestore.SERVER_TIMESTAMP,
-                }
-            },
-        )
-        return token
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
+        current_time = now or datetime.now(timezone.utc)
+        token = str(uuid.uuid4())
 
-    return run_transactional(client, claim)
+        @firestore.transactional
+        def claim(transaction):
+            snapshot = ref.get(transaction=transaction)
+            control = _authority(transaction, client, uid)
+            state = (snapshot.to_dict() or {}).get('jit_first_open') or {} if snapshot.exists else {}
+            if not snapshot.exists or control is None or not _matches(state, control) or state.get('state') == 'complete':
+                return None
+            expires = state.get('lease_expires_at')
+            if state.get('state') == 'in_flight' and isinstance(expires, datetime) and expires > current_time:
+                return None
+            attempt = state.get('attempt', 0)
+            attempt = attempt if type(attempt) is int and attempt >= 0 else 0
+            transaction.update(
+                ref,
+                {
+                    'jit_first_open': {
+                        **state,
+                        'version': 1,
+                        'effects': _effects(state),
+                        'state': 'in_flight',
+                        'attempt': attempt + 1,
+                        'lease_token': token,
+                        'lease_expires_at': current_time + timedelta(seconds=sec),
+                        'updated_at': firestore.SERVER_TIMESTAMP,
+                    }
+                },
+            )
+            return token
+
+        return run_transactional(client, claim)
+    except Exception as err:
+        logger.warning('Failed to claim first-open work uid=%s conversation=%s: %s', uid, conversation_id, err)
+        return None
 
 
 def claim_authorized_first_open_work(uid: str, conversation_id: str, source: str | None) -> Optional[str]:
@@ -413,28 +511,34 @@ def finish_first_open_work(
     firestore_client: Any = None,
 ) -> bool:
     del succeeded
-    client = firestore_client or get_firestore_client()
-    ref = _conversation_ref(client, uid, conversation_id)
+    if not _is_valid_identifier(uid) or not _is_valid_identifier(conversation_id) or not isinstance(token, str):
+        return False
+    try:
+        client = firestore_client or get_firestore_client()
+        ref = _conversation_ref(client, uid, conversation_id)
 
-    @firestore.transactional
-    def finish(transaction):
-        snapshot = ref.get(transaction=transaction)
-        control = _authority(transaction, client, uid)
-        if not snapshot.exists or control is None:
-            return False
-        state = (snapshot.to_dict() or {}).get('jit_first_open') or {}
-        if not _matches(state, control) or state.get('state') != 'in_flight' or state.get('lease_token') != token:
-            return False
-        effects = _effects(state)
-        next_state = {
-            **state,
-            'effects': effects,
-            'state': 'complete' if all(value.get('state') == 'complete' for value in effects.values()) else 'pending',
-            'updated_at': firestore.SERVER_TIMESTAMP,
-        }
-        next_state.pop('lease_token', None)
-        next_state.pop('lease_expires_at', None)
-        transaction.update(ref, {'jit_first_open': next_state})
-        return True
+        @firestore.transactional
+        def finish(transaction):
+            snapshot = ref.get(transaction=transaction)
+            control = _authority(transaction, client, uid)
+            if not snapshot.exists or control is None:
+                return False
+            state = (snapshot.to_dict() or {}).get('jit_first_open') or {}
+            if not _matches(state, control) or state.get('state') != 'in_flight' or state.get('lease_token') != token:
+                return False
+            effects = _effects(state)
+            next_state = {
+                **state,
+                'effects': effects,
+                'state': 'complete' if all(value.get('state') == 'complete' for value in effects.values()) else 'pending',
+                'updated_at': firestore.SERVER_TIMESTAMP,
+            }
+            next_state.pop('lease_token', None)
+            next_state.pop('lease_expires_at', None)
+            transaction.update(ref, {'jit_first_open': next_state})
+            return True
 
-    return bool(run_transactional(client, finish))
+        return bool(run_transactional(client, finish))
+    except Exception as err:
+        logger.warning('Failed to finish first-open work uid=%s conversation=%s: %s', uid, conversation_id, err)
+        return False

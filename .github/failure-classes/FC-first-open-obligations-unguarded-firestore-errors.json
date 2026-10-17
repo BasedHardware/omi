@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-first-open-obligations-unguarded-firestore-errors",
+  "violated_contract": "First-open conversation obligations boundary must sanitize Firestore identifiers, clamp lease durations to finite bounds, and establish error boundaries around query aggregations and transactions to prevent unhandled runtime crashes.",
+  "canonical_prevention": "Sanitize all document path identifiers against traversal/empty segments, clamp lease durations to finite ranges, guard count aggregation queries, and return fail-closed results on transaction exceptions.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_first_open_obligations_hardening.py"
+  ],
+  "evidence_prs": [22017],
+  "scope_hints": [
+    "backend/database/first_open_obligations.py",
+    "backend/tests/unit/test_first_open_obligations_hardening.py"
+  ],
+  "status": "open"
+}
