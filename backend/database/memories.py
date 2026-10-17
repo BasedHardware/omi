@@ -932,9 +932,17 @@ def get_user_public_memories(
 
     memories: List[Dict[str, Any]] = [_typed_doc(doc) for doc in memories_ref.stream()]
 
-    # Consider visibility as 'public' if it's missing
+    # Consider visibility as 'public' if it's missing — but never surface a
+    # rejected, superseded, tombstoned, or paywall-locked row to persona
+    # generation regardless of its stored visibility flag.
     public_memories: List[Dict[str, Any]] = [
-        memory for memory in memories if memory.get('visibility', 'public') == 'public'
+        memory
+        for memory in memories
+        if memory.get('visibility', 'public') == 'public'
+        and memory.get('user_review') is not False
+        and not memory.get('invalid_at')
+        and memory.get('redaction_status') != 'payload_tombstoned'
+        and not memory.get('is_locked', False)
     ]
 
     return public_memories
@@ -1173,11 +1181,9 @@ def get_memories_by_ids(
 
 @_historical_scan_write
 def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client: Any = None) -> None:
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'reviewed': True, 'user_review': value})
+    _update_memory_if_exists(
+        uid, memory_id, {'reviewed': True, 'user_review': value}, 'review', firestore_client=firestore_client
+    )
 
 
 def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
@@ -1186,11 +1192,7 @@ def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client: Any =
 
 @_historical_scan_write
 def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client: Any = None) -> None:
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'visibility': value})
+    _update_memory_if_exists(uid, memory_id, {'visibility': value}, 'visibility', firestore_client=firestore_client)
 
 
 @after_write('memories')
@@ -1200,14 +1202,9 @@ def update_memory_fields(uid: str, memory_id: str, data: Dict[str, Any], *, fire
     if not data:
         return
 
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-
     update_payload = data.copy()
     update_payload['updated_at'] = datetime.now(timezone.utc)
-    memory_ref.update(update_payload)
+    _update_memory_if_exists(uid, memory_id, update_payload, 'update_fields', firestore_client=firestore_client)
 
 
 @_historical_scan_write
@@ -1292,11 +1289,22 @@ def refine_memory(
     memory_ref = memories_ref.document(memory_id)
     update_time = datetime.now(timezone.utc)
 
+    # A missing document must not mint an orphan ledger event — verify it
+    # exists before the append, not just inside the projection writer.
+    if not memory_ref.get().exists:
+        logger.warning('refine_memory: memory %s not found for uid=%s; skipping', memory_id, uid)
+        return None
+
     def write_projection(transaction: Any) -> None:
         snapshot = memory_ref.get(transaction=transaction)
         if not snapshot.exists:
             return
-        update_payload = projection_update_for_refine(_typed_doc(snapshot) or {}, arg_changes, update_time)
+        existing = _typed_doc(snapshot) or {}
+        update_payload = projection_update_for_refine(existing, arg_changes, update_time)
+        # edit_memory encrypts rewritten content at 'enhanced'; refine must
+        # match or it writes plaintext into an encrypted document.
+        if existing.get('data_protection_level') == 'enhanced' and isinstance(update_payload.get('content'), str):
+            update_payload['content'] = encryption.encrypt(update_payload['content'], uid)
         transaction.update(memory_ref, update_payload)
 
     return memory_ledger.append_commit(
@@ -1788,16 +1796,50 @@ def migrate_memories_level_batch(
             continue
 
         # Decrypt the data first (if needed) to get a clean slate.
+        raw_content = memory_data.get('content')
         plain_data = _prepare_memory_for_read(memory_data, uid)
 
         plain_content = cast(Dict[str, Any], plain_data).get('content')
+        if (
+            current_level == 'enhanced'
+            and target_level == 'standard'
+            and isinstance(raw_content, str)
+            and plain_content == raw_content
+        ):
+            # Decryption returned the ciphertext unchanged — relabeling now
+            # would strand it as "plaintext" forever. Skip this row.
+            logger.warning(f"Memory {doc_snapshot.id} decryption failed during level migration, skipping.")
+            continue
+
         migrated_content = plain_content
         if target_level == 'enhanced':
             if isinstance(plain_content, str):
                 migrated_content = encryption.encrypt(plain_content, uid)
 
+        # evidence travels with content: encrypted under 'enhanced', a plain
+        # list under 'standard'. Migrating only content leaves ciphertext the
+        # reader never decrypts (enhanced->standard ValidationError) or a
+        # plaintext evidence list (standard->enhanced leak).
+        plain_evidence = cast(Dict[str, Any], plain_data).get('evidence')
+        migrated_evidence = plain_evidence
+        if target_level == 'enhanced':
+            if isinstance(plain_evidence, list):
+                migrated_evidence = encryption.encrypt(json.dumps(plain_evidence, default=str), uid)
+        else:
+            if isinstance(plain_evidence, str):
+                try:
+                    migrated_evidence = json.loads(encryption.decrypt(plain_evidence, uid))
+                except Exception:
+                    # Unrecoverable ciphertext must not reach the 'standard'
+                    # reader as a str — drop to empty rather than crash.
+                    migrated_evidence = []
+
         # Update the document with the migrated data and the new protection level.
-        update_data = {'data_protection_level': target_level, 'content': migrated_content}
+        update_data = {
+            'data_protection_level': target_level,
+            'content': migrated_content,
+            'evidence': migrated_evidence,
+        }
         batch.update(doc_snapshot.reference, update_data)
         batch_count += 1
         if batch_count >= BATCH_LIMIT:
@@ -1858,6 +1900,21 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
                 logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")
             else:
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
+
+            # evidence is encrypted under the same per-user key — it needs the
+            # same re-key treatment or the new owner reads nothing.
+            evidence = memory.get('evidence')
+            if isinstance(evidence, str) and evidence:
+                try:
+                    plain_evidence = encryption.decrypt(evidence, prev_uid)
+                    if plain_evidence != evidence:
+                        memory = {**memory, 'evidence': encryption.encrypt(plain_evidence, new_uid)}
+                except Exception:
+                    logger.warning(f"migrate_memories: could not re-key evidence for memory {memory.get('id')}")
+        # A stored 'uid' field belongs to the source doc — the copy must carry
+        # the destination uid or readers see a foreign owner.
+        if 'uid' in memory:
+            memory = {**memory, 'uid': new_uid}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
         batch_count += 1
