@@ -64,12 +64,12 @@ def update_person_name_transaction(
 
 
 def rename_person_retaining_aliases(
-    db_client: Any = None,
-    uid: str = "",
-    person_id: str = "",
-    name: str = "",
+    db_client: Any,
+    uid: str,
+    person_id: str,
+    name: str,
     *,
-    expected_chat_state: dict | None = None
+    expected_chat_state: dict | None = None,
 ) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
     client = db_client or get_firestore_client()
@@ -105,7 +105,7 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
     return True
 
 
-def dismiss_person_soft(db_client: Any = None, uid: str = "", person_id: str = "") -> bool:
+def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
     """Soft-dismiss an owner-scoped person and map concurrent deletion to missing."""
     client = db_client or get_firestore_client()
     person_ref = client.collection('users').document(uid).collection('people').document(person_id)
@@ -116,7 +116,11 @@ def dismiss_person_soft(db_client: Any = None, uid: str = "", person_id: str = "
 
 
 def list_people(
-    db_client: Any = None, uid: str = "", *, include_dismissed: bool = False, limit: Optional[int] = None
+    db_client: Any,
+    uid: str,
+    *,
+    include_dismissed: bool = False,
+    limit: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """List owner-scoped people, hiding soft-dismissed records by default."""
     client = db_client or get_firestore_client()
@@ -138,7 +142,7 @@ def list_people(
     return result
 
 
-def find_person_by_name(db_client: Any = None, uid: str = "", name: str = "") -> dict[str, Any] | None:
+def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
     """Find the first active owner-scoped person with an exact display name."""
     normalized_name = normalized_person_alias(name)
     if normalized_name is None:

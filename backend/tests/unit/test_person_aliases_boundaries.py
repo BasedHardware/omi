@@ -1,6 +1,21 @@
 """Hermetic unit tests for person aliases sanitization, query resilience, and client defaults."""
 
+import os
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+
+sys.path.insert(0, str(BACKEND_DIR))
+from tests.unit.memory_import_isolation import install_database_client_stub
+
+install_database_client_stub()
 
 from database import person_aliases
 
