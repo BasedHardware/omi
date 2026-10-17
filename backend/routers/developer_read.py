@@ -128,6 +128,7 @@ def search_memories(
 ):
     from database._client import db
     from utils.memory.product_authorization import authorize_memory_external_default_memory_read
+    from utils.mcp_server.errors import ToolExecutionError
     from utils.mcp_server.handlers.memories import search_memories_core
 
     reject_unknown_query(request, {'query', 'limit'})
@@ -136,7 +137,12 @@ def search_memories(
     grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not grant.allowed:
         raise HTTPException(status_code=grant.status_code, detail='This credential is not permitted to read memories.')
-    return search_memories_core(auth_context.uid, query, limit=limit)
+    try:
+        return search_memories_core(auth_context.uid, query, limit=limit)
+    except ToolExecutionError as exc:
+        raise HTTPException(
+            status_code=exc.http_status or (400 if exc.code == -32602 else 503), detail=exc.message
+        ) from exc
 
 
 @router.get('/v1/dev/user/people', tags=['People'], operation_id='listPeople', response_model=PeopleResponse)

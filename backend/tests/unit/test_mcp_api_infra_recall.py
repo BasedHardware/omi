@@ -167,3 +167,107 @@ def test_shared_search_treats_naive_dates_as_utc_even_with_aware_end(core):
     assert vector.query_vectors.call_args.kwargs['starts_at'] == int(
         datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp()
     )
+
+
+@pytest.fixture
+def memory_core():
+    service_instance = SimpleNamespace(
+        search_mcp=Mock(return_value=[]),
+        read_page=Mock(
+            return_value=SimpleNamespace(
+                memories=[],
+                next_cursor=None,
+                truncated=False,
+            )
+        ),
+    )
+    service_cls = Mock(return_value=service_instance)
+    telemetry = Mock()
+    with stub_modules(
+        {
+            'database._client': module(
+                'database._client', db=object(), document_id_from_seed=lambda *args, **kwargs: 'doc-id'
+            ),
+            'testing.parity_pack_v0.live_capture': module(
+                'testing.parity_pack_v0.live_capture', capture_memory_write=Mock()
+            ),
+            'utils.llm.memories': module('utils.llm.memories', identify_category_for_memory=Mock()),
+            'utils.memory.memory_api_contract': module(
+                'utils.memory.memory_api_contract',
+                MemoryApiExposure=SimpleNamespace(CANONICAL='canonical'),
+                memory_api_payload=lambda m, _: m,
+            ),
+            'utils.memory.memory_service': module('utils.memory.memory_service', MemoryService=service_cls),
+            'utils.memory.memory_system': module(
+                'utils.memory.memory_system', MemorySystem=SimpleNamespace(CANONICAL='canonical')
+            ),
+            'utils.memory.default_read_rollout': module(
+                'utils.memory.default_read_rollout', MemoryReadDecision=SimpleNamespace(USE_MEMORY='use_memory')
+            ),
+            'utils.memory.product_authorization': module(
+                'utils.memory.product_authorization',
+                ProductAuthorizationContext=object,
+                authorize_memory_external_default_memory_read=Mock(return_value=SimpleNamespace(allowed=True)),
+                authorize_memory_external_default_memory_write=Mock(return_value=SimpleNamespace(allowed=True)),
+            ),
+            'utils.observability.fallback': module('utils.observability.fallback', record_fallback=telemetry),
+            'utils.other.endpoints': module(
+                'utils.other.endpoints',
+                check_rate_limit_context=Mock(),
+                check_rate_limit_inline=Mock(),
+            ),
+        }
+    ):
+        handler = load_module_fresh(
+            'utils.mcp_server.handlers.memories', str(BACKEND / 'utils/mcp_server/handlers/memories.py')
+        )
+        yield handler, service_instance, telemetry
+
+
+def _memory_item(mid: str, content: str, *, category: str = 'system', is_locked: bool = False, tags=None):
+    return SimpleNamespace(
+        model_dump=lambda mode='json': {
+            'id': mid,
+            'content': content,
+            'category': category,
+            'is_locked': is_locked,
+            'tags': tags or [],
+        }
+    )
+
+
+def test_empty_memory_vectors_recover_lexical_matches(memory_core):
+    handler, service, telemetry = memory_core
+    service.read_page.return_value = SimpleNamespace(
+        memories=[
+            _memory_item('locked-hit', 'User quarterly budget target is 50k', is_locked=True),
+            _memory_item('activity-hit', 'Focused on quarterly budget spreadsheet', tags=['activity']),
+            _memory_item('lexical-hit', 'Agreed quarterly budget cap with finance team', category='work'),
+        ],
+        next_cursor=None,
+        truncated=False,
+    )
+    result = handler.search_memories_core('owner', 'quarterly budget', limit=10)
+    assert [m['id'] for m in result['memories']] == ['lexical-hit']
+    assert result['memories'][0]['relevance_score'] == 1.0
+    assert 'message' not in result
+    telemetry.assert_called_once()
+
+
+def test_memory_index_failure_and_lexical_failure_is_actionable(memory_core):
+    handler, service, _ = memory_core
+    service.search_mcp.side_effect = RuntimeError('vector unavailable')
+    service.read_page.side_effect = RuntimeError('store unavailable')
+    with pytest.raises(handler.ToolExecutionError) as exc:
+        handler.search_memories_core('owner', 'budget', limit=10)
+    assert exc.value.http_status == 503
+    assert 'get_memories' in exc.value.message
+
+
+def test_search_memories_rejects_blank_query(memory_core):
+    handler, service, _ = memory_core
+    with pytest.raises(handler.ToolExecutionError) as exc:
+        handler.search_memories('owner', {'query': '   '}, auth_context=object())
+    assert exc.value.code == -32602
+    service.search_mcp.assert_not_called()
+

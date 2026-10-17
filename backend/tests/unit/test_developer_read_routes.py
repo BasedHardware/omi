@@ -104,6 +104,8 @@ def test_unknown_parameters_and_blank_search_are_rejected(routes):
 
 
 def test_memory_search_checks_persisted_grant_before_shared_search(routes):
+    from utils.mcp_server.errors import ToolExecutionError
+
     client, _, _, _, _, search, grant, *_ = routes
     grant.return_value = SimpleNamespace(allowed=False, status_code=403)
     assert client.get('/v1/dev/user/memories/search?query=budget').status_code == 403
@@ -111,6 +113,10 @@ def test_memory_search_checks_persisted_grant_before_shared_search(routes):
     grant.return_value = SimpleNamespace(allowed=True, status_code=200)
     assert client.get('/v1/dev/user/memories/search?query=budget').status_code == 200
     search.assert_called_once_with('owner', 'budget', limit=10)
+    search.side_effect = ToolExecutionError('memory search temporarily unavailable', code=-32009, http_status=503)
+    unavailable = client.get('/v1/dev/user/memories/search?query=budget')
+    assert unavailable.status_code == 503
+    assert 'unavailable' in unavailable.json()['detail']
 
 
 def test_people_does_not_expand_existing_key_privileges(routes):
