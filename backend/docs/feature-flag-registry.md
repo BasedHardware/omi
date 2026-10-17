@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-09-24 -->
+<!-- feature-flag-registry as-of: 2026-10-17 -->
 
 # Feature-flag authority registry
 
@@ -85,12 +85,6 @@ entries are exempt: they are queued for removal, not running.
 
 | key | owner | prereg | review_by |
 | --- | --- | --- | --- |
-| `CAPTURE_JEV_SHADOW_ENABLED` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
-| `CAPTURE_JEV_SHADOW_EXPIRY` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
-| `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
-| `CAPTURE_JEV_SHADOW_PERCENT` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
-| `CAPTURE_JEV_SHADOW_UID_ALLOWLIST` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
-| `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
 | `CONVERSATION_RELEVANCE_JEV_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `CONVERSATION_RELEVANCE_JEV_RESCUE` | dazheng | [benchmarks/jev-vs-rules/RESULTS-NOTES.md](../../benchmarks/jev-vs-rules/RESULTS-NOTES.md) | 2026-11-08 |
 | `CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
@@ -114,7 +108,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-09-24.
+None as of 2026-10-17.
 
 ## Flags
 
@@ -129,12 +123,6 @@ and an explicit empty literal renders as `''`.
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `CAPTURE_JEV_SHADOW_ENABLED` | Log Jev same-scene and re-summary advice without changing capture behavior | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-18 | David |
-| `CAPTURE_JEV_SHADOW_EXPIRY` | Shorten the Jev capture shadow hard deadline | backend | env | closed | — | — | — | — | pending | 2026-10-18 | David |
-| `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` | Global daily Jev capture shadow call budget | backend | env | closed | — | — | — | — | pending | 2026-10-18 | David |
-| `CAPTURE_JEV_SHADOW_PERCENT` | Optional Jev capture shadow percentage cohort, default zero | backend | env | closed | 0 | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-18 | David |
-| `CAPTURE_JEV_SHADOW_UID_ALLOWLIST` | Explicit UIDs for Jev capture shadow | backend | env | closed | vi7SA9ckQCe4ccobWNxlbdcNdC23 | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-18 | David |
-| `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` | Per-user daily Jev capture shadow call budget | backend | env | closed | — | — | — | — | pending | 2026-10-18 | David |
 | `CONVERSATION_RELEVANCE_JEV_PERCENT` | Jev conversation percentage after keep-all; production stage 4 is 100% (2026-10-06); ramp 1 -> 10 -> 50 -> 100; unset is 100 when enabled | backend | env | closed | declared | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | ship | 2026-10-21 | dazheng |
 | `CONVERSATION_RELEVANCE_JEV_RESCUE` | R03/R08 JEV keep-rescue: off default; shadow observes; on rescues; invalid config off | backend | env | closed | — | — | shadow (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
 | `CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP` | Global UTC daily admission cap for discard shadow, default 60000 | backend | env | closed | 60000 | 60000 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | 60000 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
@@ -494,9 +482,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_WINDOW_SECONDS` — GPU chain internal ASR core window seconds; default 30; queue units remain conversations (fail: closed)
 - `BATCH_PIPELINE_WORDS_PROVIDER` — GPU chain words registry selection; default parakeet; unavailable providers fail closed (fail: closed)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
-- `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
-- `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
-- `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` — Per-user daily Jev capture shadow call budget (fail: closed)
 - `CAPTURE_SHARED_SPEECH_UID_ALLOWLIST` — Comma-separated exact accounts admitted to shared speech mode; default empty, union with stable percentage cohort (fail: closed)
 - `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
 - `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` — One-shot commitment due callback transport; absent disables scheduling (fail: closed)
@@ -646,6 +631,12 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `CAPTURE_JEV_SHADOW_ENABLED` | 2026-10-17 | EXP-003 concluded no-go 2026-10-17; replaced by deterministic shared-speech matcher |
+| `CAPTURE_JEV_SHADOW_EXPIRY` | 2026-10-17 | EXP-003 concluded no-go 2026-10-17; replaced by deterministic shared-speech matcher |
+| `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` | 2026-10-17 | EXP-003 concluded no-go 2026-10-17; replaced by deterministic shared-speech matcher |
+| `CAPTURE_JEV_SHADOW_PERCENT` | 2026-10-17 | EXP-003 concluded no-go 2026-10-17; replaced by deterministic shared-speech matcher |
+| `CAPTURE_JEV_SHADOW_UID_ALLOWLIST` | 2026-10-17 | EXP-003 concluded no-go 2026-10-17; replaced by deterministic shared-speech matcher |
+| `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` | 2026-10-17 | EXP-003 concluded no-go 2026-10-17; replaced by deterministic shared-speech matcher |
 | `DREAM_AGENT_GLOBAL_DAILY_USD` | 2026-10-15 | Reservation headroom replaced the $15000 global ceiling and its 64 spend shards. Per-user daily_usd remains. |
 | `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` | 2026-10-08 | Removed unconsumed episode evidence capture after legacy notes writer deletion |
 | `autoCreateSpeakersEnabled` | 2026-09-26 | Shipped developer preference removed; create_speakers always true |

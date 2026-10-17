@@ -966,7 +966,7 @@ and not a raw matched/smaller ratio. The numeric evidence keeps `smaller_words`
 as the full in-window denominator while the matched fields count actual matched
 words in the sampled utterances only. Modes: `off` runs nothing new, `shadow`
 computes and logs the fixed content-free line
-`event=capture_group_containment mode=… phase=… would_join=… reason=… jev_p=… basis=… dropped_segments=…`
+`event=capture_group_containment mode=… phase=rule would_join=… reason=… basis=… dropped_segments=…`
 (labels and numbers only — never transcript, identifiers, or errors), and `on`
 authorizes the same `join_capture_group` writer with the detector's numeric
 evidence and the existing expected windows and transcript fingerprints — but
@@ -977,9 +977,7 @@ requires `basis=full` so a sampled estimate can never authorize membership. The
 symmetric shared-speech path, its evidence, and its events are unchanged, and a
 detector fault cannot inhibit it. The mode is declared `shadow` on all six
 processing hosts — Cloud Run `backend`, `backend-sync`, `backend-sync-backfill`,
-`backend-integration`, and GKE `backend-listen` and `pusher`. A successful Jev
-same-scene shadow also logs a companion `phase=jev` line carrying the existing
-score for per-flow comparison; it changes nothing in the Jev record.
+`backend-integration`, and GKE `backend-listen` and `pusher`.
 
 ### Default-off deterministic shared speech
 
@@ -994,13 +992,12 @@ and listen keep mode off and receive code through their regular train. No on
 activation is qualified. Design, calibration, bounds and rollback details are in
 [the shared speech runbook](operational/capture-shared-speech.md).
 
-The default-off `CAPTURE_JEV_SHADOW_ENABLED` experiment also submits up to six
-overlapping pairs, including same-source and below-threshold pairs, to a bounded
-background Jev worker after finalization. It records the shipped group outcome
-and Jev's advice, and separately evaluates material re-summary when a capture
-joins an existing group. It never changes membership or summary content. The
-worker uses the existing trusted gateway lane, Redis daily caps, a uid cohort,
-and a hard UTC expiry; see `docs/experiments/EXP-003-jev-capture-shadow.md`.
+EXP-003's Jev capture shadow concluded no-go on 2026-10-17: 3 of 14 “same” calls
+were wrong (79% precision, below the preregistered 90% bar), and its re-summary
+half was dropped. The log-only shadow has been removed. Its deterministic
+replacement is the overlap shared-speech matcher described in the
+[shared-speech runbook](operational/capture-shared-speech.md); the experiment
+record remains in `docs/experiments/EXP-003-jev-capture-shadow.md`.
 
 In production, unrelated pairs of the same user from different surfaces
 peaked at a containment of 0.13 (p99), while pairs that heard the same speech
