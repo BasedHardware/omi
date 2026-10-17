@@ -65,17 +65,24 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
     return meeting_id
 
 
-def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> None:
+def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> bool:
     """
-    Update an existing calendar meeting.
+    Update an existing calendar meeting. Returns True if updated, False if document missing.
 
     NOTE: Times should already be in UTC before calling this function.
     """
     # Update synced_at timestamp (always in UTC for consistent querying)
     meeting_data['synced_at'] = datetime.now(timezone.utc)
 
-    # Update document
-    _get_meetings_collection(uid).document(meeting_id).update(meeting_data)
+    doc_ref = _get_meetings_collection(uid).document(meeting_id)
+    if not getattr(doc_ref.get(), "exists", False):
+        return False
+    try:
+        doc_ref.update(meeting_data)
+        return True
+    except Exception:
+        # Guard against TOCTOU race deletion between get() and update()
+        return False
 
 
 def get_meeting(uid: str, meeting_id: str) -> Optional[Dict[str, Any]]:
@@ -135,9 +142,13 @@ def list_meetings(
     return meetings
 
 
-def delete_meeting(uid: str, meeting_id: str) -> None:
-    """Delete a calendar meeting"""
-    _get_meetings_collection(uid).document(meeting_id).delete()
+def delete_meeting(uid: str, meeting_id: str) -> bool:
+    """Delete a calendar meeting. Returns True if deleted, False if document not found."""
+    doc_ref = _get_meetings_collection(uid).document(meeting_id)
+    if not getattr(doc_ref.get(), "exists", False):
+        return False
+    doc_ref.delete()
+    return True
 
 
 def delete_old_meetings(uid: str, before_date: datetime) -> int:
