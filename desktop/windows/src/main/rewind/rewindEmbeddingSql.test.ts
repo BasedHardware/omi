@@ -237,6 +237,18 @@ describe('the backfill work list', () => {
 })
 
 describe('similarity search over stored rows', () => {
+  it('selects scoped vectors before the similarity limit', () => {
+    addFrame(1, 1_000, 'outside range')
+    addFrame(2, 9_000, 'inside range')
+    embedFrame(1, 'outside range', [1, 0])
+    embedFrame(2, 'inside range', [0, 1])
+
+    const page = db.prepare(searchEmbeddingPageSql(TOY_BLOB_BYTES, true))
+    const hashes = (page.all(8_000, 10_000, 50, 0) as { hash: string }[]).map((row) => row.hash)
+
+    expect(hashes).toEqual([contentHash('inside range')])
+  })
+
   it('ranks stored content by cosine similarity, scanning in bounded pages', async () => {
     addFrame(1, 1000, 'orthogonal content')
     addFrame(2, 2000, 'exact match content')
