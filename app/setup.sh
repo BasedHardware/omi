@@ -49,6 +49,7 @@ echo "- bash setup.sh android"
 echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
 echo "- bash setup.sh android beta   # explicit production-data dogfood build"
 echo "- OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # AOT build that opens from the Home Screen without flutter run"
+echo "- OMI_AUTH_CALLBACK_SCHEME=omi-preview bash setup.sh ios   # preview build paired with native AUTH_CALLBACK_SCHEME"
 echo ""
 
 LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
@@ -107,7 +108,13 @@ function generate_device_suffix() {
 ######################################
 function generate_ios_custom_config() {
   local config_name="${1:-Dev}"
-  local callback_scheme="${2:-omi-dev}"
+  local default_scheme="omi-dev"
+  if [[ "$config_name" == "Prod" ]]; then
+    default_scheme="omi"
+  fi
+  # Note: OMI_AUTH_CALLBACK_SCHEME pairs the native iOS CFBundleURLSchemes entry
+  # in Custom.xcconfig with the Dart redirect URI passed via --dart-define.
+  local callback_scheme="${OMI_AUTH_CALLBACK_SCHEME:-${2:-$default_scheme}}"
   bash scripts/generate_ios_custom_config.sh "ios/Config/${config_name}/GoogleService-Info.plist" ios/Flutter
 
   if [[ "$config_name" == "Dev" ]]; then
@@ -115,6 +122,7 @@ function generate_ios_custom_config() {
     local suffix
     suffix=$(generate_device_suffix)
     echo "APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12-${suffix}" >> ios/Flutter/Custom.xcconfig
+    echo "AUTH_CALLBACK_SCHEME=${callback_scheme}" >> ios/Flutter/Custom.xcconfig
     # The prebuilt/placeholder GoogleService-Info.plist (setup_firebase) carries the
     # stock unsuffixed BUNDLE_ID. Firebase's native SDK validates that field against
     # the running app's actual bundle identifier at Firebase.initializeApp() and
@@ -341,6 +349,18 @@ function run_build_android() {
   while IFS= read -r provenance_def; do
     [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
   done < <(build_provenance_define_lines)
+  if [[ -n "${OMI_AUTH_CALLBACK_SCHEME:-}" ]]; then
+    local has_callback_define=0
+    for arg in "${flutter_args[@]}"; do
+      if [[ "$arg" == --dart-define=OMI_AUTH_CALLBACK_SCHEME=* ]]; then
+        has_callback_define=1
+        break
+      fi
+    done
+    if [[ $has_callback_define -eq 0 ]]; then
+      flutter_args+=("--dart-define=OMI_AUTH_CALLBACK_SCHEME=${OMI_AUTH_CALLBACK_SCHEME}")
+    fi
+  fi
   flutter pub get \
     && dart run build_runner build \
     && flutter run "${flutter_args[@]}"

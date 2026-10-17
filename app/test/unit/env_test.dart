@@ -89,6 +89,14 @@ void main() {
         Env.authCallbackSchemeForProfile(AppEnvironmentProfile.mobileBeta, definedScheme: ''),
         'omi-beta',
       );
+      expect(
+        Env.authCallbackSchemeForProfile(AppEnvironmentProfile.production, definedScheme: '   '),
+        'omi',
+      );
+      expect(
+        Env.authCallbackSchemeForProfile(AppEnvironmentProfile.production, definedScheme: '  omi-preview  '),
+        'omi-preview',
+      );
     });
 
     test('local profile rejects a production Firebase project', () {

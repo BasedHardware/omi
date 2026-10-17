@@ -148,8 +148,10 @@ abstract class Env {
   static String authCallbackSchemeForProfile(
     AppEnvironmentProfile configuredProfile, {
     String definedScheme = _authCallbackSchemeFromDefine,
-  }) =>
-      definedScheme.isNotEmpty ? definedScheme : configuredProfile.authCallbackScheme;
+  }) {
+    final trimmedScheme = definedScheme.trim();
+    return trimmedScheme.isNotEmpty ? trimmedScheme : configuredProfile.authCallbackScheme;
+  }
 
   static String get authRedirectUri => '$authCallbackScheme://auth/callback';
 
