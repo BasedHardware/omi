@@ -52,13 +52,14 @@ def tools():
         module.conversations_db.get_conversations_by_id.return_value = rows
         module.deserialize_conversation = lambda data: SimpleNamespace(id=data['id'], transcript_segments=[])
         module.conversations_to_string.return_value = 'conversation results'
-        module.notification_db.get_user_time_zone.return_value = 'UTC'
         yield module
 
 
 def invoke(tools):
     return tools.search_conversations_tool(
-        'topic', include_transcript=False, config={'configurable': {'user_id': 'uid', 'conversations_collected': []}}
+        'topic',
+        include_transcript=False,
+        config={'configurable': {'user_id': 'uid', 'user_timezone': 'UTC', 'conversations_collected': []}},
     )
 
 
@@ -69,9 +70,15 @@ def value(path, outcome):
 def test_happy_path_unchanged_and_keyword_semantic_both_used(tools):
     before = value('keyword', 'ok')
     result = invoke(tools)
-    assert result.startswith("Found 2 conversations semantically matching 'topic':\n\nconversation results")
+    assert result.startswith(
+        "2 nearest conversations for 'topic' "
+        "(semantic search returns the closest matches even when none is relevant; check before citing)\n\n"
+        "conversation results"
+    )
     assert 'Keyword index temporarily unavailable' not in result
-    tools.conversations_db.get_conversations_by_id.assert_called_once_with('uid', ['keyword', 'semantic'])
+    tools.conversations_db.get_conversations_by_id.assert_called_once_with(
+        'uid', ['keyword', 'semantic'], include_discarded=True
+    )
     assert value('keyword', 'ok') == before + 1
 
 
@@ -105,7 +112,9 @@ def test_successful_empty_keyword_is_not_degraded(tools):
 def test_exact_lookup_skips_keyword_and_records_firestore(tools):
     before = value('firestore', 'ok')
     tools.search_conversations_tool(
-        'e8c05000-52f0-4a95-951c-ccd715523429', include_transcript=False, config={'configurable': {'user_id': 'uid'}}
+        'e8c05000-52f0-4a95-951c-ccd715523429',
+        include_transcript=False,
+        config={'configurable': {'user_id': 'uid', 'user_timezone': 'UTC'}},
     )
     tools.keyword_search_conversation_ids.assert_not_called()
     assert value('firestore', 'ok') == before + 1

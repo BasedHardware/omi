@@ -10,12 +10,16 @@ import secrets
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from typing import Any
 
+from config.messaging import channel_policy
+from utils.messaging.access import SeatFull, AccessDenied
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from google.cloud import firestore
 from prometheus_client import Counter
 from google.api_core.exceptions import AlreadyExists
 
+from database.messaging_albums import read_album, append_album, seal_album
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -68,6 +72,7 @@ class MessagingStore:
         now = now or datetime.now(timezone.utc)
         if kind not in ('token', 'code'):
             raise ValueError('Unknown proof kind')
+        self.check_capacity(uid, channel, now=now)
         # Both have >100 bits of entropy. Codes are human copy/pasteable, not short PINs.
         proof = secrets.token_urlsafe(24) if kind == 'token' else secrets.token_hex(16).upper()
         proof_id = key(proof)
@@ -78,6 +83,50 @@ class MessagingStore:
         batch.set(self.user(uid).collection('channel_link_proofs').document(proof_id), {'expires_at': expires})
         batch.commit()
         return {'proof': proof, 'kind': kind, 'expires_at': expires}
+
+    def capacity(self, channel):
+        return self.db.collection('channel_capacity').document(channel)
+
+    def waitlist(self, uid, channel, *, now=None):
+        now = now or datetime.now(timezone.utc)
+        self.user(uid).collection('channel_waitlist').document(channel).set(
+            {'channel': channel, 'updated_at': now, 'expires_at': now + timedelta(days=30)}
+        )
+
+    def seat_state(self, uid, channel):
+        """Read-only seat answer for display: None (no cap or seat available), 'seat_cap', or 'unavailable'."""
+        cap = channel_policy(channel).get('seat_cap')
+        if cap is None:
+            return None
+        capacity = self.capacity(channel)
+        member = capacity.collection('members').document(uid).get().to_dict() or {}
+        if member.get('link_ids'):
+            return None
+        row = capacity.get().to_dict() or {}
+        if row.get('initialized') is not True:
+            return 'unavailable'
+        return 'seat_cap' if row.get('count', 0) >= cap else None
+
+    def waitlisted(self, uid, channel):
+        return self.user(uid).collection('channel_waitlist').document(channel).get().exists
+
+    def check_capacity(self, uid, channel, *, now=None):
+        state = self.seat_state(uid, channel)
+        if state == 'unavailable':
+            raise PermissionError('Seat counter needs reconciliation')
+        if state == 'seat_cap':
+            self.waitlist(uid, channel, now=now)
+            raise SeatFull()
+
+    def assert_link_capacity(self, message, link):
+        if channel_policy(message.channel).get('seat_cap') is None:
+            return
+        capacity = self.capacity(message.channel)
+        row = capacity.get().to_dict() or {}
+        member = capacity.collection('members').document(link['uid']).get().to_dict() or {}
+        link_id = key(message.channel, message.provider, message.external_user_id)
+        if row.get('initialized') is not True or link_id not in member.get('link_ids', []):
+            raise AccessDenied('seat_cap', 'iMessage seat unavailable — join the waitlist in Omi')
 
     def consume(self, proof, message, *, now=None):
         now = now or datetime.now(timezone.utc)
@@ -99,8 +148,24 @@ class MessagingStore:
                 raise PermissionError('Account deletion in progress')
             if not user or user.get('deleted') or user.get('deletion_requested_at'):
                 raise PermissionError('Account unavailable')
+            if existing.get('cleanup_pending'):
+                raise PermissionError('Identity cleanup in progress')
             if existing.get('uid') and existing['uid'] != uid:
                 raise PermissionError('Identity already linked')
+            cap = channel_policy(message.channel).get('seat_cap')
+            capacity = member_ref = None
+            link_ids, seats = [], {}
+            if cap is not None:
+                capacity = self.capacity(message.channel)
+                member_ref = capacity.collection('members').document(uid)
+                member = member_ref.get(transaction=tx).to_dict() or {}
+                seats = capacity.get(transaction=tx).to_dict() or {}
+                link_ids = member.get('link_ids', [])
+                if not link_ids:
+                    if seats.get('initialized') is not True:
+                        raise PermissionError('Seat counter needs reconciliation')
+                    if seats.get('count', 0) >= cap:
+                        raise SeatFull()
             link = dict(
                 uid=uid,
                 channel=message.channel,
@@ -114,13 +179,27 @@ class MessagingStore:
             )
             for name, default in _SETTING_DEFAULTS.items():
                 link[name] = existing.get(name, default)
+            if capacity is not None and member_ref is not None:
+                if identity.id not in link_ids:
+                    tx.set(member_ref, {'link_ids': [*link_ids, identity.id]})
+                    if not link_ids:
+                        tx.set(capacity, {'count': seats.get('count', 0) + 1}, merge=True)
+            tx.delete(self.user(uid).collection('channel_waitlist').document(message.channel))
             tx.set(identity, link)
             tx.set(self.user(uid).collection('channel_links').document(identity.id), link)
             tx.delete(proof_ref)
             tx.delete(self.user(uid).collection('channel_link_proofs').document(proof_ref.id))
             return link
 
-        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
+        try:
+            return run_with_transaction_contention_retry(
+                self.db.transaction, apply, operation_name='messaging_transaction'
+            )
+        except SeatFull:
+            token = proof_ref.get().to_dict()
+            if token:
+                self.waitlist(token['uid'], message.channel, now=now)
+            raise
 
     def lookup(self, message):
         return self.identity(message.channel, message.provider, message.external_user_id).get().to_dict()
@@ -152,24 +231,36 @@ class MessagingStore:
             link = identity.get(transaction=tx).to_dict() or {}
             if link.get('uid') != uid:
                 raise PermissionError('Link not found')
+            if channel_policy(link.get('channel', 'unknown')).get('seat_cap') is not None:
+                capacity = self.capacity(link.get('channel', 'unknown'))
+                member_ref = capacity.collection('members').document(uid)
+                member = member_ref.get(transaction=tx).to_dict() or {}
+                seats = capacity.get(transaction=tx).to_dict() or {}
+                link_ids = member.get('link_ids', [])
+                if link_id in link_ids:
+                    remaining = [value for value in link_ids if value != link_id]
+                    if remaining:
+                        tx.set(member_ref, {'link_ids': remaining})
+                    else:
+                        tx.delete(member_ref)
+                        tx.set(capacity, {'count': max(0, seats.get('count', 0) - 1)}, merge=True)
             tx.update(identity, {'active': False, 'generation': str(uuid4())})
             return link
 
         run_with_transaction_contention_retry(self.db.transaction, revoke, operation_name='messaging_revoke')
         # Revocation precedes deletion. Workers re-check immediately before every send.
-        for session in self.user(uid).collection('chat_sessions').stream():
-            data = session.to_dict()
-            if data.get('channel_link_id') == link_id:
-                self.db.recursive_delete(session.reference)
-        for message in self.user(uid).collection('messages').stream():
-            if message.to_dict().get('channel_link_id') == link_id:
-                message.reference.delete()
+        for session in self.user(uid).collection('chat_sessions').where('channel_link_id', '==', link_id).stream():
+            self.db.recursive_delete(session.reference)
+        for message in self.user(uid).collection('messages').where('channel_link_id', '==', link_id).stream():
+            message.reference.delete()
         self.db.recursive_delete(identity)
         mirror.delete()
 
     def delete_account(self, uid):
         for link in self.links(uid):
             self.unlink(uid, link['id'])
+        for entry in self.user(uid).collection('channel_waitlist').stream():
+            entry.reference.delete()
         for proof in self.user(uid).collection('channel_link_proofs').stream():
             self.db.collection('channel_link_proofs').document(proof.id).delete()
             proof.reference.delete()
@@ -177,7 +268,14 @@ class MessagingStore:
     def enqueue(self, message):
         identity = self.identity(message.channel, message.provider, message.external_user_id)
         try:
-            identity.create({'channel': message.channel, 'provider': message.provider, 'active': False})
+            identity.create(
+                {
+                    'channel': message.channel,
+                    'provider': message.provider,
+                    'active': False,
+                    'created_at': datetime.now(timezone.utc),
+                }
+            )
         except AlreadyExists:
             pass
         # Provider message ids may only be unique within a chat.
@@ -190,11 +288,31 @@ class MessagingStore:
 
         @firestore.transactional
         def apply(tx):
-            exists = ref.get(transaction=tx).exists
-            prior = head.get(transaction=tx).to_dict() or {}
-            if exists:
+            if ref.get(transaction=tx).exists:
                 return None
-            tx.create(ref, {'payload': encrypted, 'status': 'pending', 'created_at': now})
+            batch = read_album(tx, identity, message)
+            identity_row = identity.get(transaction=tx).to_dict() or {}
+            if identity_row.get('cleanup_pending'):
+                raise ValueError('Identity cleanup in progress')
+            prior = head.get(transaction=tx).to_dict() or {}
+            tx.set(identity, {'last_inbound_at': now}, merge=True)
+            if batch is not None:
+                path = append_album(tx, batch, ref, payload, identity.id, now, message.channel, message.provider)
+                if advances_inbound_head(message, prior):
+                    tx.set(
+                        head, {'provider_message_id': message.provider_message_id, 'received_at': message.received_at}
+                    )
+                return path
+            tx.create(
+                ref,
+                {
+                    'payload': encrypted,
+                    'status': 'pending',
+                    'created_at': now,
+                    'channel': message.channel,
+                    'provider': message.provider,
+                },
+            )
             if advances_inbound_head(message, prior):
                 tx.set(head, {'provider_message_id': message.provider_message_id, 'received_at': message.received_at})
             return ref.path
@@ -259,21 +377,29 @@ class MessagingStore:
                         path,
                         _age(row, now),
                     )
+                if row.get('album_ready_at', now) > now:
+                    return None
                 if row['status'] == 'pending' and (take_head or head.reference.path == path):
                     payload = json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
             for candidate, reason, age in retired:
                 # Ambiguous running effects must never be replayed.
                 patch = {'fifo_settled_at': now, 'retired_reason': reason}
                 if reason == 'stale_pending':
-                    patch.update(status='done', payload=firestore.DELETE_FIELD)
+                    patch.update(status='expired', retired_at=now)
                 tx.update(candidate.reference, patch)
                 _queue_event(reason, candidate.reference.path, age)
             if payload is not None and head is not None:
-                tx.update(head.reference, {'status': 'running', 'started_at': now})
+                claim_patch: dict[str, Any] = {'status': 'running', 'started_at': now}
+                if payload.get('media_group_id'):
+                    claim_patch['album_appendable'] = True  # Only a generation-aware worker opts in.
+                tx.update(head.reference, claim_patch)
                 return head.reference.path, payload
             return None
 
         return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
+
+    def seal_album(self, path, attachment_count):
+        return seal_album(self.db, path, attachment_count, stale_seconds=STALE_SECONDS)
 
     def assert_running(self, path):
         row = self.db.document(path).get().to_dict() or {}
@@ -286,7 +412,9 @@ class MessagingStore:
 
     def complete(self, path):
         # Content-free dedup tombstone survives retries; unlink removes its parent.
-        self.db.document(path).update({'status': 'done', 'payload': firestore.DELETE_FIELD})
+        self.db.document(path).update(
+            {'status': 'done', 'payload': firestore.DELETE_FIELD, 'done_at': datetime.now(timezone.utc)}
+        )
 
     def settle(self, path):
         # Retain evidence and prevent replay; only fully unwound workers may
@@ -350,6 +478,7 @@ class MessagingStore:
             plugin_id='__channel__',
             created_at=now,
             updated_at=now,
+            channel_events_migrated=True,
             message_ids=[],
             file_ids=[],
             title='Channel chat',
@@ -360,37 +489,174 @@ class MessagingStore:
             row = ref.get().to_dict()
         if row.get('channel_link_id') != key(message.channel, message.provider, message.external_user_id):
             raise PermissionError('Surface belongs to another link')
+        if row.get('current_session_id'):
+            row = ref.parent.document(row['current_session_id']).get().to_dict()
+            if not row or row.get('channel_link_id') != key(
+                message.channel, message.provider, message.external_user_id
+            ):
+                raise PermissionError('Surface session removed')
         return row
 
-    def events(self, uid, session_id):
+    def events(self, uid, session_id, limit=40):
+        """Bounded awareness tail; model chat context is owned by chat_db."""
+        self.migrate_event_fences(uid, session_id)
         ref = self.user(uid).collection('chat_sessions').document(session_id)
-        return [
-            json.loads(encryption.decrypt(d.to_dict()['payload'], uid))
-            for d in ref.collection('channel_events').order_by('__name__').stream()
-        ]
+        rows = list(
+            ref.collection('channel_events')
+            .order_by('sequence', direction=firestore.Query.DESCENDING)
+            .limit(limit)
+            .stream()
+        )
+        return [json.loads(encryption.decrypt(d.to_dict()['payload'], uid)) for d in reversed(rows)]
+
+    def migrate_event_fences(self, uid, session_id):
+        """One-time legacy fence migration before pruning. No message history is rewritten."""
+        ref = self.user(uid).collection('chat_sessions').document(session_id)
+        session = ref.get().to_dict() or {}
+        if session.get('channel_events_migrated'):
+            return
+        rows = ref.collection('channel_events').order_by('__name__').stream()
+        sequence = 0
+        for document in rows:
+            sequence += 1
+            event = json.loads(encryption.decrypt(document.to_dict()['payload'], uid))
+            fence = ref.collection('channel_event_fences').document(key(event['id']))
+
+            @firestore.transactional
+            def apply(tx):
+                current = ref.get(transaction=tx).to_dict()
+                if not current:
+                    raise PermissionError('Session removed')
+                self.assert_session_link(tx, uid, current)
+                tx.set(fence, {'created_at': datetime.now(timezone.utc)})
+                tx.update(document.reference, {'sequence': sequence})
+
+            run_with_transaction_contention_retry(
+                self.db.transaction, apply, operation_name='messaging_fence_migration'
+            )
+        ref.update({'channel_events_migrated': True, 'channel_event_sequence': sequence})
+
+    def has_event(self, uid, session_id, event_ids):
+        self.migrate_event_fences(uid, session_id)
+        ref = self.user(uid).collection('chat_sessions').document(session_id)
+        return any(ref.collection('channel_event_fences').document(key(value)).get().exists for value in event_ids)
 
     def append_event(self, uid, session_id, event):
+        self.migrate_event_fences(uid, session_id)
         ref = self.user(uid).collection('chat_sessions').document(session_id)
-        # Called under a fenced surface lease. Prefix is never modified.
-        events = self.events(uid, session_id)
-        if any(e['id'] == event['id'] for e in events):
-            return
-        if sum(len(json.dumps(e)) for e in events) + len(json.dumps(event)) > 500_000:
-            raise ValueError('Surface history budget reached; explicit new session required')
-        payload = {'payload': encryption.encrypt(json.dumps(event), uid)}
+        fence = ref.collection('channel_event_fences').document(key(event['id']))
+        encoded = json.dumps(event)
+        # This log is awareness, not authoritative message storage. Bound huge answers too.
+        if len(encoded.encode()) > 12000:
+            event = dict(event, content=event.get('content', '')[:2000] + '…')
+            encoded = json.dumps(event)
+        payload = {'payload': encryption.encrypt(encoded, uid)}
 
         @firestore.transactional
         def apply(tx):
             session = ref.get(transaction=tx).to_dict()
+            exists = fence.get(transaction=tx).exists
             if not session:
                 raise PermissionError('Session removed')
+            if exists:
+                return
             self.assert_session_link(tx, uid, session)
-            tx.create(ref.collection('channel_events').document(f'{len(events):012d}'), payload)
+            sequence = session.get('channel_event_sequence', 0) + 1
+            # z sorts after the legacy numeric document IDs.
+            tx.create(ref.collection('channel_events').document(f'z{sequence:012d}'), dict(payload, sequence=sequence))
+            tx.create(fence, {'created_at': datetime.now(timezone.utc)})
+            tx.update(ref, {'channel_event_sequence': sequence, 'channel_event_watermark': event.get('at', '')})
+            return sequence
 
-        run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
+        sequence = run_with_transaction_contention_retry(
+            self.db.transaction, apply, operation_name='messaging_transaction'
+        )
+        if sequence is None:
+            return
+        # Keep 40 events. Delete in bounded batches; repeated turns finish legacy compaction.
+        old = ref.collection('channel_events').where('sequence', '<=', sequence - 40).limit(200)
+        batch = self.db.batch()
+        for row in old.stream():
+            batch.delete(row.reference)
+        batch.commit()
+
+    def reset_session(self, uid, message, link):
+        surface = 'channel:' + key(message.channel, message.external_chat_id)
+        ref = self.user(uid).collection('chat_sessions').document(key(surface))
+        archive = self.user(uid).collection('chat_sessions').document(uuid4().hex)
+
+        @firestore.transactional
+        def apply(tx):
+            previous = ref.get(transaction=tx).to_dict()
+            if not previous:
+                raise PermissionError('Session removed')
+            self.assert_session_link(tx, uid, previous)
+            fresh = dict(
+                previous,
+                id=archive.id,
+                channel_event_sequence=0,
+                channel_event_watermark='',
+                channel_events_migrated=True,
+                message_ids=[],
+                file_ids=[],
+                created_at=datetime.now(timezone.utc),
+            )
+            fresh.pop('current_session_id', None)
+            fresh.pop('shaped_context', None)
+            fresh.pop('shaped_context_revision', None)
+            tx.create(archive, fresh)
+            tx.update(ref, {'current_session_id': archive.id})
+            return fresh
+
+        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_new_session')
+
+    def notice_allowed(self, message, reason, window=3600):
+        ref = self.identity(message.channel, message.provider, message.external_user_id)
+        now = datetime.now(timezone.utc)
+        field = 'notice_' + reason
+
+        @firestore.transactional
+        def apply(tx):
+            row = ref.get(transaction=tx).to_dict() or {}
+            last = row.get(field)
+            if last and (now - last).total_seconds() < window:
+                return False
+            tx.set(ref, {field: now}, merge=True)
+            return True
+
+        return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_notice')
+
+    def claim_expired(self, channel, provider, limit=20):
+        rows = (
+            self.db.collection_group('inbox')
+            .where('status', '==', 'expired')
+            .where('channel', '==', channel)
+            .where('provider', '==', provider)
+            .limit(limit)
+        )
+        claimed = []
+        for candidate in rows.stream():
+
+            @firestore.transactional
+            def apply(tx):
+                row = candidate.reference.get(transaction=tx).to_dict() or {}
+                if row.get('status') != 'expired':
+                    return None
+                tx.update(
+                    candidate.reference,
+                    {'status': 'done', 'payload': firestore.DELETE_FIELD, 'done_at': datetime.now(timezone.utc)},
+                )
+                return json.loads(encryption.decrypt(row['payload'], candidate.reference.parent.parent.id))
+
+            payload = run_with_transaction_contention_retry(
+                self.db.transaction, apply, operation_name='messaging_expiry'
+            )
+            if payload:
+                claimed.append(payload)
+        return claimed
 
     def retry(self, path):
-        self.db.document(path).update({'status': 'pending'})
+        self.db.document(path).update({'status': 'pending', 'album_appendable': firestore.DELETE_FIELD})
 
     def pending(self, message):
         """Recovery seam: Stage B's dispatcher periodically scans its owned identities."""
@@ -398,10 +664,25 @@ class MessagingStore:
             d.reference.path
             for d in self.identity(message.channel, message.provider, message.external_user_id)
             .collection('inbox')
+            .where('status', '==', 'pending')
+            .limit(100)
             .order_by('created_at')
             .stream()
-            if d.to_dict().get('status') == 'pending'
         ]
+
+    def assert_notice_link(self, message, link):
+        @firestore.transactional
+        def check(tx):
+            self.assert_session_link(
+                tx,
+                link['uid'],
+                {
+                    'channel_link_id': key(message.channel, message.provider, message.external_user_id),
+                    'link_generation': link['generation'],
+                },
+            )
+
+        run_with_transaction_contention_retry(self.db.transaction, check, operation_name='messaging_notice_guard')
 
     def assert_session_link(self, tx, uid, session):
         user = self.user(uid).get(transaction=tx).to_dict()
@@ -413,6 +694,7 @@ class MessagingStore:
             link = self.db.collection('channel_identities').document(link_id).get(transaction=tx).to_dict() or {}
             if not link.get('active') or link.get('uid') != uid or link.get('generation') != session['link_generation']:
                 raise PermissionError('Link revoked')
+        return user
 
     def persist_message(self, uid, document, session_id):
         session_ref = self.user(uid).collection('chat_sessions').document(session_id)
@@ -437,18 +719,99 @@ class MessagingStore:
             raise PermissionError('Invalid proof')
         return row['uid']
 
-    def pending_jobs(self, channel, provider, limit=100):
-        paths = []
+    def prepare_launch(self, *, now=None):
+        """One-time content-free metadata backfill; run only with admissions disabled."""
+        from config.messaging import channel_enabled
+
+        if any(channel_enabled(channel) for channel in ('telegram', 'imessage')):
+            raise ValueError('Disable messaging admission before preparing launch')
+        now = now or datetime.now(timezone.utc)
+        members = {}
+        count = 0
         for identity in self.db.collection('channel_identities').stream():
             row = identity.to_dict()
-            if (row.get('channel'), row.get('provider')) != (channel, provider):
+            if not row.get('last_inbound_at'):
+                identity.reference.update({'last_inbound_at': row.get('linked_at', now)})
+            if row.get('active') and row.get('channel') == 'imessage' and row.get('uid'):
+                members.setdefault(row['uid'], []).append(identity.id)
+            # One-time scan only; steady-state recovery never scans completed inboxes.
+            for inbox in identity.reference.collection('inbox').stream():
+                job = inbox.to_dict()
+                patch = {'channel': row.get('channel'), 'provider': row.get('provider')}
+                if job.get('status') == 'done' and not job.get('done_at'):
+                    patch['done_at'] = job.get('created_at', now)
+                inbox.reference.update(patch)
+                count += 1
+        capacity = self.capacity('imessage')
+        for prior in capacity.collection('members').stream():
+            prior.reference.delete()
+        for uid, link_ids in members.items():
+            capacity.collection('members').document(uid).set({'link_ids': link_ids})
+        capacity.set({'initialized': True, 'count': len(members)})
+        return {'seats': len(members), 'inbox_metadata': count}
+
+    def cleanup(self, *, now=None, limit=100, retention_days=30):
+        """Bounded hourly maintenance. Never sends messages or touches linked identities."""
+        now = now or datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=retention_days)
+        counts = {'proofs': 0, 'identities': 0, 'inbox': 0, 'waitlist': 0}
+        for proof in self.db.collection('channel_link_proofs').where('expires_at', '<=', now).limit(limit).stream():
+            row = proof.to_dict()
+            batch = self.db.batch()
+            batch.delete(proof.reference)
+            batch.delete(self.user(row['uid']).collection('channel_link_proofs').document(proof.id))
+            batch.commit()
+            counts['proofs'] += 1
+        for identity in (
+            self.db.collection('channel_identities')
+            .where('active', '==', False)
+            .where('last_inbound_at', '<=', cutoff)
+            .limit(limit)
+            .stream()
+        ):
+
+            @firestore.transactional
+            def revoke(tx):
+                row = identity.reference.get(transaction=tx).to_dict() or {}
+                if row.get('active') or row.get('uid') or row.get('last_inbound_at', now) > cutoff:
+                    return False
+                # Unknown senders can also have ambiguous provider delivery. Never
+                # erase their running reconciliation evidence through a parent purge.
+                running = identity.reference.collection('inbox').where('status', '==', 'running').limit(1)
+                if next(running.stream(transaction=tx), None) is not None:
+                    return False
+                tx.update(identity.reference, {'cleanup_pending': True})
+                return True
+
+            if run_with_transaction_contention_retry(self.db.transaction, revoke, operation_name='messaging_cleanup'):
+                self.db.recursive_delete(identity.reference)
+                counts['identities'] += 1
+        for inbox in (
+            self.db.collection_group('inbox')
+            .where('status', '==', 'done')
+            .where('done_at', '<=', cutoff)
+            .limit(limit)
+            .stream()
+        ):
+            if not inbox.reference.path.startswith('channel_identities/'):
                 continue
-            for event in identity.reference.collection('inbox').order_by('created_at').stream():
-                if event.to_dict().get('status') == 'pending':
-                    paths.append(event.reference.path)
-                    if len(paths) >= limit:
-                        return paths
-        return paths
+            inbox.reference.delete()
+            counts['inbox'] += 1
+        for entry in self.db.collection_group('channel_waitlist').where('expires_at', '<=', now).limit(limit).stream():
+            entry.reference.delete()
+            counts['waitlist'] += 1
+        return counts
+
+    def pending_jobs(self, channel, provider, limit=100):
+        query = (
+            self.db.collection_group('inbox')
+            .where('status', '==', 'pending')
+            .where('channel', '==', channel)
+            .where('provider', '==', provider)
+            .order_by('created_at')
+            .limit(limit)
+        )
+        return [doc.reference.path for doc in query.stream()]
 
 
 def _display_handle(value):

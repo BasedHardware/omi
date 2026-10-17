@@ -581,7 +581,7 @@ async def test_ptt_and_initial_legs_never_get_recovery_pacing():
 
 def test_terminal_after_text_counter_only_when_delivered_then_failed():
 
-    soniox_counter = LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox')
+    soniox_counter = LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider='soniox', demand_cohort='ineligible')
     before = soniox_counter._value.get()
     runtime = _runtime(delivered=True, terminal=True)
     runtime.stt_service = st.STTService.soniox

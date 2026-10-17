@@ -47,6 +47,15 @@ interface DailyCostPoint {
   mobile: number;
   unknown: number;
   total: number;
+  /** Billing mode only: the provider legs that sum to `total`. */
+  components?: {
+    gcpInfra: number;
+    vertexLlm: number;
+    openai: number;
+    anthropic: number;
+    /** GCP net by service; the TV's one-time incident detector reads it. */
+    gcpServices?: Record<string, number>;
+  };
 }
 
 interface ServiceCostRow {
@@ -444,23 +453,26 @@ export function infraCostsCacheKey(
 // llm_usage scan stays as an attribution signal (perUserLlmUsd, coverage)
 // but is NOT added to totals: its cost_usd rows are provider spend already
 // present in the provider invoices / GCP bill — adding both double-counts.
-async function computeBillingInfraCosts(
+export async function computeBillingInfraCosts(
   days: number,
-  overheadMonthly: number
+  overheadMonthly: number,
+  aggregatesOnly = false
 ): Promise<InfraCostsPayload | null> {
   // The ledger leg is scoped to the GCP window, so it chains off the GCP
   // promise rather than guessing the dates — but it still settles alongside the
   // other legs instead of adding a serial round trip.
   const gcpPromise = fetchGcpBilling(days);
   const ledgerPromise = gcpPromise.then((snapshot) =>
-    snapshot ? fetchGatewayLedgerDays(snapshot.daily.map((d) => d.date)) : null
+    snapshot && !aggregatesOnly
+      ? fetchGatewayLedgerDays(snapshot.daily.map((d) => d.date))
+      : null
   );
   const [gcpRes, anthropicRes, openaiRes, llmRes, ledgerRes] =
     await Promise.allSettled([
       gcpPromise,
       fetchAnthropicDailyCosts(days),
       fetchOpenAiDailyCosts(days),
-      fetchLlmCostsPerDay(days),
+      aggregatesOnly ? Promise.resolve(null) : fetchLlmCostsPerDay(days),
       ledgerPromise,
     ]);
   const gcp: GcpBillingSnapshot | null =
@@ -522,6 +534,15 @@ async function computeBillingInfraCosts(
       mobile: round(mobile),
       unknown: 0,
       total: round(desktop + mobile),
+      // Provider legs of the same total (TV cost stack). Vertex/Gemini LLM is
+      // inside the GCP bill; OpenAI and Anthropic are their own invoices.
+      components: {
+        gcpInfra: round(otherPool),
+        vertexLlm: round(row.llmNetUsd),
+        openai: round(openaiByDay.get(row.date) ?? 0),
+        anthropic: round(chatPool),
+        gcpServices: row.services,
+      },
     };
   });
 

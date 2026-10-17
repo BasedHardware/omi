@@ -4407,6 +4407,16 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return 'Το πρόγραμμα $plan λήγει στις $date.';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return 'Επανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return 'Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις $date.\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
   }
@@ -4414,6 +4424,11 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get annualPlanStartsAutomatically =>
       'Το ετήσιο πρόγραμμά σας θα ξεκινήσει αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα.';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return 'Το πρόγραμμα $plan θα ανανεωθεί στις $date.';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4446,6 +4461,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get continueText => 'Συνέχεια';
+
+  @override
+  String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
   String get resubscribe => 'Επανεγγραφή';
@@ -5063,9 +5081,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get content => 'Περιεχόμενο';
-
-  @override
-  String get noContentToDisplay => 'Δεν υπάρχει περιεχόμενο για εμφάνιση';
 
   @override
   String get noSummary => 'Χωρίς σύνοψη';
@@ -5686,11 +5701,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get downloadingFromSdCard => 'Λήψη από κάρτα SD';
-
-  @override
-  String processingProgress(int current, int total) {
-    return 'Επεξεργασία $current/$total';
-  }
 
   @override
   String conversationsCreated(int count) {
@@ -9153,18 +9163,10 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current από $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Στη συσκευή σας';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Λήψη από τη συσκευή σας';
-
-  @override
-  String get newestFirst => 'Νεότερες πρώτα';
 
   @override
   String get noSyncedRecordingsYet => 'Δεν υπάρχουν ακόμα συγχρονισμένες εγγραφές';
@@ -9889,9 +9891,6 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Η μετατροπή ομιλίας σε κείμενο δεν είναι διαθέσιμη αυτή τη στιγμή. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και τις ρυθμίσεις αναγνώρισης ομιλίας της συσκευής σας και δοκιμάστε ξανά.';
-
-  @override
-  String get processingTakingLonger => 'Ακόμα σε εξέλιξη — χρειάζεται περισσότερο χρόνο από το συνηθισμένο.';
 
   @override
   String get speechProfileEnrollmentPrompt =>
@@ -12076,9 +12075,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Τοπικά αντίγραφα';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12399,6 +12395,9 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Πλαίσιο συνομιλίας';
+
+  @override
   String get reviewQuestionSpelling => 'Πώς γράφεται αυτό;';
 
   @override
@@ -12495,6 +12494,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewRecentChanges => 'Πρόσφατες αλλαγές';
 
   @override
+  String get reviewChangeAfter => 'Μετά';
+
+  @override
+  String get reviewChangeBefore => 'Πριν';
+
+  @override
+  String get reviewChangeRemoved => 'Αφαιρέθηκε από την ενεργή λίστα';
+
+  @override
   String get reviewChangesIntro => 'Τι άλλαξε το Omi μόνο του τις τελευταίες 30 ημέρες. Αναιρέστε ό,τι φαίνεται λάθος.';
 
   @override
@@ -12511,6 +12519,59 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Όταν το Omi τακτοποιεί τις σημειώσεις σας, οι αλλαγές εμφανίζονται εδώ.';
+
+  @override
+  String get reviewChangesSectionTerms => 'Ονόματα και όροι';
+
+  @override
+  String get reviewChangesSectionTitles => 'Τίτλοι και περιλήψεις';
+
+  @override
+  String get reviewChangesSectionOther => 'Άλλες αλλαγές';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες',
+      one: '1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count σημεία',
+      one: '1 σημείο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Εμφάνιση όλων ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Αναίρεση όλων';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Δείτε τα στοιχεία';
+
+  @override
+  String get reviewChangeViewConversation => 'Προβολή συνομιλίας';
+
+  @override
+  String get reviewChangeViewTask => 'Προβολή εργασίας';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Δεν ήταν δυνατή η αναίρεση $failed από $total. Δοκιμάστε ξανά.';
+  }
 
   @override
   String get reviewShowMore => 'Εμφάνιση περισσότερων';
@@ -13136,6 +13197,36 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
   String get firstCaptureTitle => 'How will you capture?';
 
   @override
@@ -13182,6 +13273,41 @@ class AppLocalizationsEl extends AppLocalizations {
   String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
 
   @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
   String get firstCaptureWatchInstructions =>
       'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
 
@@ -13219,4 +13345,242 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Μη χάσετε ποτέ ξανά ούτε λέξη.';
+
+  @override
+  String get paywallCancelAnytime => 'Ακύρωση ανά πάσα στιγμή.';
+
+  @override
+  String get connectAnAgent => 'Σύνδεση πράκτορα';
+
+  @override
+  String get connectAnAgentSubtitle => 'Λάβετε οδηγίες ρύθμισης για Claude, ChatGPT, Codex ή οποιονδήποτε πράκτορα';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Συγχρονισμός $amount ήχου';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Συγχρονισμός των ηχογραφήσεών σας';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Λήψη από το Omi σας · $done από $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Μεταφόρτωση · $done από $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Μετατροπή $amount σε συζητήσεις';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Ολοκληρώθηκαν $done από $total · μπορείτε να φύγετε από αυτήν την οθόνη';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount έτοιμα για συγχρονισμό';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → τηλέφωνο';
+
+  @override
+  String get syncStepLabelUpload => 'Μεταφόρτωση';
+
+  @override
+  String get syncStepLabelTranscribe => 'Απομαγνητοφώνηση';
+
+  @override
+  String get syncDetailsTitle => 'Λεπτομέρειες συγχρονισμού';
+
+  @override
+  String get syncDetailsRightNow => 'Αυτή τη στιγμή';
+
+  @override
+  String get syncDetailsYourOmi => 'Το Omi σας';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Ταχύτητα μεταφοράς';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Αναμονή για το Omi σας';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Αναμονή για αυτό το τηλέφωνο';
+
+  @override
+  String get syncDetailsTranscribing => 'Απομαγνητοφώνηση στο Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Για την υποστήριξη';
+
+  @override
+  String get syncDetailsAudioFiles => 'Αρχεία ήχου';
+
+  @override
+  String get syncDetailsServerJobs => 'Εργασίες διακομιστή (ολοκληρωμένες / σύνολο)';
+
+  @override
+  String get syncDetailsCopy => 'Αντιγραφή λεπτομερειών για υποστήριξη';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Διαθέσιμο στα Operator και Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return 'Το $app είναι πλήρες';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Εγγραφή στη λίστα αναμονής';
+
+  @override
+  String get chatAppsOnWaitlist => 'Είστε στη λίστα αναμονής';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Είστε στη λίστα αναμονής. Θα σας ενημερώσουμε όταν υπάρξει θέση.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Όλα έτοιμα, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Μεσημεριανό με τον Σαμ, που μετακομίζει στη Λισαβόνα τον Ιούνιο. Θέλεις να στείλεις την παρουσίαση στην ομάδα ως την Παρασκευή και να πάρεις γάλα στον δρόμο για το σπίτι.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Αποστολή της παρουσίασης στην ομάδα ως την Παρασκευή';
+
+  @override
+  String get onboardingActDemoTask2 => 'Γάλα στον δρόμο για το σπίτι';
+
+  @override
+  String get onboardingActDemoTitle => 'Γεύμα με τη Σαμ';
+
+  @override
+  String get onboardingActDictateBody => 'Πείτε το με τον τρόπο σας. Το Omi φροντίζει τα υπόλοιπα.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Απλώς μίλα. Το Omi σου ακούει.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Μόλις έφαγα με τη Σαμ, μετακομίζει στη Λισαβόνα τον Ιούνιο! Θύμισέ μου να στείλω την παρουσίαση στην ομάδα ως την Παρασκευή και να πάρω γάλα στον δρόμο.';
+
+  @override
+  String get onboardingActDictateHint => 'Πατήστε το τικ όταν τελειώσετε';
+
+  @override
+  String get onboardingActDictateTitle => 'Πείτε στο Omi για τη μέρα σας';
+
+  @override
+  String get onboardingActIntro => 'Ας δοκιμάσουμε το Omi.';
+
+  @override
+  String get onboardingActJustNow => 'Μόλις τώρα';
+
+  @override
+  String get onboardingActMicAllow => 'Να επιτρέπεται το μικρόφωνο';
+
+  @override
+  String get onboardingActMicBody => 'Για να σας ακούει το Omi όταν του μιλάτε.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'Το Omi δεν στέλνει ακόμα ήχο. Χρησιμοποίησε προς το παρόν το τηλέφωνό σου.';
+
+  @override
+  String get onboardingActMicTitle => 'Το Omi χρειάζεται το μικρόφωνό σας';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Δεν ακούμε το Omi. Βεβαιώσου ότι είναι ανοιχτό και κοντά σου.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Δεν σε ακούμε ακόμα. Δοκίμασε να μιλήσεις λίγο πιο δυνατά.';
+
+  @override
+  String get onboardingActNotesLabel => 'Η μέρα σου, σε σύνοψη';
+
+  @override
+  String get onboardingActPhoneMic => 'Μικρόφωνο τηλεφώνου';
+
+  @override
+  String get onboardingActRateTitle => 'Σας αρέσει το Omi μέχρι τώρα;';
+
+  @override
+  String get onboardingActRemembers => 'Το Omi θυμάται, για να μη χρειάζεται εσύ';
+
+  @override
+  String get onboardingActSavedToTasks => 'Αποθηκεύτηκε στις εργασίες σου';
+
+  @override
+  String get onboardingActTasksLabel => 'Το Omi εντόπισε τις εκκρεμότητές σου';
+
+  @override
+  String get onboardingActWriting => 'Γίνεται σύνοψη…';
+
+  @override
+  String get onboardingActYourWords => 'Αυτά είπατε';
+
+  @override
+  String get onboardingConnectOmi => 'Συνδέστε το Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Πάτησε το Omi σου για σύνδεση.';
+
+  @override
+  String get onboardingNoOmiYet => 'Δεν έχετε ακόμα το Omi σας;';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Δεν το έχω παραγγείλει ακόμα';
+
+  @override
+  String get onboardingOmiOrdered => 'Το έχω παραγγείλει';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Πατήστε για διόρθωση';
+
+  @override
+  String get homePendingTitle => 'Συνομιλίες καθ\' οδόν';
+
+  @override
+  String get homePendingCatchingUp => 'Επεξεργασία προηγούμενου ήχου';
+
+  @override
+  String get onTheWayTitle => 'Καθ\' οδόν';
+
+  @override
+  String get onTheWayAlmostReady => 'Σχεδόν έτοιμο';
+
+  @override
+  String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
+
+  @override
+  String get activityNewSemantics => 'Δραστηριότητα, νέα στοιχεία';
+
+  @override
+  String get activityLoadFailed => 'Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας';
+
+  @override
+  String get activityNewItem => 'Νέο';
+
+  @override
+  String get activityNeedsAttention => 'Χρειάζεται προσοχή';
+
+  @override
+  String get activityRetryAll => 'Επανάληψη όλων';
+
+  @override
+  String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
 }

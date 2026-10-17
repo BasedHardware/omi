@@ -11,7 +11,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import database._client as db_client_module
-from database.legal_holds import DestructiveOperationInProgress
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.other.account_gate_http import account_gate_busy_http_exception
 
@@ -1039,14 +1039,20 @@ def resolve_memory_review_item(
 ):
     if request.decision not in ('accept', 'reject', 'correct', 'timeout'):
         raise HTTPException(status_code=400, detail='Invalid review decision')
-    result = review_queue.resolve_review_conflict(
-        uid,
-        review_id,
-        request.decision,
-        correction=request.correction,
-        reason=request.reason,
-        current_veracity=request.current_veracity,
-    )
+    try:
+        result = review_queue.resolve_review_conflict(
+            uid,
+            review_id,
+            request.decision,
+            correction=request.correction,
+            reason=request.reason,
+            current_veracity=request.current_veracity,
+        )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        # A canonical reject/drop revalidates the destructive gate after its
+        # tombstone commit; a concurrent same-kind deletion that rotated the
+        # token must surface as the retryable account-gate response, not 500.
+        raise account_gate_busy_http_exception() from exc
     if result.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail='Review item not found')
     return result
@@ -1085,7 +1091,7 @@ def delete_memories_batch(
     except HTTPException:
         # Preserve service-owned 402/404/413 mappings and observability details.
         raise
-    except DestructiveOperationInProgress as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
@@ -1103,7 +1109,7 @@ def delete_memory(
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
-    except DestructiveOperationInProgress as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
@@ -1123,10 +1129,13 @@ def delete_memories(
     http_request: Request = None,  # type: ignore[assignment]
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
-    if scope == 'default':
-        service.delete_default(uid)
-    else:
-        service.delete_all(uid)
+    try:
+        if scope == 'default':
+            service.delete_default(uid)
+        else:
+            service.delete_all(uid)
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        raise account_gate_busy_http_exception() from exc
     record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}
 

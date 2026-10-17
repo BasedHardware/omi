@@ -1,5 +1,16 @@
 prometheus:
   url: http://prod-omi-kube-prometheus-s-prometheus.{{ .Release.Namespace }}.svc
+# 2026-10-14: the adapter ran BestEffort on the monitoring node and its liveness
+# probe timed out 35 times in 31h whenever Prometheus pinned the node's CPU,
+# breaking HPA custom-metrics reads on every restart. Requests buy a guaranteed
+# CPU share; sized generously over measured use (9m CPU, 35Mi at rest).
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 rules:
   default: false
   external:
@@ -118,14 +129,14 @@ rules:
           namespace:
             resource: namespace
       seriesQuery: parakeet_request_duration_seconds_bucket{namespace!=""}
-    - metricsQuery: avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))
+    - metricsQuery: avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="parakeet",<<.LabelMatchers>>}[1m]))
       name:
         as: parakeet_gpu_utilization
       resources:
         overrides:
           namespace:
             resource: namespace
-      seriesQuery: DCGM_FI_DEV_GPU_UTIL{namespace!=""}
+      seriesQuery: DCGM_FI_DEV_GPU_UTIL{container="parakeet",namespace!=""}
     # Keep for the prod NLLB chart's concurrency HPA, even while live is CPU-only.
     - name:
         as: "nllb_active_requests_total"
@@ -135,6 +146,34 @@ rules:
         overrides:
           namespace: { resource: "namespace" }
   custom:
+    # Queue ages are refreshed by the GPU owner, independent of pressure polls.
+    - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="live"}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+          pod: {resource: pod}
+      name:
+        as: parakeet_live_queue_age_seconds
+      metricsQuery: 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="live"}) by (<<.GroupBy>>)'
+    # Queue ages are refreshed by the GPU owner, independent of pressure polls.
+    - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="backfill"}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+          pod: {resource: pod}
+      name:
+        as: parakeet_backfill_queue_age_seconds
+      metricsQuery: 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="backfill"}) by (<<.GroupBy>>)'
+    # Direct pod scrape below owns namespace/pod labels; do not aggregate the
+    # batch queue into one global value or silently fall back to zero.
+    - seriesQuery: 'omi_diarization_v2_queue_depth{namespace="prod-omi-backend",pod!="",job="diarizer-batch-metrics"}'
+      resources:
+        overrides:
+          namespace: { resource: namespace }
+          pod: { resource: pod }
+      name:
+        as: omi_diarization_v2_queue_depth
+      metricsQuery: 'max(omi_diarization_v2_queue_depth{<<.LabelMatchers>>,job="diarizer-batch-metrics"}) by (<<.GroupBy>>)'
     - metricsQuery: sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)
       name:
         as: parakeet_active_streams

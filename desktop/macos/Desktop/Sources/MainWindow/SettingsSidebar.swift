@@ -139,6 +139,15 @@ struct SettingsSearchItem: Identifiable {
       section: .notifications, icon: "bell",
       settingId: "notifications.integrationsuggestions"),
     SettingsSearchItem(
+      name: "Connect an Agent",
+      subtitle: "Setup prompts plus MCP and Developer API keys for Claude, ChatGPT, Codex, Cursor",
+      keywords: [
+        "agent", "mcp", "api key", "developer", "claude", "chatgpt", "codex", "cursor", "openclaw",
+        "hermes",
+      ],
+      section: .advanced, icon: "point.3.connected.trianglepath.dotted",
+      settingId: "advanced.connectagent"),
+    SettingsSearchItem(
       name: "Reset Integration Suggestions",
       subtitle: "Clear every integration's suggestion history so Omi can offer them again",
       keywords: ["reset", "integration", "suggestions", "history", "again"],

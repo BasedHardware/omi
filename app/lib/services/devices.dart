@@ -369,12 +369,17 @@ class DeviceService {
     return null;
   }
 
+  /// A connection leaving [_connections] is always disposed: an orphaned
+  /// transport stays registered for native events and would swallow the next
+  /// device-ready, leaving the UI disconnected over a live link.
   Future<void> disconnectDevice(String deviceId) async {
-    final connection = _connections[deviceId];
-    if (connection != null) {
-      Logger.debug("DeviceService: Disconnecting device $deviceId...");
+    final connection = _connections.remove(deviceId);
+    if (connection == null) return;
+    Logger.debug("DeviceService: Disconnecting device $deviceId...");
+    try {
       await connection.disconnect();
-      _connections.remove(deviceId);
+    } finally {
+      await connection.transport.dispose();
     }
   }
 

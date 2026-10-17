@@ -188,6 +188,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               tag: SettingsTag(l10n.beta, OmiColors.warning),
             ),
             _row(
+              SettingsDestination.connectAgent,
+              key: 'settings_row_connect_agent',
+              icon: FontAwesomeIcons.terminal,
+              title: l10n.connectAnAgent,
+            ),
+            _row(
               SettingsDestination.privacyGroup,
               key: 'settings_group_privacy',
               icon: FontAwesomeIcons.shield,

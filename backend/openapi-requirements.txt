@@ -118,7 +118,7 @@ typing_extensions==4.15.0
 typing-inspection==0.4.2
 typing-inspect==0.9.0
 uritemplate==4.1.1
-urllib3==2.7.0
+urllib3==2.8.0
 uuid-utils==0.16.2
 websockets==12.0
 xxhash==3.7.0

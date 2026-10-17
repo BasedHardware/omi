@@ -23,6 +23,10 @@ from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariabl
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
+
+# The image build overwrites omi_logging_config.py with backend/utils/logging_config.py.
+# Importing utils.logging_config in the NeMo process hits NeMo's utils package.
+from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
 from transcribe import (
     transcribe_file,
     transcribe_file_v2,
@@ -32,12 +36,16 @@ from transcribe import (
 )
 from stream_handler import StreamSession, warmup_rnnt_decoder
 from admission import StreamAdmissionController
+from bounded_audio import submit_audio
 
-logging.basicConfig(level=logging.INFO)
-# httpx logs every outbound request at INFO; the per-segment diarizer embedding
-# calls (one per audio segment) flood the log pipeline with 200 OK noise. Keep
-# only warnings/errors (4xx/5xx, timeouts) from httpx. See issue #8080.
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# INFO/DEBUG to stdout, WARNING+ to stderr. Also quiets httpx/httpcore.
+# The internal HTTP LB already logs every request (successes sampled, errors in
+# full), so Uvicorn's per-request access line is a duplicate.
+configure_split_stream_logging(level=logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+# nemo_logger does not propagate. Drop only the per-batch timestamps INFO and
+# the two repetitive Lhotse dataloader warnings; other NeMo errors still emit.
+quiet_repetitive_nemo_logs()
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
@@ -47,6 +55,13 @@ ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket c
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
 PENDING_REQUESTS = Gauge('parakeet_batch_pending_requests', 'Pending requests in batch engine queue')
 LANE_PENDING = Gauge('parakeet_batch_lane_pending_requests', 'Pending batch requests by lane', ['lane'])
+LANE_OLDEST = Gauge('parakeet_batch_lane_oldest_pending_seconds', 'Age of oldest queued GPU quantum', ['lane'])
+SERVICE_RTF = Histogram(
+    'parakeet_service_seconds_per_audio_second',
+    'GPU batch service seconds / summed audio seconds; excludes upload, queue, diarization',
+    ['lane'],
+    buckets=(0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1),
+)
 LANE_QUEUE_WAIT = Histogram(
     'parakeet_batch_lane_queue_wait_seconds',
     'Time waiting before GPU batch assembly by lane',
@@ -105,6 +120,7 @@ start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
 _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+_packing_enabled = os.getenv('PARAKEET_PACKING_ENABLED', 'false').lower() == 'true'
 _LIVE_QUEUE_BUDGET_CAP_SECONDS = 8.0
 _TIMEOUT_HEADER = "X-Omi-STT-Timeout-Seconds"
 
@@ -170,8 +186,16 @@ async def lifespan(app: FastAPI):
             vram_bytes_per_t2=float(os.getenv("PARAKEET_VRAM_BYTES_PER_T2", "136.6")),
             starvation_timeout_sec=float(os.getenv("PARAKEET_STARVATION_TIMEOUT", "5.0")),
             max_inflight=int(os.getenv("PARAKEET_MAX_INFLIGHT", "2")),
+            packing=_packing_enabled,
+            on_service_time=lambda lane, seconds, audio: (
+                SERVICE_RTF.labels(lane=lane).observe(seconds / audio) if audio > 0 else None
+            ),
         )
         await batch_engine.start()
+        # Scrapes must refresh gauges even when nobody polls /batch/metrics.
+        # The snapshot is produced on the owning event loop, never on the
+        # prometheus ASGI worker thread (which must not mutate asyncio futures).
+        app.state.pressure_task = asyncio.create_task(_refresh_pressure_metrics())
         logger.info("Server started, GPU model loading in background...")
     else:
         logger.info("Parakeet ASR server ready (NIM mode)")
@@ -181,6 +205,12 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down...")
     if batch_engine:
+        app.state.pressure_task.cancel()
+        try:
+            await app.state.pressure_task
+        except asyncio.CancelledError:
+            pass
+    if batch_engine:
         await batch_engine.stop()
     if gpu_worker:
         gpu_worker.stop()
@@ -188,6 +218,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/metrics", cast(Any, make_asgi_app()))
+
+
+async def _refresh_pressure_metrics() -> None:
+    while True:
+        if batch_engine is not None:
+            snapshot = batch_engine.pressure_snapshot()
+            PENDING_REQUESTS.set(snapshot['pending_requests'])
+            for lane in ('live', 'backfill'):
+                LANE_PENDING.labels(lane=lane).set(snapshot[f'{lane}_pending_requests'])
+                LANE_OLDEST.labels(lane=lane).set(snapshot[f'{lane}_oldest_pending_seconds'])
+        await asyncio.sleep(0.1)
 
 
 def _write_file(path: str, data: bytes) -> None:
@@ -204,7 +245,8 @@ def _remove_file(path: str) -> None:
 
 @app.post("/v1/transcribe", response_model=None)
 async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
-    lane = 'live' if request.headers.get('X-Omi-STT-Surface') == 'live-window' else 'backfill'
+    surface = request.headers.get('X-Omi-STT-Surface')
+    lane = 'live' if surface == 'live-window' or (_packing_enabled and surface == 'live-stream') else 'backfill'
     prerecorded = lane == 'backfill'
     request_start = time.monotonic()
     if gpu_worker is not None and not gpu_worker.is_ready:
@@ -264,7 +306,15 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
 
         if batch_engine is not None:
             submit_called = True
-            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True, lane=lane, queue_deadline=queue_deadline))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            result = await submit_audio(
+                batch_engine,
+                file_path,
+                _io_pool,
+                packing=_packing_enabled,
+                owns_file=True,
+                lane=lane,
+                queue_deadline=queue_deadline,
+            )
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
@@ -362,7 +412,7 @@ async def transcribe_v2(
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            gpu_result = await submit_audio(batch_engine, file_path, _io_pool, packing=_packing_enabled)
             PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             result = cast(
                 Dict[str, Any],
@@ -432,6 +482,7 @@ async def stream_transcribe(
 
     session: Optional[StreamSession] = None
     active_gauge_owned = False
+    finalize_requested = False
     t0 = time.monotonic()
     try:
         session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
@@ -461,6 +512,7 @@ async def stream_transcribe(
                     await websocket.send_json(seg)
             elif "text" in msg:
                 if msg["text"] == "finalize":
+                    finalize_requested = True
                     break
     except WebSocketDisconnect:
         pass
@@ -479,6 +531,11 @@ async def stream_transcribe(
                         await websocket.send_json(seg)
                     except Exception:
                         break
+                else:
+                    # Finish only after every tail segment was delivered. A
+                    # handler return alone can drop TCP without a close frame.
+                    if finalize_requested:
+                        await websocket.close(code=1000)
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
         finally:

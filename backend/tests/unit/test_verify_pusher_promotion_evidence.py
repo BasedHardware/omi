@@ -1032,6 +1032,24 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
     }
 
 
+def test_isolated_canary_runs_as_the_workload_identity_bound_shared_ksa(
+    receipt_builder: SimpleNamespace,
+) -> None:
+    # Workload Identity binds only prod-omi-backend/prod-omi-pusher to pusher-runtime@.
+    # A release-named canary KSA has no binding and the metadata server returns 500.
+    documents = receipt_builder.rendered_chart_documents(
+        "prod",
+        "gcr.io/based-hardware/pusher",
+        DIGEST,
+        release_name=f"prod-omi-pusher-canary-{CANARY_RUN_ID}",
+        isolated_canary=True,
+        config_map_name=f"prod-omi-backend-config-canary-{CANARY_RUN_ID}",
+    )
+    deployment = next(document for document in documents if document.get("kind") == "Deployment")
+    assert deployment["spec"]["template"]["spec"]["serviceAccountName"] == "prod-omi-pusher"
+    assert not [document for document in documents if document.get("kind") == "ServiceAccount"]
+
+
 def test_semantic_probe_attributes_the_durable_finalization_handoff_not_socket_presence() -> None:
     source = SEMANTIC_PROBE_SCRIPT.read_text(encoding="utf-8")
 

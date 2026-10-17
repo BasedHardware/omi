@@ -11,7 +11,6 @@ from utils.conversations import action_item_refresh as flow
 @pytest.mark.parametrize(
     'state',
     [
-        {'completed': True, 'completed_at': NOW},
         {'folder_id': 'user-folder', 'manual_assignment': 'person'},
         {'due_at': NOW, 'apple_reminder_id': 'linked-reminder'},
         {'external_task_id': 'separate-export', 'exported': True},

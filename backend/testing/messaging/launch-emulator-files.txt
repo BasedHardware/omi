@@ -1,0 +1,3 @@
+tests/unit/test_messaging_firestore.py
+tests/unit/test_messaging_adapters_firestore.py
+tests/unit/test_messaging_launch_hardening.py

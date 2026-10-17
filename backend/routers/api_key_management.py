@@ -111,6 +111,9 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
       - action_items:write
       - goals:read
       - goals:write
+      - people:read (explicit opt-in)
+      - profile:read (explicit opt-in)
+      - screen_activity:read (explicit opt-in)
     """
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")

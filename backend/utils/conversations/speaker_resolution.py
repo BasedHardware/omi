@@ -15,6 +15,8 @@ on capture's ids and ``speaker_resolution`` says whether those ids can be counte
 
 from __future__ import annotations
 
+from config.transcription_final_pass import authoritative_for
+
 import bisect
 from collections.abc import Sequence
 import json
@@ -64,6 +66,7 @@ from utils.observability.owner_identity_retry import (
     resolver_trace,
 )
 from utils.observability.fallback import record_fallback
+from utils.llm.known_spellings import reuse_people_for_spellings
 from utils.other.audio_chunks import (
     AudioChunkReadSession,
     chunk_end_upper_bound,
@@ -214,6 +217,7 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         return prints
     try:
         people = users_db.get_people(uid)
+        reuse_people_for_spellings(uid, people)
     except Exception as error:
         logger.warning(
             'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__
@@ -952,7 +956,10 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        if resolution_enabled():
+        final_record = authoritative_for(uid) and all(
+            (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
+        )
+        if resolution_enabled() and not final_record:
             _resolve(
                 uid,
                 conversation,

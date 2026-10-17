@@ -15,6 +15,7 @@ import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart' show parseRecapDate;
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/share_links.dart';
@@ -180,6 +181,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     setState(() => _isDeleting = true);
 
     final success = await deleteDailySummary(widget.summaryId);
+    // Announce before the mounted check: every recap surface must drop it, even if this page is gone.
+    if (success) announceRecapDeleted(widget.summaryId);
     if (!mounted) return;
 
     final summary = _summary;

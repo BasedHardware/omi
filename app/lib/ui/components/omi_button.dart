@@ -75,6 +75,7 @@ class OmiButton extends StatefulWidget {
     this.width,
     this.height,
     this.labelStyle,
+    this.maxLines = 1,
   });
 
   const OmiButton.secondary({
@@ -90,7 +91,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   const OmiButton.destructive({
     super.key,
@@ -105,7 +107,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   const OmiButton.tertiary({
     super.key,
@@ -120,7 +123,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   /// See [OmiButtonVariant.toolbar].
   const OmiButton.toolbar({
@@ -136,7 +140,8 @@ class OmiButton extends StatefulWidget {
         colors = null,
         width = null,
         height = null,
-        labelStyle = null;
+        labelStyle = null,
+        maxLines = 1;
 
   final String label;
 
@@ -171,6 +176,9 @@ class OmiButton extends StatefulWidget {
 
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
+
+  /// Lines before the label ellipsizes. Storefront prices use 2 so a backend CTA can wrap.
+  final int maxLines;
 
   @override
   State<OmiButton> createState() => _OmiButtonState();
@@ -235,11 +243,22 @@ class _OmiButtonState extends State<OmiButton> {
     final colors = _colors(enabled);
     final visualHeight = widget.height ?? (compact ? 36.0 : 48.0);
     final baseStyle = compact ? OmiType.subhead : OmiType.callout;
+    // A label with no family drops the surrounding face. Keep it so a themed
+    // page, and the widget render harness, draw the words in that face.
+    final ambient = DefaultTextStyle.of(context).style;
     final textStyle = (widget.labelStyle ?? baseStyle.copyWith(fontWeight: FontWeight.w600)).copyWith(
       color: colors.foreground,
+      fontFamily: widget.labelStyle?.fontFamily ?? ambient.fontFamily,
+      fontFamilyFallback: widget.labelStyle?.fontFamilyFallback ?? ambient.fontFamilyFallback,
     );
 
-    Widget label = Text(widget.label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    Widget label = Text(
+      widget.label,
+      style: textStyle,
+      maxLines: widget.maxLines,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+    );
     if (widget.leading != null || widget.icon != null) {
       final iconSize = compact ? 16.0 : 18.0;
       label = Row(

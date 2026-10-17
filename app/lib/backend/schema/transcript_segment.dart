@@ -15,6 +15,7 @@ class TranscriptSegment {
   late int idx;
 
   String text;
+  String? originalText;
   String? speaker;
   late int speakerId;
   bool isUser;
@@ -31,6 +32,7 @@ class TranscriptSegment {
   TranscriptSegment({
     required this.id,
     required this.text,
+    this.originalText,
     required this.speaker,
     required this.isUser,
     required this.personId,
@@ -67,6 +69,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
+      originalText: generated.originalText,
       speakerId: generated.speakerId,
       speaker: generated.speaker ?? 'SPEAKER_00',
       isUser: generated.isUser,
@@ -84,6 +87,7 @@ class TranscriptSegment {
     return wire.GeneratedTranscriptSegment(
       id: id,
       text: text,
+      originalText: originalText,
       speaker: speaker,
       speakerId: speakerId,
       isUser: isUser,

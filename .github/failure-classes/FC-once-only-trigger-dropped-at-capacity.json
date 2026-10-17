@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-once-only-trigger-dropped-at-capacity",
+  "violated_contract": "A once-only background repair trigger must retain bounded pending intent when worker capacity is temporarily occupied; dedupe must merge fresh IDs for an owned UID instead of letting overlapping sessions consume all batch slots. Pusher drain ignores rejected late identity submissions and has no guaranteed later trigger.",
+  "canonical_prevention": "Separate ID-only bounded per-UID pending admission from worker capacity. Merge new IDs into one owned cohort without extending its candidate, pass or time budgets; retain ownership through shielded worker completion and count overflow, expiry and cancellation exactly once.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_owner_identity_coalescing.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/speaker_identity_retry.py"
+  ],
+  "status": "open"
+}

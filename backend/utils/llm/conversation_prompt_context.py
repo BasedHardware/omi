@@ -9,7 +9,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, List, Optional
-from zoneinfo import ZoneInfo
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
@@ -17,6 +16,7 @@ from utils.conversations.meeting_participants import MeetingRoster, is_silent_re
 from utils.llm.meeting_notes_validation import strip_speaker_placeholders
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.shaped_agent import route_for_uid
+from utils.model_text import DisplayClock, format_instant
 
 from utils.llm.conversation_notes_prompts import SHARED_CONVERSATION_PREAMBLE
 
@@ -45,6 +45,11 @@ class ConversationPromptPrefix:
     # key are unchanged; the notes task carries them in its volatile suffix.
     title_people: tuple[str, ...] = ()
     owner_names: tuple[str, ...] = ()
+    # Task-specific ownership metadata, including rich notes where title naming
+    # uses a roster. Never render it into the shared prefix or capture evidence.
+    account_owner_name: Optional[str] = None
+    # Account vocabulary is volatile context, outside the shared cache boundary.
+    known_spellings: str = ''
 
     @property
     def cache_key(self) -> str:
@@ -58,10 +63,13 @@ class ConversationPromptPrefix:
         context_block: dict[str, Any] = {'type': 'text', 'text': self.context}
         if cache_enabled and self.cache_eligible:
             context_block['prompt_cache_breakpoint'] = EXPLICIT_CACHE_BREAKPOINT
-        return [
+        messages = [
             {'role': 'system', 'content': SHARED_CONVERSATION_PREAMBLE},
             {'role': 'system', 'content': [context_block]},
         ]
+        if self.known_spellings:
+            messages.append({'role': 'system', 'content': self.known_spellings})
+        return messages
 
 
 def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) -> bool:
@@ -199,6 +207,7 @@ def build_conversation_prompt_prefix(
     roster: Optional[MeetingRoster] = None,
     desktop_meeting_capture: bool = False,
     uid: Optional[str] = None,
+    known_spellings: str = '',
 ) -> ConversationPromptPrefix:
     """Render the shared context prefix for conversation-wide LLM tasks.
 
@@ -214,16 +223,14 @@ def build_conversation_prompt_prefix(
     audio channel as mixed, so a bound cluster is demoted to ``?`` when several
     remote participants could share it.
     """
-    try:
-        user_tz = ZoneInfo(timezone_name) if timezone_name else timezone.utc
-    except Exception:
-        user_tz = timezone.utc
+    display_clock = DisplayClock.from_name(timezone_name)
     aware_started_at = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
-    started_at_local = aware_started_at.astimezone(user_tz).replace(tzinfo=None).isoformat()
+    started_at_local = format_instant(aware_started_at, display_clock)
     speaker_names: dict[int, Optional[str]] = dict(speaker_map) if speaker_map else {}
     metadata_lines = [
-        f'- Captured at: {started_at_local} ({timezone_name or "UTC"})',
+        f'- Captured at: {started_at_local}',
     ]
+    account_owner_name = _one_line(getattr(speaker_map, 'owner_name', None) or '')
     if roster is not None:
         if roster.display_title:
             metadata_lines.append(f'- Meeting title: {roster.display_title}')
@@ -285,7 +292,9 @@ def build_conversation_prompt_prefix(
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
-    photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True) if photos else ''
+    photo_descriptions = (
+        ConversationPhoto.photos_as_string(photos, include_timestamps=True, clock=display_clock) if photos else ''
+    )
     if photo_descriptions and photo_descriptions != 'None':
         context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
 
@@ -295,7 +304,7 @@ def build_conversation_prompt_prefix(
         # Calendar invitees are expected; screen listings are observed UI data.
         # Neither listing establishes attendance or speaker identity.
         evidence: dict[str, Any] = {
-            'started_at': started_at.isoformat(),
+            'started_at': format_instant(started_at, display_clock),
             'timezone': timezone_name,
             'language': language_code,
             'speaker_map': dict(speaker_map or {}),
@@ -339,4 +348,6 @@ def build_conversation_prompt_prefix(
         shaped_context=shaped_context,
         title_people=title_people,
         owner_names=owner_names,
+        account_owner_name=account_owner_name or None,
+        known_spellings=known_spellings,
     )

@@ -233,12 +233,20 @@ class SharedTranscriptSegment(BaseModel):
 
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
     start: float
     end: float
+
+    @model_serializer(mode='wrap')
+    def omit_absent_original(self, handler):
+        data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
+        return data
 
 
 class SharedAppResult(BaseModel):
@@ -436,6 +444,9 @@ class CaptureEvidenceMetadata(BaseModel):
 
 
 class Conversation(BaseModel):
+    notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
+    notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
+    l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
     id: str

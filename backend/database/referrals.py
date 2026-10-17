@@ -6,6 +6,7 @@ from google.cloud import firestore
 
 from database._client import get_customer_firestore_client, run_transactional
 from utils.referrals import referral_claim_patch
+from database.fsr_read_cache import writing
 
 
 def claim_referral_trial(
@@ -33,4 +34,5 @@ def claim_referral_trial(
         transaction.set(user_ref, patch, merge=True)
         return True, reason
 
-    return run_transactional(client, apply)
+    with writing('subscription_cache', referred_uid):
+        return run_transactional(client, apply)

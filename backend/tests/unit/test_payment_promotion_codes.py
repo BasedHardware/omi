@@ -251,6 +251,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     # Provide required names in mocked modules
     db_mod = sys.modules["database"]
+    db_mod.__path__ = [str(PAYMENT_SOURCE.parents[1] / "database")]
     db_mod.users = MagicMock()
     db_mod.conversations = MagicMock()
     db_mod.memories = MagicMock()

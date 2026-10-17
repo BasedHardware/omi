@@ -60,3 +60,5 @@ class SpeechDeadlineTest < Minitest::Test
     end
   end
 end
+
+require_relative "speech_fallback_coordinator_test"

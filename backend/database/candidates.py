@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from database.dream_dirty import after_write
+from database.s5_candidates_cache import invalidate_after_write
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -491,6 +492,7 @@ def stored_candidate_has_lapsed(candidate: dict[str, Any], *, now: datetime) -> 
 
 
 @after_write('candidates')
+@invalidate_after_write
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -701,6 +703,7 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     return parse_snapshot_or_none(CandidateRecord, snapshot)
 
 
+@invalidate_after_write
 def update_candidate_compatibility_score(
     uid: str,
     candidate_id: str,
@@ -850,6 +853,7 @@ def _task_update_storage(candidate: CandidateRecord, *, current_task: dict[str, 
     return patch
 
 
+@invalidate_after_write
 def resolve_task_candidate(
     uid: str,
     candidate_id: str,
@@ -1034,6 +1038,7 @@ def resolve_task_candidate(
     return apply(transaction)
 
 
+@invalidate_after_write
 def resolve_candidate_without_mutation(
     uid: str,
     candidate_id: str,
@@ -1092,6 +1097,7 @@ def resolve_candidate_without_mutation(
     return apply(transaction)
 
 
+@invalidate_after_write
 def reconcile_migrated_candidate(
     uid: str,
     candidate_id: str,

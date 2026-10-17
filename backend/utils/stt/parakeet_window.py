@@ -20,6 +20,8 @@ from utils.stt.batch_pressure import BatchPressure
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.stt import streaming as st
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import demand_cohort
 from utils.stt.live_metrics import (
     WINDOW_ACTIVE,
     WINDOW_ADMISSION,
@@ -97,6 +99,7 @@ STRANDED_SILENCE_SECONDS = 5.0
 # Answered-empty context may leave TDT only after the 90s capture replay horizon.
 ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
+DEADLINE_CUT_POST_LATENCY_SECONDS = 1.2
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
 # Several short utterances may return empty; only emitted text renews this allowance.
@@ -287,10 +290,15 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._health_close: Callable[[], None] = lambda: None
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
+        self._demand_cohort = demand_cohort()
         self.progress_deadline_enabled = False
         self.allow_no_text_rescue: Callable[[], bool] = lambda: True
         self._first_text_deadline = _positive_float_env(
             'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
+        )
+        self._deadline_cut_enabled = os.getenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', 'false').lower() == 'true'
+        self._deadline_cut_post_latency = _positive_float_env(
+            'PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', DEADLINE_CUT_POST_LATENCY_SECONDS
         )
         self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
         self._empty_streak = 0
@@ -797,6 +805,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
+        # Sentence anchoring may hold a healthy nonempty answer until the
+        # context cap (24s), beyond the first/progress deadline (12s). If the
+        # remaining budget is within the qualified POST latency allowance,
+        # publish the held tail using the existing timestamp-preserving cut.
+        # A normal first POST after 6s of capture must still hold its sentence;
+        # neither a full pace nor the next pacing wait is a cut allowance.
+        # Empty answers and in-flight faults retain the original deadline.
+        deadline_cut = (
+            self._deadline_cut_enabled
+            and self._deadline_speech_at is not None
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
+            and self._deadline_speech_at + self._first_text_deadline - time.monotonic()
+            <= self._deadline_cut_post_latency
+        )
         decision = decide_window(
             segments,
             job.duration,
@@ -808,7 +830,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # the long held tail only when another pace of audio would leave
             # too little room for the next POST to make progress.
             min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
-            force_replay_cut=self._replay_cut_requested,
+            force_replay_cut=self._replay_cut_requested or deadline_cut,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -826,7 +848,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._first_text_recorded = True
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
-                        WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
+                        record_metric(
+                            WINDOW_FIRST_TEXT,
+                            {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
+                            max(0.0, time.monotonic() - self._first_speech_at),
+                            observe=True,
+                        )
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone, tzinfo
+from datetime import datetime, tzinfo
 from typing import Any, Dict, List, Optional, Sequence, Set, cast
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.folders as folders_db
 import database.users as users_db
@@ -13,8 +12,21 @@ from models.other import Person
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
 from models.note_claims import current_note_claims
-from models.transcript_segment import strip_grouping_internal_fields
+from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
+from models.conversation_photo import ConversationPhoto
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
+from utils.model_text import (
+    DisplayClock,
+    ELAPSED_LEGEND,
+    UNTRUSTED_LEGEND,
+    format_date,
+    format_duration,
+    format_instant,
+    format_span,
+    generated,
+    untrusted_block,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +45,8 @@ def resolve_display_tz(tz: Optional[str]) -> Any:
     Shared by the chat retrieval tools so every user-facing timestamp is shown in the
     user's local time rather than UTC (see issue #4643).
     """
-    if tz:
-        try:
-            return ZoneInfo(tz), tz
-        except (ZoneInfoNotFoundError, ValueError):
-            logger.warning(f"resolve_display_tz: invalid timezone '{tz}', falling back to UTC")
-    return timezone.utc, "UTC"
-
-
-def _as_utc(dt: datetime) -> datetime:
-    """Treat a naive timestamp as UTC so ``astimezone`` cannot reinterpret it as server-local."""
-    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    clock = DisplayClock.from_name(tz)
+    return clock.tz, clock.name
 
 
 def format_local_time(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
@@ -53,7 +56,7 @@ def format_local_time(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
     UTC wall clock reads as local time to the model, which then states the wrong time of day
     ("tonight" for a mid-afternoon due date) — issues #4643 and #6214.
     """
-    return f"{_as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+    return format_instant(dt, DisplayClock(display_tz, tz_label))
 
 
 def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
@@ -63,7 +66,7 @@ def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
     captured at 21:00 in Sao Paulo is stored as the next UTC day, so a raw UTC date is a day
     late for anyone west of Greenwich in the evening (issue #6214).
     """
-    return _as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d')
+    return format_date(dt, DisplayClock(display_tz, getattr(display_tz, 'key', 'UTC')))
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +102,8 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
             elif seg.get('person_id') and str(seg['person_id']) in people_map:
                 seg['speaker_name'] = people_map[str(seg['person_id'])]
             else:
-                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
+                speaker_id = seg.get('speaker_id')
+                seg['speaker_name'] = f"Speaker {speaker_id}" if speaker_id is not None else 'Unknown speaker'
 
 
 def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None:
@@ -240,6 +244,11 @@ def conversations_to_string(
     people: Optional[List[Person]] = None,
     user_name: Optional[str] = None,
     tz: Optional[str] = None,
+    clock: Optional[DisplayClock] = None,
+    include_refs: bool = False,
+    index_start: int = 1,
+    truncation_notes: Optional[Dict[str, str]] = None,
+    include_legends: bool = True,
 ) -> str:
     """Format a sequence of Conversation objects into a human-readable string.
 
@@ -251,68 +260,117 @@ def conversations_to_string(
     user's timezone when this text is fed to the chat LLM so it reasons about times correctly.
     """
     result: List[str] = []
+    elapsed_timestamps_shown = False
     people_map: Dict[str, Person] = {p.id: p for p in people} if people else {}
-    display_tz, tz_label = resolve_display_tz(tz)
+    if clock is not None and tz is not None:
+        raise ValueError('Pass clock or tz, not both')
+    clock = clock or DisplayClock.from_name(tz)
     for i, conversation in enumerate(conversations):
-        formatted_date = (
-            _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
-        )
+        formatted_date = format_date(conversation.created_at, clock)
         conversation_str = (
-            f"Conversation #{i + 1}\n"
-            f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+            f"Conversation #{i + index_start}\n"
+            + (f"ref: conversations/{conversation.id}\n" if include_refs else '')
+            + f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
         )
 
         # Add started_at and finished_at if available
-        if conversation.started_at:
-            formatted_started = (
-                _as_utc(conversation.started_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
-            )
-            conversation_str += f"Started: {formatted_started}\n"
-        if conversation.finished_at:
-            formatted_finished = (
-                _as_utc(conversation.finished_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
-            )
-            conversation_str += f"Finished: {formatted_finished}\n"
+        conversation_str += f"When: {format_span(conversation.started_at or conversation.created_at, conversation.finished_at, clock)}\n"
 
-        conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
+        conversation_content: List[str] = []
+        title = str(conversation.structured.title or '')
+        title = title[:1].upper() + title[1:] if title else ''
+        if title:
+            conversation_content.append(generated('Title', title))
 
-        conversation_str += f"{select_primary_summary(conversation).content}\n"
+        overview = str(select_primary_summary(conversation).content or '')
+        if overview:
+            conversation_content.append(generated('Overview', overview))
 
         # attendees
         if people_map:
             conv_person_ids = set(conversation.get_person_ids())
             if conv_person_ids:
-                attendees_names = [people_map[pid].name for pid in conv_person_ids if pid in people_map]
+                attendees_names = [
+                    people_map[pid].name + (f' (ref: people/{pid})' if include_refs else '')
+                    for pid in sorted(conv_person_ids)
+                    if pid in people_map
+                ]
                 if attendees_names:
                     attendees = ", ".join(attendees_names)
                     conversation_str += f"Attendees: {attendees}\n"
 
         if conversation.structured.action_items:
-            conversation_str += "Action Items:\n"
+            action_items: List[str] = []
             for item in conversation.structured.action_items:
-                conversation_str += f"- {item.description}\n"
+                state = 'done' if item.completed else 'open'
+                action_items.append(f'- [{state}] {item.description}')
+            conversation_content.append(generated('Action Items', '\n'.join(action_items)))
 
         if conversation.structured.events:
-            conversation_str += "Events:\n"
+            events: List[str] = []
             for event in conversation.structured.events:
-                conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
+                events.append(
+                    f"- {event.title} ({format_instant(event.start, clock)}, {format_duration(event.duration * 60)})"
+                )
+            conversation_content.append(generated('Events', '\n'.join(events)))
 
         if use_transcript:
-            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+            safe_segments, owner_note = owner_safe_transcript_segments(conversation.transcript_segments)
+            show_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(safe_segments)
+            if include_refs:
+                transcript = '\n\n'.join(
+                    f'#{segment.id} '
+                    + TranscriptSegment.segments_as_string(
+                        [segment],
+                        include_timestamps=show_timestamps,
+                        people=people,
+                        user_name=user_name,
+                        elapsed_timestamps=True,
+                    )
+                    for segment in safe_segments
+                )
+            else:
+                transcript = TranscriptSegment.segments_as_string(
+                    safe_segments,
+                    include_timestamps=include_timestamps,
+                    people=people,
+                    user_name=user_name,
+                    elapsed_timestamps=True,
+                )
+            if show_timestamps and transcript:
+                elapsed_timestamps_shown = True
+            transcript_block = f"Transcript:\n{owner_note + chr(10) if owner_note else ''}{transcript}"
+            if transcript:
+                conversation_content.append(transcript_block)
+            if truncation_notes and truncation_notes.get(conversation.id):
+                conversation_str += truncation_notes[conversation.id] + '\n'
             # photos
-            photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
+            photo_descriptions = ConversationPhoto.photos_as_string(
+                conversation.photos,
+                include_timestamps=include_timestamps,
+                clock=clock,
+            )
             if photo_descriptions != 'None':
-                conversation_str += f"Photo Descriptions from a wearable camera:\n{photo_descriptions}\n"
+                conversation_content.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+        if conversation_content:
+            conversation_str += untrusted_block('conversation', '\n'.join(conversation_content)) + '\n'
 
         result.append(conversation_str.strip())
 
-    return "\n\n---------------------\n\n".join(result).strip()
+    rendered = "\n\n---------------------\n\n".join(result).strip()
+    if include_legends and rendered:
+        legends = [UNTRUSTED_LEGEND]
+        if elapsed_timestamps_shown:
+            legends.insert(0, ELAPSED_LEGEND)
+        rendered = '\n'.join(legends) + '\n' + rendered
+    return rendered
 
 
 def serialize_datetimes(obj: Any) -> Any:
     """Recursively convert datetime objects to ISO format strings."""
     if isinstance(obj, datetime):
-        return obj.isoformat()
+        return obj.isoformat()  # not-model-facing: client JSON serialization
     elif isinstance(obj, dict):
         obj_dict = cast(Dict[Any, Any], obj)
         return {key: serialize_datetimes(value) for key, value in obj_dict.items()}

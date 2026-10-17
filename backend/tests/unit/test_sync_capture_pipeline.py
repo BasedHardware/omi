@@ -5,7 +5,7 @@ from copy import deepcopy
 from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
 from pathlib import Path
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 import uuid
 
 import fakeredis
@@ -31,6 +31,7 @@ def pipeline():
     fakes = _build_pipeline_fakes()
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     bridge = AutoMockModule('utils.sync.bridge')
+    final_pass = AutoMockModule('utils.conversations.final_pass_sync')
     bridge.finish_sync_bridges = lambda uid, cid: cid
     fakes.update(
         {
@@ -40,6 +41,7 @@ def pipeline():
             'utils.conversations.deterministic_minimum': deterministic_minimum,
             'utils.conversations.lifecycle': lifecycle,
             'utils.sync.bridge': bridge,
+            'utils.conversations.final_pass_sync': final_pass,
         }
     )
     with stub_modules(fakes):
@@ -47,6 +49,7 @@ def pipeline():
             'utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py'
         )
         module.ingest_test_seam = lifecycle
+        module.final_pass_test_seam = final_pass
         module.real_bridge = real_bridge
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
@@ -132,6 +135,63 @@ def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_w
     assert not store.rows and not errors
     assert response == {'new_memories': set(), 'updated_memories': set()}
     assert outcome['outcome'].value == 'expected_silence' and not outcome['retryable']
+
+
+@pytest.mark.parametrize('failed_read', [False, True])
+def test_sync_passes_real_dream_keyterms_to_stt_with_nonfatal_fallback(pipeline, monkeypatch, failed_read):
+    module, store = pipeline
+    dream_store = AutoMockModule('database.dream_store')
+    dream_store.vocabulary = MagicMock(
+        return_value=[{'spelling': 'Quorbi'}, {'spelling': 'Tala'}, {'spelling': 'x' * 51}],
+        side_effect=RuntimeError('synthetic unavailable') if failed_read else None,
+    )
+    with stub_modules({'database.dream_store': dream_store}):
+        helper = load_module_fresh(
+            'utils.dream_vocabulary', Path(__file__).resolve().parents[2] / 'utils/dream_vocabulary.py'
+        )
+        helper.run_blocking = AsyncMock(side_effect=lambda executor, fn, uid: fn(uid))
+        helper.record_fallback = MagicMock()
+        monkeypatch.setenv('DREAM_AGENT_VOCABULARY_STT', 'true')
+        monkeypatch.setattr(module, 'keyterms', helper.keyterms)
+        errors = []
+        assert module.process_segment(
+            '1700000000.wav',
+            'synthetic-owner',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            errors,
+            transcription_prefs={'vocabulary': ['Tala', 'Omi', 'Tala']},
+        )
+        assert errors == [] and len(conversations(store)) == 1
+        expected = ['Omi', 'Tala'] if failed_read else ['Omi', 'Tala', 'Quorbi']
+        assert module.prerecorded.call_args.kwargs['keywords'] == expected
+        dream_store.vocabulary.assert_called_once_with('synthetic-owner')
+        assert helper.record_fallback.call_count == int(failed_read)
+
+
+def test_sync_keyterm_cap_keeps_product_and_preferences_first(pipeline, monkeypatch):
+    module, _ = pipeline
+    dream_store = AutoMockModule('database.dream_store')
+    dream_store.vocabulary = MagicMock(return_value=[{'spelling': f'Learned {i}'} for i in range(150)])
+    with stub_modules({'database.dream_store': dream_store}):
+        helper = load_module_fresh(
+            'utils.dream_vocabulary', Path(__file__).resolve().parents[2] / 'utils/dream_vocabulary.py'
+        )
+        helper.run_blocking = AsyncMock(side_effect=lambda executor, fn, uid: fn(uid))
+        monkeypatch.setenv('DREAM_AGENT_VOCABULARY_STT', 'true')
+        monkeypatch.setattr(module, 'keyterms', helper.keyterms)
+        assert module.process_segment(
+            '1700000000.wav',
+            'synthetic-owner',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            [],
+            transcription_prefs={'vocabulary': ['Tala']},
+        )
+        keywords = module.prerecorded.call_args.kwargs['keywords']
+        assert len(keywords) == 100
+        assert keywords[:3] == ['Omi', 'Tala', 'Learned 0']
+        assert keywords[-1] == 'Learned 97'
 
 
 def test_empty_retry_recovers_through_original_path_once(pipeline):
@@ -452,3 +512,33 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     assert f'firestore_doc_kind={kind} ' in event
     assert 'private' not in event and '2026-10-03' not in event
     module.prerecorded.assert_called_once()
+
+
+@pytest.mark.parametrize('legacy_failure', [False, True])
+def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, monkeypatch, caplog, legacy_failure):
+    import hashlib
+
+    module, store = pipeline
+    uid = 'synthetic-private-uid'
+    monkeypatch.setattr(module, 'sync_enabled_for', lambda _: True)
+    monkeypatch.setattr(module, '_download_audio_bytes', lambda _: b'synthetic')
+    monkeypatch.setattr(
+        module.final_pass_test_seam, 'run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'skipped_budget'})
+    )
+    legacy = MagicMock(side_effect=RuntimeError('synthetic') if legacy_failure else None)
+    monkeypatch.setattr(module, 'identify_speakers_for_segments', legacy)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    with caplog.at_level(logging.INFO):
+        assert module.process_segment('1700000000.wav', uid, response, threading.Lock(), [])
+    legacy.assert_called_once()
+    assert conversations(store)[0]['transcript_segments'][0]['text'] == 'Keep the capture.'
+    events = [
+        r.message
+        for r in caplog.records
+        if 'event=sync_final_pass' in r.message or 'event=sync_speaker_id' in r.message
+    ]
+    assert len(events) == (2 if legacy_failure else 1)
+    digest = hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest()
+    assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
+    assert 'outcome=skipped_budget' in events[0]
+    assert 'lane=' in events[0] and 'duration_seconds=' in events[0]

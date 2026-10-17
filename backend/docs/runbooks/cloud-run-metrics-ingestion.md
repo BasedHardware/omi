@@ -170,7 +170,7 @@ python3 deploy/compose_runtime_env.py --check
 After merge, platform deployment is still required; repository changes alone do not mutate Cloud Run or GKE. The repository now owns both halves instead of leaving Helm commands as an undocumented manual release:
 
 - `.github/workflows/gcp_cloud_run_metrics_egress.yml` runs automatically for relevant changes on `main` and atomically installs the dev exporter plus the dev Prometheus scrape configuration. It uses the live release name `dev-kube-prometheus-stack`, not the failed historical `dev-omi-kube-prometheus-stack` release.
-- Production is an explicit protected-environment dispatch from `main`. It atomically upgrades `prod-omi-cloud-run-metrics-exporter` and the live `prod-omi-kube-prometheus-stack` release with pinned chart versions.
+- Production is an explicit protected-environment dispatch from `main`. It atomically upgrades `prod-omi-cloud-run-sync-metrics-exporter`, `prod-omi-cloud-run-metrics-exporter` and the live `prod-omi-kube-prometheus-stack` release with pinned chart versions. The stack upgrade passes Grafana's `omi-stats-proxy-sha256` annotation computed from the checked-out `stats_proxy.py`; the `grafana-stats-proxy` ConfigMap stays parent-applied and must match it.
 - Both paths render first, install the isolated exporter before its scrape target, wait for Helm readiness, and verify the exporter Deployment and Service.
 
 1. Confirm the automatic `Deploy Cloud Run Metrics Egress` development run succeeded after merge. If it must be retried, dispatch it from `main`:
@@ -229,8 +229,10 @@ reads `K_SERVICE` for its namespace (see [upstream metadata mapping](https://git
 Cloud Run Jobs supply `CLOUD_RUN_JOB` instead, so the helper explicitly gives
 only the collector process `K_SERVICE=$CLOUD_RUN_JOB` inside its wrapper
 (without deploying a reserved service env name). The resulting GMP target
-has `namespace=notifications-job` and `cluster=__run__`. Both dedicated exporter
-values retain the service namespaces and add this exact namespace to `one_of`.
+has `namespace=notifications-job` and `cluster=__run__`. Both environments'
+`<env>_omi_cloud_run_metrics_exporter.yaml` add this exact namespace to `one_of`;
+the sync services are imported by the separate `<env>_sync_omi_cloud_run_metrics_exporter.yaml`
+release, limited to consumed families.
 The kube-prometheus-stack values own the scrape and name normalization, not
 the monitored-resource namespace filter.
 
