@@ -8,6 +8,7 @@ through the public Stack Exchange API.
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from html import unescape
+import logging
 import math
 import re
 from typing import Any, Optional
@@ -33,6 +34,8 @@ SITE_HOSTS = {
     "mathoverflow": "mathoverflow.net",
     "stackapps": "stackapps.com",
 }
+
+logger = logging.getLogger(__name__)
 
 _stack_client: Optional[httpx.AsyncClient] = None
 
@@ -235,6 +238,20 @@ async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> d
     if data.get("backoff"):
         raise ValueError(f"Stack Exchange requested a {data['backoff']} second backoff. Retry shortly.")
     return data
+
+
+def _tool_failure_response(label: str, exc: Exception) -> ChatToolResponse:
+    """Builds the chat-visible error for a failed Stack Exchange call without echoing exception text.
+
+    Exception text can carry resolver or proxy details and remote-controlled API messages, so only the
+    HTTP status code reaches the response and only the exception class name reaches the logs.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        logger.warning("%s failed with status %s", label, status_code)
+        return ChatToolResponse(error=f"{label} failed with status {status_code}.")
+    logger.warning("%s failed: %s", label, type(exc).__name__)
+    return ChatToolResponse(error=f"{label} failed. Please try again later.")
 
 
 def _question_url(site: str, question_id: Any) -> str:
@@ -448,12 +465,8 @@ async def search_questions(payload: dict[str, Any]):
         lines = [f"Stack Exchange results for '{clean_query}' on {site}:"]
         lines.extend(_format_question(item, index, site) for index, item in enumerate(items, start=1))
         return ChatToolResponse(result="\n\n".join(lines))
-    except ValueError as exc:
-        return ChatToolResponse(error=f"Stack Exchange search failed: {exc}")
-    except httpx.HTTPStatusError as exc:
-        return ChatToolResponse(error=f"Stack Exchange search failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange search failed: {exc}")
+    except (ValueError, httpx.HTTPError) as exc:
+        return _tool_failure_response("Stack Exchange search", exc)
 
 
 @app.post("/tools/get_question", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -508,12 +521,8 @@ async def get_question(payload: dict[str, Any]):
         if body:
             lines.extend(["", "Question body:", body])
         return ChatToolResponse(result="\n".join(lines))
-    except ValueError as exc:
-        return ChatToolResponse(error=f"Stack Exchange question request failed: {exc}")
-    except httpx.HTTPStatusError as exc:
-        return ChatToolResponse(error=f"Stack Exchange question request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange question request failed: {exc}")
+    except (ValueError, httpx.HTTPError) as exc:
+        return _tool_failure_response("Stack Exchange question request", exc)
 
 
 @app.post("/tools/get_top_answers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -556,9 +565,5 @@ async def get_top_answers(payload: dict[str, Any]):
         lines = [f"Top answers for question {question_id} on {site}:", _question_url(site, question_id)]
         lines.extend(_format_answer(item, index) for index, item in enumerate(items, start=1))
         return ChatToolResponse(result="\n\n".join(lines))
-    except ValueError as exc:
-        return ChatToolResponse(error=f"Stack Exchange answers request failed: {exc}")
-    except httpx.HTTPStatusError as exc:
-        return ChatToolResponse(error=f"Stack Exchange answers request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Stack Exchange answers request failed: {exc}")
+    except (ValueError, httpx.HTTPError) as exc:
+        return _tool_failure_response("Stack Exchange answers request", exc)
