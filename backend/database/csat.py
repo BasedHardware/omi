@@ -28,6 +28,7 @@ the only client read path. The doc is cached 60s like app_review_config so
 admin copy edits reach clients within one poll (~5 min) plus the cache.
 """
 
+import logging
 import time
 from typing import Any, Dict, Tuple, cast
 
@@ -35,6 +36,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict
 
 from database._client import get_firestore_client
 from database.cache import get_memory_cache
+
+logger = logging.getLogger(__name__)
 
 CONFIG_COLLECTION = 'csat_config'
 CONFIG_DOC = 'product'
@@ -97,17 +100,24 @@ def normalize_config(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     }
 
 
-def _fetch_config() -> Dict[str, Any]:
-    doc = get_firestore_client().collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
-    if not getattr(doc, 'exists', False):
+def _fetch_config(firestore_client: Any = None) -> Dict[str, Any]:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    try:
+        doc = client.collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
+        if not getattr(doc, 'exists', False):
+            return dict(DEFAULT_CONFIG)
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else dict(DEFAULT_CONFIG)
+    except Exception as e:
+        logger.warning('Failed to fetch CSAT config from Firestore: %s', e)
         return dict(DEFAULT_CONFIG)
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else dict(DEFAULT_CONFIG)
 
 
-def get_product_config() -> Dict[str, Any]:
+def get_product_config(firestore_client: Any = None) -> Dict[str, Any]:
     """Return the product CSAT config, normalized, cached for 60s."""
-    fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
+    fetched = get_memory_cache().get_or_fetch(
+        _CACHE_KEY, lambda: _fetch_config(firestore_client=firestore_client), ttl=_CACHE_TTL_SECONDS
+    )
     raw = cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else dict(DEFAULT_CONFIG)
     return normalize_config(raw)
 
@@ -120,6 +130,7 @@ def submit_rating(
     score: int,
     comment: str,
     revision: int,
+    firestore_client: Any = None,
 ) -> Tuple[str, bool]:
     """Create the user's one rating doc for the platform.
 
@@ -128,19 +139,22 @@ def submit_rating(
     Returns `(doc_id, created)`; `created=False` means a rating already
     existed and was left untouched.
     """
-    config = get_product_config()
-    effective_comment = comment if score <= config['comment_max_score'] else ''
-    doc_id = f'{platform}_{uid}'
+    config = get_product_config(firestore_client=firestore_client)
+    effective_comment = (comment or '').strip()[:MAX_COMMENT_LENGTH] if score <= config['comment_max_score'] else ''
+    clean_platform = (platform or '').strip()
+    clean_app_version = (app_version or '').strip()[:MAX_APP_VERSION_LENGTH]
+    doc_id = f'{clean_platform}_{uid}'
     payload: Dict[str, Any] = {
         'uid': uid,
-        'platform': platform,
-        'app_version': app_version[:MAX_APP_VERSION_LENGTH],
+        'platform': clean_platform,
+        'app_version': clean_app_version,
         'score': score,
         'comment': effective_comment,
         'revision': max(0, revision),
         'created_at': int(time.time()),
     }
-    ref = get_firestore_client().collection(RATINGS_COLLECTION).document(doc_id)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection(RATINGS_COLLECTION).document(doc_id)
     try:
         ref.create(payload)
     except (AlreadyExists, Conflict):
