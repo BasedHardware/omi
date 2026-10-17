@@ -16,7 +16,6 @@ enum HiddenSettingsSurfacesPolicy {
     "advanced.memoryassistant",
     "floatingbar.notificationpreviews",
     "floatingbar.background",
-    "floatingbar.draggable",
   ]
 
   /// The Tasks-page header gear deep-linked to the hidden Task Assistant pane.
