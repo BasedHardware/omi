@@ -90,22 +90,31 @@ def _run(processor, text):
     [
         "I'm Chinese.",
         "I am American.",
+        "I'm Vietnamese.",
         "I'm Googling it now.",
         "I'm Amazon shopping.",
         "I'm Always late.",
     ],
 )
-def test_bare_copula_never_creates_a_person(text):
+def test_bare_copula_never_creates_or_suggests_a_person(text):
     recorder = _Recorder()
-    _run(_processor(recorder), text)
+    events = []
+    processor = _processor(recorder)
+    processor.host.send_event = events.append
+    _run(processor, text)
     assert recorder.created == [], f"{text!r} minted a person: {recorder.created}"
+    assert events == [], f"{text!r} emitted a new-person suggestion event: {events}"
 
 
-@pytest.mark.parametrize("text", ["我是因为这个", "我是一碗稀饭，"])
-def test_chinese_copula_never_creates_a_person(text):
+@pytest.mark.parametrize("text", ["我是因为这个", "我是一碗稀饭，", "我叫他过来", "我叫你别去", "我叫外卖"])
+def test_chinese_copula_and_clause_fragments_never_create_a_person(text):
     recorder = _Recorder()
-    _run(_processor(recorder, language='zh'), text)
+    events = []
+    processor = _processor(recorder, language='zh')
+    processor.host.send_event = events.append
+    _run(processor, text)
     assert recorder.created == []
+    assert events == []
 
 
 def test_explicit_introduction_still_creates_a_person():
@@ -144,11 +153,27 @@ def test_owner_name_match_is_case_insensitive():
 
 def test_create_speakers_disabled_still_suppresses_creation():
     recorder = _Recorder()
-    _run(_processor(recorder, create_speakers=False), "My name is Alice.")
+    events = []
+    processor = _processor(recorder, create_speakers=False)
+    processor.host.send_event = events.append
+    _run(processor, "My name is Alice.")
     assert recorder.created == []
+    assert len(events) == 1
+    assert events[0].person_name == "Alice"
+    assert events[0].person_id == ""
 
 
-@pytest.mark.parametrize('text', ["I'm Because it matters.", "My name is Googling.", "My name is Because."])
+@pytest.mark.parametrize(
+    'text',
+    [
+        "I'm Because it matters.",
+        "My name is Googling.",
+        "My name is Because.",
+        "I'm Oh really.",
+        "My name is Wow.",
+        "I am Mhmm.",
+    ],
+)
 def test_observed_mishears_never_lookup_or_create_people(text):
     recorder = _Recorder()
     _run(_processor(recorder), text)

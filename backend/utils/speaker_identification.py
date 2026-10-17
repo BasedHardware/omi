@@ -503,10 +503,18 @@ ZH_NAME_STOPWORDS = frozenset(
         '工作',
         '学校',
         '我们的这个',
+        '外卖',
+        '服务员',
+        '救护车',
+        '警察',
+        '出租车',
+        '司机',
     }
 )
 
-ZH_INVALID_CHARS = frozenset('的了着得地')
+ZH_INVALID_CHARS = frozenset(
+    '的了着得地我你他她它咱您谁什么哪怎不没别吗呢吧啊呀哦喔嗯哈嘛啦呗过把被给让跟从往向去来到在有是叫说看听做吃喝买卖想要会能该很太都也就还又再些'
+)
 
 KO_NAME_STOPWORDS = frozenset(
     {
@@ -602,6 +610,32 @@ SPEAKER_NAME_STOPWORDS = frozenset(
         'ok',
         'yeah',
         'just',
+        'oh',
+        'wow',
+        'mhmm',
+        'mhm',
+        'mm',
+        'mmm',
+        'uh',
+        'um',
+        'umm',
+        'hmm',
+        'hm',
+        'ah',
+        'eh',
+        'huh',
+        'nah',
+        'yep',
+        'yup',
+        'nope',
+        'hey',
+        'hi',
+        'hello',
+        'bye',
+        'thanks',
+        'thank',
+        'please',
+        'wait',
         'because',
         'googling',
         'like',
