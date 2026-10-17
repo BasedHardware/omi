@@ -7,7 +7,7 @@
     prefix += '\uE000';
   }
   String protect(String value) {
-    final key = prefix + List.filled(protected.length, '\uE002').join() + '\uE001';
+    final key = '$prefix${List.filled(protected.length, '\uE002').join()}\uE001';
     protected[key] = value;
     return key;
   }
