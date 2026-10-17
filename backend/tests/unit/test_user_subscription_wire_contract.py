@@ -84,14 +84,25 @@ def test_export_publishes_capable_catalog_schema_and_preserves_checked_legacy_re
     assert check_app_client_openapi_compatibility.compare_specs(base, schema)
 
 
+@pytest.fixture
+def subscription_http_route():
+    # Router/bootstrap setup is separate from the request serialization under test.
+    from routers import users
+
+    return users
+
+
 @pytest.mark.parametrize('flag', ['false', 'true'])
-def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatch, flag):
+def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatch, flag, subscription_http_route):
     from contextlib import nullcontext
     from types import SimpleNamespace
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from routers import users as route
+
+    route = subscription_http_route
     from utils.sync import held_audio_summary
+    from utils import funded_processing
+    from database import processing_backlog as backlog_store
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', flag)
     monkeypatch.setattr(route, '_user_subscription_response', lambda *a: _response(PlanType.basic))
@@ -102,8 +113,8 @@ def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatc
         as_dict=lambda: {'mode': 'managed', 'remaining_seconds': None, 'reason': 'available'},
     )
     monkeypatch.setattr(route, 'resolve_transcription_allowance', lambda *a, **kw: allowance)
-    monkeypatch.setattr(route.funded_processing, 'allowance', lambda *a, **kw: allowance)
-    monkeypatch.setattr(route.processing_backlog.store, 'read', lambda uid: {})
+    monkeypatch.setattr(funded_processing, 'allowance', lambda *a, **kw: allowance)
+    monkeypatch.setattr(backlog_store, 'read', lambda uid: {})
     monkeypatch.setattr(route, 'fresh_cache_reads', lambda *a: nullcontext())
     monkeypatch.setattr(held_audio_summary, '_load_summary', lambda uid: {'version': 2, 'seconds': 12, 'count': 1})
     monkeypatch.setattr(held_audio_summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 20, 'seconds': 12}])

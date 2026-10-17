@@ -686,7 +686,9 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
   if (response == null) return null;
   Logger.debug('getUserSubscription response: ${response.body}');
   if (response.statusCode == 200) {
-    return UserSubscriptionResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserSubscriptionResponse.fromGenerated(
+      subscription_wire.GeneratedUserSubscriptionResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   return null;
 }
@@ -703,7 +705,9 @@ Future<ProcessingBacklog?> processProcessingBacklog({required String idempotency
     body: '{}',
   );
   if (response == null || response.statusCode != 200) return null;
-  return ProcessingBacklog.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return ProcessingBacklog.fromGenerated(
+    subscription_wire.GeneratedProcessingBacklog.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+  );
 }
 
 // Daily Summary Settings

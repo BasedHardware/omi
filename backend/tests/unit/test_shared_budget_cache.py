@@ -11,8 +11,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from database import funded_usage_session as cache, usage_units as units, usage_units_session as unit_session
+from database import users as users_db
 from tests.unit.fixtures.shadow_usage_firestore import Store
-from utils import funded_processing as funded, generated_compute as generated, ladder_v1 as ladder
+from utils import byok, funded_processing as funded, generated_compute as generated, ladder_v1 as ladder, subscription
 from utils.storefront_copy import chat_at_cap
 from utils.transcription_allowance import TranscriptionAllowance
 
@@ -69,7 +70,7 @@ def clock(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', '2026-10-01')
     monkeypatch.setattr(ladder.policy, 'entitlements', lambda subscription: entitlement())
-    monkeypatch.setattr(funded.users_db, 'get_user_valid_subscription', Mock(return_value={'plan': 'basic'}))
+    monkeypatch.setattr(users_db, 'get_user_valid_subscription', Mock(return_value={'plan': 'basic'}))
     return value
 
 
@@ -100,7 +101,7 @@ def test_pipeline_allowance_and_unscoped_chat_budget_share_unit_session(clock):
     allowance = funded.allowance('u', firestore_client=db)
     assert db.reads - before == 3
     assert allowance.managed and allowance.remaining_units == 75000 and allowance.budget_units == 100000
-    funded.users_db.get_user_valid_subscription.assert_called_with('u', provision=False, firestore_client=db)
+    users_db.get_user_valid_subscription.assert_called_with('u', provision=False, firestore_client=db)
     before = db.reads
     assert ladder.budget_snapshot('u', firestore_client=db)['budget_percent'] == 25
     assert db.reads - before == 3
@@ -134,12 +135,12 @@ def test_default_client_seam_omits_none_keyword_and_never_provisions(clock, monk
     db = store()
     monkeypatch.setattr(units, 'get_customer_firestore_client', lambda: db)
     assert funded.allowance('u').managed
-    funded.users_db.get_user_valid_subscription.assert_called_once_with('u', provision=False)
+    users_db.get_user_valid_subscription.assert_called_once_with('u', provision=False)
     assert db.writes == 0
     before = db.reads
     ladder.budget_snapshot('u')
     assert db.reads - before == 3
-    funded.users_db.get_user_valid_subscription.assert_called_with('u', provision=False)
+    users_db.get_user_valid_subscription.assert_called_with('u', provision=False)
 
 
 def test_cache_is_lru_bounded_and_uses_identity_for_unhashable_equal_clients(clock):
@@ -195,7 +196,7 @@ def test_ladder_chat_402_body_exactly_matches_existing_copy_and_warm_reads(clock
 def test_flags_off_real_http_bytes_and_no_new_reads(clock, monkeypatch):
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    lookup = funded.users_db.get_user_valid_subscription
+    lookup = users_db.get_user_valid_subscription
     db = store(100000)
     app = FastAPI()
 
@@ -227,7 +228,7 @@ def test_legacy_cache_forwards_client_reads_current_hour_then_reconciles(clock, 
             'managed', 100 - kwargs['usage']['transcription_seconds'], 'remaining', limit_seconds=100
         )
     )
-    monkeypatch.setattr(funded, 'resolve_transcription_allowance', resolver)
+    monkeypatch.setattr(subscription, 'resolve_transcription_allowance', resolver)
     monkeypatch.setattr(
         cache, 'get_customer_firestore_client', Mock(side_effect=AssertionError('explicit client lost'))
     )
@@ -242,14 +243,14 @@ def test_legacy_cache_forwards_client_reads_current_hour_then_reconciles(clock, 
     before = db.reads
     assert funded.allowance('u', firestore_client=db).remaining_seconds == 40
     assert db.reads - before == 2
-    funded.users_db.get_user_valid_subscription.assert_called_with('u', provision=False, firestore_client=db)
+    users_db.get_user_valid_subscription.assert_called_with('u', provision=False, firestore_client=db)
     assert resolver.call_args.kwargs['usage']['transcription_seconds'] == 60
     assert db.writes == 0
 
 
 def test_subscription_failure_fails_closed_without_provision_or_ledger_reads(clock):
     db = store()
-    funded.users_db.get_user_valid_subscription.side_effect = RuntimeError('synthetic unavailable')
+    users_db.get_user_valid_subscription.side_effect = RuntimeError('synthetic unavailable')
     result = funded.allowance('u', firestore_client=db)
     assert not result.managed and result.reason == 'allowance_unavailable'
     assert db.reads == db.writes == 0
@@ -266,21 +267,19 @@ def test_legacy_direct_session_does_not_reuse_totals_for_another_client(clock, m
 
 
 def test_chat_quota_forwards_explicit_client_through_adapter_without_provision(clock, monkeypatch):
-    from utils import subscription
-
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
-    monkeypatch.setattr(generated.byok, 'has_validated_byok_keys', lambda: False)
+    monkeypatch.setattr(byok, 'has_validated_byok_keys', lambda: False)
     db = Store({'users/u/hourly_usage/2026-10-17-10': hour(seconds=100)})
     monkeypatch.setattr(
-        funded,
+        subscription,
         'resolve_transcription_allowance',
         Mock(return_value=TranscriptionAllowance('on_device', 0, 'plan_allowance_exhausted', limit_seconds=100)),
     )
     with pytest.raises(HTTPException) as error:
         subscription.enforce_chat_quota('u', firestore_client=db, provision=False)
     assert error.value.status_code == 402 and error.value.detail['error'] == 'usage_budget_exhausted'
-    funded.users_db.get_user_valid_subscription.assert_called_once_with('u', provision=False, firestore_client=db)
+    users_db.get_user_valid_subscription.assert_called_once_with('u', provision=False, firestore_client=db)
     assert db.reads == 1 and db.writes == 0
 
 

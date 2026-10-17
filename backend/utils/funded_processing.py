@@ -13,23 +13,18 @@ import logging
 from typing import Any, Mapping
 
 from config.stt_cap_dispatch import execution_admission_enabled as enabled
-from config.rate_card import recording_units_per_hour
-from config.plan_catalog import allocation_limit
-from database.funded_usage_session import budget_session, client_identity
-from database import users as users_db
-from config import ladder_v1 as ladder_policy
 from config.stt_cap_dispatch import enabled as legacy_enabled
-from utils.subscription import resolve_transcription_allowance, get_monthly_usage_for_subscription
-from utils.transcription_allowance import TranscriptionAllowance
-from utils.stt_cap_dispatch import funded_allowance
-from utils.llm.usage_tracker import track_usage
-from utils import ladder_v1
 
 _scope: ContextVar[dict | None] = ContextVar('funded_processing_scope', default=None)
 _UNSET = object()
 
 
 def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, firestore_client: Any = None):
+    # Admission callers short-circuit before loading database/provider dependencies.
+    from config import ladder_v1 as ladder_policy
+    from database.funded_usage_session import budget_session, client_identity
+    from utils.transcription_allowance import TranscriptionAllowance
+
     scope = _scope.get()
     key = (uid, client_identity(firestore_client))
     if scope is not None and key in scope:
@@ -38,11 +33,15 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
         try:
             client_kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
             if subscription is _UNSET:
+                from database import users as users_db
+
                 subscription = users_db.get_user_valid_subscription(uid, provision=False, **client_kwargs)
             entitlement = (
                 ladder_policy.entitlements(subscription) if ladder_policy.budget_enforcement_enabled() else None
             )
             if entitlement is not None:
+                from utils import ladder_v1
+
                 # Use the actual projection and client, not a placeholder allowance.
                 # The same unit session serves direct chat budget_snapshot callers.
                 snapshot = ladder_v1.budget_snapshot(uid, subscription, session_cache=session.units, **client_kwargs)
@@ -58,6 +57,9 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
                     budget_units=snapshot['budget_units'],
                 )
             elif legacy_enabled():
+                from config.plan_catalog import allocation_limit
+                from utils.subscription import resolve_transcription_allowance
+
                 if usage is _UNSET:
                     plan = (
                         subscription.get('plan')
@@ -86,6 +88,8 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
                     omi_funded=True,
                 )
             else:
+                from utils.stt_cap_dispatch import funded_allowance
+
                 # Retain the existing legacy bypass / explicitly unenforced policy.
                 result = funded_allowance(uid, usage_cache=session.units, subscription=subscription)
         except Exception as exc:
@@ -101,13 +105,19 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
 def monthly_usage(uid: str) -> dict:
     """Subscription reporting shares closed-hour totals instead of rescanning every poll."""
     if not enabled():
+        from utils.subscription import get_monthly_usage_for_subscription
+
         return get_monthly_usage_for_subscription(uid)
     raw = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
     try:
         launch = datetime.strptime(raw or '', '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
+        from utils.subscription import get_monthly_usage_for_subscription
+
         # Preserve the resolver's missing/invalid/future launch-date contract.
         return get_monthly_usage_for_subscription(uid)
+    from database.funded_usage_session import budget_session
+
     with budget_session(uid) as session:
         return session.legacy.read(uid, launch)
 
@@ -119,6 +129,8 @@ def processing_allowed(uid: str, *, firestore_client: Any = None) -> bool:
 
 def capacity(value: Any) -> tuple[float | None, float | None]:
     """Units and budget, or None for the catalog's explicit unlimited marker."""
+    from config.rate_card import recording_units_per_hour
+
     rate = float(recording_units_per_hour('batch'))
     if getattr(value, 'remaining_units', None) is not None:
         return max(0, value.remaining_units), value.budget_units
@@ -148,6 +160,8 @@ def scoped(fn):
     def wrapped(*args, **kwargs):
         if not enabled():
             return fn(*args, **kwargs)
+        from utils.llm.usage_tracker import track_usage
+
         uid = args[0] if args else kwargs['uid']
         with admission_scope(), track_usage(uid, 'conversation_processing'):
             return fn(*args, **kwargs)

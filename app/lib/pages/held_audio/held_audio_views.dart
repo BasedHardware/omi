@@ -190,7 +190,7 @@ class HeldAudioHomeSection extends StatelessWidget {
       builder: (context, _) {
         final processing = backlog ??
             ((summary == null && gate != false)
-                ? context.select<UsageProvider, ProcessingBacklog?>((p) => p.subscription?.processingBacklog)
+                ? context.select<UsageProvider?, ProcessingBacklog?>((p) => p?.subscription?.processingBacklog)
                 : null);
         final active = gate ?? (processing != null || resolved.isActive);
         final held = summary ??
@@ -380,7 +380,7 @@ class HeldAudioLiveBanner extends StatelessWidget {
       builder: (context, _) {
         final processing = backlog ??
             ((summary == null && gate != false)
-                ? context.select<UsageProvider, ProcessingBacklog?>((p) => p.subscription?.processingBacklog)
+                ? context.select<UsageProvider?, ProcessingBacklog?>((p) => p?.subscription?.processingBacklog)
                 : null);
         final active = gate ?? (processing != null || resolved.isActive);
         if (!active) return const SizedBox.shrink();
@@ -458,7 +458,7 @@ class HeldAudioUsageSection extends StatelessWidget {
       builder: (context, _) {
         final processing = backlog ??
             ((summary == null && gate != false)
-                ? context.select<UsageProvider, ProcessingBacklog?>((p) => p.subscription?.processingBacklog)
+                ? context.select<UsageProvider?, ProcessingBacklog?>((p) => p?.subscription?.processingBacklog)
                 : null);
         final active = gate ?? (processing != null || resolved.isActive);
         final held = summary ??

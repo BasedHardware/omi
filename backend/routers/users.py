@@ -57,9 +57,8 @@ from database.users import (
 )
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
-from utils import funded_processing, processing_backlog
+from config.stt_cap_dispatch import execution_admission_enabled as funded_processing_enabled
 from utils.generated_compute import require_generated_compute, generated_compute_enabled
-from utils.processing_backlog_worker import kick as kick_processing_backlog
 from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
@@ -1232,7 +1231,9 @@ def get_user_subscription_endpoint(
         response = _user_subscription_response(
             uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
         )
-    if funded_processing.enabled():
+    if funded_processing_enabled():
+        from utils import funded_processing
+
         funded = funded_processing.allowance(
             uid, **{key: value for key, value in already_read.items() if key in {'subscription', 'usage'}}
         )
@@ -1255,11 +1256,15 @@ def get_user_subscription_endpoint(
     # On: reuse this allowance, kick recovery without waiting, and read the
     # running summary (plus a short newest-first page when the count is positive).
     attach_subscription_held_audio(response, uid, funded, already_read.get('subscription'))
-    if funded_processing.enabled():
+    if funded_processing_enabled():
+        from utils import processing_backlog
+
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
         if response.processing_backlog and response.processing_backlog.state == 'processing':
+            from utils.processing_backlog_worker import kick as kick_processing_backlog
+
             kick_processing_backlog(uid)
     return response
 
@@ -1269,8 +1274,11 @@ def process_waiting_recordings(
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
 ):
-    if not funded_processing.enabled():
+    if not funded_processing_enabled():
         raise HTTPException(status_code=404, detail='Not found')
+    from utils import processing_backlog
+    from utils.processing_backlog_worker import kick as kick_processing_backlog
+
     result = processing_backlog.choose(uid, request_key=idempotency_key)
     snapshot = processing_backlog.snapshot(uid)
     if snapshot is not None and snapshot.state == 'capped':
@@ -1311,11 +1319,12 @@ def _user_subscription_response(
                 show_subscription_ui=False,
                 phone_call_quota=unlimited_phone_quota,
             )
-        usage = (
-            funded_processing.monthly_usage(uid)
-            if funded_processing.enabled()
-            else get_monthly_usage_for_subscription(uid)
-        )
+        if funded_processing_enabled():
+            from utils.funded_processing import monthly_usage
+
+            usage = monthly_usage(uid)
+        else:
+            usage = get_monthly_usage_for_subscription(uid)
         already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
         basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
@@ -1395,9 +1404,12 @@ def _user_subscription_response(
         subscription.plan = PlanType.unlimited
 
     # Get current usage
-    usage = (
-        funded_processing.monthly_usage(uid) if funded_processing.enabled() else get_monthly_usage_for_subscription(uid)
-    )
+    if funded_processing_enabled():
+        from utils.funded_processing import monthly_usage
+
+        usage = monthly_usage(uid)
+    else:
+        usage = get_monthly_usage_for_subscription(uid)
     already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
 
     # Calculate usage metrics

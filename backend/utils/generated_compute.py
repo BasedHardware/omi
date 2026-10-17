@@ -14,7 +14,6 @@ from typing import Any, Callable, Concatenate, Iterator, ParamSpec, TypeVar
 from fastapi import HTTPException
 
 from config.stt_cap_dispatch import execution_admission_enabled as generated_compute_enabled
-from utils import byok
 
 _generation_uid: ContextVar[str | None] = ContextVar('generated_compute_uid', default=None)
 
@@ -44,10 +43,13 @@ def generated_compute_allowed(
         return True
     if not uid or uid == 'unknown':
         return False
-    if allow_byok and byok.has_validated_byok_keys() and byok.get_byok_uid() == uid:
-        providers = (provider,) if provider in _LLM_PROVIDERS else (() if provider else _LLM_PROVIDERS)
-        if any(byok.get_byok_key(candidate) for candidate in providers):
-            return True
+    if allow_byok:
+        from utils import byok
+
+        if byok.has_validated_byok_keys() and byok.get_byok_uid() == uid:
+            providers = (provider,) if provider in _LLM_PROVIDERS else (() if provider else _LLM_PROVIDERS)
+            if any(byok.get_byok_key(candidate) for candidate in providers):
+                return True
     # Billing/provider imports remain lazy so flag-off clients keep import purity.
     from utils import funded_processing
 
@@ -91,6 +93,8 @@ def current_compute_uid(uid: str | None = None) -> str | None:
     context = get_current_context()
     if context and context.uid and context.uid != 'unknown':
         return context.uid
+    from utils import byok
+
     return byok.get_byok_uid()
 
 

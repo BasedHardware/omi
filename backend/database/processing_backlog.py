@@ -7,11 +7,22 @@ import time
 import hashlib
 
 from google.cloud import firestore
-from database._client import get_firestore_client
-from database.legal_holds import external_write_fence
 
 COLLECTION = 'processing_backlog_items'
 SUMMARY = 'processing_backlog'
+
+
+def get_firestore_client():
+    # Deferring this dependency keeps unflagged conversation imports inert.
+    from database._client import get_firestore_client as client_factory
+
+    return client_factory()
+
+
+def external_write_fence(uid: str, *, firestore_client):
+    from database.legal_holds import external_write_fence as open_fence
+
+    return open_fence(uid, firestore_client=firestore_client)
 
 
 def summary_ref(uid: str, *, firestore_client=None):

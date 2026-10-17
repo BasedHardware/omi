@@ -4,8 +4,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from database import funded_usage_session as usage
-from utils import funded_processing as funded
+from config import ladder_v1 as ladder_policy
+from database import funded_usage_session as usage, users as users_db
+from utils import funded_processing as funded, stt_cap_dispatch, subscription
 
 
 def test_legacy_warm_checks_read_only_current_and_once_closing_hour(monkeypatch):
@@ -52,9 +53,9 @@ def test_legacy_warm_checks_read_only_current_and_once_closing_hour(monkeypatch)
 def test_scope_reuses_admission_only_within_one_operation(monkeypatch):
     monkeypatch.setattr(funded, 'enabled', lambda: True)
     monkeypatch.setattr(funded, 'legacy_enabled', lambda: False)
-    monkeypatch.setattr(funded.users_db, 'get_user_valid_subscription', lambda uid, *, provision=False: None)
+    monkeypatch.setattr(users_db, 'get_user_valid_subscription', lambda uid, *, provision=False: None)
     gate = Mock(return_value=SimpleNamespace(managed=False))
-    monkeypatch.setattr(funded, 'funded_allowance', gate)
+    monkeypatch.setattr(stt_cap_dispatch, 'funded_allowance', gate)
     with funded.admission_scope():
         assert not funded.processing_allowed('synthetic')
         assert not funded.processing_allowed('synthetic')
@@ -75,11 +76,11 @@ def test_unlimited_legacy_plan_does_not_read_finite_usage(monkeypatch):
     def session(*args, **kwargs):
         yield SimpleNamespace(legacy=SimpleNamespace(read=reader))
 
-    monkeypatch.setattr(funded, 'budget_session', session)
+    monkeypatch.setattr(usage, 'budget_session', session)
     monkeypatch.setattr(funded, 'legacy_enabled', lambda: True)
-    monkeypatch.setattr(funded.ladder_policy, 'budget_enforcement_enabled', lambda: False)
+    monkeypatch.setattr(ladder_policy, 'budget_enforcement_enabled', lambda: False)
     monkeypatch.setattr(
-        funded, 'resolve_transcription_allowance', lambda *args, **kwargs: SimpleNamespace(managed=True)
+        subscription, 'resolve_transcription_allowance', lambda *args, **kwargs: SimpleNamespace(managed=True)
     )
     assert funded.allowance('unlimited-synthetic', subscription=SimpleNamespace(plan=PlanType.architect)).managed
     reader.assert_not_called()
@@ -103,7 +104,9 @@ def test_subscription_reporting_uses_all_counters_without_another_month_scan(mon
     def session(*args, **kwargs):
         yield SimpleNamespace(legacy=SimpleNamespace(read=reader))
 
-    monkeypatch.setattr(funded, 'budget_session', session)
-    monkeypatch.setattr(funded, 'get_monthly_usage_for_subscription', Mock(side_effect=AssertionError('uncached scan')))
+    monkeypatch.setattr(usage, 'budget_session', session)
+    monkeypatch.setattr(
+        subscription, 'get_monthly_usage_for_subscription', Mock(side_effect=AssertionError('uncached scan'))
+    )
     assert funded.monthly_usage('synthetic') == counters
     reader.assert_called_once()

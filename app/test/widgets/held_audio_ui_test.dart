@@ -220,6 +220,24 @@ void main() {
     expect(find.byKey(const Key('held_audio_upgrade')), findsOneWidget);
   });
 
+  testWidgets('inactive surfaces do not require a subscription provider', (tester) async {
+    final controller = OnDeviceTranscriptionController(
+      model: FakeOnDeviceModel(OnDeviceModelStatus(phase: OnDeviceModelPhase.installed)),
+      power: FakePhonePowerSource(),
+      manageNativeCustody: false,
+    );
+    addTearDown(controller.dispose);
+    for (final surface in <Widget>[
+      HeldAudioHomeSection(controller: controller),
+      HeldAudioLiveBanner(controller: controller),
+      HeldAudioUsageSection(controller: controller),
+    ]) {
+      await pump(tester, surface);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ProcessingBacklogView), findsNothing);
+    }
+  });
+
   testWidgets('flag off leaves the conversations list unchanged', (tester) async {
     await pump(
       tester,

@@ -6,10 +6,8 @@ import time
 from config.rate_card import recording_units_per_hour, standard_chat_units, budget_units
 from config.plan_catalog import resolve_subscription_entitlements, allocation_limit
 from datetime import datetime, timezone
-from database import processing_backlog as store
 from models.users import ProcessingBacklog
 from utils import funded_processing
-from utils.sync import cap_hold
 
 
 def defer_estimate(conversation: Any) -> dict:
@@ -27,6 +25,9 @@ def defer_estimate(conversation: Any) -> dict:
 def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> ProcessingBacklog | None:
     if not funded_processing.enabled():
         return None
+    from database import processing_backlog as store
+    from utils.sync import cap_hold
+
     allowance = allowance if allowance is not None else funded_processing.allowance(uid)
     summary = summary if summary is not None else store.read(uid)
     audio = audio if audio is not None else cap_hold.ensure_summary(uid)
@@ -62,6 +63,8 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
 def choose(uid: str, *, request_key: str, automatic: bool = False) -> dict | None:
     if not funded_processing.enabled():
         return None
+    from database import processing_backlog as store
+
     allowance = funded_processing.allowance(uid)
     result = snapshot(uid, allowance=allowance)
     if result is None:

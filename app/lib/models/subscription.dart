@@ -385,7 +385,6 @@ class ProcessingBacklog {
   final double estimatedPercent;
   final double? remainingUnits;
   final bool exceedsRemaining;
-  final int? processableCount;
 
   const ProcessingBacklog({
     required this.state,
@@ -399,7 +398,6 @@ class ProcessingBacklog {
     this.estimatedPercent = 0,
     this.remainingUnits,
     this.exceedsRemaining = false,
-    this.processableCount,
   });
 
   int get waitingSeconds => heldAudioSeconds + deferredSeconds;
@@ -409,19 +407,35 @@ class ProcessingBacklog {
   bool get isProcessing => state == 'processing';
   bool get isVisible => isCapped || isWaitingChoice || isProcessing;
 
-  factory ProcessingBacklog.fromJson(Map<String, dynamic> json) => ProcessingBacklog(
-        state: json['state'] as String? ?? 'none',
-        budgetExhausted: json['budget_exhausted'] as bool? ?? true,
-        heldAudioCount: (json['held_audio_count'] as num?)?.toInt() ?? 0,
-        heldAudioSeconds: (json['held_audio_seconds'] as num?)?.toInt() ?? 0,
-        deferredConversations: (json['deferred_conversations'] as num?)?.toInt() ?? 0,
-        deferredSeconds: (json['deferred_seconds'] as num?)?.toInt() ?? 0,
-        estimatedUnits: (json['estimated_units'] as num?)?.toDouble() ?? 0,
-        estimatedHours: (json['estimated_hours'] as num?)?.toDouble() ?? 0,
-        estimatedPercent: (json['estimated_percent'] as num?)?.toDouble() ?? 0,
-        remainingUnits: (json['remaining_units'] as num?)?.toDouble(),
-        exceedsRemaining: json['exceeds_remaining'] == true,
-        processableCount: (json['processable_count'] as num?)?.toInt(),
+  factory ProcessingBacklog.fromJson(Map<String, dynamic> json) =>
+      ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog.fromJson(json));
+
+  factory ProcessingBacklog.fromGenerated(wire.GeneratedProcessingBacklog generated) => ProcessingBacklog(
+        state: generated.state,
+        budgetExhausted: generated.budgetExhausted,
+        heldAudioCount: generated.heldAudioCount,
+        heldAudioSeconds: generated.heldAudioSeconds,
+        deferredConversations: generated.deferredConversations,
+        deferredSeconds: generated.deferredSeconds,
+        estimatedUnits: generated.estimatedUnits,
+        estimatedHours: generated.estimatedHours,
+        estimatedPercent: generated.estimatedPercent,
+        remainingUnits: generated.remainingUnits,
+        exceedsRemaining: generated.exceedsRemaining,
+      );
+
+  wire.GeneratedProcessingBacklog toGenerated() => wire.GeneratedProcessingBacklog(
+        state: state,
+        budgetExhausted: budgetExhausted,
+        heldAudioCount: heldAudioCount,
+        heldAudioSeconds: heldAudioSeconds,
+        deferredConversations: deferredConversations,
+        deferredSeconds: deferredSeconds,
+        estimatedUnits: estimatedUnits,
+        estimatedHours: estimatedHours,
+        estimatedPercent: estimatedPercent,
+        remainingUnits: remainingUnits,
+        exceedsRemaining: exceedsRemaining,
       );
 
   Map<String, dynamic> toJson() => {
@@ -436,7 +450,6 @@ class ProcessingBacklog {
         'estimated_percent': estimatedPercent,
         'remaining_units': remainingUnits,
         'exceeds_remaining': exceedsRemaining,
-        if (processableCount != null) 'processable_count': processableCount,
       };
 }
 
@@ -482,25 +495,14 @@ class UserSubscriptionResponse {
     this.processingBacklog,
   });
 
-  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
-    return UserSubscriptionResponse.fromGenerated(
-      wire.GeneratedUserSubscriptionResponse.fromJson(json),
-      processingBacklog: json['processing_backlog'] is Map<String, dynamic>
-          ? ProcessingBacklog.fromJson(json['processing_backlog'])
-          : null,
-    );
-  }
+  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
+      UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
 
-  factory UserSubscriptionResponse.fromGenerated(
-    wire.GeneratedUserSubscriptionResponse generated, {
-    ProcessingBacklog? processingBacklog,
-  }) {
+  factory UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse generated) {
     return UserSubscriptionResponse(
       subscription: Subscription.fromGenerated(generated.subscription),
-      processingBacklog: processingBacklog ??
-          (generated.toJson()['processing_backlog'] is Map<String, dynamic>
-              ? ProcessingBacklog.fromJson(generated.toJson()['processing_backlog'])
-              : null),
+      processingBacklog:
+          generated.processingBacklog == null ? null : ProcessingBacklog.fromGenerated(generated.processingBacklog!),
       transcriptionSecondsUsed: generated.transcriptionSecondsUsed,
       transcriptionSecondsLimit: generated.transcriptionSecondsLimit,
       wordsTranscribedUsed: generated.wordsTranscribedUsed,
@@ -525,6 +527,7 @@ class UserSubscriptionResponse {
   wire.GeneratedUserSubscriptionResponse toGenerated() {
     return wire.GeneratedUserSubscriptionResponse(
       subscription: subscription.toGenerated(),
+      processingBacklog: processingBacklog?.toGenerated(),
       transcriptionSecondsUsed: transcriptionSecondsUsed,
       transcriptionSecondsLimit: transcriptionSecondsLimit,
       wordsTranscribedUsed: wordsTranscribedUsed,

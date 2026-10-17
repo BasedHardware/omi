@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
+from tests.unit.memory_import_isolation import AutoMockModule
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MEMORIES_ROUTER_FILE = BACKEND_DIR / "routers" / "memories.py"
@@ -75,8 +76,10 @@ class MemoriesErrorSanitizationTests(unittest.TestCase):
 
         for mod in stub_names:
             if mod not in sys.modules:
-                mock_mod = MagicMock()
-                mock_mod.__path__ = []
+                # Preserve the root package protocol so new pure helpers can
+                # import without widening this fixture's mocked side effects.
+                mock_mod = AutoMockModule(mod) if mod == "utils" else MagicMock()
+                mock_mod.__path__ = [str(BACKEND_DIR / "utils")] if mod == "utils" else []
                 cls._stubbed_modules[mod] = mock_mod
                 sys.modules[mod] = mock_mod
 

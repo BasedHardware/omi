@@ -24,7 +24,7 @@ def allowance(remaining=130, managed=True):
 def test_flags_off_add_no_reads_or_wire_fields(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
-    monkeypatch.setattr(backlog.store, 'read', Mock(side_effect=AssertionError('read')))
+    monkeypatch.setattr(worker.store, 'read', Mock(side_effect=AssertionError('read')))
     assert backlog.snapshot('synthetic') is None
     assert backlog.choose('synthetic', request_key='synthetic-choice') is None
     app = FastAPI()
@@ -75,7 +75,7 @@ def test_upgrade_over_estimate_asks_but_explicit_choice_accepts_partial(monkeypa
         ),
     )
     start = Mock(return_value={'token': 'new'})
-    monkeypatch.setattr(backlog.store, 'start', start)
+    monkeypatch.setattr(worker.store, 'start', start)
     assert backlog.choose('synthetic', request_key='synthetic-choice', automatic=True) is None
     assert start.call_args.kwargs['begin'] is False
     start.reset_mock()
@@ -114,6 +114,43 @@ def test_all_sources_store_transcript_without_paid_pipeline(monkeypatch, source,
     assert payload['processing_deferred']
     assert payload['external_data']['processing_backlog_estimate']['units'] > 0
     assert dispositions == [pipeline.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
+
+
+@pytest.mark.parametrize('initial', [True, False])
+def test_waiting_projection_stays_display_only_and_never_overwrites_an_existing_row(monkeypatch, initial):
+    from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
+
+    now = datetime.now(timezone.utc)
+    projection = ClientProcessing(
+        schema_version=1,
+        transcript_sha256='ab' * 32,
+        structure=ProjectedStructure(title='Untrusted display sentinel'),
+        provenance=ProjectionProvenance(model_id='local', runtime='test', device_class='phone', generated_at=now),
+    )
+    fields = dict(
+        started_at=now,
+        finished_at=now + timedelta(seconds=60),
+        transcript_segments=[TranscriptSegment(is_user=True, text='Original captured words', start=0, end=60)],
+    )
+    incoming = (
+        CreateConversation(**fields)
+        if initial
+        else Conversation(id='existing', created_at=now, structured=Structured(title='Server structure'), **fields)
+    )
+    create, persist = Mock(return_value=True), Mock(return_value=True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'create_completed_conversation', create)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
+    result, _ = pipeline._store_budget_waiting('synthetic', incoming, client_projection=projection)
+    payload = (create if initial else persist).call_args.args[1]
+    assert result.client_processing == projection
+    assert 'Untrusted display sentinel' not in str(payload['structured'])
+    assert payload['processing_deferred'] is True
+    if initial:
+        assert payload['client_processing']['structure']['title'] == 'Untrusted display sentinel'
+        persist.assert_not_called()
+    else:
+        assert 'client_processing' not in payload
+        create.assert_not_called()
 
 
 def test_opening_existing_waiting_transcript_after_reset_does_not_process(monkeypatch):
@@ -234,6 +271,7 @@ async def test_previous_month_intent_cannot_spend_the_new_month(monkeypatch):
 
 
 def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(funded, 'enabled', lambda: True)
     choice = Mock(return_value={'token': 'run'})
     monkeypatch.setattr(backlog, 'choose', choice)
@@ -242,7 +280,7 @@ def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backen
     )
     monkeypatch.setattr(backlog, 'snapshot', lambda uid: snapshot)
     kicked = Mock()
-    monkeypatch.setattr(route, 'kick_processing_backlog', kicked)
+    monkeypatch.setattr(worker, 'kick', kicked)
     app = FastAPI()
     app.include_router(route.router)
     app.dependency_overrides[route.auth.get_current_user_uid] = lambda: 'synthetic'

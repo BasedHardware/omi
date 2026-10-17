@@ -1008,7 +1008,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
             processing_backlog.stage_transition(
-                transaction, uid, conversation_ref.id, existing, write_data, firestore_client=db
+                transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
             transaction.set(conversation_ref, write_data, merge=True)
             return
@@ -1016,7 +1016,9 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
-        processing_backlog.stage_transition(transaction, uid, conversation_ref.id, {}, write_data, firestore_client=db)
+        processing_backlog.stage_transition(
+            transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
+        )
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
@@ -1197,7 +1199,7 @@ def persist_processing_result_with_lifecycle(
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         processing_backlog.stage_transition(
-            transaction, uid, conversation_ref.id, existing, write_data, firestore_client=db
+            transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
@@ -1256,7 +1258,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
                 if conversation_ref.get(transaction=transaction).exists:
                     raise AlreadyExists('conversation exists')
                 processing_backlog.stage_transition(
-                    transaction, uid, conversation_ref.id, {}, conversation_data, firestore_client=db
+                    transaction, uid, conversation_data['id'], {}, conversation_data, firestore_client=db
                 )
                 transaction.create(conversation_ref, conversation_data)
 
