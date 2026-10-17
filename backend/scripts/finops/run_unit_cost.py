@@ -129,6 +129,8 @@ def validate(derived: pathlib.Path, raw: pathlib.Path, tol_pct: float, dates: li
         "llm_openai",
         "llm_anthropic",
         "stt_vendor_low",
+        "stt_soniox_measured",
+        "stt_deepgram_measured",
         "gcp_total_export",
         "one_time",
     }
@@ -241,6 +243,14 @@ def main() -> None:
                 "posthog",
                 required=False,
             )
+
+    # Provider stderr normally stays in pull.log. Surface optional skips in Cloud Logging too.
+    stt_invoice = raw / "stt_vendor_cost_daily.json"
+    if stt_invoice.exists():
+        skipped = json.loads(stt_invoice.read_text()).get("skipped", [])
+        for provider in ("soniox", "deepgram"):
+            if provider in skipped:
+                sys.stderr.write("WARNING: %s measured STT unavailable; see pull.log\n" % provider)
 
     cws = a.cohort_window_start
     with open(run / "assembly_output.md", "w") as fh:
