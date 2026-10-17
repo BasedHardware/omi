@@ -16,6 +16,8 @@ from typing import Any
 
 import yaml
 
+_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
 
 def _find_bindings(value: Any, env_name: str) -> list[Mapping[str, Any]]:
     if isinstance(value, Mapping):
@@ -187,7 +189,7 @@ def main() -> int:
     contract_document = None
     if args.runtime_env:
         try:
-            runtime_document = yaml.safe_load(args.runtime_env.read_text(encoding="utf-8"))
+            runtime_document = yaml.load(args.runtime_env.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
         except (OSError, yaml.YAMLError) as exc:
             errors.append(f"could not read runtime env manifest: {exc}")
         else:
