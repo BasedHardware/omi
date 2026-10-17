@@ -1,0 +1,3 @@
+{
+  "change": "Fixed conversations list pagination skipping a conversation after deleting a chat or removing one from the Starred filter"
+}
