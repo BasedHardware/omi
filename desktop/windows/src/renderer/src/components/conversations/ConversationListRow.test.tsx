@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ConversationListRow } from './ConversationListRow'
 import type { ConversationRow } from '../../lib/pageCache'
 import type { ConversationFolder } from '../../../../shared/types'
+import { toast } from '../../lib/toast'
+
+vi.mock('../../lib/toast', () => ({ toast: vi.fn() }))
 
 afterEach(cleanup)
 
@@ -135,6 +138,50 @@ describe('ConversationListRow right-click context menu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
     expect(h.onDelete).toHaveBeenCalledTimes(1)
     expect(h.onDelete.mock.calls[0][0]).toMatchObject({ id: 'c1' })
+  })
+
+  it('copies the cached summary and current title without loading a transcript or link', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderRowWithHandlers({
+      title: 'Renamed conversation',
+      preview: 'Transcript preview must not be exported as an overview',
+      markdownSummary: {
+        overview: 'Full cached overview.',
+        actionItems: [{ description: 'Send recap', completed: true }]
+      }
+    })
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy as Markdown' }))
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        '### 💡 Renamed conversation\n\n**Key Takeaways:**\n\nFull cached overview.\n\n**Action Items:**\n\n- [x] Send recap'
+      )
+    )
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(toast).toHaveBeenCalledWith('Summary copied', { tone: 'success' })
+  })
+
+  it('reports a clipboard rejection without claiming the summary was copied', async () => {
+    vi.mocked(toast).mockClear()
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard denied'))
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderRowWithHandlers({ markdownSummary: { overview: 'Cached' } })
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy as Markdown' }))
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Could not copy summary', {
+        tone: 'error',
+        body: 'Clipboard denied'
+      })
+    )
+    expect(toast).not.toHaveBeenCalledWith('Summary copied', expect.anything())
+  })
+
+  it('does not offer an incomplete export for an older row without cached summary metadata', () => {
+    renderRowWithHandlers({})
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Copy as Markdown' })).toBeNull()
   })
 
   it('Edit Title enters the inline rename and closes the menu', () => {
