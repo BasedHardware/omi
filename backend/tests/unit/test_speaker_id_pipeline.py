@@ -470,6 +470,14 @@ class TestDetectSpeakerFromText:
         "我们的这个",
         "我是谁",
         "我是你",
+        "我叫他过来",
+        "我叫你别去",
+        "我叫不出来",
+        "我叫什么来着",
+        "我叫外卖",
+        "我叫服务员",
+        "我是来帮忙",
+        "我是说真的",
         # Korean ordinary sentences:
         "저는 학생입니다",
         "저는 생각합니다",
@@ -478,7 +486,7 @@ class TestDetectSpeakerFromText:
     ]
 
     # Run-on / garbled transcripts where the regex captures a pronoun or filler
-    # word instead of a name — these created phantom contacts "It", "You", "Them" (#5223).
+    # word instead of a name — these created phantom contacts "It", "You", "Them" (#5223, #21427).
     STOPWORD_CASES = [
         "And I am It was great",
         "I'm You know, the guy",
@@ -487,6 +495,11 @@ class TestDetectSpeakerFromText:
         "I am Sorry about that",
         "I'm Just saying",
         "i am Gonna do it",
+        "I'm Oh really",
+        "My name is Wow",
+        "I am Mhmm",
+        "My name is Uh",
+        "I'm Hmm",
     ]
 
     @pytest.mark.parametrize("lang,text,expected_name", POSITIVE_CASES)

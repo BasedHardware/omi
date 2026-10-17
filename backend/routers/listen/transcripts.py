@@ -1564,9 +1564,9 @@ class TranscriptProcessor:
             if owner_name and name.casefold() == owner_name.casefold():
                 continue
             person = await self.host.persistence.call(user_db.get_person_by_name, self.host.request.uid, name)
-            # Only an explicit self-introduction may create a person. A bare copula
-            # ("I'm Chinese") still resolves one the user already has, so a real name
-            # keeps working, but it can no longer fill the picker with regex guesses.
+            # Only an explicit self-introduction may create or suggest a new person; a bare copula only resolves an existing one.
+            if not person and not detection.explicit:
+                continue
             may_create = self.host.request.create_speakers and detection.explicit
             person_id = person['id'] if person else (str(uuid.uuid4()) if may_create else None)
             if person_id and not person:
