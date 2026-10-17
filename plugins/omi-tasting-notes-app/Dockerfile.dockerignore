@@ -1,0 +1,7 @@
+# Keeps `docker build -f plugins/omi-tasting-notes-app/Dockerfile plugins/`
+# fast: that Dockerfile only COPYs omi-plugin-sdk/ and
+# omi-tasting-notes-app/, so the big sibling trees below never enter the
+# build context. (No other Dockerfile currently builds from plugins/.)
+hume-ai/
+logos/
+instructions/
