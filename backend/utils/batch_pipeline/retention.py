@@ -116,7 +116,26 @@ def register_batch_artifact(
             and bool(disposition.get('token'))
             and uri.endswith(f"/{disposition['token']}.enc")
         )
-        if kind != 'audio' and job.get('state') != 'leased' and not recovery_write and not disposition_write:
+        redrive = job.get('speech_redrive') or {}
+        from config.batch_pipeline import speech_empty_multilingual_enabled
+
+        redrive_write = (
+            speech_empty_multilingual_enabled()
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'failed_held'
+            and redrive.get('state') == 'running'
+            and redrive.get('paid_epoch') == 2
+            and redrive.get('privacy_generation') == expected_generation
+            and bool(redrive.get('token'))
+            and uri.endswith(f"/{redrive['token']}.enc")
+        )
+        if (
+            kind != 'audio'
+            and job.get('state') != 'leased'
+            and not recovery_write
+            and not disposition_write
+            and not redrive_write
+        ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')
