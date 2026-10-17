@@ -171,34 +171,45 @@ class Config:
 def load(path: Optional[Path] = None) -> Config:
     """Load the config from disk, returning an empty Config if the file is missing.
 
-    A malformed or undecodable TOML file also yields an empty Config rather
-    than raising, so read-only diagnostics such as ``omi version`` and
-    ``omi config path`` keep working precisely when the config needs repair.
-    The parse failure is recorded on :attr:`Config.load_error`, and
-    :func:`save` refuses to overwrite such a file so a write command cannot
+    A file that is malformed, undecodable, or unreadable altogether also yields
+    an empty Config rather than raising, so read-only diagnostics such as
+    ``omi version`` and ``omi config path`` keep working precisely when the
+    config needs repair. The reason is recorded on :attr:`Config.load_error`,
+    and :func:`save` refuses to overwrite such a file so a write command cannot
     silently destroy config the user could still repair by hand.
     """
     p = path or default_config_path()
     if not p.exists():
         return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
 
-    with p.open("rb") as fh:
-        try:
+    try:
+        with p.open("rb") as fh:
             data = tomllib.load(fh)
-        except tomllib.TOMLDecodeError as exc:
-            return Config(
-                path=p,
-                active_profile=DEFAULT_PROFILE_NAME,
-                profiles={},
-                load_error=f"config file is not valid TOML: {exc}",
-            )
-        except UnicodeDecodeError as exc:
-            return Config(
-                path=p,
-                active_profile=DEFAULT_PROFILE_NAME,
-                profiles={},
-                load_error=f"config file is not valid UTF-8: {exc}",
-            )
+    except tomllib.TOMLDecodeError as exc:
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file is not valid TOML: {exc}",
+        )
+    except UnicodeDecodeError as exc:
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file is not valid UTF-8: {exc}",
+        )
+    except OSError as exc:
+        # The file is there but we cannot read it — wrong owner after a `sudo`
+        # run, a mode the user tightened, a directory in its place. That is the
+        # state this function exists to survive, so record it like a parse
+        # failure: diagnostics keep working and save() still refuses to clobber.
+        return Config(
+            path=p,
+            active_profile=DEFAULT_PROFILE_NAME,
+            profiles={},
+            load_error=f"config file could not be read: {exc}",
+        )
 
     active = data.get("active_profile", DEFAULT_PROFILE_NAME)
     if not isinstance(active, str):
