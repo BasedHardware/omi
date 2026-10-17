@@ -326,25 +326,35 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
         return None
 
 
-def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
-    """Mark an app as disabled in Firestore due to webhook failures."""
+def disable_app_in_firestore(app_id: str, error: str, failure_hours: int, *, firestore_client: Any = None) -> bool:
+    """Mark an app as disabled in Firestore due to webhook failures with TOCTOU resilience and client injection."""
+    clean_id = (app_id or "").strip()
+    if not clean_id:
+        return False
     with _cache_lock:
-        _set_disabled_state(app_id, True)
+        _set_disabled_state(clean_id, True)
     try:
-        apps_collection = 'plugins_data'
-        app_ref = db.collection(apps_collection).document(app_id)
+        client = firestore_client or db
+        apps_collection = "plugins_data"
+        app_ref = client.collection(apps_collection).document(clean_id)
+        doc = app_ref.get()
+        if not getattr(doc, "exists", False):
+            logger.warning(f"Cannot disable non-existent app {clean_id} in Firestore")
+            return False
         app_ref.update(
             {
-                'disabled': True,
-                'disabled_reason': 'webhook_failures',
-                'disabled_at': datetime.now(timezone.utc).isoformat(),
-                'disabled_error': error[:200],
-                'disabled_failure_duration_hours': failure_hours,
+                "disabled": True,
+                "disabled_reason": "webhook_failures",
+                "disabled_at": datetime.now(timezone.utc).isoformat(),
+                "disabled_error": str(error or "")[:200],
+                "disabled_failure_duration_hours": failure_hours,
             }
         )
-        logger.info(f'Auto-disabled app {app_id} in Firestore after {failure_hours}h of webhook failures')
+        logger.info(f"Auto-disabled app {clean_id} in Firestore after {failure_hours}h of webhook failures")
+        return True
     except Exception as e:
-        logger.error(f'Failed to disable app {app_id} in Firestore: {e}')
+        logger.error(f"Failed to disable app {clean_id} in Firestore: {e}")
+        return False
 
 
 # --- Developer webhook health (per-user, per-type) ---
