@@ -36,6 +36,7 @@ import { useAppLifetimeJobs } from './lib/appLifetimeJobs'
 import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
+import { MuteReminderHost } from './components/recording/MuteReminderHost'
 import { ChatBridgeHost } from './components/chat/ChatBridgeHost'
 import { VoiceHubDriverHost } from './components/chat/VoiceHubDriverHost'
 import { UsageLimitPopup } from './components/settings/billing/UsageLimitPopup'
@@ -339,6 +340,7 @@ function App(): React.JSX.Element {
       {/* Tray state reporting + tray-driven pause. Main window only (not the
           overlay/insight-toast windows sharing this bundle). */}
       {!IS_SECONDARY_WINDOW && <TrayStateHost />}
+      {!IS_SECONDARY_WINDOW && <MuteReminderHost />}
       {!IS_SECONDARY_WINDOW && <RecordHotkeyHost />}
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
