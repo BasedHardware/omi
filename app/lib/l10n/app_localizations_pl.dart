@@ -13729,6 +13729,94 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Jeszcze nie podsumowano';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi może przekształcić tę rozmowę w przegląd, kluczowe punkty i zadania.';
+
+  @override
+  String get summaryWithOmi => 'Podsumuj z Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Podsumuj z $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Użyj innego szablonu';
+
+  @override
+  String get summaryFromTheTranscript => 'Z transkrypcji';
+
+  @override
+  String get summaryReadFullTranscript => 'Przeczytaj pełną transkrypcję';
+
+  @override
+  String get summarySheetTitle => 'Podsumuj za pomocą';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Przegląd, kluczowe punkty i zadania';
+
+  @override
+  String get summaryYourTemplates => 'Twoje szablony';
+
+  @override
+  String get summarySuggestedTemplates => 'Sugerowane dla tej rozmowy';
+
+  @override
+  String get summaryBrowseTemplates => 'Przeglądaj szablony';
+
+  @override
+  String get summaryCreateYourOwn => 'Utwórz własny';
+
+  @override
+  String get summaryUseForNewConversations => 'Ustaw jako domyślny';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Nie udało się wczytać Twoich szablonów. Omi nadal działa.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Nie dodano jeszcze żadnych szablonów. Przejrzyj kilka lub utwórz własny.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Podsumowywanie z $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nie może dokończyć';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Szablon nie zwrócił podsumowania tej rozmowy.';
+
+  @override
+  String get summaryWithOmiInstead => 'Zamiast tego podsumuj z Omi';
+
+  @override
+  String get summaryBusyTitle => 'Trwa przetwarzanie';
+
+  @override
+  String get summaryBusyBody => 'Omi już pracuje nad tą rozmową. Podsumowanie pojawi się tutaj po zakończeniu.';
+
+  @override
+  String get summaryCheckAgain => 'Sprawdź ponownie';
+
+  @override
+  String get summaryLimitTitle => 'Osiągnięto limit podsumowań';
+
+  @override
+  String get summaryLimitBody =>
+      'W ciągu ostatniej godziny kilkakrotnie wygenerowano ponownie podsumowania. Spróbuj ponownie później.';
+
+  @override
+  String get summaryFailedTitle => 'Nie udało się podsumować';
+
+  @override
+  String get summaryFailedBody => 'Coś poszło nie tak podczas podsumowywania tej rozmowy.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

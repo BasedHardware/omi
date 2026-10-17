@@ -13686,6 +13686,93 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'এখনও সারসংক্ষেপ করা হয়নি';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi এই কথোপকথনটিকে একটি ওভারভিউ, মূল বিষয় এবং করণীয় কাজে রূপান্তর করতে পারে।';
+
+  @override
+  String get summaryWithOmi => 'Omi দিয়ে সারসংক্ষেপ করুন';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name দিয়ে সারসংক্ষেপ করুন';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'অন্য টেমপ্লেট ব্যবহার করুন';
+
+  @override
+  String get summaryFromTheTranscript => 'ট্রান্সক্রিপ্ট থেকে';
+
+  @override
+  String get summaryReadFullTranscript => 'সম্পূর্ণ ট্রান্সক্রিপ্ট পড়ুন';
+
+  @override
+  String get summarySheetTitle => 'সারসংক্ষেপ করুন যা দিয়ে';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'ওভারভিউ, মূল বিষয় এবং করণীয় কাজ';
+
+  @override
+  String get summaryYourTemplates => 'আপনার টেমপ্লেট';
+
+  @override
+  String get summarySuggestedTemplates => 'এই কথোপকথনের জন্য প্রস্তাবিত';
+
+  @override
+  String get summaryBrowseTemplates => 'টেমপ্লেট ব্রাউজ করুন';
+
+  @override
+  String get summaryCreateYourOwn => 'নিজের তৈরি করুন';
+
+  @override
+  String get summaryUseForNewConversations => 'এটিকে আমার ডিফল্ট করুন';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'আপনার টেমপ্লেট লোড করা যায়নি। Omi এখনও কাজ করছে।';
+
+  @override
+  String get summaryNoTemplatesYet => 'আপনি এখনও কোনো টেমপ্লেট যোগ করেননি। কয়েকটি ব্রাউজ করুন বা নিজের তৈরি করুন।';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name দিয়ে সারসংক্ষেপ করা হচ্ছে…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name শেষ করতে পারেনি';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'টেমপ্লেটটি এই কথোপকথনের জন্য কোনো সারসংক্ষেপ দেয়নি।';
+
+  @override
+  String get summaryWithOmiInstead => 'বরং Omi দিয়ে সারসংক্ষেপ করুন';
+
+  @override
+  String get summaryBusyTitle => 'এখনও প্রক্রিয়া চলছে';
+
+  @override
+  String get summaryBusyBody => 'Omi ইতিমধ্যে এই কথোপকথনে কাজ করছে। শেষ হলে সারসংক্ষেপ এখানে দেখা যাবে।';
+
+  @override
+  String get summaryCheckAgain => 'আবার দেখুন';
+
+  @override
+  String get summaryLimitTitle => 'সারসংক্ষেপের সীমা পূর্ণ হয়েছে';
+
+  @override
+  String get summaryLimitBody => 'আপনি গত এক ঘণ্টায় একাধিক সারসংক্ষেপ পুনরায় তৈরি করেছেন। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get summaryFailedTitle => 'সারসংক্ষেপ করা যায়নি';
+
+  @override
+  String get summaryFailedBody => 'এই কথোপকথনের সারসংক্ষেপ করার সময় কিছু ভুল হয়েছে।';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

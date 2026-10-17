@@ -13719,6 +13719,93 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Še ni povzeto';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi lahko ta pogovor pretvori v pregled, ključne točke in naloge.';
+
+  @override
+  String get summaryWithOmi => 'Povzemi z Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Povzemi z $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Uporabi drugo predlogo';
+
+  @override
+  String get summaryFromTheTranscript => 'Iz prepisa';
+
+  @override
+  String get summaryReadFullTranscript => 'Preberi celoten prepis';
+
+  @override
+  String get summarySheetTitle => 'Povzemi z';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Pregled, ključne točke in naloge';
+
+  @override
+  String get summaryYourTemplates => 'Vaše predloge';
+
+  @override
+  String get summarySuggestedTemplates => 'Predlagano za ta pogovor';
+
+  @override
+  String get summaryBrowseTemplates => 'Prebrskaj predloge';
+
+  @override
+  String get summaryCreateYourOwn => 'Ustvari svojo';
+
+  @override
+  String get summaryUseForNewConversations => 'Nastavi kot privzeto';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Vaših predlog ni bilo mogoče naložiti. Omi še vedno deluje.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Dodali še niste nobene predloge. Prebrskajte nekaj ali ustvarite svojo.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Povzemanje z $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ni mogel dokončati';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Predloga za ta pogovor ni vrnila povzetka.';
+
+  @override
+  String get summaryWithOmiInstead => 'Raje povzemi z Omi';
+
+  @override
+  String get summaryBusyTitle => 'Obdelava še poteka';
+
+  @override
+  String get summaryBusyBody => 'Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.';
+
+  @override
+  String get summaryCheckAgain => 'Preveri znova';
+
+  @override
+  String get summaryLimitTitle => 'Dosežena omejitev povzetkov';
+
+  @override
+  String get summaryLimitBody => 'V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.';
+
+  @override
+  String get summaryFailedTitle => 'Povzemanje ni uspelo';
+
+  @override
+  String get summaryFailedBody => 'Pri povzemanju tega pogovora je prišlo do napake.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

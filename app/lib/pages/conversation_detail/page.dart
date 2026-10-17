@@ -24,6 +24,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
@@ -234,6 +235,20 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         ConversationTab.summary => _summaryTabIndex,
       };
 
+  void _openTranscriptTab() {
+    _hasExplicitTabSelection = true;
+    setState(() => selectedTab = ConversationTab.transcript);
+    _controller?.animateTo(_transcriptTabIndex);
+  }
+
+  /// Brings the Summary tab forward. A reprocess started elsewhere (the ⋯ menu on Transcript,
+  /// a failed-transcript retry) shows its progress and, with the v2 gate, its failure card there.
+  void _openSummaryTab() {
+    _hasExplicitTabSelection = true;
+    setState(() => selectedTab = ConversationTab.summary);
+    _controller?.animateTo(_summaryTabIndex);
+  }
+
   void _createTabController({required int initialIndex}) {
     _controller = TabController(length: 2, vsync: this, initialIndex: initialIndex);
     _controller!.addListener(_onTabChanged);
@@ -261,6 +276,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
     );
     unawaited(SiriIntegration.instance.donateUiAction('conversation', widget.conversation.id));
+    unawaited(SummaryGenerationV2Gate.refresh());
 
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
@@ -571,8 +587,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         _copyContent(context, provider.conversation.getTranscript(generate: true), context.l10n.transcript);
         break;
       case 'copy_summary':
-        final conversation = provider.conversation;
-        _copyContent(context, ConversationSummarySelection.select(conversation).content, context.l10n.summary);
+        // Copy the source the reader put on screen (a chip can show Omi while the canonical
+        // selection is still a template's result), not the canonical selection.
+        _copyContent(context, provider.getDisplayedSummarySelection().content, context.l10n.summary);
         break;
       case 'download_audio':
         await _downloadAudio(context, provider);
@@ -586,6 +603,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
           ConnectivityProvider.showNoInternetDialog(context);
           break;
         }
+        // The Summary tab is the single progress and (with the v2 gate) failure surface, so a
+        // request started from the ⋯ menu while Transcript is open moves there.
+        _openSummaryTab();
         await provider.reprocessConversation();
         break;
       case 'link_event':
@@ -1094,6 +1114,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       showError: (error) {
         switch (error) {
           case 'REPROCESS_FAILED':
+            // The redesigned Summary tab explains the failure in place, with its own actions.
+            if (SummaryGenerationV2Gate.isEnabled) break;
             // The provider is shared: a reprocess started on another conversation can fail after
             // the reader opened this one. Report only this page's own failure, and retry only it.
             final failedId = detailProvider.lastFailedReprocessConversationId;
@@ -1105,6 +1127,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
               actionLabel: context.l10n.tryAgain,
               onAction: () {
                 if (detailProvider.conversationOrNull?.id == failedId) {
+                  // The failure card explaining the retry lives on the Summary tab.
+                  _openSummaryTab();
                   detailProvider.reprocessConversation(appId: appId);
                 }
               },
@@ -1116,8 +1140,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       },
       showInfo: (info) {
         switch (info) {
-          case 'REPROCESS_STARTED':
-            OmiFeedback.progress(context, context.l10n.reprocessingConversationProgress);
           case 'REPROCESS_SUCCESS':
             if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
               OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
@@ -1153,7 +1175,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                     // Title and facts, shared by both tabs (#17297), then the tab row (v3).
                     ConversationDetailHeader(onOpenRecordings: _openRecordings),
                     ConversationDetailTabs(controller: _controller!, onTap: (_) => _hasExplicitTabSelection = true),
-                    const ConversationActivityStrip(),
+                    ConversationActivityStrip(summaryTabVisible: selectedTab == ConversationTab.summary),
                     Expanded(
                       // Each tab owns the page's side margin, so a section can scroll edge to edge
                       // (the Summary tab's screenshot strip) instead of clipping at the margin.
@@ -1182,6 +1204,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                            onOpenTranscript: _openTranscriptTab,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),

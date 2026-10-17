@@ -722,6 +722,61 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
         self.assertIn("one point per day", panel["description"])
 
+    def test_margin_by_plan_sits_beside_unit_economics(self):
+        from build_wall_dashboard import FREE, PLAN_NAMES
+        board = load("omi-tv-v2")
+        panel = next(p for p in board["panels"] if p["title"] == "Margin by plan")
+        unit = next(p for p in board["panels"] if p["title"] == "Unit economics")
+        self.assertEqual(panel["gridPos"]["y"], unit["gridPos"]["y"])
+        self.assertEqual(panel["gridPos"]["h"], unit["gridPos"]["h"])
+        self.assertEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], unit["gridPos"]["x"])
+        target = panel["targets"][0]
+        self.assertTrue(target["url"].endswith("/health"))
+        self.assertEqual(target["root_selector"], "frames.marginByPlan")
+        fields = [c["selector"] for c in target["columns"]]
+        for key in PLAN_NAMES:  # paid plans as margin %, $/day in the tooltip
+            for suffix in ("Pct", "Revenue", "Cost", "Margin"):
+                self.assertIn(key + suffix, fields)
+        self.assertIn("basicMargin", fields)
+        self.assertIn("unattributedCost", fields)  # its own row, never folded in
+        self.assertEqual(set(PLAN_NAMES), {"unlimited", "unlimited_v2", "operator", "plus", "architect"})
+        styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
+                  for o in panel["fieldConfig"]["overrides"]}
+        # Free: negative $/day bars on their own centred axis.
+        free = styled[FREE]
+        self.assertEqual((free["unit"], free["custom.drawStyle"], free["custom.axisPlacement"]),
+                         ("currencyUSD", "bars", "right"))
+        self.assertTrue(free["custom.axisCenteredZero"])
+        custom = panel["fieldConfig"]["defaults"]["custom"]
+        self.assertEqual(panel["fieldConfig"]["defaults"]["unit"], "percent")
+        self.assertTrue(custom["axisCenteredZero"])
+        self.assertFalse(custom["spanNulls"])
+        self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
+        # Tooltip rows: drawn invisibly on their own hidden scale (Grafana 13 drops
+        # viz-hidden fields from the tooltip).
+        money = styled["Neo revenue/day"]
+        self.assertEqual(money["custom.hideFrom"], {"legend": True, "tooltip": False, "viz": False})
+        self.assertEqual((money["custom.lineWidth"], money["custom.fillOpacity"], money["custom.axisPlacement"]),
+                         (0, 0, "hidden"))
+        self.assertNotIn("min", free)  # Free keeps its own centred, data-fitted axis
+        for phrase in ("Allocated estimate", "cost-active user-days", "speech seconds", "point-in-time snapshot",
+                       "~3 days back"):
+            self.assertIn(phrase, panel["description"])
+        status = next(p for p in board["panels"] if p["targets"][0]["root_selector"] == "frames.marginStatus")
+        self.assertEqual(status["gridPos"], {**panel["gridPos"], "y": panel["gridPos"]["y"] + panel["gridPos"]["h"],
+                                             "h": 1})
+
+    def test_cost_estimates_are_dated_like_the_api(self):
+        import re
+        from build_wall_dashboard import ESTIMATES_AS_OF
+        source = (HERE.parent / "lib/wall-cost.ts").read_text()
+        self.assertEqual(re.search(r'STT_AS_OF = "([\d-]+)"', source).group(1), ESTIMATES_AS_OF)
+        self.assertEqual(re.search(r'SAAS_AS_OF = "([\d-]+)"', source).group(1), ESTIMATES_AS_OF)
+        board = load("omi-tv-v2")
+        for title in ("Health", "Cost vs revenue"):
+            panel = next(p for p in board["panels"] if p["title"] == title)
+            self.assertIn(f"estimate as of {ESTIMATES_AS_OF}", panel["description"])
+
     def test_platform_hues_mean_platforms(self):
         from build_wall_dashboard import PLATFORM
         board = load("omi-tv-v2")

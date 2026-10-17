@@ -13744,6 +13744,94 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Még nincs összefoglalva';
+
+  @override
+  String get summaryEmptyStateBody => 'Az Omi áttekintéssé, kulcspontokká és teendőkké alakíthatja ezt a beszélgetést.';
+
+  @override
+  String get summaryWithOmi => 'Összefoglalás az Omival';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Összefoglalás ezzel: $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Másik sablon használata';
+
+  @override
+  String get summaryFromTheTranscript => 'Az átiratból';
+
+  @override
+  String get summaryReadFullTranscript => 'Teljes átirat olvasása';
+
+  @override
+  String get summarySheetTitle => 'Összefoglalás ezzel:';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Áttekintés, kulcspontok és teendők';
+
+  @override
+  String get summaryYourTemplates => 'Saját sablonok';
+
+  @override
+  String get summarySuggestedTemplates => 'Javasolt ehhez a beszélgetéshez';
+
+  @override
+  String get summaryBrowseTemplates => 'Sablonok böngészése';
+
+  @override
+  String get summaryCreateYourOwn => 'Saját létrehozása';
+
+  @override
+  String get summaryUseForNewConversations => 'Legyen ez az alapértelmezett';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Nem sikerült betölteni a sablonjaidat. Az Omi továbbra is működik.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Még nem adtál hozzá sablont. Böngéssz közülük, vagy készíts sajátot.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Összefoglalás ezzel: $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name: nem sikerült befejezni';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'A sablon nem adott vissza összefoglalót ehhez a beszélgetéshez.';
+
+  @override
+  String get summaryWithOmiInstead => 'Összefoglalás inkább az Omival';
+
+  @override
+  String get summaryBusyTitle => 'Feldolgozás folyamatban';
+
+  @override
+  String get summaryBusyBody =>
+      'Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.';
+
+  @override
+  String get summaryCheckAgain => 'Újbóli ellenőrzés';
+
+  @override
+  String get summaryLimitTitle => 'Elérted az összefoglalók korlátját';
+
+  @override
+  String get summaryLimitBody => 'Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.';
+
+  @override
+  String get summaryFailedTitle => 'Nem sikerült összefoglalni';
+
+  @override
+  String get summaryFailedBody => 'Hiba történt a beszélgetés összefoglalása közben.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

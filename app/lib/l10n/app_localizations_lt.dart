@@ -13714,6 +13714,94 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Dar nesantraukta';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi gali paversti šį pokalbį apžvalga, pagrindiniais punktais ir užduotimis.';
+
+  @override
+  String get summaryWithOmi => 'Apibendrinti su Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Apibendrinti su $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Naudoti kitą šabloną';
+
+  @override
+  String get summaryFromTheTranscript => 'Iš transkripcijos';
+
+  @override
+  String get summaryReadFullTranscript => 'Skaityti visą transkripciją';
+
+  @override
+  String get summarySheetTitle => 'Apibendrinti su';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Apžvalga, pagrindiniai punktai ir užduotys';
+
+  @override
+  String get summaryYourTemplates => 'Jūsų šablonai';
+
+  @override
+  String get summarySuggestedTemplates => 'Siūloma šiam pokalbiui';
+
+  @override
+  String get summaryBrowseTemplates => 'Naršyti šablonus';
+
+  @override
+  String get summaryCreateYourOwn => 'Sukurti savo';
+
+  @override
+  String get summaryUseForNewConversations => 'Nustatyti kaip numatytąjį';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Nepavyko įkelti jūsų šablonų. Omi vis tiek veikia.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Dar nepridėjote jokių šablonų. Peržiūrėkite kelis arba sukurkite savo.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Apibendrinama su $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nepavyko užbaigti';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Šablonas nepateikė šio pokalbio santraukos.';
+
+  @override
+  String get summaryWithOmiInstead => 'Verčiau apibendrinti su Omi';
+
+  @override
+  String get summaryBusyTitle => 'Vis dar apdorojama';
+
+  @override
+  String get summaryBusyBody => 'Omi jau apdoroja šį pokalbį. Santrauka bus parodyta čia, kai bus baigta.';
+
+  @override
+  String get summaryCheckAgain => 'Tikrinti dar kartą';
+
+  @override
+  String get summaryLimitTitle => 'Pasiektas santraukų limitas';
+
+  @override
+  String get summaryLimitBody =>
+      'Per pastarąją valandą kelis kartus iš naujo sugeneravote santraukas. Bandykite vėliau.';
+
+  @override
+  String get summaryFailedTitle => 'Nepavyko apibendrinti';
+
+  @override
+  String get summaryFailedBody => 'Apibendrinant šį pokalbį kažkas nutiko.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

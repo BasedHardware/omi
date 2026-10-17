@@ -13776,6 +13776,96 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Δεν έχει γίνει ακόμα σύνοψη';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Το Omi μπορεί να μετατρέψει αυτή τη συνομιλία σε επισκόπηση, βασικά σημεία και εργασίες.';
+
+  @override
+  String get summaryWithOmi => 'Σύνοψη με το Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Σύνοψη με $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Χρήση άλλου προτύπου';
+
+  @override
+  String get summaryFromTheTranscript => 'Από την απομαγνητοφώνηση';
+
+  @override
+  String get summaryReadFullTranscript => 'Ανάγνωση πλήρους απομαγνητοφώνησης';
+
+  @override
+  String get summarySheetTitle => 'Σύνοψη με';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Επισκόπηση, βασικά σημεία και εργασίες';
+
+  @override
+  String get summaryYourTemplates => 'Τα πρότυπά σας';
+
+  @override
+  String get summarySuggestedTemplates => 'Προτεινόμενα για αυτή τη συνομιλία';
+
+  @override
+  String get summaryBrowseTemplates => 'Περιήγηση στα πρότυπα';
+
+  @override
+  String get summaryCreateYourOwn => 'Δημιουργία δικού σας';
+
+  @override
+  String get summaryUseForNewConversations => 'Ορισμός ως προεπιλογής μου';
+
+  @override
+  String get summaryTemplatesLoadFailed =>
+      'Δεν ήταν δυνατή η φόρτωση των προτύπων σας. Το Omi εξακολουθεί να λειτουργεί.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Δεν έχετε προσθέσει ακόμα πρότυπα. Δείτε μερικά ή δημιουργήστε το δικό σας.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Σύνοψη με $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return 'Το $name δεν μπόρεσε να ολοκληρωθεί';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Το πρότυπο δεν επέστρεψε σύνοψη για αυτή τη συνομιλία.';
+
+  @override
+  String get summaryWithOmiInstead => 'Σύνοψη με το Omi αντί αυτού';
+
+  @override
+  String get summaryBusyTitle => 'Η επεξεργασία συνεχίζεται';
+
+  @override
+  String get summaryBusyBody =>
+      'Το Omi επεξεργάζεται ήδη αυτή τη συνομιλία. Η σύνοψη θα εμφανιστεί εδώ μόλις ολοκληρωθεί.';
+
+  @override
+  String get summaryCheckAgain => 'Νέος έλεγχος';
+
+  @override
+  String get summaryLimitTitle => 'Συμπληρώθηκε το όριο συνόψεων';
+
+  @override
+  String get summaryLimitBody => 'Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get summaryFailedTitle => 'Δεν ήταν δυνατή η σύνοψη';
+
+  @override
+  String get summaryFailedBody => 'Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

@@ -13790,6 +13790,97 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Noch nicht zusammengefasst';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi kann aus diesem Gespräch einen Überblick, Kernpunkte und Aufgaben erstellen.';
+
+  @override
+  String get summaryWithOmi => 'Mit Omi zusammenfassen';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Mit $name zusammenfassen';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Andere Vorlage verwenden';
+
+  @override
+  String get summaryFromTheTranscript => 'Aus dem Transkript';
+
+  @override
+  String get summaryReadFullTranscript => 'Ganzes Transkript lesen';
+
+  @override
+  String get summarySheetTitle => 'Zusammenfassen mit';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Überblick, Kernpunkte und Aufgaben';
+
+  @override
+  String get summaryYourTemplates => 'Deine Vorlagen';
+
+  @override
+  String get summarySuggestedTemplates => 'Vorgeschlagen für dieses Gespräch';
+
+  @override
+  String get summaryBrowseTemplates => 'Vorlagen durchsuchen';
+
+  @override
+  String get summaryCreateYourOwn => 'Eigene erstellen';
+
+  @override
+  String get summaryUseForNewConversations => 'Als Standard festlegen';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Deine Vorlagen konnten nicht geladen werden. Omi funktioniert trotzdem.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Du hast noch keine Vorlagen hinzugefügt. Sieh dir einige an oder erstelle eine eigene.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Wird mit $name zusammengefasst…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name konnte nicht abschließen';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Die Vorlage hat für dieses Gespräch keine Zusammenfassung geliefert.';
+
+  @override
+  String get summaryWithOmiInstead => 'Stattdessen mit Omi zusammenfassen';
+
+  @override
+  String get summaryBusyTitle => 'Wird noch verarbeitet';
+
+  @override
+  String get summaryBusyBody =>
+      'Omi arbeitet bereits an diesem Gespräch. Die Zusammenfassung erscheint hier, sobald sie fertig ist.';
+
+  @override
+  String get summaryCheckAgain => 'Erneut prüfen';
+
+  @override
+  String get summaryLimitTitle => 'Limit für Zusammenfassungen erreicht';
+
+  @override
+  String get summaryLimitBody =>
+      'Du hast in der letzten Stunde mehrere Zusammenfassungen neu erstellt. Versuche es später erneut.';
+
+  @override
+  String get summaryFailedTitle => 'Zusammenfassung fehlgeschlagen';
+
+  @override
+  String get summaryFailedBody => 'Beim Zusammenfassen dieses Gesprächs ist ein Fehler aufgetreten.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

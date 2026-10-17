@@ -51,6 +51,6 @@ def run_enrichment(
             from utils.sync.pipeline import _reprocess_conversation_after_update  # type: ignore[reportPrivateUsage]
 
             callback = _reprocess_conversation_after_update
-        callback(uid, conversation_id, language)
+        return callback(uid, conversation_id, language)
 
     return reprocess.run(document_id, task_token, enrich, now=now)

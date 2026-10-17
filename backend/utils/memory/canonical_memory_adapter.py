@@ -9,13 +9,16 @@ import json
 import logging
 import secrets
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Collection, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
 from database.firestore_index_registry import UNIVERSAL_CANONICAL_LIST_SCAN_QUERY
@@ -3742,6 +3745,38 @@ def _run_immediate_privacy_cleanup(
         )
 
 
+@dataclass
+class _DeferredCanonicalPrivacyFinalization:
+    uid: str
+    db_client: Any
+    memory_ids: List[str]
+
+
+_DEFERRED_CANONICAL_PRIVACY_FINALIZATION: ContextVar[Optional[_DeferredCanonicalPrivacyFinalization]] = ContextVar(
+    "deferred_canonical_privacy_finalization", default=None
+)
+
+
+@contextmanager
+def defer_conversation_privacy_finalization(uid: str, *, db_client: Any) -> Iterator[List[str]]:
+    """Keep retry tombstones until MemoryService purges the complete task set.
+
+    Only provider-proven IDs are collected; no history read is cached. Bind
+    the scope to both the user and client so nested work cannot enlist a
+    different account or database in this task's finalization. The
+    caller must run the mandatory final projection purge after this scope and
+    before removing source-replacement receipts. On failure, both the durable
+    tombstones and receipts remain available to reconstruct cleanup on retry.
+    """
+    client = db_client if db_client is not None else default_db_client
+    pending = _DeferredCanonicalPrivacyFinalization(uid, client, [])
+    token = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.set(pending)
+    try:
+        yield pending.memory_ids
+    finally:
+        _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.reset(token)
+
+
 def purge_canonical_memory_projections(
     uid: str,
     memory_ids: List[str],
@@ -3755,6 +3790,7 @@ def purge_canonical_memory_projections(
 ) -> None:
     """Fail closed until every content-bearing canonical projection is gone."""
 
+    coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
     unique_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
     for memory_id in unique_ids:
         if revalidate_gate:
@@ -3777,7 +3813,9 @@ def purge_canonical_memory_projections(
             gate_kind=gate_kind,
             reason=reason,
             db_client=db_client,
-            include_legacy_commits=True,
+            # Review/correction cleanup stays live. Only its redundant history
+            # walk is omitted; the mandatory finalizer performs a fresh purge.
+            include_legacy_commits=not coalesce,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
     if revalidate_gate:
@@ -3787,6 +3825,16 @@ def purge_canonical_memory_projections(
 
     if revalidate_gate:
         assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
+    pending = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.get() if coalesce else None
+    if (
+        pending is not None
+        and pending.uid == uid
+        and pending.db_client is (db_client if db_client is not None else default_db_client)
+        and gate_kind == "explicit_memory_deletion"
+        and preserve_source_replacement_receipts
+    ):
+        pending.memory_ids[:] = list(dict.fromkeys(pending.memory_ids + unique_ids))
+        return
     finalize_canonical_privacy_tombstones(
         uid,
         unique_ids,

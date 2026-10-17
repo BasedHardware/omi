@@ -13723,6 +13723,93 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Яшчэ не падсумавана';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi можа ператварыць гэту размову ў агляд, ключавыя моманты і задачы.';
+
+  @override
+  String get summaryWithOmi => 'Падсумаваць з Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Падсумаваць з $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Выкарыстаць іншы шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'З транскрыпцыі';
+
+  @override
+  String get summaryReadFullTranscript => 'Чытаць поўную транскрыпцыю';
+
+  @override
+  String get summarySheetTitle => 'Падсумаваць з дапамогай';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Агляд, ключавыя моманты і задачы';
+
+  @override
+  String get summaryYourTemplates => 'Вашы шаблоны';
+
+  @override
+  String get summarySuggestedTemplates => 'Прапанаваныя для гэтай размовы';
+
+  @override
+  String get summaryBrowseTemplates => 'Праглядзець шаблоны';
+
+  @override
+  String get summaryCreateYourOwn => 'Стварыць свой';
+
+  @override
+  String get summaryUseForNewConversations => 'Зрабіць гэта прадвызначаным';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Не ўдалося загрузіць вашы шаблоны. Omi усё яшчэ працуе.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Вы яшчэ не дадалі ніводнага шаблону. Праглядзіце некалькі або стварыце свой.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Падсумоўванне з $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name не ўдалося завяршыць';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблон не вярнуў падсумавання для гэтай размовы.';
+
+  @override
+  String get summaryWithOmiInstead => 'Падсумаваць з Omi замест гэтага';
+
+  @override
+  String get summaryBusyTitle => 'Усё яшчэ апрацоўваецца';
+
+  @override
+  String get summaryBusyBody => 'Omi ужо працуе над гэтай размовай. Падсумаванне з\'явіцца тут, калі будзе гатова.';
+
+  @override
+  String get summaryCheckAgain => 'Праверыць зноў';
+
+  @override
+  String get summaryLimitTitle => 'Дасягнуты ліміт падсумаванняў';
+
+  @override
+  String get summaryLimitBody => 'За апошнюю гадзіну вы некалькі разоў перастваралі падсумаванні. Паспрабуйце пазней.';
+
+  @override
+  String get summaryFailedTitle => 'Не ўдалося падсумаваць';
+
+  @override
+  String get summaryFailedBody => 'Падчас падсумоўвання гэтай размовы нешта пайшло не так.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

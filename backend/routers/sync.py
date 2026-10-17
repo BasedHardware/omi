@@ -15,6 +15,8 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from config.summary_guarantee import repair_enabled as summary_repair_enabled
+from services import summary_debt_repair
 from config.batch_pipeline import enabled_for as batch_enabled_for
 from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
 from models.sync_job_status import (
@@ -178,6 +180,7 @@ from utils.sync.backfill import (
     retry_after_next_utc_day,
     try_acquire_backfill_slot,
 )
+from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
@@ -1013,6 +1016,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
     )
+    record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
         _capture_matches_server_conversation,
@@ -1020,6 +1024,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
         client_device_context.client_device_id,
+        snapshot_out=record_snapshot,
     )
     lane_decision = classify_sync_lane(
         filenames,
@@ -1165,7 +1170,23 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
-        if batch_enabled_for(uid):
+        record_response = await registered_record_response(
+            uid=uid,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            content_id=content_id,
+            paths=paths,
+            source=source.value,
+            client_device_id=client_device_context.client_device_id,
+            byok_enabled=byok_enabled,
+            recording_session_id=recording_session_id,
+            loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+        )
+        if isinstance(record_response, JSONResponse):
+            return record_response
+
+        if record_response is RecordUploadRoute.BATCH or (
+            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
+        ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
@@ -1193,6 +1214,7 @@ async def sync_local_files_v2(
                     'capture_evidence_claims': capture_claims,
                     'raw_capture_paths': archive_paths,
                 },
+                record_router=registered_record_response,
             )
             if batch_response is not None:
                 return batch_response
@@ -1903,6 +1925,17 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
             repair = {'repaired': 0, 'error': 1}
         outcomes['reprocess_repaired'] = repair['repaired']
         outcomes['reprocess_repair_errors'] = repair['error']
+        if summary_repair_enabled():
+            # Only the scheduled two-minute owner scans conversation debt.
+            # Batch pumps replay the outbox without paying a per-pump cursor read.
+            try:
+                summary = await run_blocking(db_executor, summary_debt_repair.tick)
+            except Exception as error:
+                logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
+                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+            outcomes['summary_debt_scanned'] = summary['scanned']
+            outcomes['summary_debt_admitted'] = summary['admitted']
+            outcomes['summary_debt_errors'] = summary['errors']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

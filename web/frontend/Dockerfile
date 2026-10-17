@@ -9,7 +9,9 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app/web/frontend
 
 # Copy only the lock and package files
-COPY web/frontend/package.json web/frontend/yarn.lock* web/frontend/package-lock.json* web/frontend/pnpm-lock.yaml* ./
+COPY web/frontend/package.json web/frontend/.npmrc web/frontend/yarn.lock* web/frontend/package-lock.json* web/frontend/pnpm-lock.yaml* ./
+
+COPY web/packages/note-shared /app/web/packages/note-shared
 
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
@@ -23,7 +25,6 @@ FROM base AS builder
 WORKDIR /app/web/frontend
 COPY --from=deps /app/web/frontend/node_modules ./node_modules
 COPY web/frontend .
-COPY web/shared /app/web/shared
 
 ARG NEXT_PUBLIC_FIREBASE_API_KEY
 ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN

@@ -13697,6 +13697,94 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'अद्याप सारांश केलेला नाही';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi हे संभाषण आढावा, महत्त्वाचे मुद्दे आणि कृती आयटममध्ये बदलू शकते.';
+
+  @override
+  String get summaryWithOmi => 'Omi ने सारांश करा';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name ने सारांश करा';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'दुसरा टेम्पलेट वापरा';
+
+  @override
+  String get summaryFromTheTranscript => 'ट्रान्सक्रिप्टमधून';
+
+  @override
+  String get summaryReadFullTranscript => 'संपूर्ण ट्रान्सक्रिप्ट वाचा';
+
+  @override
+  String get summarySheetTitle => 'याने सारांश करा';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'आढावा, महत्त्वाचे मुद्दे आणि कृती आयटम';
+
+  @override
+  String get summaryYourTemplates => 'तुमचे टेम्पलेट';
+
+  @override
+  String get summarySuggestedTemplates => 'या संभाषणासाठी सुचवलेले';
+
+  @override
+  String get summaryBrowseTemplates => 'टेम्पलेट ब्राउझ करा';
+
+  @override
+  String get summaryCreateYourOwn => 'स्वतःचा तयार करा';
+
+  @override
+  String get summaryUseForNewConversations => 'हे माझे डीफॉल्ट करा';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'तुमचे टेम्पलेट लोड करता आले नाहीत. Omi अजूनही काम करते.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'तुम्ही अद्याप कोणतेही टेम्पलेट जोडलेले नाहीत. काही ब्राउझ करा किंवा स्वतःचा तयार करा.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name ने सारांश करत आहे…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name पूर्ण करू शकले नाही';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'टेम्पलेटने या संभाषणाचा सारांश दिला नाही.';
+
+  @override
+  String get summaryWithOmiInstead => 'त्याऐवजी Omi ने सारांश करा';
+
+  @override
+  String get summaryBusyTitle => 'अजूनही प्रक्रिया सुरू आहे';
+
+  @override
+  String get summaryBusyBody => 'Omi आधीच या संभाषणावर काम करत आहे. पूर्ण झाल्यावर सारांश येथे दिसेल.';
+
+  @override
+  String get summaryCheckAgain => 'पुन्हा तपासा';
+
+  @override
+  String get summaryLimitTitle => 'सारांश मर्यादा गाठली';
+
+  @override
+  String get summaryLimitBody => 'तुम्ही गेल्या तासात अनेक सारांश पुन्हा तयार केले आहेत. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get summaryFailedTitle => 'सारांश करता आला नाही';
+
+  @override
+  String get summaryFailedBody => 'हे संभाषण सारांशित करताना काहीतरी चूक झाली.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

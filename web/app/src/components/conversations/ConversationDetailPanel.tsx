@@ -23,7 +23,7 @@ import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { ActionItemsTab, NextStepsList } from './NoteActionItems';
-import { repairNoteCitations } from '../../../../shared/note-citations.mjs';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 import { NoteInsights } from './NoteInsights';
 import { NoteParticipants } from './NoteParticipants';
 import { NoteSections } from './NoteSections';

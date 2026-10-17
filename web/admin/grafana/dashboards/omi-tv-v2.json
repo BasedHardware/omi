@@ -3413,7 +3413,7 @@
     {
       "type": "timeseries",
       "title": "MRR by plan",
-      "description": "Unlimited includes Neo. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+      "description": "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3442,17 +3442,17 @@
             },
             {
               "selector": "unlimited",
-              "text": "Unlimited",
+              "text": "Neo",
               "type": "number"
             },
             {
               "selector": "unlimited_v2",
-              "text": "Unlimited v2",
+              "text": "Unlimited",
               "type": "number"
             },
             {
               "selector": "operator",
-              "text": "Operator",
+              "text": "Pro",
               "type": "number"
             },
             {
@@ -3509,12 +3509,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Unlimited"
+              "options": "Neo"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Unlimited"
+                "value": "Neo"
               },
               {
                 "id": "color",
@@ -3528,12 +3528,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Unlimited v2"
+              "options": "Unlimited"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Unlimited v2"
+                "value": "Unlimited"
               },
               {
                 "id": "color",
@@ -3547,12 +3547,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Operator"
+              "options": "Pro"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Operator"
+                "value": "Pro"
               },
               {
                 "id": "color",
@@ -3639,9 +3639,9 @@
           "options": {
             "indexByName": {
               "date": 0,
-              "Unlimited": 1,
-              "Unlimited v2": 2,
-              "Operator": 3,
+              "Neo": 1,
+              "Unlimited": 2,
+              "Pro": 3,
               "Plus": 4,
               "Architect": 5,
               "Other": 6
@@ -3657,7 +3657,7 @@
         "x": 15,
         "y": 4,
         "w": 5,
-        "h": 12
+        "h": 7
       },
       "id": 19
     },
@@ -3836,16 +3836,1470 @@
       ],
       "gridPos": {
         "x": 15,
-        "y": 16,
+        "y": 11,
         "w": 5,
-        "h": 11
+        "h": 5
       },
       "id": 20
     },
     {
+      "type": "timeseries",
+      "title": "Margin by plan",
+      "description": "Allocated estimate, not gross margin. Revenue = that day's FinOps MRR \u00f7 30.4. Cost = FinOps fully-loaded plan cost + the shared pool (TV all-in \u2212 FinOps: BigQuery, STT, SaaS) split by each plan's cost-active user-days. Lines: margin % (left); Free: \u2212$/day bars (right); $/day and the unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier than the wall (line below); a day without both cost and revenue is a gap. Caveats: STT is not invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan membership comes from a point-in-time snapshot.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.marginByPlan",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "timestamp"
+            },
+            {
+              "selector": "unlimitedPct",
+              "text": "Neo",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Pct",
+              "text": "Unlimited",
+              "type": "number"
+            },
+            {
+              "selector": "operatorPct",
+              "text": "Pro",
+              "type": "number"
+            },
+            {
+              "selector": "plusPct",
+              "text": "Plus",
+              "type": "number"
+            },
+            {
+              "selector": "architectPct",
+              "text": "Architect",
+              "type": "number"
+            },
+            {
+              "selector": "basicMargin",
+              "text": "Free $/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimitedRevenue",
+              "text": "Neo revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimitedCost",
+              "text": "Neo cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimitedMargin",
+              "text": "Neo margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Revenue",
+              "text": "Unlimited revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Cost",
+              "text": "Unlimited cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "unlimited_v2Margin",
+              "text": "Unlimited margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "operatorRevenue",
+              "text": "Pro revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "operatorCost",
+              "text": "Pro cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "operatorMargin",
+              "text": "Pro margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "plusRevenue",
+              "text": "Plus revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "plusCost",
+              "text": "Plus cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "plusMargin",
+              "text": "Plus margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "architectRevenue",
+              "text": "Architect revenue/day",
+              "type": "number"
+            },
+            {
+              "selector": "architectCost",
+              "text": "Architect cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "architectMargin",
+              "text": "Architect margin/day",
+              "type": "number"
+            },
+            {
+              "selector": "basicCost",
+              "text": "Free cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "unattributedCost",
+              "text": "Unattributed cost/day",
+              "type": "number"
+            },
+            {
+              "selector": "shared",
+              "text": "Shared pool/day",
+              "type": "number"
+            },
+            {
+              "selector": "allInTotal",
+              "text": "All-in total/day",
+              "type": "number"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#e8e6df"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false,
+            "barAlignment": 0,
+            "axisPlacement": "left",
+            "axisLabel": "",
+            "axisSoftMin": null,
+            "axisBorderShow": false,
+            "axisCenteredZero": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "insertNulls": 129600000
+          },
+          "noValue": "Loading\u2026",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#9085e9"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#d55181"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#008300"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e66767"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free $/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Free $/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6b6a63"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 70
+              },
+              {
+                "id": "custom.barWidthFactor",
+                "value": 0.7
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisCenteredZero",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Neo margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Neo margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unlimited margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unlimited margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pro margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pro margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plus margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plus margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect revenue/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect revenue/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Architect margin/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Architect margin/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Free cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Free cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unattributed cost/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Unattributed cost/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Shared pool/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Shared pool/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All-in total/day"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "All-in total/day"
+              },
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "min",
+                "value": -1000000.0
+              },
+              {
+                "id": "max",
+                "value": 1000000.0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "hidden"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 1
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "date": 0,
+              "Neo": 1,
+              "Unlimited": 2,
+              "Pro": 3,
+              "Plus": 4,
+              "Architect": 5,
+              "Free $/day": 6,
+              "Neo revenue/day": 7,
+              "Neo cost/day": 8,
+              "Neo margin/day": 9,
+              "Unlimited revenue/day": 10,
+              "Unlimited cost/day": 11,
+              "Unlimited margin/day": 12,
+              "Pro revenue/day": 13,
+              "Pro cost/day": 14,
+              "Pro margin/day": 15,
+              "Plus revenue/day": 16,
+              "Plus cost/day": 17,
+              "Plus margin/day": 18,
+              "Architect revenue/day": 19,
+              "Architect cost/day": 20,
+              "Architect margin/day": 21,
+              "Free cost/day": 22,
+              "Unattributed cost/day": 23,
+              "Shared pool/day": 24,
+              "All-in total/day": 25
+            },
+            "excludeByName": {},
+            "renameByName": {}
+          }
+        }
+      ],
+      "timeFrom": "35d",
+      "hideTimeOverride": true,
+      "gridPos": {
+        "x": 15,
+        "y": 16,
+        "w": 5,
+        "h": 10
+      },
+      "id": 21
+    },
+    {
+      "type": "stat",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, and the date the STT and SaaS estimates were read (\"stale\" after 35 days; \"STT measured\" once FinOps carries a vendor line).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.marginStatus",
+          "columns": [
+            {
+              "selector": "text",
+              "text": "Margin status",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#6b6a63"
+          },
+          "noValue": "Margin through \u2014"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "vertical",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "valueSize": 12
+        }
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 26,
+        "w": 5,
+        "h": 1
+      },
+      "id": 22
+    },
+    {
       "type": "stat",
       "title": "Health",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (October 2026, read 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate. Cost / day is the settled day D\u22122; cost / user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (estimate as of 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate as of 2026-10-16. An estimate older than 35 days is marked stale under Margin by plan. Cost / day is the settled day D\u22122; cost / user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3975,7 +5429,7 @@
         "w": 4,
         "h": 3
       },
-      "id": 21
+      "id": 23
     },
     {
       "type": "stat",
@@ -4084,12 +5538,12 @@
         "w": 4,
         "h": 1
       },
-      "id": 22
+      "id": 24
     },
     {
       "type": "timeseries",
       "title": "Cost vs revenue",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (October 2026, read 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate. Settled through D\u22122. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the sand-colored segments. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (estimate as of 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate as of 2026-10-16. An estimate older than 35 days is marked stale under Margin by plan. Settled through D\u22122. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the sand-colored segments. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -4439,7 +5893,7 @@
         "w": 4,
         "h": 12
       },
-      "id": 23
+      "id": 25
     },
     {
       "type": "timeseries",
@@ -4615,7 +6069,7 @@
         "w": 4,
         "h": 10
       },
-      "id": 24
+      "id": 26
     },
     {
       "type": "stat",
@@ -4686,7 +6140,7 @@
         "w": 4,
         "h": 1
       },
-      "id": 25
+      "id": 27
     }
   ],
   "links": [],

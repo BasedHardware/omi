@@ -13684,6 +13684,95 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'هنوز خلاصه نشده است';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi می‌تواند این گفتگو را به یک نمای کلی، نکات کلیدی و کارهای قابل انجام تبدیل کند.';
+
+  @override
+  String get summaryWithOmi => 'خلاصه‌سازی با Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'خلاصه‌سازی با $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'استفاده از الگوی دیگر';
+
+  @override
+  String get summaryFromTheTranscript => 'از رونوشت';
+
+  @override
+  String get summaryReadFullTranscript => 'خواندن رونوشت کامل';
+
+  @override
+  String get summarySheetTitle => 'خلاصه‌سازی با';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'نمای کلی، نکات کلیدی و کارهای قابل انجام';
+
+  @override
+  String get summaryYourTemplates => 'الگوهای شما';
+
+  @override
+  String get summarySuggestedTemplates => 'پیشنهادی برای این گفتگو';
+
+  @override
+  String get summaryBrowseTemplates => 'مرور الگوها';
+
+  @override
+  String get summaryCreateYourOwn => 'ساخت الگوی خودتان';
+
+  @override
+  String get summaryUseForNewConversations => 'این را پیش‌فرض من کن';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'الگوهای شما بارگیری نشد. Omi همچنان کار می‌کند.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'هنوز هیچ الگویی اضافه نکرده‌اید. چند الگو را مرور کنید یا الگوی خودتان را بسازید.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'در حال خلاصه‌سازی با $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name نتوانست کار را تمام کند';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'الگو برای این گفتگو خلاصه‌ای برنگرداند.';
+
+  @override
+  String get summaryWithOmiInstead => 'به‌جای آن با Omi خلاصه کنید';
+
+  @override
+  String get summaryBusyTitle => 'هنوز در حال پردازش';
+
+  @override
+  String get summaryBusyBody => 'Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.';
+
+  @override
+  String get summaryCheckAgain => 'بررسی دوباره';
+
+  @override
+  String get summaryLimitTitle => 'به سقف خلاصه‌ها رسیدید';
+
+  @override
+  String get summaryLimitBody => 'در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.';
+
+  @override
+  String get summaryFailedTitle => 'خلاصه‌سازی انجام نشد';
+
+  @override
+  String get summaryFailedBody => 'هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

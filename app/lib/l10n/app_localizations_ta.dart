@@ -13784,6 +13784,96 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'இன்னும் சுருக்கப்படவில்லை';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi இந்த உரையாடலை மேலோட்டம், முக்கிய குறிப்புகள் மற்றும் செயல் உருப்படிகளாக மாற்ற முடியும்.';
+
+  @override
+  String get summaryWithOmi => 'Omi மூலம் சுருக்கு';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '$name மூலம் சுருக்கு';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'வேறு டெம்ப்ளேட்டைப் பயன்படுத்து';
+
+  @override
+  String get summaryFromTheTranscript => 'டிரான்ஸ்கிரிப்டிலிருந்து';
+
+  @override
+  String get summaryReadFullTranscript => 'முழு டிரான்ஸ்கிரிப்டைப் படி';
+
+  @override
+  String get summarySheetTitle => 'இதன் மூலம் சுருக்கு';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'மேலோட்டம், முக்கிய குறிப்புகள் மற்றும் செயல் உருப்படிகள்';
+
+  @override
+  String get summaryYourTemplates => 'உங்கள் டெம்ப்ளேட்கள்';
+
+  @override
+  String get summarySuggestedTemplates => 'இந்த உரையாடலுக்குப் பரிந்துரைக்கப்பட்டவை';
+
+  @override
+  String get summaryBrowseTemplates => 'டெம்ப்ளேட்களை உலாவு';
+
+  @override
+  String get summaryCreateYourOwn => 'உங்களுடையதை உருவாக்கு';
+
+  @override
+  String get summaryUseForNewConversations => 'இதை என் இயல்புநிலையாக்கு';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'உங்கள் டெம்ப்ளேட்களை ஏற்ற முடியவில்லை. Omi இன்னும் செயல்படுகிறது.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'நீங்கள் இன்னும் டெம்ப்ளேட்கள் எதையும் சேர்க்கவில்லை. சிலவற்றை உலாவவும் அல்லது உங்களுடையதை உருவாக்கவும்.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '$name மூலம் சுருக்குகிறது…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name முடிக்க முடியவில்லை';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'இந்த உரையாடலுக்கு டெம்ப்ளேட் சுருக்கம் எதையும் வழங்கவில்லை.';
+
+  @override
+  String get summaryWithOmiInstead => 'பதிலாக Omi மூலம் சுருக்கு';
+
+  @override
+  String get summaryBusyTitle => 'இன்னும் செயலாக்கப்படுகிறது';
+
+  @override
+  String get summaryBusyBody => 'Omi ஏற்கனவே இந்த உரையாடலில் வேலை செய்கிறது. முடிந்ததும் சுருக்கம் இங்கே தோன்றும்.';
+
+  @override
+  String get summaryCheckAgain => 'மீண்டும் சரிபார்';
+
+  @override
+  String get summaryLimitTitle => 'சுருக்க வரம்பை அடைந்துவிட்டீர்கள்';
+
+  @override
+  String get summaryLimitBody =>
+      'கடந்த ஒரு மணிநேரத்தில் பல சுருக்கங்களை மீண்டும் உருவாக்கியுள்ளீர்கள். பிறகு மீண்டும் முயலவும்.';
+
+  @override
+  String get summaryFailedTitle => 'சுருக்க முடியவில்லை';
+
+  @override
+  String get summaryFailedBody => 'இந்த உரையாடலைச் சுருக்கும்போது ஏதோ தவறு நடந்தது.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

@@ -13684,6 +13684,94 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Zatiaľ nezhrnuté';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi dokáže z tohto rozhovoru vytvoriť prehľad, kľúčové body a úlohy.';
+
+  @override
+  String get summaryWithOmi => 'Zhrnúť pomocou Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Zhrnúť pomocou $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Použiť inú šablónu';
+
+  @override
+  String get summaryFromTheTranscript => 'Z prepisu';
+
+  @override
+  String get summaryReadFullTranscript => 'Čítať celý prepis';
+
+  @override
+  String get summarySheetTitle => 'Zhrnúť pomocou';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Prehľad, kľúčové body a úlohy';
+
+  @override
+  String get summaryYourTemplates => 'Vaše šablóny';
+
+  @override
+  String get summarySuggestedTemplates => 'Navrhnuté pre tento rozhovor';
+
+  @override
+  String get summaryBrowseTemplates => 'Prehľadávať šablóny';
+
+  @override
+  String get summaryCreateYourOwn => 'Vytvoriť vlastnú';
+
+  @override
+  String get summaryUseForNewConversations => 'Nastaviť ako predvolené';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Vaše šablóny sa nepodarilo načítať. Omi stále funguje.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Zatiaľ ste nepridali žiadne šablóny. Prezrite si niektoré alebo si vytvorte vlastnú.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Zhrňuje sa pomocou $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name sa nepodarilo dokončiť';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Šablóna pre tento rozhovor nevrátila zhrnutie.';
+
+  @override
+  String get summaryWithOmiInstead => 'Radšej zhrnúť pomocou Omi';
+
+  @override
+  String get summaryBusyTitle => 'Stále sa spracúva';
+
+  @override
+  String get summaryBusyBody => 'Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.';
+
+  @override
+  String get summaryCheckAgain => 'Skontrolovať znova';
+
+  @override
+  String get summaryLimitTitle => 'Dosiahnutý limit zhrnutí';
+
+  @override
+  String get summaryLimitBody => 'Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.';
+
+  @override
+  String get summaryFailedTitle => 'Zhrnutie sa nepodarilo';
+
+  @override
+  String get summaryFailedBody => 'Pri zhrnutí tohto rozhovoru sa niečo pokazilo.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

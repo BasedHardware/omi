@@ -13736,6 +13736,93 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Ещё не обобщено';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi может превратить этот разговор в обзор, ключевые моменты и задачи.';
+
+  @override
+  String get summaryWithOmi => 'Обобщить с Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Обобщить с $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Выбрать другой шаблон';
+
+  @override
+  String get summaryFromTheTranscript => 'Из расшифровки';
+
+  @override
+  String get summaryReadFullTranscript => 'Читать полную расшифровку';
+
+  @override
+  String get summarySheetTitle => 'Обобщить с помощью';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Обзор, ключевые моменты и задачи';
+
+  @override
+  String get summaryYourTemplates => 'Ваши шаблоны';
+
+  @override
+  String get summarySuggestedTemplates => 'Рекомендуемые для этого разговора';
+
+  @override
+  String get summaryBrowseTemplates => 'Просмотреть шаблоны';
+
+  @override
+  String get summaryCreateYourOwn => 'Создать свой';
+
+  @override
+  String get summaryUseForNewConversations => 'Сделать основным';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Не удалось загрузить ваши шаблоны. Omi продолжает работать.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Вы ещё не добавили шаблоны. Просмотрите готовые или создайте свой.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Обобщение с $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name не удалось завершить';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Шаблон не вернул сводку для этого разговора.';
+
+  @override
+  String get summaryWithOmiInstead => 'Обобщить с Omi вместо этого';
+
+  @override
+  String get summaryBusyTitle => 'Ещё обрабатывается';
+
+  @override
+  String get summaryBusyBody => 'Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.';
+
+  @override
+  String get summaryCheckAgain => 'Проверить снова';
+
+  @override
+  String get summaryLimitTitle => 'Достигнут лимит сводок';
+
+  @override
+  String get summaryLimitBody => 'За последний час вы несколько раз пересоздали сводки. Повторите попытку позже.';
+
+  @override
+  String get summaryFailedTitle => 'Не удалось обобщить';
+
+  @override
+  String get summaryFailedBody => 'При обобщении этого разговора что-то пошло не так.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

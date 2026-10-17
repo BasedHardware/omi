@@ -13682,6 +13682,93 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Veel kokku võtmata';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi saab muuta selle vestluse ülevaateks, põhipunktideks ja ülesanneteks.';
+
+  @override
+  String get summaryWithOmi => 'Võta Omiga kokku';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Võta kokku: $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Kasuta teist malli';
+
+  @override
+  String get summaryFromTheTranscript => 'Transkriptsioonist';
+
+  @override
+  String get summaryReadFullTranscript => 'Loe kogu transkriptsiooni';
+
+  @override
+  String get summarySheetTitle => 'Kokkuvõtte tegija';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Ülevaade, põhipunktid ja ülesanded';
+
+  @override
+  String get summaryYourTemplates => 'Sinu mallid';
+
+  @override
+  String get summarySuggestedTemplates => 'Soovitatud selle vestluse jaoks';
+
+  @override
+  String get summaryBrowseTemplates => 'Sirvi malle';
+
+  @override
+  String get summaryCreateYourOwn => 'Loo oma';
+
+  @override
+  String get summaryUseForNewConversations => 'Määra minu vaikevalikuks';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Sinu malle ei õnnestunud laadida. Omi töötab endiselt.';
+
+  @override
+  String get summaryNoTemplatesYet => 'Sa pole veel ühtegi malli lisanud. Sirvi mõnda või loo oma.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Kokkuvõtte tegemine: $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name ei suutnud lõpetada';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Mall ei tagastanud selle vestluse kokkuvõtet.';
+
+  @override
+  String get summaryWithOmiInstead => 'Võta hoopis Omiga kokku';
+
+  @override
+  String get summaryBusyTitle => 'Töötlemine käib veel';
+
+  @override
+  String get summaryBusyBody => 'Omi juba töötab selle vestlusega. Kokkuvõte ilmub siia, kui see valmis saab.';
+
+  @override
+  String get summaryCheckAgain => 'Kontrolli uuesti';
+
+  @override
+  String get summaryLimitTitle => 'Kokkuvõtete limiit on täis';
+
+  @override
+  String get summaryLimitBody => 'Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.';
+
+  @override
+  String get summaryFailedTitle => 'Kokkuvõtet ei õnnestunud teha';
+
+  @override
+  String get summaryFailedBody => 'Selle vestluse kokkuvõtte tegemisel läks midagi valesti.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

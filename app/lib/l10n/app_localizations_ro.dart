@@ -13746,6 +13746,95 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get summaryNotSummarizedYet => 'Încă nu a fost rezumată';
+
+  @override
+  String get summaryEmptyStateBody =>
+      'Omi poate transforma această conversație într-o prezentare generală, puncte cheie și sarcini.';
+
+  @override
+  String get summaryWithOmi => 'Rezumă cu Omi';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return 'Rezumă cu $name';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => 'Folosește alt șablon';
+
+  @override
+  String get summaryFromTheTranscript => 'Din transcriere';
+
+  @override
+  String get summaryReadFullTranscript => 'Citește transcrierea completă';
+
+  @override
+  String get summarySheetTitle => 'Rezumă cu';
+
+  @override
+  String get summaryOmiTemplateSubtitle => 'Prezentare generală, puncte cheie și sarcini';
+
+  @override
+  String get summaryYourTemplates => 'Șabloanele tale';
+
+  @override
+  String get summarySuggestedTemplates => 'Sugerate pentru această conversație';
+
+  @override
+  String get summaryBrowseTemplates => 'Răsfoiește șabloanele';
+
+  @override
+  String get summaryCreateYourOwn => 'Creează-ți propriul șablon';
+
+  @override
+  String get summaryUseForNewConversations => 'Setează ca implicit';
+
+  @override
+  String get summaryTemplatesLoadFailed => 'Nu s-au putut încărca șabloanele tale. Omi funcționează în continuare.';
+
+  @override
+  String get summaryNoTemplatesYet =>
+      'Nu ai adăugat încă niciun șablon. Răsfoiește câteva sau creează-ți propriul șablon.';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return 'Se rezumă cu $name…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name nu a putut finaliza';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => 'Șablonul nu a returnat un rezumat pentru această conversație.';
+
+  @override
+  String get summaryWithOmiInstead => 'Rezumă cu Omi în schimb';
+
+  @override
+  String get summaryBusyTitle => 'Se procesează încă';
+
+  @override
+  String get summaryBusyBody => 'Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.';
+
+  @override
+  String get summaryCheckAgain => 'Verifică din nou';
+
+  @override
+  String get summaryLimitTitle => 'Limita de rezumate a fost atinsă';
+
+  @override
+  String get summaryLimitBody => 'Ai regenerat mai multe rezumate în ultima oră. Încearcă din nou mai târziu.';
+
+  @override
+  String get summaryFailedTitle => 'Nu s-a putut rezuma';
+
+  @override
+  String get summaryFailedBody => 'A apărut o problemă la rezumarea acestei conversații.';
+
+  @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
 
   @override

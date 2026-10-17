@@ -49868,7 +49868,7 @@
             "description": "The conversation or selected app does not exist"
           },
           "409": {
-            "description": "The selected app is disabled or not enabled by this user"
+            "description": "The selected app is disabled or not enabled by this user, or the conversation is already being processed (detail code conversation_processing_in_progress)"
           },
           "422": {
             "content": {
@@ -49879,6 +49879,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "description": "The selected app produced no summary (detail code app_result_failed)"
           }
         },
         "security": [

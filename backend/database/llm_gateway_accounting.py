@@ -49,7 +49,8 @@ def record_llm_gateway_attempt(
     client = firestore_client or get_firestore_client()
     data = dict(event)
     annotation, shadow = gateway_shadow(data)
-    data["usage_units_v1"] = annotation
+    rate_card_version = annotation['rate_card_version']
+    data[f'usage_units_{rate_card_version}'] = annotation
     data['subscription_tier'] = _subscription_tier(client, data.get('user_uid'))
     plan_id = resolve_usage_plan_id(data.get('user_uid', ''), firestore_client=client)
     data['plan_id'] = plan_id

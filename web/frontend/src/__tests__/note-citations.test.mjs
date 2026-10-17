@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { repairNoteCitations } from '../../../shared/note-citations.mjs';
+import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 const contract = JSON.parse(
   readFileSync(
     new URL('../../../../contracts/note_citation_contract.json', import.meta.url),

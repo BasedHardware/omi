@@ -16543,6 +16543,129 @@
             }
         }
     },
+    "summaryNotSummarizedYet": "Not summarized yet",
+    "@summaryNotSummarizedYet": {
+        "description": "Title of the card shown on a conversation that has no summary yet."
+    },
+    "summaryEmptyStateBody": "Omi can turn this conversation into an overview, key points and action items.",
+    "@summaryEmptyStateBody": {
+        "description": "Body of the card shown on a conversation that has no summary yet. Omi is the product name; keep it untranslated."
+    },
+    "summaryWithOmi": "Summarize with Omi",
+    "@summaryWithOmi": {
+        "description": "Button that summarizes the conversation with Omi's built-in summary. Omi is the product name."
+    },
+    "summaryWithTemplate": "Summarize with {name}",
+    "@summaryWithTemplate": {
+        "description": "Button that summarizes the conversation with the named summary template.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryUseDifferentTemplate": "Use a Different Template",
+    "@summaryUseDifferentTemplate": {
+        "description": "Button that opens the list of summary templates to pick another one."
+    },
+    "summaryFromTheTranscript": "From the transcript",
+    "@summaryFromTheTranscript": {
+        "description": "Small section header above a quoted excerpt of the conversation transcript."
+    },
+    "summaryReadFullTranscript": "Read Full Transcript",
+    "@summaryReadFullTranscript": {
+        "description": "Link that switches to the full transcript tab."
+    },
+    "summarySheetTitle": "Summarize with",
+    "@summarySheetTitle": {
+        "description": "Title of the sheet that lists the ways (Omi, templates) to summarize a conversation; the rows below complete the phrase."
+    },
+    "summaryOmiTemplateSubtitle": "Overview, key points and action items",
+    "@summaryOmiTemplateSubtitle": {
+        "description": "Subtitle of the built-in Omi summary row, describing what it produces."
+    },
+    "summaryYourTemplates": "Your templates",
+    "@summaryYourTemplates": {
+        "description": "Section header for the summary templates the user has added."
+    },
+    "summarySuggestedTemplates": "Suggested for this conversation",
+    "@summarySuggestedTemplates": {
+        "description": "Section header for summary templates suggested for this conversation."
+    },
+    "summaryBrowseTemplates": "Browse Templates",
+    "@summaryBrowseTemplates": {
+        "description": "Row that opens the catalog of summary templates."
+    },
+    "summaryCreateYourOwn": "Create Your Own",
+    "@summaryCreateYourOwn": {
+        "description": "Row that opens the editor to create a custom summary template."
+    },
+    "summaryUseForNewConversations": "Make this my default",
+    "@summaryUseForNewConversations": {
+        "description": "Checkbox label in the summary template sheet: remember the chosen template (or Omi) as the default this device offers first."
+    },
+    "summaryTemplatesLoadFailed": "Couldn't load your templates. Omi still works.",
+    "@summaryTemplatesLoadFailed": {
+        "description": "Inline message when the user's summary templates could not be loaded; the built-in Omi summary still works."
+    },
+    "summaryNoTemplatesYet": "You haven't added any templates yet. Browse a few or make your own.",
+    "@summaryNoTemplatesYet": {
+        "description": "Inline message when the user has no summary templates."
+    },
+    "summarySummarizingWith": "Summarizing with {name}…",
+    "@summarySummarizingWith": {
+        "description": "Progress label while the conversation is being summarized with Omi or the named template. Keep the single ellipsis character.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryTemplateFailedTitle": "{name} couldn't finish",
+    "@summaryTemplateFailedTitle": {
+        "description": "Heading when the named summary template failed to produce a summary.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "summaryTemplateFailedBody": "The template didn't return a summary for this conversation.",
+    "@summaryTemplateFailedBody": {
+        "description": "Body when a summary template failed to produce a summary."
+    },
+    "summaryWithOmiInstead": "Summarize with Omi Instead",
+    "@summaryWithOmiInstead": {
+        "description": "Button that falls back to Omi's built-in summary after a template failed. Omi is the product name."
+    },
+    "summaryBusyTitle": "Still processing",
+    "@summaryBusyTitle": {
+        "description": "Heading when the conversation is already being processed and a new summary cannot start."
+    },
+    "summaryBusyBody": "Omi is already working on this conversation. The summary will appear here when it finishes.",
+    "@summaryBusyBody": {
+        "description": "Body when the conversation is already being processed. Omi is the product name."
+    },
+    "summaryCheckAgain": "Check Again",
+    "@summaryCheckAgain": {
+        "description": "Button that re-reads the conversation to see if processing finished."
+    },
+    "summaryLimitTitle": "Summary limit reached",
+    "@summaryLimitTitle": {
+        "description": "Heading when the user has regenerated too many summaries recently."
+    },
+    "summaryLimitBody": "You've regenerated several summaries in the last hour. Try again later.",
+    "@summaryLimitBody": {
+        "description": "Body when the user hit the hourly limit on regenerating summaries."
+    },
+    "summaryFailedTitle": "Couldn't summarize",
+    "@summaryFailedTitle": {
+        "description": "Heading when summarizing the conversation failed for an unknown reason."
+    },
+    "summaryFailedBody": "Something went wrong while summarizing this conversation.",
+    "@summaryFailedBody": {
+        "description": "Body when summarizing the conversation failed for an unknown reason."
+    },
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "@onboardingChatOnTelegramTitle": {
         "description": "Title for the optional onboarding step that invites connecting Telegram"

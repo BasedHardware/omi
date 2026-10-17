@@ -22,6 +22,9 @@ class MemoryTransaction:
     def put(self, table, key, value):
         self.rows[(table, key)] = deepcopy(value)
 
+    def patch(self, table, key, fields):
+        self.rows[(table, key)].update(deepcopy(fields))
+
     def service_frontier(self, priority):
         return max(
             (v.get(f'p{priority}_service', 0) for (table, _), v in self.rows.items() if table == 'control'), default=0.0
