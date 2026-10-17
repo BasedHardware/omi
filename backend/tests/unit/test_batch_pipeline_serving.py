@@ -204,6 +204,74 @@ async def test_landed_reprocess_busy_response_remains_retryable(monkeypatch, sta
     assert response.status_code == code
 
 
+def test_fenced_enrichment_absorbs_lifecycle_fence_and_settles(monkeypatch, caplog):
+    """A lifecycle fence is terminal supersession: absorbed (ACK 200), not an unhandled 500."""
+    import logging
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from utils.batch_pipeline import enrichment
+
+    caplog.set_level(logging.INFO, logger='utils.batch_pipeline.enrichment')
+
+    fence = type('SyncConversationPersistenceFenced', (RuntimeError,), {})
+    callback = Mock(side_effect=fence('sync conversation persistence fenced'))
+    fake_pipeline = SimpleNamespace(
+        _reprocess_conversation_after_update=callback, SyncConversationPersistenceFenced=fence
+    )
+    monkeypatch.setitem(sys.modules, 'utils.sync.pipeline', fake_pipeline)
+    monkeypatch.setattr(enrichment, 'discard_blocked', lambda document_id: False)
+    monkeypatch.setattr(enrichment.reprocess, 'owns_runtime', lambda: True)
+
+    captured = {}
+
+    def fake_run(document_id, task_token, process, *, now=None):
+        captured['process'] = process
+        return 'processed'
+
+    monkeypatch.setattr(enrichment.reprocess, 'run', fake_run)
+
+    assert enrichment.run_enrichment('a' * 64, 'b' * 32) == 'processed'
+    # Pre-fix this raised the fence straight through reprocess.run into the
+    # Cloud Tasks handler's generic 500; post-fix it is absorbed and settles.
+    assert captured['process']('u', 'c', 'en') is None
+    callback.assert_called_once_with('u', 'c', 'en')
+    assert any('conversation_fenced' in record.getMessage() for record in caplog.records)
+
+
+def test_enrichment_non_fence_errors_still_propagate(monkeypatch):
+    """Only the lifecycle fence is absorbed; every other processor error keeps its taxonomy."""
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import pytest
+
+    from utils.batch_pipeline import enrichment
+
+    fence = type('SyncConversationPersistenceFenced', (RuntimeError,), {})
+    callback = Mock(side_effect=ValueError('boom'))
+    fake_pipeline = SimpleNamespace(
+        _reprocess_conversation_after_update=callback, SyncConversationPersistenceFenced=fence
+    )
+    monkeypatch.setitem(sys.modules, 'utils.sync.pipeline', fake_pipeline)
+    monkeypatch.setattr(enrichment, 'discard_blocked', lambda document_id: False)
+    monkeypatch.setattr(enrichment.reprocess, 'owns_runtime', lambda: True)
+
+    captured = {}
+
+    def fake_run(document_id, task_token, process, *, now=None):
+        captured['process'] = process
+        return 'processed'
+
+    monkeypatch.setattr(enrichment.reprocess, 'run', fake_run)
+
+    enrichment.run_enrichment('a' * 64, 'b' * 32)
+    with pytest.raises(ValueError, match='boom'):
+        captured['process']('u', 'c', 'en')
+
+
 def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api, monkeypatch):
     client, store = api
     Scheduler(store).pull(time.time())

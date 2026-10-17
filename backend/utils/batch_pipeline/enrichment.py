@@ -1,5 +1,6 @@
 """Task adapter for the existing coalesced sync enrichment outbox."""
 
+import logging
 import re
 from typing import Callable
 
@@ -7,6 +8,8 @@ from google.cloud import firestore
 from database._client import get_firestore_client
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from utils.sync import reprocess
+
+logger = logging.getLogger(__name__)
 
 
 def discard_blocked(document_id: str) -> bool:
@@ -46,11 +49,24 @@ def run_enrichment(
     def enrich(uid: str, conversation_id: str, language: str):
         if discard_blocked(document_id):
             return
+        from utils.sync.pipeline import SyncConversationPersistenceFenced
+
         callback = process
         if callback is None:
             from utils.sync.pipeline import _reprocess_conversation_after_update  # type: ignore[reportPrivateUsage]
 
             callback = _reprocess_conversation_after_update
-        callback(uid, conversation_id, language)
+        try:
+            callback(uid, conversation_id, language)
+        except SyncConversationPersistenceFenced:
+            # A lifecycle fence is a terminal supersession, not a delivery
+            # failure: the newer ingest owns the conversation and arms its own
+            # obligation. Absorb it so reprocess.run settles this claim
+            # (re-enqueue when marked again, complete otherwise) and the Cloud
+            # Tasks handler ACKs 200 instead of retrying an unwinnable task.
+            logger.info(
+                'event=sync_reprocess outcome=conversation_fenced conversation_id=%s',
+                conversation_id,
+            )
 
     return reprocess.run(document_id, task_token, enrich, now=now)
