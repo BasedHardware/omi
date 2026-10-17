@@ -677,6 +677,32 @@ def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str
         assert profile.local_api_url is None
 
 
+@pytest.mark.parametrize("key", ["api_base", "local_api_url"])
+@pytest.mark.parametrize(
+    "malformed_url",
+    [
+        # urlsplit raises eagerly on an unterminated IPv6 bracket...
+        "http://[",
+        # ...and lazily on a non-numeric or out-of-range port:
+        "http://example.test:abc",
+        "https://example.test:65536",
+        # authority present but no hostname:
+        "http://:47778",
+    ],
+)
+def test_config_set_rejects_malformed_urls(config_path: Path, cli_runner, key: str, malformed_url: str) -> None:
+    """Malformed URLs must produce a clean UsageError (no traceback) and must not be persisted."""
+    result = cli_runner.invoke(app, ["config", "set", key, malformed_url])
+    assert result.exit_code != 0
+    assert "Invalid URL" in result.output
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == cfg.DEFAULT_API_BASE
+    else:
+        assert profile.local_api_url is None
+
+
 @pytest.mark.parametrize(
     "key,valid_url,expected_saved",
     [
@@ -684,6 +710,7 @@ def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str
         ("api_base", "https://api.staging.omi.me/", "https://api.staging.omi.me"),
         ("local_api_url", "http://localhost:8000/", "http://localhost:8000"),
         ("local_api_url", "http://127.0.0.1:47778", "http://127.0.0.1:47778"),
+        ("local_api_url", "http://[::1]:8000", "http://[::1]:8000"),
     ],
 )
 def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
