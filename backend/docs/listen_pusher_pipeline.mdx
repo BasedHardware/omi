@@ -4799,6 +4799,16 @@ Backfill ownership and expired-head retirement are defined in [the two-lane runb
 
 Backfill admission transactionally creates or repairs its sequencer owner. Completion and retirement transactionally park empty owners outside the hot reconcile query while retaining their fencing epochs; admission wakes them atomically. The bounded pending reconcile scan self-heals legacy missing owners over a configurable window (default 30 minutes), honors the staggered deadline before claiming or retiring waiting work, and meters `sync_backfill_owner_repaired`. The operator-only dry-run/apply procedure is in [backfill owner repair](runbooks/sync-two-lane.md#backfill-owner-repair).
 
+### Sync VAD segment cache
+
+`vad_is_empty(..., cache=True)` stores sync VAD segments in Redis for 24 hours by
+default. `VAD_CACHE_TTL_SECONDS` is read when each cache entry is written and
+accepts integer seconds from 300 through 86400; unset, invalid, or out-of-range
+values keep the 86400-second default. It is declared at 86400 for the backend,
+sync, and sync-backfill Cloud Run services in both dev and prod. A cache miss
+recomputes VAD, so a shorter setting reduces cache residency while increasing
+repeat VAD work. Existing entries keep their original expiry.
+
 The default-oldest `SYNC_BACKFILL_ORDER` policy can select descending pending
 capture time for a UID cohort, including persisted work draining while sequencer
 admission is off. Direct tasks receive a bounded newer-first eligibility
