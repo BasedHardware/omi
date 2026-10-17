@@ -103,8 +103,13 @@ PENDING_REQUEST_RECOVERY_COOLDOWN = 300
 # frame sent into a teardown socket would otherwise park until the peer or
 # the close timeout answers — absorbing drain_tasks' whole force-cancel
 # wait. Healthy sends complete in milliseconds; hitting this bound means
-# the socket is stalled, and the request stays pending for the reconnect
-# replay instead of hanging the calling task.
+# the socket is stalled. Every protocol send that can run inside teardown
+# (the receive loop's resume flush and retry burst, the transcript and
+# audio flush loops, the speaker-sample request, the heartbeat) goes
+# through ``_bounded_protocol_send``, which raises TimeoutError at the
+# bound so each caller's own failure handling classifies it — a pending
+# request stays armed for the reconnect replay, an audio envelope turns
+# uncertain, a transcript batch returns to its buffer.
 PUSHER_SEND_CANCEL_BOUND_SECONDS = 1.0
 # Wire contract with utils.pusher_finalization: a claim rejected because a live
 # lease is already finalizing this job reports the non-terminal `job_leased`
@@ -184,6 +189,18 @@ class ListenPusherSessionDeps:
     monotonic: Callable[[], float] = time.monotonic
 
 
+def _consume_abandoned_send_result(task: 'asyncio.Task[Any]') -> None:
+    """Mark an abandoned bounded-send task's exception as retrieved.
+
+    A send abandoned at the bound keeps running until the socket itself
+    closes (websockets bounds that with ``close_timeout``); when it then
+    fails with ConnectionClosed, consuming the exception here keeps asyncio
+    from logging "exception was never retrieved" for a send nobody joined.
+    """
+    if not task.cancelled():
+        task.exception()
+
+
 class ListenPusherSession:
     def __init__(self, config: ListenPusherSessionConfig, deps: ListenPusherSessionDeps):
         self.config = config
@@ -252,6 +269,53 @@ class ListenPusherSession:
         }
         self.pending_request_event.set()
 
+    async def _bounded_protocol_send(self, ws: Any, frame: Any) -> None:
+        """One bounded protocol send on a session pusher socket.
+
+        The class-wide contract (``PUSHER_SEND_CANCEL_BOUND_SECONDS``): a
+        websockets send can ignore task cancellation while the connection is
+        closing (its open-check shields the close-completion wait from
+        cancellation), so a protocol send that can run inside teardown — the
+        receive loop's resume flush and retry burst, the transcript and
+        audio flush loops, the speaker-sample request, the heartbeat — must
+        not park past the bound. Healthy sends complete in milliseconds;
+        hitting the bound means the socket is stalled or closing.
+
+        The bound cannot be an ``asyncio.timeout`` (or ``wait_for``) around
+        the awaited send: a send that absorbs its own cancellation (the
+        shielded open-check) also absorbs the timeout's expiry-cancel — the
+        caller would park anyway — and a force-cancel of the calling task
+        while the send is being cancelled parks in the same absorbed
+        cancellation. ``asyncio.wait`` has neither property: it never cancels
+        the send task and never waits for a cancellation to complete, so at
+        the bound — or when the caller itself is cancelled — control returns
+        immediately, and the abandoned send task keeps running until the
+        socket itself closes (websockets bounds that with ``close_timeout``).
+
+        Raises ``TimeoutError`` at the bound so each caller's existing
+        failure classification keeps working (uncertain envelopes, buffer
+        restores, disconnect marking); transport errors and cancellation
+        propagate unchanged — the force-cancel at the end of the drain
+        window must still end the task.
+        """
+        send_task = asyncio.ensure_future(ws.send(frame))
+        try:
+            done, _ = await asyncio.wait({send_task}, timeout=PUSHER_SEND_CANCEL_BOUND_SECONDS)
+        except asyncio.CancelledError:
+            # The caller was cancelled (the drain's force-cancel): detach the
+            # send instead of parking on it and cancel it fire-and-forget —
+            # if the socket absorbs that cancellation (the shielded
+            # open-check), the send still ends when the socket itself closes.
+            send_task.cancel()
+            send_task.add_done_callback(_consume_abandoned_send_result)
+            raise
+        if not done:
+            send_task.add_done_callback(_consume_abandoned_send_result)
+            raise asyncio.TimeoutError()
+        # Joined the task: success or transport error propagate exactly as a
+        # raw awaited send would.
+        send_task.result()
+
     async def request_conversation_processing(
         self,
         conversation_id: str,
@@ -260,13 +324,14 @@ class ListenPusherSession:
     ):
         """Request pusher to process a conversation through its durable lease.
 
-        The protocol send is bounded by ``PUSHER_SEND_CANCEL_BOUND_SECONDS``:
-        a websockets send may ignore task cancellation while the connection
-        is closing (its open-check shields the close-completion wait), so an
-        unbounded send parked inside teardown until the force-cancel window
-        expired — one production shape of "tasks ignored cancellation after
-        5s [listen_bg]". A send that hits the bound fails open: the request
-        stays pending for the reconnect replay.
+        The protocol send is bounded by ``PUSHER_SEND_CANCEL_BOUND_SECONDS``
+        (see ``_bounded_protocol_send``): a websockets send may ignore task
+        cancellation while the connection is closing (its open-check shields
+        the close-completion wait), so an unbounded send parked inside
+        teardown until the force-cancel window expired — one production shape
+        of "tasks ignored cancellation after 5s [listen_bg]". A send that
+        hits the bound fails open: the request stays pending for the
+        reconnect replay.
         """
         if not self.pusher_connected or not self.pusher_ws:
             logger.info(
@@ -297,19 +362,12 @@ class ListenPusherSession:
                 payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
                 payload['finalization_result_protocol'] = FINALIZATION_RESULT_PROTOCOL
             data.extend(bytes(json.dumps(payload), "utf-8"))
-            try:
-                async with asyncio.timeout(PUSHER_SEND_CANCEL_BOUND_SECONDS):
-                    await self.pusher_ws.send(cast(bytes, data))
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                # Bounded fail-open: a stalled or closing socket must not hang
-                # the calling task (pusher_receive's retry burst runs during
-                # teardown drain). Covers both transport errors and the
-                # TimeoutError asyncio.timeout raises on the bound. The
-                # pending entry stays armed; a healthy reconnect replays it.
-                logger.error(f"Failed to send process_conversation request: {e} {self.uid} {self.session_id}")
-                return False
+            # Bounded fail-open: a stalled or closing socket must not hang the
+            # calling task (pusher_receive's retry burst runs during teardown
+            # drain). A bound hit raises TimeoutError here, which the outer
+            # handler logs; the pending entry stays armed and a healthy
+            # reconnect replays it.
+            await self._bounded_protocol_send(self.pusher_ws, cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
             return True
         except Exception as e:
@@ -336,7 +394,7 @@ class ListenPusherSession:
                             "utf-8",
                         )
                     )
-                    await pusher_ws.send(cast(bytes, data))
+                    await self._bounded_protocol_send(pusher_ws, cast(bytes, data))
                 except (asyncio.CancelledError, Exception) as e:
                     self.segment_buffers = deque(
                         (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
@@ -529,14 +587,14 @@ class ListenPusherSession:
                         header = bytearray()
                         header.extend(struct.pack("I", 103))
                         header.extend(bytes(conversation, "utf-8"))
-                        await pusher_ws.send(cast(bytes, header))
+                        await self._bounded_protocol_send(pusher_ws, cast(bytes, header))
                         self.last_synced_conversation_id = conversation
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
                     data.extend(struct.pack("d", cast(float, envelope.header_timestamp)))
                     data.extend(envelope.data)
                     try:
-                        await pusher_ws.send(cast(bytes, data))
+                        await self._bounded_protocol_send(pusher_ws, cast(bytes, data))
                     except (asyncio.CancelledError, Exception):
                         if timeline_active:
                             envelope.uncertain = True
@@ -552,7 +610,7 @@ class ListenPusherSession:
                     data = bytearray()
                     data.extend(struct.pack("I", 103))
                     data.extend(bytes(current_conversation_id, "utf-8"))
-                    await pusher_ws.send(cast(bytes, data))
+                    await self._bounded_protocol_send(pusher_ws, cast(bytes, data))
                     self.last_synced_conversation_id = current_conversation_id
             except (asyncio.CancelledError, Exception) as e:
                 unsent: List[AudioRun] = []
@@ -1158,7 +1216,7 @@ class ListenPusherSession:
                     "utf-8",
                 )
             )
-            await self.pusher_ws.send(cast(bytes, data))
+            await self._bounded_protocol_send(self.pusher_ws, cast(bytes, data))
             logger.info(
                 f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {self.uid} {self.session_id}"
             )
@@ -1174,13 +1232,20 @@ class ListenPusherSession:
         return self.pusher_connected
 
     async def pusher_heartbeat(self):
-        """Send periodic data-frame heartbeats to reset the GKE ILB idle timer."""
+        """Send periodic data-frame heartbeats to reset the GKE ILB idle timer.
+
+        The send is bounded like every other protocol send on this socket:
+        a heartbeat into a closing socket otherwise parks in websockets'
+        cancellation-shielded open-check, and the heartbeat task — a sibling
+        of ``pusher_receive`` in the same supervised drain — then absorbs
+        the force-cancel window.
+        """
         while self.deps.is_active():
             if await self.deps.wait_for_event(self.deps.shutdown_event, 20):
                 break
             if self.pusher_connected and self.pusher_ws:
                 try:
-                    await self.pusher_ws.send(struct.pack("I", 100))
+                    await self._bounded_protocol_send(self.pusher_ws, struct.pack("I", 100))
                 except ConnectionClosed:
                     self._mark_disconnected()
                 except Exception as e:
