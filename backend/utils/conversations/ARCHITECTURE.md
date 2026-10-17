@@ -207,6 +207,21 @@ and background processing.
   outside this package: `database/conversation_finalization_jobs.py`,
   `services/conversation_finalization.py`, and their callers own those states.
 
+Segment-text PATCH goes through `database/review_transcript_changes.edit_user_segment`:
+the edit is applied transactionally with its revision and summary-reference
+invalidation and recorded in the review ledger, then search converges post-commit
+for that one conversation via `utils/review_projection.py` — `sync_conversations`
+refreshes its Typesense document (fail-open) and `sync_transcript_chunks` rebuilds
+only its transcript-chunk vectors, returning early when no vector index is
+configured. No other indexing work is scheduled for the edit.
+
+Search still follows the existing server contract, including optional historical
+chunk hits and snippets hydrated from current transcript text; when a transcript
+vector index is configured, the post-commit rebuild above is what makes edited
+words fresh semantic candidates. Any broader freshness or cost change belongs to
+the maintainer-owned review projection path, not to an ad hoc background task in
+this package.
+
 ## Data and credential safety
 
 This package receives persisted conversation data only. Request-scoped BYOK
