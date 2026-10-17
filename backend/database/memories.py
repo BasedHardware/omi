@@ -1291,9 +1291,23 @@ def refine_memory(
 
     # A missing document must not mint an orphan ledger event — verify it
     # exists before the append, not just inside the projection writer.
-    if not memory_ref.get().exists:
+    doc_snapshot = memory_ref.get()
+    if not doc_snapshot.exists:
         logger.warning('refine_memory: memory %s not found for uid=%s; skipping', memory_id, uid)
         return None
+    doc_level = (_typed_doc(doc_snapshot) or {}).get('data_protection_level', 'standard')
+
+    # arg_changes is written verbatim into the commit-history ledger doc —
+    # for enhanced docs, commit ciphertext + digest instead of the plaintext
+    # content.to or the ledger trail leaks what the document encrypts.
+    commit_changes = arg_changes
+    if doc_level == 'enhanced':
+        commit_changes = copy.deepcopy(arg_changes)
+        content_change = commit_changes.get('content')
+        if isinstance(content_change, dict) and isinstance(content_change.get('to'), str):
+            plain_to = content_change['to']
+            content_change['to'] = encryption.encrypt(plain_to, uid)
+            content_change['to_sha256'] = hashlib.sha256(plain_to.encode('utf-8')).hexdigest()
 
     def write_projection(transaction: Any) -> None:
         snapshot = memory_ref.get(transaction=transaction)
@@ -1310,7 +1324,7 @@ def refine_memory(
     return memory_ledger.append_commit(
         uid,
         None,
-        [memory_ledger.refine_fact(memory_id, arg_changes)],
+        [memory_ledger.refine_fact(memory_id, commit_changes)],
         commit_time=update_time,
         projection_writer=write_projection,
         use_current_head=True,
