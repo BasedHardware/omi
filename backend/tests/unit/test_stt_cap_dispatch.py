@@ -375,29 +375,44 @@ async def test_ladder_only_legacy_profile_keeps_long_read_cadence_and_invalidate
     assert state.remaining_units == 10000
 
 
-def test_first_suppression_emits_one_pcm_offset(monkeypatch):
+def test_live_notice_is_a_session_scoped_durable_receipt():
+    event = SttCapLiveHeldEvent(session_id='socket-1', held_seconds=12, paused=True, reset_at=123)
+    assert event.to_json() == {
+        'type': 'stt_cap_live_held',
+        'session_id': 'socket-1',
+        'held_seconds': 12,
+        'paused': True,
+        'reset_at': 123,
+    }
+
+
+def test_provider_capture_observer_sees_only_actual_admission(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     state = cap.LiveAdmission('synthetic')
     state.managed, state.remaining = True, 1
-    state.reason = 'plan_within_allowance'
+    observer = Mock()
+    state.capture_observer = observer
     raw = Mock(send=Mock(return_value=True))
     socket = cap.CapSocket(state, 'soniox', 16000, AsyncMock(), raw)
-    assert socket.send(b'\0' * 3200)
-    assert socket.send(b'\0' * 28800)
-    assert state.pending_held_notice() is None
-    assert socket.send(b'\0' * 3200)
-    assert state.pending_held_notice() == 32000
-    assert socket.send(b'\0' * 1000)
-    assert state.pending_held_notice() == 32000
-    event = SttCapLiveHeldEvent(pcm_byte_offset=state.pending_held_notice())
-    assert event.to_json() == {'type': 'stt_cap_live_held', 'pcm_byte_offset': 32000}
-    state.consume_held_notice()
-    assert state.pending_held_notice() is None
-    assert raw.send.call_count == 2
+    packet = b'\0' * 32000
+    assert not cap.suppress_socket_audio(socket, packet, start_sample=0)
+    assert socket.send(packet)
+    assert cap.suppress_socket_audio(socket, packet, start_sample=16000)
+    assert [c.args[-1] for c in observer.call_args_list] == [True, False]
+    raw.send.assert_called_once()
 
 
-def test_flag_off_suppression_does_not_arm_a_notice(monkeypatch):
-    monkeypatch.delenv('STT_CAP_DISPATCH_ENFORCEMENT', raising=False)
+def test_vad_preroll_observer_uses_actual_spans_not_current_input(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     state = cap.LiveAdmission('synthetic')
-    state.note_suppressed()
-    assert state.pending_held_notice() is None
+    state.managed, state.remaining = True, None
+    observer = Mock()
+    state.capture_observer = observer
+    socket = cap.CapSocket(state, 'soniox', 16000, AsyncMock(), Mock(send=Mock(return_value=True)))
+    data = b'\1\0' * 100 + b'\2\0' * 200
+    cap.set_cap_capture(socket, data, ((100, 100), (900, 200)))
+    assert socket.send(data)
+    assert [call.args for call in observer.call_args_list] == [
+        (b'\1\0' * 100, 16000, 100, True),
+        (b'\2\0' * 200, 16000, 900, True),
+    ]

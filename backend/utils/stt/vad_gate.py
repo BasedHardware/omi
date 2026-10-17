@@ -12,7 +12,7 @@ Modes (VAD_GATE_MODE env var):
 """
 
 import audioop
-from utils.stt_cap_dispatch import suppress_socket_audio
+from utils.stt_cap_dispatch import suppress_socket_audio, set_cap_capture
 
 import logging
 import os
@@ -796,11 +796,12 @@ class GatedSTTSocket(STTSocket):
 
     def send(self, data: bytes, wall_time: Optional[float] = None, start_sample: Optional[int] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
-        if suppress_socket_audio(self._conn, data):
+        if suppress_socket_audio(self._conn, data, start_sample=start_sample):
             return True
         if self.is_connection_dead:
             return False
         if self._gate is None:
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(self._counted(data))
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
                 self._send_tracker.send_path = 'direct_recorded'
@@ -821,6 +822,7 @@ class GatedSTTSocket(STTSocket):
             )
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(data)
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
                 self._send_tracker.send_path = 'direct_recorded'
@@ -834,9 +836,11 @@ class GatedSTTSocket(STTSocket):
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
+            set_cap_capture(self._conn, data, ((start_sample, len(data) // 2),) if start_sample is not None else ())
             accepted = self._conn.send(self._counted(data))
             sent_spans = ((start_sample, len(data) // 2),) if start_sample is not None else ()
         elif gate_out.audio_to_send:
+            set_cap_capture(self._conn, gate_out.audio_to_send, gate_out.send_spans)
             accepted = self._conn.send(self._counted(gate_out.audio_to_send))
             sent_spans = gate_out.send_spans
         else:
@@ -888,6 +892,7 @@ class GatedSTTSocket(STTSocket):
         if not data:
             return True
         self._idle_send_spans = spans
+        set_cap_capture(self._conn, data, spans)
         accepted = self._conn.send(data)
         if accepted and self._send_tracker is not None and spans:
             self._send_tracker.note_accepted_spans(spans)

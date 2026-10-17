@@ -1,7 +1,7 @@
 from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Literal
 
 from pydantic import BaseModel, Field, model_serializer
 
@@ -223,6 +223,7 @@ class HeldAudioSummary(BaseModel):
     seconds: int
     reset_at: int
     retain_live: bool
+    state: Literal['paused', 'recovering'] = 'paused'
     count: int = 0
     recordings: List[HeldAudioRecording] = []
 
@@ -259,8 +260,9 @@ class UserSubscriptionResponse(BaseModel):
     # Older clients ignore the field.
     held_audio: Optional[HeldAudioSummary] = None
 
-    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
-        data = super().model_dump(**kwargs)
+    @model_serializer(mode='wrap')
+    def serialize_optional_held_audio(self, handler):
+        data = handler(self)
         if data.get('held_audio') is None:
             data.pop('held_audio', None)
         return data

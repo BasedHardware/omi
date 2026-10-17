@@ -2932,6 +2932,7 @@ export interface HeldAudioSummary {
   reset_at: number;
   retain_live: boolean;
   seconds: number;
+  state?: "paused" | "recovering";
 }
 
 export interface IgnoredVoice {

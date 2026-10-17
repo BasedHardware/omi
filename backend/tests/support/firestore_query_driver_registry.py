@@ -2948,6 +2948,7 @@ _add(
         base={'uid': UID},
     )
 )
+_add(DriverEntry('utils.sync.cap_hold.ensure_summary', base={'uid': UID}))
 _add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(

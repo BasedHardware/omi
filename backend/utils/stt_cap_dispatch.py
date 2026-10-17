@@ -99,9 +99,8 @@ class LiveAdmission:
         self.refreshed_at = None
         self.failures = 0
         self.usage_cache = None
-        self.accepted_pcm_bytes = 0
-        self._held_pcm_offset: int | None = None
-        self._held_notice_sent = False
+        self.capture_observer = None
+        self.active_capture = None
         if budget_enforcement_enabled():
             from database.usage_units_session import UsageUnitsSession
 
@@ -184,13 +183,13 @@ class LiveAdmission:
             record_audio(
                 'live', 'suppressed', provider, len(data) / (2 * rate), self.reason == 'plan_allowance_exhausted'
             )
-            self.note_suppressed()
+            self.observe_capture(False)
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
             return True
         accepted = raw.send(data, *args, **kwargs)
         if accepted is not False:
-            self.note_forwarded(data)
+            self.observe_capture(True)
         if accepted is not False and not customer_funded(provider):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
@@ -207,28 +206,14 @@ class LiveAdmission:
                     self.reason = 'plan_allowance_exhausted'
         return accepted
 
-    def note_forwarded(self, data: bytes) -> None:
-        self.accepted_pcm_bytes += len(data)
-
-    def note_suppressed(self) -> None:
-        """Arm one listen notice at the first funded packet this session does not send.
-
-        The offset is the PCM16 byte count already forwarded to the provider.
-        Audio before it was transcribed; audio from it was not, so the client
-        can re-upload only that tail. Later suppressions do not move it.
-        """
-        if not enabled() or self._held_pcm_offset is not None:
-            return
-        self._held_pcm_offset = self.accepted_pcm_bytes
-
-    def pending_held_notice(self) -> int | None:
-        if self._held_pcm_offset is None or self._held_notice_sent:
-            return None
-        return self._held_pcm_offset
-
-    def consume_held_notice(self) -> None:
-        if self._held_pcm_offset is not None:
-            self._held_notice_sent = True
+    def observe_capture(self, admitted):
+        capture, self.active_capture = self.active_capture, None
+        if capture is not None and self.capture_observer is not None:
+            data, rate, spans = capture
+            offset = 0
+            for start, samples in spans:
+                self.capture_observer(data[offset : offset + samples * 2], rate, start, admitted)
+                offset += samples * 2
 
 
 current_live_admission = ContextVar('stt_cap_live_admission', default=None)
@@ -306,7 +291,12 @@ class CapSocket(STTSocket):
     def death_reason(self):
         return self.raw.death_reason if self.raw is not None else None
 
-    def suppress(self, data):
+    def set_cap_capture(self, data, spans):
+        self.admission.active_capture = (data, self.rate, tuple(spans)) if spans else None
+
+    def suppress(self, data, start_sample=None):
+        if start_sample is not None:
+            self.admission.active_capture = (data, self.rate, ((start_sample, len(data) // 2),))
         if self.raw is None or not self.admission.packet_allowed(data, self.provider, self.rate):
             record_audio(
                 'live',
@@ -315,7 +305,7 @@ class CapSocket(STTSocket):
                 len(data) / (2 * self.rate),
                 self.admission.reason == 'plan_allowance_exhausted',
             )
-            self.admission.note_suppressed()
+            self.admission.observe_capture(False)
             return True
         return False
 
@@ -328,7 +318,7 @@ class CapSocket(STTSocket):
                 len(data) / (2 * self.rate),
                 self.admission.reason == 'plan_allowance_exhausted',
             )
-            self.admission.note_suppressed()
+            self.admission.observe_capture(False)
             return True
         return self.admission.send(self.raw, data, self.provider, self.rate, *args, **kwargs)
 
@@ -392,7 +382,12 @@ def session_admission(fn):
     return connect
 
 
-def suppress_socket_audio(socket, data):
+def suppress_socket_audio(socket, data, start_sample=None):
     # Explicit identity avoids treating test doubles or unrelated adapters as
     # cap owners. Suppress before VAD/timeline adapters record provider spans.
-    return getattr(socket, 'cap_dispatch_socket', False) is True and socket.suppress(data)
+    return getattr(socket, 'cap_dispatch_socket', False) is True and socket.suppress(data, start_sample=start_sample)
+
+
+def set_cap_capture(socket, data, spans):
+    if getattr(socket, 'cap_dispatch_socket', False) is True:
+        socket.set_cap_capture(data, spans)

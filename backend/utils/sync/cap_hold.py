@@ -59,6 +59,8 @@ def capture_identity(path: str, metadata: dict[str, Any]) -> str:
     partition = {
         key: metadata.get(key) for key in ('timestamp', 'source', 'client_device_id', 'target_conversation_id')
     }
+    if metadata.get('origin') == 'live':
+        partition.update({key: metadata.get(key) for key in ('origin', 'recording_session_id', 'channel')})
     digest = hashlib.sha256(json.dumps(partition, sort_keys=True).encode())
     with open(path, 'rb') as source:
         while chunk := source.read(AUDIO_CHUNK_BYTES):
@@ -132,16 +134,82 @@ def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | No
 def _summary_after(current: dict | None, delta_seconds: int, delta_count: int) -> dict:
     data = current or {}
     return {
-        'seconds': max(0, whole_seconds(data.get('seconds')) + int(delta_seconds)),
+        'version': 2,
+        'seconds': max(0, float(data.get('seconds') or 0) + delta_seconds),
         'count': max(0, int(data.get('count') or 0) + int(delta_count)),
     }
+
+
+def remaining_seconds(row: dict) -> float:
+    """Pending source seconds, then pending frozen pieces once VAD is planned.
+
+    Failed reconciliation remains waiting and retained. Successful/silent pieces
+    cease contributing as soon as their transcribed receipt is fenced in.
+    """
+    if row.get('failed_reconciliation') or row.get('state') == 'held':
+        plan = row.get('piece_plan')
+        if plan is None:
+            return max(0.0, float(row.get('seconds') or 0))
+        receipts = row.get('piece_receipts') or {}
+        processed = set(row.get('processed_paths') or [])
+        return sum(
+            max(0.0, float(piece.get('seconds') or 0))
+            for name, piece in plan.items()
+            if name not in processed and receipts.get(name, {}).get('state') != 'transcribed'
+        )
+    return 0.0
+
+
+def ensure_summary(uid: str) -> dict:
+    """One lazy, transactional rebuild for old manifests or pre-v2 summaries.
+
+    Every creator/checkpoint runs this before mutating. Rebuilders conflict on
+    the same summary document; subsequent deltas cannot race a rebuild. Listing
+    backfill uses bounded commits before the final transactional snapshot.
+    """
+    client = get_firestore_client()
+    ref = summary_ref(uid)
+    snap = ref.get()
+    current = snap.to_dict() if snap.exists else {}
+    if current and current.get('version') == 2:
+        return current
+    with external_write_fence(uid):
+        batch, writes = client.batch(), 0
+        for snap in holds(uid).stream():
+            row = snap.to_dict() or {}
+            if 'listed_at' not in row:
+                batch.update(snap.reference, {'listed_at': row.get('started_at') or row.get('created_at') or 0})
+                writes += 1
+                if writes == 400:
+                    batch.commit()
+                    batch, writes = client.batch(), 0
+        if writes:
+            batch.commit()
+
+        @firestore.transactional
+        def rebuild(tx):
+            snap = ref.get(transaction=tx)
+            current = snap.to_dict() if snap.exists else {}
+            if current and current.get('version') == 2:
+                return current
+            seconds, count = 0.0, 0
+            for snap in holds(uid).stream(transaction=tx):
+                pending = remaining_seconds(snap.to_dict() or {})
+                seconds += pending
+                count += int(pending > 0)
+            result = {'version': 2, 'seconds': seconds, 'count': count}
+            tx.set(ref, result)
+            return result
+
+        return rebuild(client.transaction())
 
 
 def _publish(uid: str, identity: str, seconds: float, fields: dict, started_at: int | None = None) -> bool:
     # Reacquire the account fence after upload: deletion may have started while
     # the async coordinator switched pools. Never acknowledge a refused manifest.
     manifest = hold_manifest(fields, seconds, time.time(), started_at)
-    whole = whole_seconds(seconds)
+    whole = seconds
+    ensure_summary(uid)
     with external_write_fence(uid):
         client = get_firestore_client()
         batch = client.batch()
@@ -311,6 +379,7 @@ def defer_segment(uid: str, path: str, metadata: dict, response: dict, lock: Any
 
 
 def checkpoint(uid: str, ref: Any, token: str, updates: dict) -> bool:
+    ensure_summary(uid)
     client = get_firestore_client()
 
     @firestore.transactional
@@ -319,15 +388,15 @@ def checkpoint(uid: str, ref: Any, token: str, updates: dict) -> bool:
         row = snapshot.to_dict() if snapshot.exists else {}
         if row.get('lease_token') != token or row.get('lease_until', 0) <= time.time():
             return False
-        new_state = updates.get('state', row.get('state'))
-        leaving = row.get('state') == 'held' and new_state != 'held'
-        # Read the running total before any write. Leaving `held` decrements
-        # the same transaction that changes the manifest.
-        summary_snapshot = summary_ref(uid).get(transaction=tx) if leaving else None
+        updated = {**row, **updates}
+        before, after = remaining_seconds(row), remaining_seconds(updated)
+        delta = after - before
+        count_delta = int(after > 0) - int(before > 0)
+        summary_snapshot = summary_ref(uid).get(transaction=tx) if delta or count_delta else None
         tx.update(ref, updates)
-        if leaving and summary_snapshot is not None:
+        if summary_snapshot is not None:
             current = summary_snapshot.to_dict() if summary_snapshot.exists else None
-            tx.set(summary_ref(uid), _summary_after(current, -whole_seconds(row.get('seconds')), -1))
+            tx.set(summary_ref(uid), _summary_after(current, delta, count_delta))
         return True
 
     with external_write_fence(uid):

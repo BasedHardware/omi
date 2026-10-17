@@ -19,8 +19,8 @@ units use the bounded cadence below.
 Root counters retain their received-audio semantics. Timestamp adapters suppress
 before recording accepted-provider spans. Denial is a policy pause, not provider
 death: receiving, pusher audio and existing private-cloud/raw archive paths
-continue. Accepted provider queues drain. Nothing enables cloud audio retention
-for live users who did not already opt into it. Custom/on-device STT bypasses the
+continue. Accepted provider queues drain. When dispatch enforcement pauses managed live audio, the server retains that
+suppressed PCM for recovery independently of the optional private-cloud archive. Custom/on-device STT bypasses the
 new state. The existing Plus threshold event still uses its existing wire shape.
 
 Deepgram cloud with a request key is customer funded. Every other provider,
@@ -185,10 +185,11 @@ cross-process admission race.
   The date is the server's transcription-meter reset (00:00 UTC on the 1st, including
   legacy Plus, whose Stripe period end is not the minute counter). Live capture
   keeps recording while cloud transcription pauses. The first suppressed live
-  packet emits one `stt_cap_live_held` listen event with the PCM byte offset of
-  audio already sent to the provider. The client retains audio from that offset
-  and uploads it through the existing sync path, where it becomes held audio.
-  Audio before the offset stays synced and is not charged again. Settings usage
+  packet emits a session-scoped `stt_cap_live_held` UI receipt. Its `session_id`,
+  `paused` and `held_seconds` fields report only durably published live seconds.
+  Periodic receipts update the count; a funded resume flushes the tail and sends
+  `paused=false`. Reconnects clear the client's receipt state. No WAL offsets,
+  sync marks or client retention policies change. Settings usage
   adds the waiting row beside the existing meter, the existing paid on-phone
   toggle when this phone can run the engine, and See plans. The held total is one
   summary document, not a scan of every hold. The newest 20 rows are listed, with
@@ -258,3 +259,80 @@ units remain separate from history. Each ambiguous historical leaf contributes
 separately attributed new units. A gateway proxy uses the standard-chat estimate.
 Ambiguity does not return 503 or deny an account until reset. Coverage histograms
 and the shared degraded/fallback metric remain visible; no history is rewritten.
+
+
+## Server custody of suppressed live audio (round 3)
+
+The receive boundary holds decoded PCM16 mono (all supported input codecs are
+already decoded), resampled to 16 kHz for multi-channel inputs. One-second WAV
+objects use the same authenticated chunk encryption, owner prefix, manifests,
+pinned piece plan, fenced ingestion receipts and idempotent usage settlement
+as held sync uploads. Live pieces bypass the sync VAD minimum-duration filter,
+which otherwise discards sub-second tails; no WAL coverage belongs to this
+server-origin PCM. Ownership/rate/channel changes and clock gaps split packs.
+The projected capture clock and conversation ownership ranges preserve the
+original timestamps and target conversations. If ownership has expired, recovery
+uses ordinary timestamp-based conversation assignment rather than inventing a
+current owner. Channels retain separate source identities.
+
+The admission adapters report actual capture spans after VAD, including pre-roll.
+The receiver keeps a bounded union of decided capture ranges: paid prefix and
+already-held samples cannot become a new hold on replay. Fresh queued audio that
+is denied later can enter custody from the adapter callback. New denied receive
+buffers bypass the provider and replay ring entirely. Resume flushes custody
+before forwarding the next receive buffer; it never sends held PCM to live STT.
+
+The sink bounds individual objects to one second of mono PCM and backpressure to
+60 seconds of pending PCM. The async receive path and the one-second update task
+serialize publication. Disconnect, ordinary exceptions and cancellation flush
+the tail in cleanup; cleanup lets an in-flight executor upload finish before
+removing its WAV. **SIGKILL/pod loss can lose the pending PCM plus an in-flight write**
+(up to the 60-second aggregate buffer bound; ordinarily a sub-second mono tail). Published holds have no TTL and recover after restart.
+Counters are receipts, not an assertion that in-flight data is durable. This is
+an explicit activation limitation; no client acknowledgement protocol was added.
+
+A transactional per-user, capture-UTC-month reservation admits at most 96 GiB /
+3,000,000 source objects. Frozen recovery pieces and conservative failed/retried
+reservations share a 192 GiB / 6,000,000 total ceiling for that capture month;
+recovery does not escape it at a later month boundary. Capacity failure closes
+the listen path with an error, never a successful custody receipt. This adds no
+TTL or deletion policy. At 16 kHz, a full continuous 31-day mono month is about
+79.82 GiB plus framing. The ceiling also bounds concurrent sessions/channels.
+At illustrative regional Standard storage $0.02/GiB-month, the source bound is
+$1.92 and the combined retained-audio bound is **$3.84 per capture month retained
+for a full billing month**, excluding Firestore metadata, operations and recovery
+STT. Unrecovered months accumulate; this is an incremental monthly bound, not a
+lifetime retention cap. No production location/bucket settings were read.
+
+For a steady, mono capped minute (60 one-second publications), custody adds 60
+GCS uploads, 180 Firestore writes and 780 Firestore document reads, including the
+existing two-read deletion gates (13 reads / publication). Header overhead is
+4,560 bytes/minute; PCM is 1,920,000 bytes/minute. Boundary fragments, retries,
+transaction contention, initial summary migration and recovery add operations.
+The existing usage/allowance refresh is separate. At illustrative us-central1
+rates $0.03/100k reads, $0.09/100k writes and $0.005/1k GCS Class A operations,
+this is about **$0.000696/capped minute** before metadata/storage/recovery, or
+$31.07 for 44,640 continuous capped minutes. One-second recovery requests add
+provider overhead; a coalesced recovery dispatch is a future efficiency task.
+Sources: [GCS pricing](https://cloud.google.com/storage/pricing),
+[Firestore pricing](https://cloud.google.com/firestore/pricing).
+
+Existing account deletion purges every generation under `chunks/{uid}/` and
+recursively deletes user subcollections, including manifests, summary and monthly
+reservations. The existing deletion/write gates guard reservations, uploads and
+publication; no independent store or deletion pathway was introduced.
+
+Summary v2 lazily rebuilds older/missing totals from held rows in a transaction,
+backfills listing timestamps in bounded batches, and then uses transactional
+piece-level deltas. It counts pending frozen-piece seconds, removes successful
+or silent receipts immediately, and retains failed-reconciliation seconds.
+Subscription HTTP serialization omits only an absent `held_audio`, preserving all
+other null fields. A funded user with pending holds receives `state=recovering`;
+clients render “Transcribing your waiting recordings” without a reset promise.
+
+Local migration verification (loopback Firestore only):
+
+```sh
+firebase emulators:exec --only firestore --project demo-held-audio \
+  'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
+```

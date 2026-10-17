@@ -14,6 +14,7 @@ from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppre
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.manual_speaker_assignments import acknowledged_teaching
 from utils.other.live_audio_archive import LiveAudioArchive
+from utils.sync.live_cap_hold import LiveHeldAudio
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -211,7 +212,7 @@ class _RecordingSTTSocket:
         return getattr(self._conn, name)
 
     def send(self, data: bytes, start_sample: Optional[int] = None) -> bool:
-        if suppress_socket_audio(self._conn, data):
+        if suppress_socket_audio(self._conn, data, start_sample=start_sample):
             return True
         try:
             accepted = (
@@ -266,9 +267,14 @@ class ListenReceiver(ReplayFilterMixin):
             if stt_cap_dispatch_enabled() and not host.use_custom_stt
             else None
         )
+        self.live_hold = LiveHeldAudio(host) if self.cap_admission is not None else None
+        self._cap_init_lock = asyncio.Lock()
+        self._cap_hold_stop = asyncio.Event()
         self.cap_paused = False
         if self.cap_admission is not None:
             host.state.stt_cap_admission = self.cap_admission
+            self.cap_admission.capture_observer = self._observe_cap_capture
+        self._cap_decided_spans = []
         self.raw_archive = LiveAudioArchive(host)
         try:
             self.lane_meter = LiveLaneMeter()
@@ -1250,6 +1256,15 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        lock = getattr(self, '_cap_init_lock', None)
+        if getattr(self, 'cap_admission', None) is None or lock is None:
+            return await self._initialize_stt()
+        async with lock:
+            if not self.cap_paused and (self.stt_socket is not None or any(self.stt_sockets_multi)):
+                return True
+            return await self._initialize_stt()
+
+    async def _initialize_stt(self) -> bool:
         admission = getattr(self, 'cap_admission', None)
         if admission is not None:
             await admission.refresh(force=False)
@@ -1257,7 +1272,6 @@ class ListenReceiver(ReplayFilterMixin):
                 admission.omi_selected = True
                 self.cap_paused = True
                 return True  # Receive/persist without consulting provider routing.
-            self.cap_paused = False
         self.live_demand = attach_live_demand(self)
         if self.live_demand is not None:
             await self.live_demand.publish()
@@ -1295,6 +1309,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
                     telemetry_call(self, 'lane_meter', 'transition', self._serving_provider())
                     record_live_connection(self.host, self._serving_provider())
+                self.cap_paused = False
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
                 override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
@@ -1338,6 +1353,7 @@ class ListenReceiver(ReplayFilterMixin):
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
+            self.cap_paused = False
 
             return True
         except ProviderChainUnavailable as error:
@@ -1864,28 +1880,41 @@ class ListenReceiver(ReplayFilterMixin):
             del self.image_chunks[chunk.id]
             self.host.spawn(self._process_photo(image, chunk.id), name='photo_process')
 
+    def _observe_cap_capture(self, data, rate, start, admitted):
+        self.live_hold.observe(self, data, rate, start, admitted)
+
+    async def _cap_hold_updates(self):
+        await self.live_hold.run_updates(self)
+
     async def _emit_stt_cap_live_held(self) -> None:
-        """Send the one-shot cap notice on the listen message channel, if it is armed."""
-        admission = getattr(self, 'cap_admission', None)
-        if admission is None:
-            return
-        offset = admission.pending_held_notice()
-        if offset is None:
-            return
-        websocket = getattr(getattr(self.host, 'request', None), 'websocket', None)
-        send = getattr(websocket, 'send_json', None)
-        if send is None:
-            return
-        try:
-            await send(SttCapLiveHeldEvent(pcm_byte_offset=offset).to_json())
-        except Exception:
-            logger.warning('event=stt_cap_live_held outcome=notify_deferred')
-            return
-        admission.consume_held_notice()
+        hold = getattr(self, 'live_hold', None)
+        if hold is not None:
+            await hold.flush()
+            await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
         admission = getattr(self, 'cap_admission', None)
-        if admission is not None and not admission.allowed(self.host.stt_service):
+        if admission is not None and getattr(self, 'cap_paused', False) and admission.allowed(self.host.stt_service):
+            if not await self.initialize_stt():
+                return
+        if admission is not None and not admission.packet_allowed(
+            buffer, self.host.stt_service, self.host.request.sample_rate
+        ):
+            hold = getattr(self, 'live_hold', None)
+            if hold is not None and buffer:
+                start = self._stt_buffer_start_sample
+                timeline = getattr(self, 'capture_timeline', None)
+                timestamp = (
+                    timeline.wall(start)
+                    if timeline is not None and start is not None
+                    else time.time() - len(buffer) / (2 * self.host.request.sample_rate)
+                )
+                if start is not None:
+                    self._observe_cap_capture(bytes(buffer), self.host.request.sample_rate, start, False)
+                else:
+                    hold.append(
+                        bytes(buffer), self.host.request.sample_rate, timestamp, self.host.state.current_conversation_id
+                    )
             record_cap_audio(
                 'live',
                 'suppressed',
@@ -1893,11 +1922,14 @@ class ListenReceiver(ReplayFilterMixin):
                 len(buffer) / (2 * self.host.request.sample_rate),
                 admission.reason == 'plan_allowance_exhausted',
             )
-            admission.note_suppressed()
             buffer.clear()
             self._stt_buffer_start_sample = None
             await self._emit_stt_cap_live_held()
             return
+        hold = getattr(self, 'live_hold', None)
+        if hold is not None and hold.paused:
+            await hold.flush(force=True)
+            await hold.notice(paused=False)
         if getattr(self, 'recovery', None) is None:
             return await legacy_recovery.flush_stt_buffer(self, buffer, force=force)
         request = self.host.request
@@ -2116,9 +2148,46 @@ class ListenReceiver(ReplayFilterMixin):
                 pcm_len=len(pcm),
                 fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
             )
-            suppressed = should_send and suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm)
+            admission = getattr(self, 'cap_admission', None)
+            if (
+                admission is not None
+                and getattr(self, 'cap_paused', False)
+                and admission.allowed(self.host.stt_service)
+            ):
+                if not await self.initialize_stt():
+                    return len(audio)
+                should_send, dg_usage_ms = decide_multi_channel_stt_send(
+                    socket_available=bool(self.stt_sockets_multi[channel_index]),
+                    fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
+                    pcm_len=len(pcm),
+                    fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
+                )
+            denied = admission is not None and not admission.packet_allowed(
+                pcm, self.host.stt_service, TARGET_SAMPLE_RATE
+            )
+            suppressed = denied or should_send and suppress_socket_audio(self.stt_sockets_multi[channel_index], pcm)
+            if denied:
+                record_cap_audio(
+                    'live',
+                    'suppressed',
+                    self.host.stt_service,
+                    len(pcm) / (2 * TARGET_SAMPLE_RATE),
+                    admission.reason == 'plan_allowance_exhausted',
+                )
             if suppressed:
+                hold = getattr(self, 'live_hold', None)
+                if hold is not None:
+                    hold.append(
+                        pcm,
+                        TARGET_SAMPLE_RATE,
+                        now - len(pcm) / (2 * TARGET_SAMPLE_RATE),
+                        self.host.state.current_conversation_id,
+                        channel_index,
+                    )
                 await self._emit_stt_cap_live_held()
+            elif getattr(self, 'live_hold', None) is not None and self.live_hold.paused:
+                await self.live_hold.flush(force=True)
+                await self.live_hold.notice(paused=False)
             if should_send and not suppressed:
                 sent = await send_live_stt_audio(
                     request.websocket,
@@ -2316,6 +2385,11 @@ class ListenReceiver(ReplayFilterMixin):
         self.host.state.last_audio_received_time = time.time()
         self.host.state.last_activity_time = self.host.state.last_audio_received_time
         self._receiving = True
+        cap_updates = (
+            self.host.spawn(self._cap_hold_updates(), name='cap_held_updates')
+            if getattr(self, 'live_hold', None) is not None
+            else None
+        )
         try:
             while self.host.state.active:
                 try:
@@ -2467,6 +2541,25 @@ class ListenReceiver(ReplayFilterMixin):
                 else:
                     await self._teardown_body(buffer, decoded_audio_bytes)
             finally:
+                if cap_updates is not None:
+                    self._cap_hold_stop.set()
+                    # Let the leaf upload finish before cleaning its temporary
+                    # WAV. Cancelling run_in_executor cannot cancel its thread.
+                    try:
+                        await asyncio.shield(cap_updates)
+                    except Exception as error:
+                        logger.error(
+                            'event=stt_cap_live_held outcome=update_failed exception_type=%s', type(error).__name__
+                        )
+                        self.host.state.close_code = 1011
+                if getattr(self, 'live_hold', None) is not None:
+                    try:
+                        await self.live_hold.close()
+                    except Exception as error:
+                        self.host.state.close_code = 1011
+                        logger.error(
+                            'event=stt_cap_live_held outcome=persist_failed exception_type=%s', type(error).__name__
+                        )
                 self.stt_drain_complete.set()
                 self.host.state.active = False
                 # Archive I/O runs only after transcript drain, outside the STT

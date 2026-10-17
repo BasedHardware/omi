@@ -140,3 +140,46 @@ def test_subscription_open_kicks_recovery_only_when_dispatch_is_on(monkeypatch):
     summary.attach_subscription_held_audio(response, 'synthetic', SimpleNamespace(managed=False))
     assert kicked == ['synthetic']
     assert response.held_audio.seconds == 5
+
+
+def test_partial_receipts_and_retries_adjust_summary_under_lease(monkeypatch):
+    from contextlib import nullcontext
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    key = ('users', 'synthetic', 'stt_cap_holds', 'a')
+    total_key = ('users', 'synthetic', 'stt_cap_hold_summary', 'current')
+    client = StrictFirestore(
+        {
+            key: {'state': 'held', 'lease_until': 1000, 'lease_token': 'owner', 'seconds': 80},
+            total_key: {'version': 2, 'seconds': 80, 'count': 1},
+        }
+    )
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda uid: nullcontext())
+    monkeypatch.setattr(cap_hold.time, 'time', lambda: 100)
+    ref = client.document('/'.join(key))
+    # VAD planned only 60s; discarded silence ceases to be waiting.
+    assert cap_hold.checkpoint('synthetic', ref, 'owner', {'piece_plan': {'a': {'seconds': 20}, 'b': {'seconds': 40}}})
+    assert client.rows[total_key]['seconds'] == 60
+    for _ in range(2):
+        assert cap_hold.checkpoint('synthetic', ref, 'owner', {'piece_receipts': {'a': {'state': 'transcribed'}}})
+        assert client.rows[total_key]['seconds'] == 40
+    assert not cap_hold.checkpoint('synthetic', ref, 'stale', {'state': 'completed'})
+    assert cap_hold.checkpoint(
+        'synthetic',
+        ref,
+        'owner',
+        {
+            'piece_receipts': {'a': {'state': 'transcribed'}, 'b': {'state': 'failed_reconciliation'}},
+            'failed_reconciliation': True,
+            'state': 'completed',
+        },
+    )
+    assert client.rows[total_key] == {'version': 2, 'seconds': 40, 'count': 1}
+    assert cap_hold.checkpoint('synthetic', ref, 'owner', {'state': 'retained'})
+    assert client.rows[total_key]['seconds'] == 40
+
+
+def test_fractional_pieces_do_not_accumulate_rounding_drift(monkeypatch):
+    assert cap_hold._summary_after({'seconds': 0.4, 'count': 1}, 0.4, 1)['seconds'] == 0.8
+    assert cap_hold.remaining_seconds({'state': 'held', 'piece_plan': {}, 'seconds': 80}) == 0

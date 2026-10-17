@@ -18229,6 +18229,15 @@
           "seconds": {
             "title": "Seconds",
             "type": "integer"
+          },
+          "state": {
+            "default": "paused",
+            "enum": [
+              "paused",
+              "recovering"
+            ],
+            "title": "State",
+            "type": "string"
           }
         },
         "required": [

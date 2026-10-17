@@ -50,12 +50,15 @@ while any installed caller or stored subscription requires `pro` as Architect.
 It never turns `pro` into the new Pro ID; new Pro is always `operator`.
 
 Below 100% managed work is admitted; 80% remains a nudge in the existing usage
-payload. At 100% managed work pauses. Chat and raw sync admission return structured
-402 `usage_budget_exhausted`, `trigger=usage_budget`, reset/period and choices
-`on_device`/`upgrade`. Raw sync refuses before consuming the upload: the device WAL
-remains the recording authority, waiting for the choice/reset/upgrade. No new lock
-is created by a ladder budget exhaustion. This is not a server-accepted audio job.
-In-flight work can finish; projection admission is not a prepaid reservation.
+payload. At 100% managed work pauses. Chat admission returns structured 402
+`usage_budget_exhausted`, `trigger=usage_budget`, reset/period and choices
+`on_device`/`upgrade`. Sync v1/v2 accept exhausted uploads only after durable
+server custody, then recover on reset/upgrade through the fenced held-audio
+state machine. Suppressed live PCM uses that same encrypted store; the client
+WAL is unchanged. See [dispatch custody](stt-cap-dispatch.md) for storage bounds,
+recovery and crash limitations. No new transcript lock is created by ladder
+exhaustion. In-flight work can finish; projection admission is not a prepaid
+reservation.
 
 `/v1/users/budget-choice` recognizes ladder exhaustion and persists the existing
 monthly choice record. Upgrade intent grants no entitlement. Ask-once semantics

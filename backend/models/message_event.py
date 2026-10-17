@@ -208,15 +208,13 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
 
 
 class SttCapLiveHeldEvent(MessageEvent):
-    """First live packet this session that was not sent to the funded provider.
-
-    Additive on the existing listen message channel. Older clients parse it as
-    an unknown event and keep their previous behavior. ``pcm_byte_offset`` is
-    the PCM16 byte count already transcribed before this packet.
-    """
+    """Session-scoped UI receipt. Seconds count only durably held live PCM."""
 
     event_type: str = "stt_cap_live_held"
-    pcm_byte_offset: int
+    session_id: str
+    held_seconds: int
+    paused: bool
+    reset_at: int
 
     def to_json(self):
         j = self.model_dump(mode="json")

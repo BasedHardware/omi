@@ -11,6 +11,12 @@ from utils.sync import cap_hold, pipeline
 from utils import stt_cap_dispatch as cap
 
 
+@pytest.fixture(autouse=True)
+def initialized_summary(monkeypatch):
+    # This suite tests hold leaves; summary migration has separate transaction tests.
+    monkeypatch.setattr(cap_hold, 'ensure_summary', lambda uid: {'version': 2, 'seconds': 0, 'count': 0})
+
+
 @pytest.mark.parametrize('enforce', [False, True])
 @pytest.mark.parametrize('ladder', [False, True])
 @pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])

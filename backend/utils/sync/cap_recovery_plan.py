@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from utils.executors import run_blocking, storage_executor
+from utils.executors import run_blocking, storage_executor, db_executor
 from utils.sync import cap_hold
 from utils.sync.files import get_wav_duration
 
@@ -46,6 +46,13 @@ async def ensure_plan(
             'source_position_map': source_maps.get(path),
             'lineage_binding': bindings.get(path, meta.get('lineage_binding')),
         }
+        if meta.get('origin') == 'live':
+            from utils.sync.live_cap_hold import reserve
+
+            context['live_storage_month'] = meta['live_storage_month']
+            size = await run_blocking(storage_executor, lambda: Path(path).stat().st_size)
+            size += 32 * ((size + cap_hold.AUDIO_CHUNK_BYTES - 1) // cap_hold.AUDIO_CHUNK_BYTES)
+            await run_blocking(db_executor, reserve, uid, size, month=meta['live_storage_month'], recovery=True)
         plan[name] = await run_blocking(storage_executor, persist_piece, uid, snapshot.id, path, context)
         local_paths[name], contexts[name] = path, context
     if not await save(uid, snapshot, row, {'piece_plan': plan}):

@@ -14,6 +14,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 def state(monkeypatch, tmp_path):
     checkpoint, renew = recovery.cap_hold.checkpoint, recovery.cap_hold.renew
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(recovery.cap_hold, 'ensure_summary', lambda uid: {'version': 2, 'seconds': 0, 'count': 0})
 
     async def immediate(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)

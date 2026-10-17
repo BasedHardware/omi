@@ -8,7 +8,7 @@ from google.cloud import firestore
 from config.stt_cap_dispatch import enabled
 from models.users import HeldAudioRecording, HeldAudioSummary
 from utils.stt_cap_dispatch import funded_allowance
-from utils.sync.cap_hold import holds, summary_ref, whole_seconds
+from utils.sync.cap_hold import holds, summary_ref, whole_seconds, ensure_summary, remaining_seconds
 
 # Newest-first page. The exact total lives on the summary doc, not this page.
 LIST_LIMIT = 20
@@ -36,22 +36,20 @@ def plan_reset_at(subscription: Any = None, now: datetime | None = None) -> int:
 
 
 def _load_summary(uid: str) -> dict:
-    snap = summary_ref(uid).get()
-    data = snap.to_dict() if getattr(snap, 'exists', False) else None
-    return data or {}
+    return ensure_summary(uid)
 
 
 def _load_rows(uid: str) -> list[dict]:
     loaded = []
     query = (
         holds(uid)
-        .where('state', '==', 'held')
+        .where('state', 'in', ['held', 'retained'])
         .order_by('listed_at', direction=firestore.Query.DESCENDING)
         .limit(LIST_LIMIT)
     )
     for snap in query.stream():
         data = snap.to_dict() or {}
-        seconds = whole_seconds(data.get('seconds'))
+        seconds = whole_seconds(remaining_seconds(data))
         if seconds <= 0:
             continue
         started = whole_seconds(data.get('started_at') or data.get('created_at'))
@@ -113,6 +111,7 @@ def client_held_audio(
         seconds=total,
         reset_at=plan_reset_at(subscription, now),
         retain_live=retain_live,
+        state='paused' if retain_live else 'recovering',
         count=count,
         recordings=recordings[:LIST_LIMIT],
     )

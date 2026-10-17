@@ -82,3 +82,40 @@ def test_export_publishes_capable_catalog_schema_and_preserves_checked_legacy_re
     # The default released response is still fully checked, not exempted.
     components['Subscription']['properties']['plan']['enum'].append('plus')
     assert check_app_client_openapi_compatibility.compare_specs(base, schema)
+
+
+@pytest.mark.parametrize('flag', ['false', 'true'])
+def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatch, flag):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import users as route
+    from utils.sync import held_audio_summary
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', flag)
+    monkeypatch.setattr(route, '_user_subscription_response', lambda *a: _response(PlanType.basic))
+    allowance = SimpleNamespace(
+        managed=True,
+        remaining_seconds=None,
+        limit_seconds=None,
+        as_dict=lambda: {'mode': 'managed', 'remaining_seconds': None, 'reason': 'available'},
+    )
+    monkeypatch.setattr(route, 'resolve_transcription_allowance', lambda *a, **kw: allowance)
+    monkeypatch.setattr(route, 'fresh_cache_reads', lambda *a: nullcontext())
+    monkeypatch.setattr(held_audio_summary, '_kick_held_recovery', lambda uid: None)
+    monkeypatch.setattr(held_audio_summary, '_load_summary', lambda uid: {'version': 2, 'seconds': 12, 'count': 1})
+    monkeypatch.setattr(held_audio_summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 20, 'seconds': 12}])
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid_no_byok_validation] = lambda: 'synthetic'
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/subscription')
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload['phone_call_quota'] is None  # Do not globally exclude nulls.
+    if flag == 'true':
+        assert payload['held_audio']['state'] == 'recovering'
+        assert payload['held_audio']['seconds'] == 12
+    else:
+        assert 'held_audio' not in payload
