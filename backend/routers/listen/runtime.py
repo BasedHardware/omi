@@ -849,7 +849,7 @@ class ListenSessionRuntime:
             if should_emit_plus_meter_warning(subscription):
                 await self.asend_event(
                     FreemiumThresholdReachedEvent(
-                        remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                        remaining_seconds=int(remaining), action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
                     )
                 )
                 self.state.freemium_threshold_sent = True

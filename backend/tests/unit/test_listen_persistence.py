@@ -201,7 +201,8 @@ async def test_without_funded_admission_keeps_main_long_refresh(monkeypatch, enf
 
 
 @pytest.mark.anyio
-async def test_ladder_refresh_reuses_funded_admission_snapshot(monkeypatch):
+@pytest.mark.parametrize('plan,remaining', [(PlanType.operator, 0), (PlanType.plus, 0.5)])
+async def test_ladder_refresh_reuses_funded_admission_snapshot(monkeypatch, plan, remaining):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
@@ -212,18 +213,26 @@ async def test_ladder_refresh_reuses_funded_admission_snapshot(monkeypatch):
     runtime.limits = ListenLimits()
     runtime.state = ListenSessionState()
     runtime.stt_service = 'modulate'
-    admission = SimpleNamespace(refresh=AsyncMock(), remaining=0, managed=False, omi_selected=True)
+    admission = SimpleNamespace(refresh=AsyncMock(), remaining=remaining, managed=remaining > 0, omi_selected=True)
     runtime.receiver = SimpleNamespace(cap_admission=admission, cap_paused=False)
+    runtime.asend_event = AsyncMock()
+    monkeypatch.setattr(listen_runtime, 'send_credit_limit_notification', AsyncMock())
 
     async def call(function, *args, **kwargs):
         if function is listen_runtime.check_credits_invalidation:
             return False
         if function is listen_runtime.user_db.get_user_valid_subscription:
-            return SimpleNamespace(plan=PlanType.operator)
+            return SimpleNamespace(plan=plan)
         raise AssertionError('redundant budget read')
 
     runtime.persistence = SimpleNamespace(call=call)
     await runtime._refresh_credits()
     admission.refresh.assert_awaited_once()
-    assert runtime.state.remaining_seconds_cache == 0
-    assert not runtime.user_has_credits
+    assert runtime.state.remaining_seconds_cache == remaining
+    assert runtime.user_has_credits is (remaining > 0)
+    if plan == PlanType.plus:
+        event = runtime.asend_event.call_args.args[0]
+        assert event.remaining_seconds == 0
+        assert type(event.remaining_seconds) is int
+    else:
+        runtime.asend_event.assert_not_called()
