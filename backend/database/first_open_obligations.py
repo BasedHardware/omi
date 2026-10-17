@@ -446,10 +446,14 @@ def claim_first_open_work(
         return None
     try:
         if isinstance(lease_seconds, float) and (math.isnan(lease_seconds) or math.isinf(lease_seconds)):
+            logger.debug('Non-finite lease_seconds=%s for uid=%s conversation=%s, defaulting to 300s', lease_seconds, uid, conversation_id)
             sec = 300
         else:
             sec = int(lease_seconds)
-            sec = max(30, min(sec, 86400))
+            clamped = max(30, min(sec, 86400))
+            if clamped != sec:
+                logger.debug('Clamped lease_seconds from %d to %d for uid=%s conversation=%s', sec, clamped, uid, conversation_id)
+            sec = clamped
     except (TypeError, ValueError, OverflowError):
         sec = 300
 
