@@ -64,7 +64,12 @@ def update_person_name_transaction(
 
 
 def rename_person_retaining_aliases(
-    db_client: Any = None, uid: str = "", person_id: str = "", name: str = "", *, expected_chat_state: dict | None = None
+    db_client: Any = None,
+    uid: str = "",
+    person_id: str = "",
+    name: str = "",
+    *,
+    expected_chat_state: dict | None = None
 ) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
     client = db_client or get_firestore_client()
