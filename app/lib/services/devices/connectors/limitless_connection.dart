@@ -77,8 +77,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
   static bool Function()? realtimeSuppressionPolicy;
   bool _realtimeSuppressed = false;
 
+  Future<void>? _activeConnect;
+
   @override
-  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) =>
+      _activeConnect ??= _connect(onConnectionStateChanged).whenComplete(() => _activeConnect = null);
+
+  Future<void> _connect(Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
     _resetClockDriftCapture();
     try {
@@ -106,9 +111,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _listenForTransportReconnects() {
     if (_closed) return;
-    _transportReconnectSubscription ??= transport.connectionStateStream
-        .where((s) => s == DeviceTransportState.connected)
-        .listen((_) => unawaited(_handleTransportReconnected()));
+    _transportReconnectSubscription ??=
+        transport.connectionStateStream.where((s) => s == DeviceTransportState.connected).listen((_) {
+      // A pending Dart connect owns this ready and runs first setup itself.
+      if (_activeConnect == null) unawaited(_handleTransportReconnected());
+    });
   }
 
   Future<void> _completeInitialSetup(int epoch) async {

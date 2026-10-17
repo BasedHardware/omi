@@ -121,11 +121,16 @@ void main() {
     bool suppressRealtime = false,
     int transientWriteFailures = 0,
     bool failBeforeReady = false,
+    bool waitForDartRetry = false,
   }) {
     if (failBeforeReady) {
       setHostApiHandler('configureSavedReconnect', (_) async => <Object?>[]);
+      var first = true;
       setHostApiHandler('manageDevice', (_) async {
-        scheduleMicrotask(() => BleBridge.instance.onPeripheralDisconnected(_deviceId, 'connection_failed'));
+        if (first) {
+          first = false;
+          scheduleMicrotask(() => BleBridge.instance.onPeripheralDisconnected(_deviceId, 'connection_failed'));
+        }
         return <Object?>[];
       });
     }
@@ -161,6 +166,7 @@ void main() {
       }
       expect(service.connectionFor(device.id), same(connection));
       expect(unmanagedCalls, 0);
+      if (waitForDartRetry) async.elapse(const Duration(seconds: 5));
 
       BleBridge.instance.onDeviceReady(_deviceId, [
         BleService(uuid: limitlessServiceUuid, characteristicUuids: [limitlessRxCharUuid, limitlessTxCharUuid]),
@@ -218,6 +224,13 @@ void main() {
       async.flushMicrotasks();
       expect(frames, hasLength(8));
     }, failBeforeReady: true);
+  });
+
+  test('Limitless readiness during a Dart backoff attempt initializes only once', () {
+    withLateLimitless((async, connection, transport, writes) {
+      async.elapse(const Duration(seconds: 5));
+      expect(writes, hasLength(2), reason: 'native listener and pending Dart connect must share first-ready setup');
+    }, failBeforeReady: true, waitForDartRetry: true);
   });
 
   test('late Limitless ready preserves Transcribe Later instead of enabling realtime', () {
