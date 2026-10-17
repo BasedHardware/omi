@@ -15,7 +15,7 @@ import {
   SeriesSources,
   STORE_FAIL_LIMIT,
 } from "../wall-series";
-import { resetWallCache } from "../wall-cache";
+import { resetWallCache, wallPayload } from "../wall-cache";
 import {
   LEASE_MS,
   memorySeriesStore,
@@ -785,5 +785,134 @@ describe("v3 series lease is fenced", () => {
     ]);
     await settle();
     expect(s.query).toHaveBeenCalledTimes(GROWTH_WEEKS); // one fill, not two
+  });
+});
+
+describe("the snapshot is shared and never served cold as settled", () => {
+  const today = `${isoDay(end)}T00:00:00Z`;
+  const through = `${isoDay(shiftDay(end, -1))}T00:00:00Z`;
+  const computeWith =
+    (s: WallSources) =>
+    (_sources?: WallSources, at = new Date()) =>
+      computeWall(s, at);
+  const series = (snapshot: Promise<WallPayload>, s: SeriesSources) =>
+    Promise.all(
+      (
+        [
+          "headline",
+          "growth",
+          "activation",
+          "retention",
+          "revenue",
+          "health",
+        ] as const
+      ).map((name) => seriesPayload(name, snapshot, now, s))
+    );
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+  });
+
+  it("serves the shared last good on a cold instance with zero PostHog reads, charts reaching the stat", async () => {
+    const store = memorySeriesStore();
+    const a = sources();
+    const retain = vi.fn();
+    await wallPayload(now, computeWith(a), retain, store);
+    await Promise.all(retain.mock.calls.map(([work]) => work));
+    expect(a.query).toHaveBeenCalled();
+    expect(store.docs.has("wall-series:v1:leg:snapshot")).toBe(true);
+
+    resetWallCache(); // instance b: cold process, same shared store
+    resetSeriesCache();
+    const b = sources();
+    const compute = vi.fn(computeWith(b));
+    const wall = await wallPayload(now, compute, () => {}, store);
+    expect(compute).not.toHaveBeenCalled();
+    expect(b.query).not.toHaveBeenCalled();
+    expect(wall.refreshing).toBeFalsy();
+    expect(value(wall, "growth.wau").value).not.toBeNull();
+
+    const f = await all(wall, b);
+    expect(f.activation.activation.at(-1)).toMatchObject({
+      date: `${value(wall, "activation.rate").trend.at(-1)!.date}T00:00:00Z`,
+      total: value(wall, "activation.rate").value,
+    });
+    expect(f.retention.established.at(-1)?.total).toBeCloseTo(
+      value(wall, "retention.established_week").value!,
+      1
+    );
+    expect(f.headline.activation.at(-1)?.value).toBe(
+      f.activation.activation.at(-1)?.total
+    );
+  });
+
+  it("reports refreshing with no null points dated today while a cold refresh has no last good", async () => {
+    const compute = vi.fn(() => new Promise<never>(() => {}));
+    const snapshot = wallPayload(now, compute, () => {});
+    const pending = series(snapshot, sources());
+    await vi.advanceTimersByTimeAsync(5_000);
+    const payloads = await pending;
+    expect(compute).toHaveBeenCalledTimes(1);
+    for (const p of payloads) {
+      expect(p.refreshing).toBe(true);
+      expect(p.gaps.snapshot).toBe("Snapshot refresh running");
+      for (const rows of Object.values(p.frames))
+        for (const row of rows)
+          expect(row.date === today && row.value === null).toBe(false);
+    }
+    const head = payloads[0].frames;
+    expect(head.wau).toEqual([{ date: through, value: null }]);
+    expect(head.deltas.find((d) => d.key === "wau")?.text).toBe("—");
+  });
+
+  it("lets a second cold instance wait honestly on the instance holding the refresh", async () => {
+    const store = memorySeriesStore();
+    void wallPayload(
+      now,
+      vi.fn(() => new Promise<never>(() => {})),
+      () => {},
+      store
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    resetWallCache();
+    const compute = vi.fn(computeWith(sources()));
+    const wall = await wallPayload(now, compute, () => {}, store);
+    expect(compute).not.toHaveBeenCalled();
+    expect(wall.refreshing).toBe(true);
+    expect(wall.metrics.every((m) => m.value == null)).toBe(true);
+  });
+
+  it("keeps a failing source's previous metric, labelled stale, on every instance", async () => {
+    const store = memorySeriesStore();
+    const good = sources();
+    const retain = vi.fn();
+    await wallPayload(now, computeWith(good), retain, store);
+    await Promise.all(retain.mock.calls.map(([work]) => work));
+    const before = await wallPayload(now, computeWith(good), retain, store);
+
+    vi.advanceTimersByTime(16 * 60_000);
+    const failing = sources();
+    failing.stripe = async () => {
+      throw new Error("Stripe restricted read key unavailable");
+    };
+    failing.billing = vi.fn(async () => null);
+    await wallPayload(new Date(), computeWith(failing), retain, store);
+    await Promise.all(retain.mock.calls.map(([work]) => work));
+    resetWallCache(); // a cold instance sees the same retained metrics
+    const after = await wallPayload(
+      new Date(),
+      computeWith(failing),
+      retain,
+      store
+    );
+    for (const id of ["revenue.mrr", "cost.net_day", "revenue.arpmau"]) {
+      expect(value(after, id)).toMatchObject({
+        value: value(before, id).value,
+        stale: true,
+        sourceFailure: expect.any(String),
+      });
+      expect(value(before, id).value).not.toBeNull();
+    }
+    expect(value(after, "growth.wau").stale).toBe(false);
   });
 });
