@@ -198,3 +198,48 @@ def test_positive_vad_with_empty_local_hypothesis_reproduces_fast_closed_failure
     assert (error.value.stage, error.value.reason) == ('response_validation', 'empty_asr')
     assert time.monotonic() - started < 2
     alternate.assert_not_called()
+
+
+def test_operator_readonly_census_preserves_all_state(setup, monkeypatch, legacy_dependencies):
+    import sys
+
+    client, store, binding, artifacts, legacy, alternate, _ = enabled(setup, monkeypatch, legacy_dependencies)
+    sys.path.insert(0, str(Path(__file__).parents[2] / 'scripts'))
+    spec = importlib.util.spec_from_file_location(
+        'speech_operator', Path(__file__).parents[2] / 'scripts/batch_pipeline_speech_redrive.py'
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    transaction = client.transaction
+    seen = []
+
+    def readonly(**kwargs):
+        seen.append(kwargs)
+        return transaction()
+
+    monkeypatch.setattr(client, 'transaction', readonly)
+    before = deepcopy(client.rows)
+    key = module.held.fingerprint(row(client))
+    assert module.inspect_unit(store, artifacts, 'bad', binding.owner_id, key) == 'speech'
+    assert seen and all(item == {'read_only': True} for item in seen)
+    assert client.rows == before
+    artifacts.persist_recovery_result.assert_not_called()
+    legacy.assert_not_called()
+    alternate.assert_not_called()
+
+
+def test_allowance_and_deleted_target_fence_epoch2(setup, monkeypatch, legacy_dependencies):
+    from utils.sync.capture import chunk_identity
+
+    client, store, binding, artifacts, _, alternate, old = enabled(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *args: False)
+    assert redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100) == 'allowance_held'
+    assert row(client)['speech_redrive']['state'] == 'prepared'
+    target = chunk_identity(
+        binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, row(client)['capture_at']
+    )
+    client.rows[('users', binding.owner_id, 'deleted_conversations', target)] = {'deleted': True}
+    monkeypatch.setattr('utils.batch_pipeline.speech_redrive.sync_allowed', lambda *args: True)
+    with pytest.raises(BatchPrivacyBlocked):
+        redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, clock=lambda: 100)
+    alternate.assert_not_called()
