@@ -74,6 +74,8 @@ Legacy text logs do not provide equivalent phase attribution. Do not infer a Goo
 
 Compare Cloud Run request count, latency, container CPU, memory, concurrent requests, instance count, startup latency, and 5xx by exact revision. Saturation plus `pool` outcomes indicates local concurrency pressure; normal service metrics plus provider-phase outcomes indicates the stall is beyond local dispatch. Treat this as attribution, not proof of a vendor-wide incident.
 
+Cloud Run maximum-request-timeout terminations carry no terminal event. Bind such an error group to `/v1/proxy/gemini/` or `/v1/proxy/gemini-stream/` with `requestUrl` evidence before attributing it to proxy streaming: on revisions carrying the 90-second owner described under Mitigation and rollback, those routes — streaming bodies and downstream sends included — cannot reach the platform timeout, so a genuine kill points at a route outside this proxy or a revision predating the owner (as in the October 8 lifetime incident below).
+
 ## Alerting
 
 Create log-based counters from the terminal event and scope every policy to service `desktop-backend` and runtime `python`.
