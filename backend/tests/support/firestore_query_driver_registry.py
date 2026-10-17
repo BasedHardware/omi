@@ -2481,7 +2481,8 @@ _add(
         base={'uid': UID},
         domains={'limit': [None, 200]},
         neutrals={
-            'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
+            'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
+            'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
         },
     )
 )
@@ -2927,6 +2928,13 @@ _add(
 )
 
 
+_add(
+    DriverEntry(
+        'utils.sync.cap_hold.pending_holds',
+        base={'uid': UID},
+        neutrals={'limit': (10, 'bounded recovery page; does not affect filters')},
+    )
+)
 _add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(
@@ -2987,5 +2995,14 @@ _add(
         'utils.sync.reprocess.sweep',
         neutrals={'now': (T0.timestamp(), 'operand clock only'), 'limit': _LIMIT},
         patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
+    )
+)
+
+
+_add(
+    DriverEntry(
+        'database.summary_debt_queries.due_conversations',
+        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
+        domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
     )
 )

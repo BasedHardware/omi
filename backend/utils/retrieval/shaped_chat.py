@@ -31,7 +31,7 @@ async def run_shaped_chat_stream(
     shadow=False,
 ) -> Optional[str]:
     from utils.retrieval import agentic as a
-    from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
+    from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded, take_prepared
 
     if 'turn_refs' not in configurable:
         initialize_turn_refs(configurable)
@@ -46,11 +46,14 @@ async def run_shaped_chat_stream(
     context = {'summary': '', 'digest': ''}
     if not shadow:
         try:
-            context = await prepare_context(
-                configurable['user_id'],
-                configurable.get('chat_session_id'),
-                configurable.get('context_message_ids', ()),
-            )
+            prepared = await take_prepared(configurable['user_id'], configurable.get('chat_session_id'))
+            if prepared is None:
+                prepared = await prepare_context(
+                    configurable['user_id'],
+                    configurable.get('chat_session_id'),
+                    configurable.get('context_message_ids', ()),
+                )
+            context = prepared
         except Exception as error:
             degraded(error)
     evidence = assemble(

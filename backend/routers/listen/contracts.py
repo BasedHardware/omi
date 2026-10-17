@@ -101,6 +101,7 @@ class ListenSessionState:
     active: bool = True
     close_code: int = 1001
     stt_terminal_failure: bool = False
+    stt_cap_admission: Any = None
     shutdown_event: asyncio.Event = field(default_factory=asyncio.Event)
     audio_ring_buffer: Any = None
     speaker_id_enabled: bool = False

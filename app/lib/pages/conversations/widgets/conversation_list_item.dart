@@ -125,7 +125,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (_reprocessing || widget.conversation.id == '0') return;
     setState(() => _reprocessing = true);
     try {
-      final reprocess = widget.reprocess ?? reProcessConversationServer;
+      final reprocess = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
       final updated = await reprocess(widget.conversation.id);
       if (!mounted) return;
       final provider = context.read<ConversationProvider>();

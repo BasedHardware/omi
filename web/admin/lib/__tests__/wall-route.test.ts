@@ -2,7 +2,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { computeWall } from "../wall-metrics";
 vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
-vi.mock("@/lib/wall-cache", () => ({ wallPayload: vi.fn() }));
+vi.mock("@/lib/wall-cache", () => ({
+  wallPayload: vi.fn(),
+  wallSnapshotStore: () => undefined,
+}));
 vi.mock("@/lib/wall-local-fixture", () => ({
   localWallFixture: vi.fn(async () => null),
 }));

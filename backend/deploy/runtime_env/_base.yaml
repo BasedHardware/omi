@@ -27,7 +27,7 @@ environment_shared:
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
-          value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+          value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER:
           value: '1'
@@ -274,6 +274,12 @@ environment_shared:
         OMI_ENV_STAGE:
           value: '{env}'
           category: runtime_identity
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
@@ -525,17 +531,29 @@ environment_shared:
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
           category: rollout
-        CAPTURE_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        CAPTURE_JEV_SHADOW_PERCENT:
-          value: '0'
-          category: rollout
         REVIEW_SURFACE_MODE:
           value: 'on'
+          category: rollout
+        BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+          value: 'false'
           category: rollout
         BATCH_PIPELINE_RECOVERY_MODE:
           value: 'off'
@@ -562,12 +580,13 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
         REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
-          value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+          value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER:
           value: '0'
@@ -684,6 +703,12 @@ environment_shared:
           category: rollout
         MEMORY_ENABLED:
           value: 'on'
+        DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+        DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
           category: rollout
@@ -741,15 +766,6 @@ environment_shared:
           category: rollout
         MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
           value: '60000'
-          category: rollout
-        CAPTURE_JEV_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        CAPTURE_JEV_SHADOW_PERCENT:
-          value: '0'
           category: rollout
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
           value: 'off'
@@ -830,6 +846,12 @@ environment_shared:
         category: rollout
       GOOGLE_CLOUD_PROJECT:
         value: '{compute_project}'
+      DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+      DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+      DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       GCP_LOCATION:
         value: us-central1
       PROMETHEUS_SIDECAR_PORT:
@@ -841,7 +863,7 @@ environment_shared:
       FIRESTORE_READ_LEDGER:
         value: '1'
       FIRESTORE_READ_LEVERS:
-        value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+        value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
         category: rollout
       FSR_QUEUE_AGE_PUBLISHER:
         value: '0'
@@ -936,6 +958,7 @@ environment_shared:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1005,7 +1028,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1216,6 +1239,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1302,14 +1331,29 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
+          CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED:
+            value: 'false'
             category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
             category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
@@ -1351,6 +1395,7 @@ environment_shared:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1425,7 +1470,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1580,6 +1625,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1700,14 +1751,26 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
             category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
             category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
@@ -1737,6 +1800,7 @@ environment_shared:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1807,7 +1871,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1964,6 +2028,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -2063,14 +2133,26 @@ environment_shared:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
             value: '60000'
             category: rollout
-          CAPTURE_JEV_SHADOW_ENABLED:
-            value: 'true'
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
             category: rollout
-          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
             category: rollout
-          CAPTURE_JEV_SHADOW_PERCENT:
-            value: '0'
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
@@ -2173,7 +2255,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2303,6 +2385,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -2361,6 +2449,27 @@ environment_shared:
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_LIVE_ADMISSION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2392,7 +2501,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2438,6 +2547,12 @@ environment_shared:
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
+          DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
+          DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       x-connector-sync-job:
         flags:
           --task-timeout: 3600s
@@ -2465,7 +2580,7 @@ environment_shared:
             version: latest
         env:
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2548,7 +2663,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2638,7 +2753,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2706,7 +2821,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2796,7 +2911,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2862,7 +2977,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":5,"backfill_task_reads":0,"candidates_page":5,"deletion_marker_cache":5,"request_read_dedupe":5,"serving_config_cache":5,"singleton_loops":0,"subscription_cache":5,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'

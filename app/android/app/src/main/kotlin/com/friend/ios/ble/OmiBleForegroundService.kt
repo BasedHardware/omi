@@ -973,6 +973,7 @@ class OmiBleForegroundService : Service() {
             val after = counter.snapshot()
             row.put("received", row.optLong("received") + after.first - before.first)
             row.put("expected", row.optLong("expected") + after.second - before.second)
+            row.put("last_at", now)
             while (days.length() > 8) days.remove(0)
             val marker = healthSessions.openSince(addr) ?: return
             val key = historyKey(addr)

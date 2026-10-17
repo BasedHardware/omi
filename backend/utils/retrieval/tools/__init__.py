@@ -75,6 +75,7 @@ from .knowledge_ledger_write_tools import (
 )
 
 from .edit_tools import update_conversation, rename_person, edit_memory, delete_memory
+from .demand_processing_tools import process_recent_conversations
 
 __all__ = [
     'update_conversation',
@@ -116,4 +117,5 @@ __all__ = [
     'save_playbook',
     'create_standing_trigger',
     'close_fact_tool',
+    'process_recent_conversations',
 ]

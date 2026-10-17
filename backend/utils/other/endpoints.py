@@ -232,9 +232,9 @@ def get_current_user_uid(
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
 
-    # The content-free fleet sink must reject hot callers without customer-store
+    # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
-    if getattr(getattr(request, 'url', None), 'path', None) == '/v1/telemetry/fleet':
+    if getattr(getattr(request, 'url', None), 'path', None) in {'/v1/telemetry/fleet', '/v1/users/client-state'}:
         validate_byok_request(uid)
         return uid
 

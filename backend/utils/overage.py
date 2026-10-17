@@ -29,15 +29,16 @@ from utils.subscription import get_plan_limits
 # 1.15 = 15 % on top of true cost (covers variance + infra).
 OVERAGE_MARKUP_MULTIPLIER = float(os.getenv('OVERAGE_MARKUP_MULTIPLIER', '1.15'))
 
-# Per-1M-token reference rates shown in the explainer UI. These are NOT used
+# Per-1M-token reference rates shown in the explainer UI. Gemini Flash prices
+# were updated to the Vertex global standard rate on 2026-10-17. These are not used
 # for live computation — live cost is taken from the already-tracked
 # `desktop_chat.cost_usd` which the LLM clients compute per-call from
 # actual provider token counts. Rates here are purely informational.
 PROVIDER_REFERENCE_RATES = {
     'claude_sonnet_input_per_mtok': 3.00,
     'claude_sonnet_output_per_mtok': 15.00,
-    'gemini_flash_input_per_mtok': 0.30,
-    'gemini_flash_output_per_mtok': 2.50,
+    'gemini_flash_input_per_mtok': 0.54,
+    'gemini_flash_output_per_mtok': 4.50,
     'gpt_4_1_mini_input_per_mtok': 0.40,
     'gpt_4_1_mini_output_per_mtok': 1.60,
     'deepgram_nova_per_min': 0.0043,

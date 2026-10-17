@@ -72,6 +72,15 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
+        {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
         {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_WORKER_ENABLED", "value": "false"},
@@ -217,24 +226,11 @@ def with_jev_flags_env(payload: str) -> str:
     )
 
 
-def with_capture_jev_shadow_env(payload: str) -> str:
-    """EXP-003 shadow bindings belong on every Cloud Run capture-shadow host.
-
-    backend runs reprocess and merge inline. backend-sync writes Cloud Tasks
-    finalization and fresh sync. backend-sync-backfill replays historical sync.
-    Capture percentage stays 0; only the allowlisted UID is shadowed. The
-    EXP-004 population shadows stay 100 only on `backend`: the sync services
-    have no GMP sidecar/exporter entry, so their shadow metrics would be
-    invisible (EXP-004 doc, Admission and privacy).
-    """
-
+def with_jev_decision_config_env(payload: str) -> str:
     def service_flags(service: str) -> str:
         shadow_percent = '100' if service == 'backend' else '0'
         return (
-            r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
-            r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
-            r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
-            rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"}},'
+            r'\1\n        {"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"},'
             r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_PERCENT", "value": "0"},'
             rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
             rf'\n        {{"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
@@ -450,7 +446,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_parity_pack_env(payload)
     payload = with_backend_pusher_env(payload)
     payload = with_conversation_notes_v2_env(payload)
-    payload = with_capture_jev_shadow_env(payload)
+    payload = with_jev_decision_config_env(payload)
     payload = with_jev_flags_env(payload)
     payload = with_wake_word_adjudication_env(payload)
     payload = with_backend_public_shared_chat_auth_env(payload)
@@ -586,15 +582,25 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Dev keeps Dream disabled, but these processing hosts declare its bindings.
-    # Derive fixtures from the manifest, including the empty dev allowlist.
+    # These fixtures exercise unrelated gateway/secret failures. Carry explicit
+    # Dream and demand defaults from the manifest, including empty allowlists.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     services = manifest['environments']['dev']['cloud_run']['services']
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         bindings = services[service]['env']
         entries = ',\n'.join(
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
-            for name in ('DREAM_AGENT_ELIGIBILITY', 'DREAM_AGENT_UID_ALLOWLIST', 'DREAM_ON_DEMAND_ENABLED')
+            for name in (
+                'DREAM_AGENT_ELIGIBILITY',
+                'DREAM_AGENT_UID_ALLOWLIST',
+                'DREAM_ON_DEMAND_ENABLED',
+                'DEMAND_PROCESSING_ENABLED',
+                'DEMAND_PROCESSING_LAZY_ENABLED',
+                'DEMAND_PROCESSING_TOOL_ENABLED',
+                'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
+                'DEMAND_PROCESSING_UID_ALLOWLIST',
+                'DEMAND_PROCESSING_PERCENT',
+            )
         )
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[)',
@@ -1358,7 +1364,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
         ('DREAM_AGENT_FEEDBACK_SALT', '1'),
         ('DREAM_AGENT_PASSES_PER_DAY', '4'),
         ('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '4'),
-        ('DREAM_AGENT_DAILY_USD', '20'),
+        ('DREAM_AGENT_DAILY_USD', '10'),
     ],
 )
 def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, service, setting, stale):
@@ -1814,11 +1820,13 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -1837,6 +1845,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2140,11 +2149,13 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -2164,6 +2175,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
@@ -2222,11 +2234,13 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -2245,6 +2259,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
+        {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},

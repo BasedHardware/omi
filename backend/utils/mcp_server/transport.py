@@ -106,7 +106,14 @@ def _protocol_error_response(msg_id: Any, exc: JsonRpcProtocolError) -> Dict[str
 
 def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     scope_set = set(scopes)
-    return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
+    from config.demand_processing import tool_enabled
+
+    return [
+        tool
+        for tool in MCP_TOOLS
+        if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set
+        and (tool['name'] != 'process_recent_conversations' or tool_enabled())
+    ]
 
 
 def require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:

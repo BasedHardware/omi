@@ -15,6 +15,8 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from config.summary_guarantee import repair_enabled as summary_repair_enabled
+from services import summary_debt_repair
 from config.batch_pipeline import enabled_for as batch_enabled_for
 from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
 from models.sync_job_status import (
@@ -60,6 +62,8 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
@@ -176,6 +180,7 @@ from utils.sync.backfill import (
     retry_after_next_utc_day,
     try_acquire_backfill_slot,
 )
+from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
@@ -186,6 +191,18 @@ from utils.sync.capture_manifest import (
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
 from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
+
+# Only the API process importing this router owns held-audio STT recovery.
+# Pusher/auth-only images retain the lightweight locked-content recovery path.
+if cap_dispatch_enabled():
+    from utils.locked_content_recovery import register_cap_audio_recovery
+
+    def _kick_cap_hold_recovery(uid: str) -> None:
+        from utils.sync.cap_hold_recovery import kick
+
+        kick(uid)
+
+    register_cap_audio_recovery(_kick_cap_hold_recovery)
 
 logger = logging.getLogger(__name__)
 
@@ -644,6 +661,30 @@ async def sync_local_files(
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
+        cap_held = False
+        cap_admission: dict = {}
+        if cap_dispatch_enabled():
+            cap_held = await hold_capture_if_exhausted(
+                uid,
+                wav_paths,
+                source,
+                admission=cap_admission,
+                target_conversation_id=conversation_id,
+                client_device_id=client_device_context.client_device_id,
+                client_platform=client_device_context.platform,
+            )
+        if cap_held:
+            return JSONResponse(
+                status_code=200,
+                headers=_V1_DEPRECATION_HEADERS,
+                content={
+                    'new_memories': [],
+                    'updated_memories': [],
+                    'credits_exhausted': cap_admission.get('reason') == 'plan_allowance_exhausted',
+                    'held_audio': True,
+                    'held_files': len(wav_paths),
+                },
+            )
         vad_errors = []
         vad_segment_lock = threading.Lock()
 
@@ -798,6 +839,9 @@ async def sync_local_files(
             ]
         )
 
+        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled() else {}
+        cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
+
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
         if private_cloud_sync_enabled:
             await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
@@ -807,6 +851,8 @@ async def sync_local_files(
         if fair_use_restrict_dg:
             try:
                 dg_ms = int(total_speech_seconds * 1000)
+                if cap_holds:
+                    dg_ms = int(max(0, total_speech_seconds - cap_held_seconds) * 1000)
                 if dg_ms > 0:
                     await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
             except Exception as e:
@@ -826,9 +872,17 @@ async def sync_local_files(
             'new_memories': sorted(response['new_memories']),
             'updated_memories': sorted(response['updated_memories']),
         }
+        if cap_holds:
+            result.update(
+                held_audio=True,
+                credits_exhausted=any(item.get('reason') == 'plan_allowance_exhausted' for item in cap_holds.values()),
+                held_segments=len(cap_holds),
+            )
 
         failed_segments = len(segment_errors)
         successful_segments = total_segments - failed_segments
+        if cap_holds:
+            successful_segments -= len(cap_holds)
 
         if failed_segments > 0:
             result['failed_segments'] = failed_segments
@@ -841,15 +895,18 @@ async def sync_local_files(
 
         if total_segments > 0 and successful_segments == 0:
             # All segments failed — return 500 (consistent with VAD error behavior)
-            raise HTTPException(
-                status_code=500,
-                detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
-                headers=_V1_DEPRECATION_HEADERS,
-            )
+            if not cap_holds:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
+                    headers=_V1_DEPRECATION_HEADERS,
+                )
 
         # Record subscription usage only when at least one segment succeeded
         try:
             usage_seconds = int(total_speech_seconds)
+            if cap_holds:
+                usage_seconds = int(max(0, total_speech_seconds - cap_held_seconds)) if successful_segments > 0 else 0
             if usage_seconds > 0:
                 await run_blocking(
                     db_executor, record_usage, uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds
@@ -959,6 +1016,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
     )
+    record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
         _capture_matches_server_conversation,
@@ -966,6 +1024,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
         client_device_context.client_device_id,
+        snapshot_out=record_snapshot,
     )
     lane_decision = classify_sync_lane(
         filenames,
@@ -1111,7 +1170,23 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
-        if batch_enabled_for(uid):
+        record_response = await registered_record_response(
+            uid=uid,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            content_id=content_id,
+            paths=paths,
+            source=source.value,
+            client_device_id=client_device_context.client_device_id,
+            byok_enabled=byok_enabled,
+            recording_session_id=recording_session_id,
+            loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+        )
+        if isinstance(record_response, JSONResponse):
+            return record_response
+
+        if record_response is RecordUploadRoute.BATCH or (
+            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
+        ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
@@ -1139,6 +1214,7 @@ async def sync_local_files_v2(
                     'capture_evidence_claims': capture_claims,
                     'raw_capture_paths': archive_paths,
                 },
+                record_router=registered_record_response,
             )
             if batch_response is not None:
                 return batch_response
@@ -1176,7 +1252,7 @@ async def sync_local_files_v2(
             job_id,
             lane_decision.lane.value,
         )
-        if claim.get('outcome') == 'completed':
+        if claim.get('outcome') in {'completed', 'held'}:
             cached_result = claim.get('result') or {}
             await run_blocking(db_executor, mark_job_completed, job_id, cached_result)
             if backfill_slot_acquired:
@@ -1849,6 +1925,17 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
             repair = {'repaired': 0, 'error': 1}
         outcomes['reprocess_repaired'] = repair['repaired']
         outcomes['reprocess_repair_errors'] = repair['error']
+        if summary_repair_enabled():
+            # Only the scheduled two-minute owner scans conversation debt.
+            # Batch pumps replay the outbox without paying a per-pump cursor read.
+            try:
+                summary = await run_blocking(db_executor, summary_debt_repair.tick)
+            except Exception as error:
+                logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
+                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+            outcomes['summary_debt_scanned'] = summary['scanned']
+            outcomes['summary_debt_admitted'] = summary['admitted']
+            outcomes['summary_debt_errors'] = summary['errors']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 

@@ -5,6 +5,7 @@ import logging
 import sys
 import wave
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -715,3 +716,155 @@ def test_capture_vad_groups_keep_words_and_diarization_on_original_span_clocks()
         assert part_payload['words'] == [{'word': ['first', 'second'][index], 'timestamp': [0.25, 0.75]}]
         assert part_payload['diarization']['turns'] == [{'start': 0.0, 'end': 2.0, 'speaker': ['left', 'right'][index]}]
         assert part_payload['speech_seconds'] == 2.0
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkeypatch, enforce):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    worker, words, saved, _, _, _ = setup_worker()
+    worker.process_batch([item('a', 2)], authorize_dispatch=lambda ids: ids)
+    if enforce:
+        assert saved['a']['cap_dispatch'] == {
+            'omi_funded_accepted_provider_audio_seconds': 2,
+            'admission': 'authorized_compute',
+        }
+    else:
+        assert 'cap_dispatch' not in saved['a']
+    assert saved['a']['speech_seconds'] == 2
+    assert words.calls == [[2]]
+
+
+def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    worker, words, saved, _, diarized, failures = setup_worker()
+    checks = []
+
+    def authorize(ids):
+        checks.append(ids)
+        return set()
+
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    assert result == [HeldWork('a')]
+    assert checks == [{'a'}]
+    assert not words.calls and not saved and not diarized and not failures
+
+
+def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    worker, words, saved, _, _, _ = setup_worker()
+    assert worker.process_batch([item('a', 2)]) == [HeldWork('a')]
+    assert not words.calls and not saved
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('recovery_allowed', [False, True])
+def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, enforce, recovery_allowed):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    calls, checks = [], []
+
+    class Model:
+        def transcribe(self, arrays, **kwargs):
+            calls.append([len(samples) / 16000 for samples in arrays])
+            entries = [] if len(calls) == 1 else [{'word': 'recovered', 'start': 2.25, 'end': 2.75}]
+            return [SimpleNamespace(text='recovered' if entries else '', timestamp={'word': entries})]
+
+    provider = ParakeetWords(Model())
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+
+    def authorize(ids):
+        checks.append(ids)
+        return ids if len(checks) == 1 or recovery_allowed else set()
+
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    if enforce and not recovery_allowed:
+        assert result == [HeldWork('a')]
+        assert calls == [[2]]
+        assert not saved and not diarized and not failures
+    else:
+        assert result[0].outcome == 'success'
+        assert calls == [[2], [8]]
+        assert saved['a']['words'] == [{'word': 'recovered', 'timestamp': [0.25, 0.75]}]
+        assert not failures
+        if enforce:
+            assert saved['a']['cap_dispatch']['omi_funded_accepted_provider_audio_seconds'] == 10
+        else:
+            assert 'cap_dispatch' not in saved['a']
+    assert checks == ([{'a'}, {'a'}] if enforce else [])
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio(enforce):
+    provider = ParakeetWords(SimpleNamespace(transcribe=lambda *a, **kw: pytest.fail('oversized provider request')))
+    before, after = Mock(), Mock()
+    result = provider.recover_empty(
+        np.ones(117 * 16000, dtype=np.float32),
+        272,
+        **({'before_dispatch': before, 'after_dispatch': after} if enforce else {}),
+    )
+    assert result is None if enforce else result == []
+    before.assert_not_called()
+    after.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_oversized_empty_retry_holds_only_when_enforced(monkeypatch, enforce):
+    from utils.batch_pipeline.contracts import HeldWork
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    result = worker.process_batch([item('a', 117)], authorize_dispatch=lambda ids: ids)
+    assert model.transcribe.call_count == 1  # Initial ASR only; 121s padded retry cannot fit.
+    assert not saved and not diarized
+    if enforce:
+        assert result == [HeldWork('a')]
+        assert not failures
+    else:
+        # Exact main behavior: an empty retry enters ordinary provider failure.
+        assert not result and failures == [('a', 'BatchValidationError')]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_exhausted_padded_empty_asr_hands_off_without_fabricating_silence(monkeypatch, enabled):
+    from utils.batch_pipeline.contracts import RecoveryWork
+
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', str(enabled))
+
+    class EmptyWords:
+        def transcribe_batch(self, samples):
+            return [[] for _ in samples]
+
+    retry = Mock(return_value=[])
+    worker, _, saved, _, diarized, _ = setup_worker(words_providers={'parakeet': EmptyWords()}, recover_words=retry)
+    results = worker.process_batch([item()])
+    assert results == ([RecoveryWork('a', padded_retry_empty=True)] if enabled else [])
+    retry.assert_called_once()
+    assert not saved and not diarized
+    assert worker.counts['silence'] == 0
+
+
+def test_empty_vad_is_the_only_silence_even_with_recovery_enabled(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    retry = Mock(return_value=[])
+    worker, _, saved, _, _, _ = setup_worker(vad=lambda _: [], recover_words=retry)
+    assert worker.process_batch([item()])[0].outcome == 'silence'
+    retry.assert_not_called()
+    assert saved['a']['speech_spans'] == []

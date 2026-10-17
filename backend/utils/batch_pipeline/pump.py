@@ -6,7 +6,15 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from utils.batch_pipeline.contracts import BatchWorker, HEARTBEAT_SECONDS, LeasedWork, PoolCapacity
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.batch_pipeline.contracts import (
+    BatchWorker,
+    HEARTBEAT_SECONDS,
+    LeasedWork,
+    PoolCapacity,
+    HeldWork,
+    RecoveryWork,
+)
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
@@ -36,7 +44,7 @@ class Pump:
             raise ValueError('invalid bounded pump configuration')
         self.scheduler = scheduler
         self.worker = worker
-        self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics)
+        self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics, commit_source='gpu_pump')
         self.metrics = metrics
         self.batch_size = batch_size
         self.poll_seconds = poll_seconds
@@ -128,7 +136,7 @@ class Pump:
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         try:
-            required = [v for v in leases if v.item.requires_compute_admission]
+            required = [v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled()]
             if required:
                 receipt = {}
                 try:
@@ -159,8 +167,17 @@ class Pump:
                 leases = [v for v in leases if v.item.segment_id not in lost]
                 if not leases:
                     return 0
+            dispatch_kwargs = {}
+            if cap_dispatch_enabled():
+
+                def authorize_dispatch(segments):
+                    selected = [v for v in leases if v.item.segment_id in segments]
+                    receipt = self.authorize_compute(selected) if self.authorize_compute is not None else {}
+                    return set(receipt.get('allowed') or [])
+
+                dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
             compute = asyncio.create_task(
-                run_blocking(sync_executor, self.worker.process_batch, [v.item for v in leases])
+                run_blocking(sync_executor, self.worker.process_batch, [v.item for v in leases], **dispatch_kwargs)
             )
             # Cancelling an asyncio wrapper does not stop CUDA. Keep renewal and
             # wait for the bounded model operation before leaving this process.
@@ -205,8 +222,20 @@ class Pump:
                     lost.discard(segment)
                 try:
                     result = result_map.get(segment)
-                    if result is None:
-                        if await run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time()):
+                    if isinstance(result, HeldWork):
+                        await run_blocking(
+                            db_executor, self.scheduler.defer, segment, lease.token, time.time(), result.retry_after
+                        )
+                        continue
+                    if result is None or isinstance(result, RecoveryWork):
+                        failure_kwargs = (
+                            {'quarantine': True, 'padded_retry_empty': result.padded_retry_empty}
+                            if isinstance(result, RecoveryWork)
+                            else {}
+                        )
+                        if await run_blocking(
+                            db_executor, self.scheduler.fail, segment, lease.token, time.time(), **failure_kwargs
+                        ):
                             await self.drain_owner(lease.item.owner_id)
                         continue
                     accepted = await run_blocking(

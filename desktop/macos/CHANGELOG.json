@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.497",
+      "date": "2026-10-17",
+      "changes": [
+        "Fixed stray citation brackets, parentheses and separators in older notes and app summaries while preserving transcript sources and code examples"
+      ]
+    },
+    {
+      "version": "0.12.496",
+      "date": "2026-10-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.495",
+      "date": "2026-10-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.494",
       "date": "2026-10-16",
       "changes": [

@@ -86,6 +86,7 @@ def setup(monkeypatch):
     artifacts.fetch_audio.return_value = b'synthetic-only'
     artifacts.persist_recovery_result.return_value = 'gs://synthetic/recovered'
     artifacts.find_recovery_result.return_value = None
+    artifacts.load_result.return_value = {'synthetic': True}
     stt = Mock(return_value={'synthetic': True})
     recovery = QuarantineRecovery(store, artifacts, stt=stt, clock=lambda: 100)
     return client, store, binding, artifacts, stt, recovery
@@ -160,8 +161,8 @@ def test_lost_start_reply_does_not_repeat_stt(setup, monkeypatch):
     client, _, binding, _, stt, recovery = setup
     start = recovery.protocol.start
 
-    def lost(*args):
-        assert start(*args)
+    def lost(*args, **kwargs):
+        assert start(*args, **kwargs)
         raise TimeoutError('synthetic')
 
     monkeypatch.setattr(recovery.protocol, 'start', lost)
@@ -342,7 +343,7 @@ def test_legacy_adapter_preserves_original_clocks_and_uses_one_sync_client_attem
     assert first['speaker'] == 'SPEAKER_01'
     assert first['id'] and first['speaker_id_scope'].startswith('sync:')
     client.return_value = ([], 'en')
-    with pytest.raises(ValueError, match='empty recovery'):
+    with pytest.raises(ValueError, match='empty_asr'):
         transcribe(item, binding, data.getvalue())
 
 
@@ -420,3 +421,106 @@ def test_recovery_cas_lost_token_and_artifact_registration_are_fenced(setup):
     with pytest.raises(BatchPrivacyBlocked):
         register_batch_artifact(store, binding.owner_id, 'bad', 'gs://synthetic/' + 'b' * 32 + '.enc', 'results', 0)
     stt.assert_not_called()
+
+
+@pytest.mark.parametrize('enforce', [False, True])
+def test_exhausted_recovery_never_starts_a_provider_call(setup, monkeypatch, enforce):
+    from types import SimpleNamespace
+    from utils import stt_cap_dispatch as cap
+
+    _, _, _, artifacts, stt, recovery = setup
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setattr(
+        cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
+    )
+    result = recovery.recover('bad', 'synthetic-owner')
+    if enforce:
+        assert result == 'held'
+        stt.assert_not_called()
+        artifacts.fetch_audio.assert_not_called()
+    else:
+        stt.assert_called_once()
+        cap.funded_allowance.assert_not_called()
+
+
+def test_recovery_rechecks_after_audio_download(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, _, artifacts, stt, recovery = setup
+    monkeypatch.setattr(module, 'sync_allowed', Mock(side_effect=[True, False]))
+    assert recovery.recover('bad', 'synthetic-owner') == 'held'
+    artifacts.fetch_audio.assert_called_once()
+    stt.assert_not_called()
+
+
+def test_unavailable_completion_lookup_is_not_reported_as_genuine_exhaustion(setup, monkeypatch):
+    from types import SimpleNamespace
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, _, _, _, recovery = setup
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setattr(module, 'sync_allowed', Mock(return_value=True))
+    monkeypatch.setattr(
+        module, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='allowance_unavailable'))
+    )
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_audio', metric)
+    assert recovery.recover('bad', 'synthetic-owner') == 'recovered'
+    metric.assert_called_once_with('sync', 'accepted', 'unknown', 5, False)
+
+
+def test_all_admitted_gate_drains_non_allowlisted_obligations_without_admission_flag(setup, monkeypatch):
+    client, _, binding, _, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1 and row(client)['recovery_state'] == 'recovered'
+
+
+def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(monkeypatch, legacy_dependencies):
+    _, _, _, build_incoming, *_ = legacy_dependencies
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',))
+    item = WorkItem('part', binding.owner_id, 100, 'gs://synthetic/audio', 5, Priority.FRESH)
+    payload = {
+        'audio_seconds': 5,
+        'words_provider': 'parakeet',
+        'words': [
+            {'word': 'First.', 'timestamp': [0, 1]},
+            {'word': 'Gap.', 'timestamp': [2, 3]},
+            {'word': 'Last.', 'timestamp': [4, 5]},
+        ],
+        'diarization': {
+            'turns': [
+                {'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'},
+                {'start': 4, 'end': 5, 'speaker': 'SPEAKER_01'},
+            ]
+        },
+    }
+    row = build_incoming(item, binding, payload, batch_segment_id='unit')
+    segments = row['transcript_segments']
+    assert [s['speaker'] for s in segments] == ['SPEAKER_00', 'BATCH_UNASSIGNED_part_1', 'SPEAKER_01']
+    assert {s['speaker_id_scope'] for s in segments} == {'final:batch:unit'}
+    assert all(not s['is_user'] and s['person_id'] is None for s in segments)
+    assert segments[1]['speaker_match_source'] == 'batch_abstention'
+    assert segments[1]['speaker_identity_status'] == 'ambiguous'
+    # Recovery returns legacy utterance labels, never pyannote authority.
+    recovered = dict(payload, recovery_version=1)
+    recovered['words'] = [dict(w, speaker='SPEAKER_01') for w in payload['words']]
+    assert all(
+        s['speaker_id_scope'].startswith('sync:')
+        for s in build_incoming(item, binding, recovered)['transcript_segments']
+    )
+
+
+def test_recovered_duration_counts_only_one_settlement(setup, monkeypatch):
+    from database import batch_pipeline_quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_correctness', metric)
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    metric.assert_called_once_with('recovered', seconds=5)

@@ -1,3 +1,11 @@
+import {
+  readRollup,
+  preferRollup,
+  rollupStatus,
+  RollupRead,
+  RollupStatus,
+} from "./wall-rollup";
+import { RollupRequest } from "./wall-rollup-sql";
 /** Omi TV v3 chart series. Same definitions as the v2 snapshot (`wall-metrics`):
  * the snapshot's own complete periods are reused verbatim and win on every date
  * they cover, so each chart's latest point is the stat above it. Only older
@@ -30,10 +38,15 @@ import {
 } from "./wall-posthog";
 import { aggregatePeriod, Metric, MetricId, WallPayload } from "./wall-metrics";
 import { fetchShopifyWeek } from "./wall-shopify";
-import { fetchFinopsHistory, FinopsHistory } from "./wall-finops";
+import {
+  fetchFinopsHistory,
+  fetchPlanCostHistory,
+  FinopsHistory,
+  PlanCostHistory,
+} from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
-import { wallRefreshSettled } from "./wall-cache";
-import { allInCost } from "./wall-cost";
+import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
+import { allInCost, CostDay, estimateStatus } from "./wall-cost";
 import { createHash } from "crypto";
 import {
   firestoreSeriesStore,
@@ -42,6 +55,7 @@ import {
   LegDoc,
   memorySeriesStore,
   mergeLegDoc,
+  readThroughStore,
   SeriesStore,
   StoredRead,
   WriteResult,
@@ -75,6 +89,13 @@ export const GROWTH_WEEKS = 26;
 export const COHORT_WEEKS = 12;
 export const CURVE_COHORTS = 9;
 export const MONEY_WEEKS = 8;
+/** Daily unit-economics points (the board shows 35 days; FinOps book
+ * snapshots are daily from 2026-09-18). */
+export const UNIT_DAYS = 36;
+const MAU_WEEKS = Math.ceil(UNIT_DAYS / 7);
+const WEEK_OFFSETS = [0, 1, 2, 3, 4, 5, 6];
+/** Invisible cohort-age tag on curve field names (the board's ramp matcher). */
+export const CURVE_MARK = "\u200b";
 /** Mobile allowlisted events (Memory Created, tab/list clicks, mic starts) begin
  * the week of 2026-05-04 in PostHog; earlier periods undercount mobile, so the
  * growth series starts at the first fully instrumented period. */
@@ -110,9 +131,12 @@ type Billing = {
 } | null;
 export interface SeriesSources {
   query: Query;
+  rollup?: RollupRead;
+  rollupStatus?: () => Promise<RollupStatus>;
   shopify: typeof fetchShopifyWeek;
   billing: () => Promise<Billing>;
   finops: (today: string) => Promise<FinopsHistory>;
+  planCost: (today: string) => Promise<PlanCostHistory>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -120,6 +144,8 @@ export interface SeriesSources {
 }
 export const defaultSeriesSources: SeriesSources = {
   query: queryPosthog,
+  rollup: readRollup,
+  rollupStatus,
   shopify: fetchShopifyWeek,
   billing: async () => {
     const { computeBillingInfraCosts } = await import(
@@ -128,7 +154,11 @@ export const defaultSeriesSources: SeriesSources = {
     return computeBillingInfraCosts(90, 0, true);
   },
   finops: fetchFinopsHistory,
-  store: firestoreSeriesStore,
+  planCost: fetchPlanCostHistory,
+  // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
+  store: process.env.K_REVISION
+    ? firestoreSeriesStore
+    : readThroughStore(firestoreSeriesStore),
 };
 
 /** Leg results. Each leg is complete, partial (some periods failed) or failed. */
@@ -139,12 +169,14 @@ export interface Legs {
   retainedHistory?: AggregateRows;
   establishedHistory?: AggregateRows;
   curve?: AggregateRows;
-  /** 30-day MAU keyed by days before today: week 1 (headline priors) … */
-  mauRecent?: Record<number, number>;
-  /** … and weeks 2–7 (chart history). Split so a slow history read never
-   * holds back the headline. */
-  mauHistory?: Record<number, number>;
+  /** 30-day MAU keyed by days before today: days 7–13 (headline priors) … */
+  mauPrior?: Record<number, number>;
+  /** … and every other day the unit-economics chart draws. Split so a slow
+   * history read never holds back the headline. */
+  mauDaily?: Record<number, number>;
   finops?: FinopsHistory;
+  /** FinOps plan cost (margin by plan); settled about D−3. */
+  planCost?: PlanCostHistory;
   billing?: Billing;
   shopify?: {
     date: string;
@@ -155,12 +187,12 @@ export interface Legs {
 }
 type LegName = keyof Legs;
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
-  headline: ["finops", "mauRecent", "billing"],
+  headline: ["finops", "mauPrior", "billing"],
   growth: ["growth"],
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
-  revenue: ["finops", "mauRecent", "mauHistory", "shopify"],
-  health: ["billing", "finops", "mauRecent", "mauHistory"],
+  revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
+  health: ["billing", "finops", "mauPrior", "mauDaily", "planCost"],
 };
 
 /** Shift period numbers of a chunk read at an older end date. */
@@ -207,24 +239,40 @@ export function legJobs(
   now: Date
 ): Record<LegName, () => Promise<unknown>> {
   const end = utcDay(now);
+  const read = (request: RollupRequest, sql: string) =>
+    preferRollup(sources.rollup, request, () => sources.query(sql));
   const back = (weeks: number) => shiftDay(end, -7 * weeks);
   // Snapshot periods 0–5 come from the wall payload; read only 6–11.
-  const history = (build: (stop: Date, n: number) => string, stop: Date) =>
-    periodQueries(
-      sources.query,
-      build,
+  const history = (
+    build: (stop: Date, n: number) => string,
+    stop: Date,
+    request: (stop: Date, n: number) => RollupRequest
+  ) => {
+    const requests = new Map<string, RollupRequest>();
+    return periodQueries(
+      (sql) => read(requests.get(sql)!, sql),
+      (stop, n) => {
+        const sql = build(stop, n);
+        requests.set(sql, request(stop, n));
+        return sql;
+      },
       shiftDay(stop, -7 * SNAPSHOT_PERIODS),
       7,
       COHORT_WEEKS - SNAPSHOT_PERIODS
     ).then((rows) => offsetRows(rows, SNAPSHOT_PERIODS));
-  // Week 0 is the snapshot's own MAU; read 30-day windows at earlier week
-  // ends (ARPMAU) and one day earlier (cost/MAU, settled D−2).
-  const mauWeeks = async (from: number, to: number) => {
+  };
+  // 30-day MAU for every day the unit-economics chart draws: one read per
+  // week of seven daily offsets (one scan of 36 days, about the cost of one).
+  // Day 0 is the snapshot's own MAU; cost/MAU (settled D−2) uses day + 1.
+  const mauWeeks = async (weeks: number[]) => {
     const out: Record<number, number> = {};
     let failure: string | null = null;
-    for (let week = from; week < to; week++) {
+    for (const week of weeks) {
       try {
-        const rows = await sources.query(mauOffsetsQuery(back(week), [0, 1]));
+        const rows = await read(
+          { kind: "mau", end: back(week), offsets: WEEK_OFFSETS },
+          mauOffsetsQuery(back(week), WEEK_OFFSETS)
+        );
         for (const r of rows) out[7 * week + Number(r[0])] = Number(r[1]);
       } catch (error) {
         failure ||= wallFailure("PostHog", error);
@@ -236,20 +284,51 @@ export function legJobs(
   return {
     growth: () =>
       periods(GROWTH_WEEKS, (p) =>
-        sources.query(weeklyGrowthQuery(back(p), 1))
+        read(
+          { kind: "growth", end: back(p), periods: 1 },
+          weeklyGrowthQuery(back(p), 1)
+        )
       ),
-    activationHistory: () => history((stop, n) => cohortQuery(stop, 7, n), end),
-    captureSource: () => sources.query(captureSourceQuery(end)),
-    retainedHistory: () => history((stop, n) => cohortQuery(stop, 37, n), end),
-    establishedHistory: () => history(establishedQuery, completeWeek(now).end),
+    activationHistory: () =>
+      history(
+        (stop, n) => cohortQuery(stop, 7, n),
+        end,
+        (end, periods) => ({ kind: "cohort", end, periods, maturity: 7 })
+      ),
+    captureSource: () =>
+      read({ kind: "capture", end }, captureSourceQuery(end)),
+    retainedHistory: () =>
+      history(
+        (stop, n) => cohortQuery(stop, 37, n),
+        end,
+        (end, periods) => ({ kind: "cohort", end, periods, maturity: 37 })
+      ),
+    establishedHistory: () =>
+      history(establishedQuery, completeWeek(now).end, (end, periods) => ({
+        kind: "established",
+        end,
+        periods,
+      })),
     // One cohort per read; partial cohorts are kept and only the missing retried.
     curve: () =>
       periods(CURVE_COHORTS, (p) =>
-        sources.query(retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end))
+        read(
+          {
+            kind: "curve",
+            end: shiftDay(end, -7 * (p + 1)),
+            periods: 1,
+            observedEnd: end,
+          },
+          retentionCurveQuery(shiftDay(end, -7 * (p + 1)), 1, end)
+        )
       ),
-    mauRecent: () => mauWeeks(1, 2),
-    mauHistory: () => mauWeeks(2, MONEY_WEEKS),
+    mauPrior: () => mauWeeks([1]),
+    mauDaily: () =>
+      mauWeeks(
+        Array.from({ length: MAU_WEEKS }, (_, w) => w).filter((w) => w !== 1)
+      ),
     finops: () => sources.finops(isoDay(now)),
+    planCost: () => sources.planCost(isoDay(now)),
     billing: async () => {
       const bill = await sources.billing();
       if (!bill || bill.summary.costSource !== "billing")
@@ -282,7 +361,7 @@ export function legJobs(
 // ---------------------------------------------------------------- assembly
 
 const mauAt = (legs: Legs, offset: number) =>
-  legs.mauRecent?.[offset] ?? legs.mauHistory?.[offset] ?? null;
+  legs.mauPrior?.[offset] ?? legs.mauDaily?.[offset] ?? null;
 
 const round = (v: number | null, digits = 2) =>
   v == null || !Number.isFinite(v)
@@ -342,6 +421,17 @@ function cohortSeries(
   return mergeSnapshot(points, m, (t) =>
     cohortRow(t.value, t.split, t.denominator)
   );
+}
+
+/** The board's shaded "maturing" span: from the newest cohort whose window
+ * has closed (`stop` − 1, the cohort's label) to now. Cohorts roll daily, so
+ * the line always ends `maturity` + 1 days back; nothing is pending a weekly
+ * release. A hidden 0–1 axis draws it full height. */
+function maturingBand(stop: Date, now: Date): Row[] {
+  return [
+    { date: ts(isoDay(shiftDay(stop, -1))), maturing: 1 },
+    { date: now.toISOString(), maturing: 1 },
+  ];
 }
 
 export function growthFrames(
@@ -419,18 +509,18 @@ export function growthFrames(
   return { weekly, power };
 }
 
-/** Short bar labels: the 5-column panel cannot fit the segment names. */
+/** Bar labels: short enough for the narrow column, readable without a legend. */
 const CAPTURE_LABELS: Record<(typeof CAPTURE_SEGMENTS)[number], string> = {
-  "Omi pendant": "Pendant",
-  "Multiple devices": "Multi-device",
+  "Omi pendant": "Omi pendant",
+  "Multiple devices": "2+ devices",
   Limitless: "Limitless",
-  "Apple Watch": "Watch",
+  "Apple Watch": "Apple Watch",
   "Other device": "Other device",
-  "Omi, model unknown": "Omi (model?)",
+  "Omi, model unknown": "Other Omi",
   "Phone + Mac": "Phone + Mac",
   "Mac only": "Mac only",
   "Phone mic only": "Phone mic",
-  "No capture": "None",
+  "No capture": "No capture",
 };
 
 export function activationFrames(
@@ -444,7 +534,7 @@ export function activationFrames(
   const activation = cohortSeries(legs.activationHistory, rate, stop, 3, 2);
   const captured = cohortSeries(legs.activationHistory, capture, stop, 8, 2);
   // Activation by first-week capture source for the latest matured cohort
-  // (the stat's cohort); people ride in the label, segments in a fixed order.
+  // (the stat's cohort); users ride in the label, largest group first.
   const counts = new Map(
     (legs.captureSource || []).map((r) => [
       String(r[0]),
@@ -461,7 +551,13 @@ export function activationFrames(
       people,
     };
   });
-  return { activation, capture: captured, sources };
+  sources.sort((a, b) => b.people - a.people);
+  return {
+    activation,
+    capture: captured,
+    sources,
+    maturing: maturingBand(stop, now),
+  };
 }
 
 export function retentionFrames(
@@ -488,14 +584,24 @@ export function retentionFrames(
         timeZone: "UTC",
       })
     );
-  // Nine week rows once any cohort has loaded (the x field must exist with
-  // its y fields); no rows before then, so the panel shows its noValue text
-  // instead of "Cannot visualize data".
-  const curve = Array.from({ length: cohorts.length ? 9 : 0 }, (_, k) => {
-    const row: Row = { week: k };
-    cohorts.forEach((p, i) => (row[labels[i]] = byCohort.get(p)?.[k] ?? null));
-    return row;
-  });
+  // One frame per cohort age (`cohort_0` = newest): the board joins them in
+  // date order (Grafana sorts one frame's fields by name, which put "Aug 8"
+  // after "Aug 29"). Each name carries `age` invisible marks so the board can
+  // color the joined fields on a ramp, newest strongest.
+  // Nine week rows per loaded cohort (the x field must exist with its y
+  // field); an unloaded age is an empty frame the panel skips.
+  const curves: Record<string, Row[]> = {};
+  for (let age = 0; age < CURVE_COHORTS; age++) {
+    const i = cohorts.indexOf(age);
+    curves[`cohort_${age}`] =
+      i < 0
+        ? []
+        : Array.from({ length: 9 }, (_, k) => ({
+            week: k,
+            [labels[i] + CURVE_MARK.repeat(age)]:
+              byCohort.get(age)?.[k] ?? null,
+          }));
+  }
   const established = cohortSeries(
     legs.establishedHistory,
     metric(snapshot, "retention.established_week"),
@@ -511,9 +617,10 @@ export function retentionFrames(
     3
   );
   return {
-    curve,
+    ...curves,
     established,
     retained,
+    retainedMaturing: maturingBand(shiftDay(end, -37), now),
     power: growthFrames(legs, snapshot, now).power,
   };
 }
@@ -556,15 +663,17 @@ export function revenueFrames(
 
   const mauNow = usable(metric(snapshot, "engagement.mau"));
   const arpLive = usable(metric(snapshot, "revenue.arpmau"));
+  // Daily: the FinOps book at each day ÷ that day's 30-day MAU. Days without
+  // a book snapshot (before 2026-09-18) are absent, never zero.
   const arpmau: Row[] = [];
-  for (let k = MONEY_WEEKS - 1; k >= 0; k--) {
-    const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, 7 * k) ?? null;
-    const book = finopsMrr(legs.finops, shiftDay(end, -7 * k));
+  for (let k = UNIT_DAYS - 1; k >= 0; k--) {
+    const mau = k === 0 ? mauNow?.value ?? null : mauAt(legs, k) ?? null;
+    const book = finopsMrr(legs.finops, shiftDay(end, -k));
     const finopsArp = mau && book != null ? book / mau : null;
     const value = k === 0 && arpLive ? arpLive.value : finopsArp;
     if (value == null) continue;
     arpmau.push({
-      date: ts(isoDay(shiftDay(end, -7 * k - 1))),
+      date: ts(isoDay(shiftDay(end, -k - 1))),
       arpmau: value,
       finopsArpmau: round(finopsArp),
       mau,
@@ -595,8 +704,12 @@ export function healthFrames(
   // Same all-in model as the snapshot's cost stats (every cost line counted).
   const allIn = allInCost(
     (legs.billing?.daily || []).filter((d) => d.date <= cutoff),
-    legs.billing?.summary.coverage
+    legs.billing?.summary.coverage,
+    legs.planCost?.sttMeasured
   );
+  const estimates = estimateStatus(now);
+  // 1 when a manual estimate is older than ESTIMATE_STALE_DAYS.
+  const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
@@ -611,9 +724,12 @@ export function healthFrames(
       openai: d.openai,
       anthropic: d.anthropic,
       stt: d.stt,
+      sttSource: d.sttMeasured ? "measured" : "estimate",
       saas: d.saas,
+      estimateStale,
       oneTimeExcluded: d.oneTime || null,
-      total: snapshotTotals.get(d.date) ?? d.total,
+      // The snapshot prices STT from the constant; a measured day is our own.
+      total: d.sttMeasured ? d.total : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
     };
   });
@@ -625,29 +741,133 @@ export function healthFrames(
     ])
   );
   const live = usable(metric(snapshot, "cost.per_mau_month"));
+  // Daily, settled D−2: day k's 30-day all-in cost ÷ the same window's MAU.
   const costPerMau: Row[] = [];
-  for (let k = MONEY_WEEKS - 1; k >= 0; k--) {
-    const windowEnd = shiftDay(end, -1 - 7 * k); // exclusive; D−2 inclusive
+  for (let k = UNIT_DAYS - 1; k >= 1; k--) {
+    const windowEnd = shiftDay(end, -k); // exclusive; D−2 inclusive at k = 1
     const window = Array.from({ length: 30 }, (_, i) =>
       byDay.get(isoDay(shiftDay(windowEnd, -30 + i)))
     );
-    const mau = k === 0 ? live?.denominator ?? null : mauAt(legs, 7 * k + 1);
+    const mau = k === 1 ? live?.denominator ?? null : mauAt(legs, k);
     const settled = window.every((v) => v != null);
     const value =
-      k === 0 && live
+      k === 1 && live
         ? live.value
         : settled && mau
         ? window.reduce<number>((s, v) => s + (v as number), 0) / mau
         : null;
     if (value == null) continue;
-    const arpmau = arp.get(isoDay(shiftDay(end, -7 * k - 1)));
+    const arpmau = arp.get(isoDay(shiftDay(windowEnd, -1)));
     costPerMau.push({
       date: ts(isoDay(shiftDay(windowEnd, -1))),
       costPerMau: value,
       goal: arpmau == null ? null : round(arpmau * (1 - MARGIN_GOAL)),
     });
   }
-  return { cost, costPerMau };
+  const marginByPlan = marginFrames(legs, days, now);
+  return {
+    cost,
+    costPerMau,
+    marginByPlan,
+    marginStatus: [{ text: marginStatus(marginByPlan, days, estimates) }],
+    estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
+  };
+}
+
+/** Plans on the margin chart, as FinOps plan ids: Neo (legacy), Unlimited,
+ * Pro, Plus, Architect, Free. Every other FinOps segment (`unattributed`,
+ * `none`, a retired id) is the unattributed row. */
+export const MARGIN_PLANS = [
+  "unlimited",
+  "unlimited_v2",
+  "operator",
+  "plus",
+  "architect",
+  "basic",
+] as const;
+export const MARGIN_DAYS = 35;
+
+/** Allocated-estimate margin by plan (David 2026-10-17), one row per day that
+ * has both a settled FinOps plan cost and that day's book snapshot; FinOps
+ * plan cost settles about D−3, and a missing day is absent, never zero.
+ * Plan cost = FinOps fully-loaded plan cost + a share of the shared remainder
+ * (TV all-in total − FinOps fully loaded: BigQuery, STT, SaaS) in proportion
+ * to the plan's cost-active user-days that day, so the plans and the
+ * unattributed row sum to the all-in total. Revenue = that day's book ÷ 30.4.
+ * Paid plans carry margin %; Free has no revenue, so only its −$/day. */
+export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
+  const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
+  const known = new Set<string>(MARGIN_PLANS);
+  const rows: Row[] = [];
+  for (let k = MARGIN_DAYS; k >= 1; k--) {
+    const day = isoDay(shiftDay(utcDay(now), -k));
+    const plans = legs.planCost?.plans[day];
+    const book = legs.finops?.mrr[day];
+    const total = allIn.get(day);
+    if (!plans || !book || total == null) continue;
+    const segments = Object.entries(plans);
+    const finops = segments.reduce((s, [, p]) => s + p.usd, 0);
+    const users = segments.reduce((s, [, p]) => s + p.users, 0);
+    if (!users) continue;
+    const shared = total - finops;
+    const allocated = (p: { usd: number; users: number }) =>
+      p.usd + (shared * p.users) / users;
+    const row: Row = {
+      date: ts(day),
+      allInTotal: round(total),
+      finopsTotal: round(finops),
+      shared: round(shared),
+    };
+    for (const plan of MARGIN_PLANS) {
+      const cost = allocated(plans[plan] ?? { usd: 0, users: 0 });
+      const revenue = (book[plan] ?? 0) / DAYS_PER_MONTH;
+      row[`${plan}Revenue`] = round(revenue);
+      row[`${plan}Cost`] = round(cost);
+      row[`${plan}Margin`] = round(revenue - cost);
+      row[`${plan}Pct`] =
+        revenue > 0 ? round((100 * (revenue - cost)) / revenue, 1) : null;
+    }
+    row.unattributedCost = round(
+      segments
+        .filter(([plan]) => !known.has(plan))
+        .reduce((s, [, p]) => s + allocated(p), 0)
+    );
+    row.unattributedRevenue = round(
+      Object.entries(book)
+        .filter(([plan]) => !known.has(plan))
+        .reduce((s, [, v]) => s + v / DAYS_PER_MONTH, 0)
+    );
+    rows.push(row);
+  }
+  return rows;
+}
+
+const shortDay = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/** The margin chart's freshness line: its own data-through day (it lags the
+ * rest of the wall) and how its STT and SaaS lines were priced. */
+function marginStatus(
+  rows: Row[],
+  days: CostDay[],
+  estimates: ReturnType<typeof estimateStatus>
+) {
+  const through = rows.length ? String(rows.at(-1)!.date).slice(0, 10) : null;
+  const measured =
+    through != null && days.find((d) => d.date === through)?.sttMeasured;
+  const shown = estimates.filter((e) => !(measured && e.line === "STT"));
+  const asOf = shown.map((e) => e.asOf).sort()[0];
+  const stale = shown.some((e) => e.stale);
+  return [
+    `Margin through ${through ? shortDay(through) : "—"}`,
+    `${measured ? "STT measured · SaaS" : "STT & SaaS"} est. as of ${shortDay(
+      asOf
+    )}${stale ? " (stale)" : ""}`,
+  ].join(" · ");
 }
 
 const HEADLINE: [string, MetricId][] = [
@@ -708,9 +928,10 @@ export function headlineDelta(key: string, rows: Row[]) {
     ? "—"
     : shown == null
     ? "no prior"
-    : `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"} ${Math.abs(shown).toFixed(
-        1
-      )}${unit === "pp" ? " pp" : "%"}${
+    : // Non-breaking spaces: a narrow stat must not wrap the glyph apart.
+      `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"}\u00a0${Math.abs(
+        shown
+      ).toFixed(1)}${unit === "pp" ? "\u00a0pp" : "%"}${
         tone === "good" ? GOOD_MARK : tone === "bad" ? BAD_MARK : ""
       }`;
   return { key, prior, current, delta, unit, tone, text };
@@ -773,7 +994,17 @@ export function headlineFrames(
         }
       )
     : [];
-  const [arpPrior, arpNow] = revenue.arpmau.slice(-2);
+  // Per-user stats compare with the point a week earlier (the charts are daily).
+  const weekBefore = (rows: Row[]) => {
+    const last = rows.at(-1);
+    if (!last) return [undefined, undefined] as const;
+    const day = isoDay(shiftDay(new Date(String(last.date)), -7));
+    return [
+      rows.find((r) => String(r.date).slice(0, 10) === day),
+      last,
+    ] as const;
+  };
+  const [arpPrior, arpNow] = weekBefore(revenue.arpmau);
   frames.arpmau = arpNow
     ? pair(
         arpPrior && arpNow.finopsArpmau
@@ -791,8 +1022,8 @@ export function headlineFrames(
         }
       )
     : [];
-  const [cpmPrior, cpmNow] = healthFrames(legs, snapshot, now).costPerMau.slice(
-    -2
+  const [cpmPrior, cpmNow] = weekBefore(
+    healthFrames(legs, snapshot, now).costPerMau
   );
   frames.costPerMau = cpmNow
     ? pair(
@@ -810,11 +1041,12 @@ export function headlineFrames(
   // counts and money (David 2026-10-16). Grafana's native percent change is
   // relative only, so the API carries the delta and its text.
   // A missing stat keeps its slot (one null row → the stat shows "—"), so the
-  // stat values and the strip below stay aligned column for column.
+  // stat values and the strip below stay aligned column for column. The slot
+  // is dated at the data-through day the stats describe, never today.
+  const through = ts(isoDay(shiftDay(utcDay(now), -1)));
   for (const keys of Object.values(DELTA_STRIPS))
     for (const key of keys)
-      if (!frames[key]?.length)
-        frames[key] = [{ date: ts(isoDay(utcDay(now))), value: null }];
+      if (!frames[key]?.length) frames[key] = [{ date: through, value: null }];
   frames.deltas = [];
   for (const [column, keys] of Object.entries(DELTA_STRIPS)) {
     const strip: Row = {};
@@ -905,13 +1137,13 @@ const sqlHash = (sql: string) =>
 class StoreTimeout extends Error {}
 class LeaseLost extends Error {}
 
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+function withTimeout<T>(work: Promise<T>, wait = STORE_WAIT): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     work,
     new Promise<T>(
       (_, reject) =>
-        (timer = setTimeout(() => reject(new StoreTimeout()), STORE_WAIT))
+        (timer = setTimeout(() => reject(new StoreTimeout()), wait))
     ),
   ]).finally(() => clearTimeout(timer));
 }
@@ -968,7 +1200,11 @@ async function legState(
     return cached;
   let doc = cached?.doc ?? null;
   try {
-    const shared = await withTimeout(store.read<LegEntry>(name));
+    // A fresh process's first read also opens the store channel.
+    const shared = await withTimeout(
+      store.read<LegEntry>(name),
+      doc ? STORE_WAIT : COLD_STORE_WAIT
+    );
     storeOk();
     if (shared) doc = shared;
   } catch {
@@ -1309,6 +1545,12 @@ export async function seriesPayload(
         ? "Shared series store unavailable"
         : "Series data unavailable";
   }
+  // A snapshot with no value yet is still filling (or retrying): never settled,
+  // so the proxy keeps re-polling instead of pinning the empty frames.
+  if (wall && wall.metrics.every((m) => m.value == null)) {
+    refreshing = true;
+    gaps.snapshot = wall.refreshError || "Snapshot refresh running";
+  } else if (wall?.refreshing) refreshing = true;
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
   if (name === "headline") {
@@ -1322,6 +1564,16 @@ export async function seriesPayload(
       states.map((s) => s.doc?.entry),
       filling
     );
+    // The TV's one freshness line (no diagnostics table on the wall); the
+    // rollup detail below stays in the API's status and gaps.
+    frames.through = [{ text: `Data through ${status.text}` }];
+    const rollup = await sources
+      .rollupStatus?.()
+      .catch(() => ({ through: null, reason: "unavailable" }));
+    if (rollup)
+      status.text += ` · rollup ${
+        rollup.through || rollup.reason || "unavailable"
+      }`;
     frames.gaps = [
       { metric: "Data through", missing: status.text, reason: "" },
       ...(frames.gaps || []),

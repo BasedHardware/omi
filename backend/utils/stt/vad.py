@@ -25,10 +25,14 @@ logger = logging.getLogger(__name__)
 
 HOSTED_VAD_CONNECT_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS'
 HOSTED_VAD_READ_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_READ_TIMEOUT_SECONDS'
+VAD_CACHE_TTL_SECONDS_ENV = 'VAD_CACHE_TTL_SECONDS'
 DEFAULT_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 3.0
 DEFAULT_HOSTED_VAD_READ_TIMEOUT_SECONDS = 30.0
 MAX_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 30.0
 MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS = 60.0
+DEFAULT_VAD_CACHE_TTL_SECONDS = 86400
+MIN_VAD_CACHE_TTL_SECONDS = 300
+MAX_VAD_CACHE_TTL_SECONDS = 86400
 
 
 class VADAudioDecodeError(RuntimeError):
@@ -78,6 +82,20 @@ def _hosted_vad_timeout_seconds() -> Tuple[float, float]:
             MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS,
         ),
     )
+
+
+def _vad_cache_ttl_seconds() -> int:
+    """Return the current bounded sync-VAD cache TTL, preserving the 24h default."""
+    raw_value = os.getenv(VAD_CACHE_TTL_SECONDS_ENV)
+    if raw_value is None:
+        return DEFAULT_VAD_CACHE_TTL_SECONDS
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return DEFAULT_VAD_CACHE_TTL_SECONDS
+    if MIN_VAD_CACHE_TTL_SECONDS <= value <= MAX_VAD_CACHE_TTL_SECONDS:
+        return value
+    return DEFAULT_VAD_CACHE_TTL_SECONDS
 
 
 def _hosted_vad_httpx_timeout() -> httpx.Timeout:
@@ -237,7 +255,7 @@ def vad_is_empty(
         segments = _run_file_vad(file_path)
 
     if cache:
-        redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
+        redis_db.set_generic_cache(caching_key, segments, ttl=_vad_cache_ttl_seconds())
     if return_segments:
         return segments
     logger.info(f'vad_is_empty {len(segments) == 0}')
@@ -288,6 +306,8 @@ def _segments_from_16khz_samples(samples: np.ndarray[Any, Any], *, threshold: fl
     while offset + VAD_WINDOW_SAMPLES <= len(samples):
         window = samples[offset : offset + VAD_WINDOW_SAMPLES]
         prob, state, context = run_vad_window(window, state, context)
+        if not math.isfinite(prob) or not 0 <= prob <= 1:
+            raise VADProcessingError('invalid local VAD probability')
         is_speech_flags.append(prob > threshold)
         offset += VAD_WINDOW_SAMPLES
     # Convert per-window flags to time segments

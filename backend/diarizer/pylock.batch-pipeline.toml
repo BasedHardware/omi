@@ -2,7 +2,7 @@
 #    uv pip compile backend/diarizer/requirements-batch-pipeline.txt --python 3.11 --python-platform x86_64-unknown-linux-gnu --format pylock.toml --output-file backend/diarizer/pylock.batch-pipeline.toml
 lock-version = "1.0"
 created-by = "uv"
-requires-python = ">=3.11.15"
+requires-python = ">=3.11"
 
 [[packages]]
 name = "absl-py"
@@ -822,6 +822,11 @@ name = "optuna"
 version = "5.0.0"
 sdist = { url = "https://files.pythonhosted.org/packages/27/6d/7bd33b5ed3a83f1c1517fb20c54c7dbf59e6c76430d9b26d3205074ff6b0/optuna-5.0.0.tar.gz", upload-time = 2026-09-07T05:16:21Z, size = 508726, hashes = { sha256 = "358bb878b7b1e20e90dc944ac4261796dd3d5c2b7860aa960a08fc10e0b5beff" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/90/e5/7c5e8cdda8c9f0cd8aca0a376dee9cff6b8c30692cf614960d9e80f59689/optuna-5.0.0-py3-none-any.whl", upload-time = 2026-09-07T05:16:19Z, size = 442352, hashes = { sha256 = "5fff892ae6baf4948c810c5b8635ec67e08efb0709b41cb73b14e30391d44720" } }]
+
+[[packages]]
+name = "opuslib"
+version = "3.0.1"
+sdist = { url = "https://files.pythonhosted.org/packages/46/55/826befabb29fd3902bad6d6d7308790894c7ad4d73f051728a0c53d37cd7/opuslib-3.0.1.tar.gz", upload-time = 2018-01-16T06:04:42Z, size = 8550, hashes = { sha256 = "2cb045e5b03e7fc50dfefe431e3404dddddbd8f5961c10c51e32dfb69a044c97" } }
 
 [[packages]]
 name = "overrides"

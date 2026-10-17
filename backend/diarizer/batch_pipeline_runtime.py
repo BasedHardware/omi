@@ -15,6 +15,8 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
+from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
@@ -23,6 +25,7 @@ from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synch
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
@@ -57,13 +60,13 @@ class SynchronizedWorker:
         self.memory_probe = memory_probe
         self._unavailable = False
 
-    def process_batch(self, items):
+    def process_batch(self, items, **kwargs):
         if self._unavailable:
             raise FatalGpuError('GPU chain unavailable; restart required')
         try:
             baseline = self.memory_probe.begin() if self.memory_probe else None
             try:
-                return self.worker.process_batch(items)
+                return self.worker.process_batch(items, **kwargs)
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
@@ -86,6 +89,12 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
+    if cap_dispatch_enabled():
+        registry.register(AUDIO_SECONDS)
+    registry.register(TRANSITIONS)
+    registry.register(DURATION)
+    registry.register(LABELS)
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path == '/metrics':

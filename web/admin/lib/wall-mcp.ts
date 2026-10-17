@@ -25,10 +25,10 @@ export const MCP_CADENCE = {
   maxCv: 0.15,
 } as const;
 
-export function mcpActivityCtes(start: Date, end: Date) {
+export function mcpMarkerCte(start: Date, end: Date, observationDays = 30) {
   // A quiet day must show zero once a v2 marker has appeared in recent history.
   const observedStart = new Date(
-    Math.min(start.getTime(), shiftDay(end, -30).getTime())
+    Math.min(start.getTime(), shiftDay(end, -observationDays).getTime())
   );
   return `mcp_raw AS (
     SELECT ${MCP_SUCCESS_SELECT}
@@ -36,7 +36,11 @@ export function mcpActivityCtes(start: Date, end: Date) {
     observedStart
   )} AND timestamp < ${sqlTime(end)}
       AND toIntOrZero(toString(properties.schema_version))=2 AND ${EXCLUSIONS_SQL}
-  ),
+  )`;
+}
+
+export function mcpActivityCtes(start: Date, end: Date, observationDays = 30) {
+  return `${mcpMarkerCte(start, end, observationDays)},
   mcp_eligible AS (SELECT *,intDiv(toUnixTimestamp(timestamp),86400) AS utc_day FROM mcp_raw WHERE initiator IN ('user','unknown')),
   mcp_ordered AS (SELECT actor,timestamp,client,tool,initiator,utc_day,
     lagInFrame(timestamp,1,timestamp) OVER (PARTITION BY actor,client,utc_day ORDER BY timestamp) previous_at

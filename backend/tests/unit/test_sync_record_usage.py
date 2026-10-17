@@ -8,6 +8,7 @@ Verifies:
 - v1 deprecation headers appear on all response paths
 """
 
+import ast
 import os
 import re
 
@@ -37,6 +38,25 @@ def _extract_function_body(source, func_name):
     next_def = re.search(r'\n(?:@router\.|def |async def |class )', source[start + 1 :])
     end = start + 1 + next_def.start() if next_def else len(source)
     return source[start:end]
+
+
+def _usage_has_exception_boundary(body):
+    """Check nesting, rather than a character window around a formatted call."""
+    for node in ast.walk(ast.parse(body)):
+        if not isinstance(node, ast.Try):
+            continue
+        catches = any(
+            isinstance(handler.type, ast.Name) and handler.type.id == 'Exception' for handler in node.handlers
+        )
+        if not catches:
+            continue
+        for statement in node.body:
+            for call in ast.walk(statement):
+                if isinstance(call, ast.Call) and any(
+                    isinstance(argument, ast.Name) and argument.id == 'record_usage' for argument in call.args
+                ):
+                    return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -102,14 +122,7 @@ class TestV1RecordUsage:
 
     def test_record_usage_wrapped_in_try_except(self):
         """record_usage must be protected by try/except."""
-        body = self._get_v1_body()
-        record_idx = body.find('record_usage,')
-        # Check there's a try: before it (within ~5 lines)
-        preceding_chunk = body[max(0, record_idx - 200) : record_idx]
-        assert 'try:' in preceding_chunk, "record_usage must be inside a try block"
-        # Check there's an except after it
-        following_chunk = body[record_idx : record_idx + 200]
-        assert 'except Exception' in following_chunk, "record_usage must have an except handler"
+        assert _usage_has_exception_boundary(self._get_v1_body()), 'record_usage must be inside a protected try body'
 
     def test_record_usage_logs_error_on_failure(self):
         """Error from record_usage must be logged, not silenced."""
@@ -159,12 +172,7 @@ class TestV2RecordUsage:
         assert record_pos < complete_pos, "record_usage must run before final job publication"
 
     def test_record_usage_wrapped_in_try_except(self):
-        body = self._get_v2_body()
-        record_idx = body.find('record_usage,')
-        preceding = body[max(0, record_idx - 1000) : record_idx]
-        assert 'try:' in preceding, "record_usage must be inside a try block"
-        following = body[record_idx : record_idx + 800]
-        assert 'except Exception' in following, "record_usage must have an except handler"
+        assert _usage_has_exception_boundary(self._get_v2_body()), 'record_usage must be inside a protected try body'
 
 
 # ---------------------------------------------------------------------------

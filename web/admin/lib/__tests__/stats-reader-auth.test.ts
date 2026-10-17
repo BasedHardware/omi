@@ -32,6 +32,7 @@ import { GET } from "@/app/api/omi/stats/daily-new-users/route";
 import { GET as wallGET } from "@/app/api/omi/stats/wall/route";
 vi.mock("@/lib/wall-cache", () => ({
   wallPayload: async () => ({ metrics: [{ value: 1 }] }),
+  wallSnapshotStore: () => undefined,
 }));
 vi.mock("@/lib/wall-local-fixture", () => ({
   localWallFixture: async () => null,

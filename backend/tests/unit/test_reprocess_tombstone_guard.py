@@ -141,7 +141,14 @@ def test_sequential_reprocess_calls_both_run_after_success(monkeypatch, app_ids)
     from database import processing_attention as attention
 
     row = {'id': 'c1', 'status': 'completed', 'structured': {'overview': 'Existing summary'}}
-    model = SimpleNamespace(language='en', discarded=False, structured=SimpleNamespace(overview='New summary'))
+    # An explicit selection only returns after its app produced a result; the
+    # attention outcome is judged on that result, not on the notes overview.
+    model = SimpleNamespace(
+        language='en',
+        discarded=False,
+        structured=SimpleNamespace(overview='New summary'),
+        apps_results=[SimpleNamespace(app_id=app_id, content='App summary') for app_id in app_ids if app_id],
+    )
     with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=row), patch.object(
         conv_router, 'deserialize_conversation', return_value=model
     ), patch.object(

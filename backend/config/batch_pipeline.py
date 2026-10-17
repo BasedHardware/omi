@@ -5,6 +5,7 @@ import hashlib
 import math
 import os
 from typing import Callable, TypeVar
+from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
 class Priority(IntEnum):
@@ -14,6 +15,10 @@ class Priority(IntEnum):
 
 
 T = TypeVar('T')
+
+
+class RecordOwnerContention(RuntimeError):
+    """A loaded conversation revision lost a route-only compare-and-set."""
 
 
 def enabled_for(owner_id: str) -> bool:
@@ -47,6 +52,27 @@ def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
 def admit_or_legacy(owner_id: str, admit: Callable[..., T], legacy: Callable[..., T], *args, **kwargs) -> T:
     """Explicit integration seam; disabled path does not evaluate admission/store."""
     return (admit if enabled_for(owner_id) else legacy)(*args, **kwargs)
+
+
+def live_record_admission_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false').lower() == 'true'
+
+
+def live_record_enabled_for(owner_id: str) -> bool:
+    return live_record_admission_enabled() and enabled_for(owner_id)
+
+
+def record_capture_eligible(owner_id: str, capture: dict) -> bool:
+    return bool(
+        live_record_enabled_for(owner_id)
+        and capture.get('private_cloud_sync_enabled')
+        and not capture.get('uses_custom_stt')
+        and not capture.get('deleted')
+        and not capture.get('discarded')
+        and capture.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
+        and normalized_stt_language(capture.get('language'))
+        in (PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'})
+    )
 
 
 def shared_live_enabled() -> bool:
@@ -83,3 +109,46 @@ def recovery_owners() -> tuple[str, ...]:
             }
         )
     )
+
+
+def authoritative_labels_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'false').lower() == 'true'
+
+
+def empty_asr_recovery_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true'
+
+
+def require_live_target_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'false').lower() == 'true'
+
+
+def recover_all_admitted() -> bool:
+    # These are already batch-owned obligations; rollback must still drain them.
+    return (
+        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').lower() == 'on'
+        and os.getenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'false').lower() == 'true'
+    )
+
+
+def recovery_enabled_for(owner_id: str) -> bool:
+    return recover_all_admitted() or owner_id in recovery_owners()
+
+
+def empty_asr_disposition_enabled() -> bool:
+    """Dark strict-VAD disposition; accepted paid intents are never reset."""
+    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def projection_contention_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def speech_empty_multilingual_enabled() -> bool:
+    """Dark alternate-provider recovery; one call per durable paid intent."""
+    return os.getenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false').strip().lower() == 'true'
+
+
+def terminal_empty_disposition_enabled() -> bool:
+    """Dark, evidenced terminal empty result; never grants another paid intent."""
+    return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'

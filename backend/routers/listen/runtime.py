@@ -108,6 +108,7 @@ from .contracts import ListenLimits, ListenRequest, ListenSessionState
 from .conversations import LiveConversationController
 from .persistence import ListenPersistence
 from .parity_capture import ListenParityCapture
+from utils.stt_cap_dispatch import customer_funded
 from . import receiver as receiver_module
 from .receiver import ListenReceiver
 from .registry import register as register_listen_session
@@ -799,6 +800,11 @@ class ListenSessionRuntime:
             await self._refresh_credits(transcription_seconds=transcription_seconds)
 
     async def _refresh_credits(self, *, transcription_seconds: int = 0) -> None:
+        admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
+        if admission is not None:
+            await admission.refresh()
+            if getattr(self.receiver, 'cap_paused', False) and admission.managed:
+                await self.receiver.initialize_stt()
         now = time.time()
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
         needs_refresh = (
@@ -820,6 +826,8 @@ class ListenSessionRuntime:
         elif self.state.remaining_seconds_cache is not None and transcription_seconds > 0:
             self.state.remaining_seconds_cache = max(0, self.state.remaining_seconds_cache - transcription_seconds)
         remaining = self.state.remaining_seconds_cache
+        if admission is not None and (admission.omi_selected or not customer_funded(self.stt_service)):
+            remaining = admission.remaining
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if remaining is not None and remaining <= FREEMIUM_THRESHOLD_SECONDS and not self.state.freemium_threshold_sent:
             if should_emit_plus_meter_warning(subscription):
