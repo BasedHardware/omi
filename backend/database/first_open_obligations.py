@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import math
 import uuid
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -25,6 +27,15 @@ CONVERSATIONS_COLLECTION = 'conversations'
 # effect row; ``_effects`` normalizes to this tuple, so completion never waits
 # on the retired effect.
 FIRST_OPEN_EFFECTS = ('folder_assignment', 'app_fanout')
+
+logger = logging.getLogger(__name__)
+
+
+def _is_valid_id(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    return bool(stripped) and '/' not in stripped and '\x00' not in stripped
 
 
 def _refs(client: Any, uid: str) -> tuple[Any, Any, Any]:
@@ -87,12 +98,18 @@ def _effects(state: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id):
+        return None
     return client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
 
 
 def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id):
+        return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return False
 
     @firestore.transactional
     def initialize(transaction):
@@ -119,7 +136,11 @@ def initialize_first_open_work(uid: str, conversation_id: str, *, firestore_clie
         )
         return True
 
-    return bool(run_transactional(client, initialize))
+    try:
+        return bool(run_transactional(client, initialize))
+    except Exception as exc:
+        logger.warning(f'initialize_first_open_work failed for uid={uid} conversation_id={conversation_id}: {exc}')
+        return False
 
 
 def _live_effect(snapshot: Any, control: Optional[MemoryControlState], token: str, effect: str) -> bool:
@@ -137,15 +158,29 @@ def _live_effect(snapshot: Any, control: Optional[MemoryControlState], token: st
 def first_open_effect_is_authorized(
     uid: str, conversation_id: str, token: str, effect: str, *, firestore_client: Any = None
 ) -> bool:
+    if (
+        not _is_valid_id(uid)
+        or not _is_valid_id(conversation_id)
+        or not isinstance(token, str)
+        or not token
+        or effect not in FIRST_OPEN_EFFECTS
+    ):
+        return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return False
 
     @firestore.transactional
     def authorize(transaction):
         snapshot = ref.get(transaction=transaction)
         return _live_effect(snapshot, _authority(transaction, client, uid), token, effect)
 
-    return bool(run_transactional(client, authorize))
+    try:
+        return bool(run_transactional(client, authorize))
+    except Exception as exc:
+        logger.warning(f'first_open_effect_is_authorized failed for uid={uid} effect={effect}: {exc}')
+        return False
 
 
 def commit_first_open_conversation_patch(
@@ -157,10 +192,19 @@ def commit_first_open_conversation_patch(
     *,
     firestore_client: Any = None,
 ) -> bool:
-    if not patch:
+    if (
+        not patch
+        or not _is_valid_id(uid)
+        or not _is_valid_id(conversation_id)
+        or not isinstance(token, str)
+        or not token
+        or effect not in FIRST_OPEN_EFFECTS
+    ):
         return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return False
 
     @firestore.transactional
     def commit(transaction):
@@ -170,7 +214,11 @@ def commit_first_open_conversation_patch(
         transaction.update(ref, dict(patch))
         return True
 
-    return bool(run_transactional(client, commit))
+    try:
+        return bool(run_transactional(client, commit))
+    except Exception as exc:
+        logger.warning(f'commit_first_open_conversation_patch failed for uid={uid} effect={effect}: {exc}')
+        return False
 
 
 def commit_first_open_app_result(
@@ -183,10 +231,19 @@ def commit_first_open_app_result(
     firestore_client: Any = None,
 ) -> bool:
     """Persist an app result and its resumable receipt in one transaction."""
-    if not app_id or not patch:
+    if (
+        not _is_valid_id(app_id)
+        or not patch
+        or not _is_valid_id(uid)
+        or not _is_valid_id(conversation_id)
+        or not isinstance(token, str)
+        or not token
+    ):
         return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return False
 
     @firestore.transactional
     def commit(transaction):
@@ -213,7 +270,11 @@ def commit_first_open_app_result(
         )
         return True
 
-    return bool(run_transactional(client, commit))
+    try:
+        return bool(run_transactional(client, commit))
+    except Exception as exc:
+        logger.warning(f'commit_first_open_app_result failed for uid={uid} app_id={app_id}: {exc}')
+        return False
 
 
 def complete_first_open_effect(
@@ -227,8 +288,12 @@ def complete_first_open_effect(
 ) -> bool:
     if effect not in FIRST_OPEN_EFFECTS:
         raise ValueError(f'unknown first-open effect: {effect}')
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id) or not isinstance(token, str) or not token:
+        return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return False
 
     @firestore.transactional
     def complete(transaction):
@@ -266,21 +331,43 @@ def complete_first_open_effect(
         transaction.update(ref, patch)
         return True
 
-    return bool(run_transactional(client, complete))
+    try:
+        return bool(run_transactional(client, complete))
+    except Exception as exc:
+        logger.warning(f'complete_first_open_effect failed for uid={uid} effect={effect}: {exc}')
+        return False
 
 
 def commit_first_open_folder_count(
     uid: str, conversation_id: str, token: str, folder_id: str, *, firestore_client: Any = None
 ) -> bool:
+    if (
+        not _is_valid_id(uid)
+        or not _is_valid_id(conversation_id)
+        or not _is_valid_id(folder_id)
+        or not isinstance(token, str)
+        or not token
+    ):
+        return False
     client = firestore_client or get_firestore_client()
     user = client.collection('users').document(uid)
-    query = FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY.build(
-        user.collection(CONVERSATIONS_COLLECTION),
-        {'folder_id': folder_id, 'discarded': False},
-        field_filter_factory=FieldFilter,
-    )
-    count = int(query.count().get()[0][0].value or 0)
+    try:
+        query = FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY.build(
+            user.collection(CONVERSATIONS_COLLECTION),
+            {'folder_id': folder_id, 'discarded': False},
+            field_filter_factory=FieldFilter,
+        )
+        count_res = query.count().get()
+        if count_res and len(count_res) > 0 and len(count_res[0]) > 0:
+            count = int(getattr(count_res[0][0], 'value', 0) or 0)
+        else:
+            count = 0
+    except Exception as exc:
+        logger.warning(f'Failed to compute folder conversation count for uid={uid} folder={folder_id}: {exc}')
+        count = 0
     conversation_ref = _conversation_ref(client, uid, conversation_id)
+    if conversation_ref is None:
+        return False
     folder_ref = user.collection('folders').document(folder_id)
 
     @firestore.transactional
@@ -293,7 +380,11 @@ def commit_first_open_folder_count(
         transaction.update(folder_ref, {'conversation_count': count})
         return True
 
-    return bool(run_transactional(client, commit))
+    try:
+        return bool(run_transactional(client, commit))
+    except Exception as exc:
+        logger.warning(f'commit_first_open_folder_count failed for uid={uid} folder={folder_id}: {exc}')
+        return False
 
 
 def commit_first_open_app_usage(
@@ -305,8 +396,18 @@ def commit_first_open_app_usage(
     *,
     firestore_client: Any = None,
 ) -> bool:
+    if (
+        not _is_valid_id(uid)
+        or not _is_valid_id(conversation_id)
+        or not _is_valid_id(app_id)
+        or not isinstance(token, str)
+        or not token
+    ):
+        return False
     client = firestore_client or get_firestore_client()
     conversation_ref = _conversation_ref(client, uid, conversation_id)
+    if conversation_ref is None:
+        return False
     plugin_ref = client.collection('plugins_data').document(app_id)
     usage_ref = client.collection('plugins').document(app_id).collection('usage_history').document(conversation_id)
 
@@ -348,7 +449,11 @@ def commit_first_open_app_usage(
         )
         return True
 
-    return bool(run_transactional(client, commit))
+    try:
+        return bool(run_transactional(client, commit))
+    except Exception as exc:
+        logger.warning(f'commit_first_open_app_usage failed for uid={uid} app_id={app_id}: {exc}')
+        return False
 
 
 def claim_first_open_work(
@@ -359,8 +464,14 @@ def claim_first_open_work(
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Optional[str]:
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id):
+        return None
+    valid_lease = lease_seconds if isinstance(lease_seconds, (int, float)) and math.isfinite(lease_seconds) else 300
+    effective_lease_seconds = max(30, int(valid_lease))
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return None
     current_time = now or datetime.now(timezone.utc)
     token = str(uuid.uuid4())
 
@@ -386,22 +497,30 @@ def claim_first_open_work(
                     'state': 'in_flight',
                     'attempt': attempt + 1,
                     'lease_token': token,
-                    'lease_expires_at': current_time + timedelta(seconds=max(30, lease_seconds)),
+                    'lease_expires_at': current_time + timedelta(seconds=effective_lease_seconds),
                     'updated_at': firestore.SERVER_TIMESTAMP,
                 }
             },
         )
         return token
 
-    return run_transactional(client, claim)
+    try:
+        return run_transactional(client, claim)
+    except Exception as exc:
+        logger.warning(f'claim_first_open_work failed for uid={uid} conversation_id={conversation_id}: {exc}')
+        return None
 
 
-def claim_authorized_first_open_work(uid: str, conversation_id: str, source: str | None) -> Optional[str]:
+def claim_authorized_first_open_work(
+    uid: str, conversation_id: str, source: str | None, *, firestore_client: Any = None
+) -> Optional[str]:
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id):
+        return None
     from utils.jit_first_open_policy import outstanding_first_open_work_permitted
 
     if not outstanding_first_open_work_permitted(uid=uid, source=source):
         return None
-    return claim_first_open_work(uid, conversation_id)
+    return claim_first_open_work(uid, conversation_id, firestore_client=firestore_client)
 
 
 def finish_first_open_work(
@@ -409,12 +528,16 @@ def finish_first_open_work(
     conversation_id: str,
     token: str,
     *,
-    succeeded: bool,
+    succeeded: bool = True,
     firestore_client: Any = None,
 ) -> bool:
     del succeeded
+    if not _is_valid_id(uid) or not _is_valid_id(conversation_id) or not isinstance(token, str) or not token:
+        return False
     client = firestore_client or get_firestore_client()
     ref = _conversation_ref(client, uid, conversation_id)
+    if ref is None:
+        return False
 
     @firestore.transactional
     def finish(transaction):
@@ -437,4 +560,8 @@ def finish_first_open_work(
         transaction.update(ref, {'jit_first_open': next_state})
         return True
 
-    return bool(run_transactional(client, finish))
+    try:
+        return bool(run_transactional(client, finish))
+    except Exception as exc:
+        logger.warning(f'finish_first_open_work failed for uid={uid} conversation_id={conversation_id}: {exc}')
+        return False
