@@ -18,7 +18,7 @@ entry like "1.0.531" matches every build of that semantic version.
 from typing import Any, Optional, cast
 
 from database._client import db
-from database.announcements import _parse_version, compare_versions
+from database.announcements import parse_version, compare_versions
 from database.cache import get_memory_cache
 
 _CACHE_KEY_PREFIX = "app_review_config:"
@@ -54,13 +54,13 @@ _SUPPORTED_PLATFORMS = {"ios", "macos"}
 def _is_plausible_version(version: str) -> bool:
     """True when ``version`` parses to something other than the zero fallback.
 
-    ``_parse_version`` returns ``((0, 0, 0), 0, False)`` for unparseable
+    ``parse_version`` returns ``((0, 0, 0), 0, False)`` for unparseable
     input, so two malformed strings collide at compare==0. Guarding the
     comparison keeps "malformed..version" from hiding subscription surfaces
     for every other malformed entry.
     """
     try:
-        semantic, _build, has_build = _parse_version(version)
+        semantic, _build, has_build = parse_version(version)
     except Exception:
         return False
     return semantic != (0, 0, 0) or has_build
@@ -91,7 +91,7 @@ def should_hide_subscription_ui(
 
     cfg = get_review_config(normalized, firestore_client) or {}
 
-    uid_clean = uid.strip() if isinstance(uid, str) else ""
+    uid_clean = (uid or "").strip()
     if uid_clean:
         reviewer_uids_raw = cfg.get("reviewer_uids")
         reviewer_uids: list[object] = (
@@ -101,7 +101,7 @@ def should_hide_subscription_ui(
         if uid_clean in reviewers:
             return True
 
-    if app_version and isinstance(app_version, str):
+    if app_version:
         version_clean = app_version.strip()
         hidden_versions_raw = cfg.get("hidden_versions")
         hidden_versions: list[object] = (
