@@ -5274,3 +5274,23 @@ Worker label/retry flags apply only to already-admitted work. Warm capacity and
 budget checks precede each percentage flip. Close admission everywhere to roll
 back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
+
+
+### Batch projection contention and replay
+
+`BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
+Enable it on integration to coalesce concurrent projection per owner using an advisory Redis
+NX/300-second token lease with one-second connect/read timeouts. Token-checked release cannot remove a replacement lease; expiry
+or Redis unavailability can allow overlap, so Firestore privacy, predecessor ordering and
+assignment receipts remain authoritative. No Firestore lookup is added. Both projection and
+batch assignment then use the existing bounded five-attempt fresh-transaction contention
+retry with jitter, retaining the existing expired-transaction restart. Legacy assignment retains its separate `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED`
+control. No STT or admission path is changed.
+
+With the control enabled, silence persistence can discover another projector's receipt after its initial check. Resume
+all post-persist obligations and durable completion; a replay alone is never client completion.
+With the contention control on, content-free `action=project outcome=completed|waiting` and
+`action=claim outcome=busy|unavailable` logs plus per-sweep completed/waiting/blocked/error summaries distinguish drain progress from contention. Keep
+admission paused until accepted-work completion, visible synthetic canary and at least 30 minutes
+of correctness sentinels pass. Scaling all integration traffic to one instance is a temporary
+capacity tradeoff, not a distributed projection fence (revision overlap remains possible).

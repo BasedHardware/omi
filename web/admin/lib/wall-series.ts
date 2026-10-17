@@ -878,11 +878,12 @@ export function headlineFrames(
   // counts and money (David 2026-10-16). Grafana's native percent change is
   // relative only, so the API carries the delta and its text.
   // A missing stat keeps its slot (one null row → the stat shows "—"), so the
-  // stat values and the strip below stay aligned column for column.
+  // stat values and the strip below stay aligned column for column. The slot
+  // is dated at the data-through day the stats describe, never today.
+  const through = ts(isoDay(shiftDay(utcDay(now), -1)));
   for (const keys of Object.values(DELTA_STRIPS))
     for (const key of keys)
-      if (!frames[key]?.length)
-        frames[key] = [{ date: ts(isoDay(utcDay(now))), value: null }];
+      if (!frames[key]?.length) frames[key] = [{ date: through, value: null }];
   frames.deltas = [];
   for (const [column, keys] of Object.entries(DELTA_STRIPS)) {
     const strip: Row = {};
@@ -1377,6 +1378,12 @@ export async function seriesPayload(
         ? "Shared series store unavailable"
         : "Series data unavailable";
   }
+  // A snapshot with no value yet is still filling (or retrying): never settled,
+  // so the proxy keeps re-polling instead of pinning the empty frames.
+  if (wall && wall.metrics.every((m) => m.value == null)) {
+    refreshing = true;
+    gaps.snapshot = wall.refreshError || "Snapshot refresh running";
+  } else if (wall?.refreshing) refreshing = true;
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
   if (name === "headline") {
