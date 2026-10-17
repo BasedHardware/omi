@@ -13,6 +13,18 @@ Future<Map<String, dynamic>> _emptyGraph() async => {'nodes': [], 'edges': []};
 
 Future<Map<String, dynamic>> _neverLoads() => Completer<Map<String, dynamic>>().future;
 
+Future<Map<String, dynamic>> _multiUserGraph() async => {
+      'nodes': [
+        {'id': 'user-central', 'label': 'user', 'node_type': 'concept'},
+        {'id': 'person-sam', 'label': 'Sam', 'node_type': 'person'},
+        {'id': 'concept-coding', 'label': 'Coding', 'node_type': 'concept'},
+      ],
+      'edges': [
+        {'source_id': 'user-central', 'target_id': 'concept-coding', 'label': 'builds'},
+        {'source_id': 'person-sam', 'target_id': 'concept-coding', 'label': 'enjoys'},
+      ],
+    };
+
 Widget _app(Widget home) {
   return MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -41,9 +53,18 @@ void main() {
     });
 
     test('only backend labels and the given name identify the user node', () {
-      expect(memoryGraphKnownUserLabels(''), {'me', 'the user'});
-      expect(memoryGraphKnownUserLabels(' Ana '), {'me', 'the user', 'ana'});
+      expect(memoryGraphKnownUserLabels(''), {'me', 'the user', 'user', 'myself', 'i'});
+      expect(memoryGraphKnownUserLabels(' Ana '), {'me', 'the user', 'user', 'myself', 'i', 'ana'});
       expect(memoryGraphKnownUserLabels('').contains('tú'), isFalse);
+    });
+
+    test('recognizes full name and merges duplicate user and person nodes (#20578)', () {
+      final labels = memoryGraphKnownUserLabels('Sam', fullName: 'Sam Altman');
+      expect(labels.contains('sam'), isTrue);
+      expect(labels.contains('sam altman'), isTrue);
+      expect(labels.contains('user'), isTrue);
+      expect(labels.contains('the user'), isTrue);
+      expect(labels.contains('me'), isTrue);
     });
 
     test('uses the given name when one is set', () {
@@ -139,5 +160,26 @@ void main() {
     expect(calls, 2);
     expect(row, findsNothing);
     expect(find.byKey(const ValueKey('memories_mind_map_preview')), findsOneWidget);
+  });
+
+  testWidgets('merges separate user node and given name node into one owner node (#20578)', (tester) async {
+    SharedPreferencesUtil().givenName = 'Sam';
+    SharedPreferencesUtil().familyName = 'Altman';
+
+    await tester.pumpWidget(_app(const MemoryGraphPage(trackOpenEvent: false, loadGraph: _multiUserGraph)));
+    await tester.pumpAndSettle();
+
+    final state = tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage));
+    // Verify only 2 nodes exist: 1 merged owner node and 1 concept node
+    expect(state.simulationForTesting.nodes.length, 2);
+    // The owner node is labeled with given name
+    final ownerNode = state.simulationForTesting.nodes.firstWhere((n) => n.isFixed);
+    expect(ownerNode.label, 'Sam');
+    // Both edges were preserved and remapped to the single owner node
+    expect(state.simulationForTesting.edges.length, 2);
+    for (final edge in state.simulationForTesting.edges) {
+      expect(edge.sourceId, ownerNode.id);
+      expect(edge.targetId, 'concept-coding');
+    }
   });
 }
