@@ -60,6 +60,6 @@
         </div>
         <p>You can safely close this window - the import will continue running.</p>
     </div>
-    <a href="/" class="home-button">Import More Content</a>
+    <a href="{% if session_token %}/api/notion/import?uid={{ uid }}&composio_session={{ session_token }}{% else %}/{% endif %}" class="home-button">Import More Content</a>
 </body>
 </html> 
