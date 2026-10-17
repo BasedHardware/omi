@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 import time
 import logging
-import wave
 from typing import Any
 
 from google.cloud import firestore
@@ -64,12 +63,6 @@ def reserve(
         commit(client.transaction())
 
 
-def write_wav(path: str, data: bytes, rate: int) -> None:
-    with wave.open(path, 'wb') as output:
-        output.setparams((1, 2, rate, 0, 'NONE', 'not compressed'))
-        output.writeframes(data)
-
-
 class LiveHeldAudio:
     """Only unique, denied capture PCM enters this sink; replay has no append path."""
 
@@ -87,7 +80,6 @@ class LiveHeldAudio:
         self._charged: set[str] = set()
         self._buffer_opened = {}
         self._lock = asyncio.Lock()
-        self._last_flush = time.monotonic()
 
     def append(self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int = 0) -> None:
         # Reserve against the capture month, including packets straddling reset.
@@ -112,10 +104,8 @@ class LiveHeldAudio:
         if not data:
             return
         buffered = self.pending_bytes + sum(len(item[0]) for item in self.buffers.values())
-        if (
-            buffered >= MAX_PENDING_SECONDS * rate * 2
-            or len(data) > (MAX_PENDING_SECONDS if not buffered else 1) * rate * 2
-        ):
+        limit = MAX_PENDING_SECONDS * rate * 2
+        if len(data) > limit or (buffered + len(data) > limit and (buffered >= limit or len(data) > rate * 2)):
             raise RuntimeError('live held audio packet exceeds custody bound')
         if len(data) % 2:
             raise ValueError('held PCM must contain whole PCM16 samples')
@@ -139,12 +129,16 @@ class LiveHeldAudio:
             self._buffer_opened[key] = time.monotonic()
         buffer, start = self.buffers[key]
         buffer.extend(data)
+        emitted = False
         while len(buffer) >= rate * 2 * CHUNK_SECONDS:
             size = rate * 2 * CHUNK_SECONDS
             self.pending.append((bytes(buffer[:size]), rate, start, conversation_id, channel))
             self.pending_bytes += size
             del buffer[:size]
             start += CHUNK_SECONDS
+            emitted = True
+        if emitted:
+            self._buffer_opened[key] = time.monotonic()
         self.buffers[key][1] = start
         if self.pending_bytes > MAX_PENDING_SECONDS * rate * 2:
             raise RuntimeError('live held audio persistence backpressure')
@@ -183,7 +177,7 @@ class LiveHeldAudio:
                         'source': getattr(self.host.request.source, 'value', self.host.request.source) or 'omi',
                         'target_conversation_id': owner,
                         'recording_session_id': str(self.host.session_id),
-                        'client_device_id': getattr(context, 'device_id', None),
+                        'client_device_id': getattr(context, 'client_device_id', None),
                         'channel': channel,
                         'file_name': f'{start:.6f}.wav',
                         'full_capture': True,

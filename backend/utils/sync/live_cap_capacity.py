@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from google.cloud import firestore
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.legal_holds import external_write_fence
 from utils.sync.live_cap_codec import MAX_OBJECT_BYTES
 

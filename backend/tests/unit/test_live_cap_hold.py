@@ -11,12 +11,18 @@ from utils.sync import cap_hold, held_audio_summary, cap_hold_recovery
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
+def write_wav(path, data, rate):
+    with wave.open(path, 'wb') as audio:
+        audio.setparams((1, 2, rate, 0, 'NONE', 'not compressed'))
+        audio.writeframes(data)
+
+
 @pytest.fixture
 def host():
     return SimpleNamespace(
         request=SimpleNamespace(uid='synthetic', source='phone', websocket=SimpleNamespace(send_json=AsyncMock())),
         state=SimpleNamespace(current_conversation_id='conversation', conversation_sample_ranges=[]),
-        client_device_context=SimpleNamespace(device_id='device'),
+        client_device_context=SimpleNamespace(client_device_id='device'),
         session_id='socket-1',
     )
 
@@ -33,7 +39,7 @@ def persistence(monkeypatch, tmp_path):
         lambda uid, month, identity=None: live.live_cap_capacity.Capacity(uid, month, identity or 'lease'),
     )
     monkeypatch.setattr(live.live_cap_capacity, 'release', Mock())
-    monkeypatch.setattr(live.live_cap_codec, 'encode', live.write_wav)
+    monkeypatch.setattr(live.live_cap_codec, 'encode', write_wav)
     monkeypatch.setattr(
         cap_hold, 'recovery_directory', lambda uid: __import__('tempfile').TemporaryDirectory(dir=tmp_path)
     )
@@ -67,6 +73,7 @@ async def test_only_published_seconds_are_reported_and_close_flushes_tail(host, 
     assert persistence[0][2]['target_conversation_id'] == 'conversation'
     assert persistence[0][2]['origin'] == 'live'
     assert persistence[0][2]['recording_session_id'] == 'socket-1'
+    assert persistence[0][2]['client_device_id'] == 'device'
     assert hold.seconds == 0.5
     assert not hold.pending and not hold.buffers
 
@@ -222,7 +229,7 @@ def test_recovery_storage_uses_the_capture_month_and_combined_ceiling(monkeypatc
 
 def test_group_recovery_joins_pcm_without_duplicate_wav_headers(tmp_path, monkeypatch):
     def decode(uid, row, path):
-        live.write_wav(path, (b'\1\0' if row['audio_path'].endswith('a') else b'\2\0') * 16000, 16000)
+        write_wav(path, (b'\1\0' if row['audio_path'].endswith('a') else b'\2\0') * 16000, 16000)
 
     monkeypatch.setattr(cap_hold, '_read_single_audio', decode)
     path = str(tmp_path / '100.wav')
@@ -357,3 +364,26 @@ async def test_capture_month_boundary_flushes_exact_frames(host, persistence):
     await hold.close()
     assert [len(data) for data, _, _ in persistence] == [16000, 16000]
     assert [meta['live_storage_month'] for _, _, meta in persistence] == ['2026-10', '2026-11']
+
+
+async def test_minute_publication_does_not_age_and_flush_its_new_tail(host, persistence, monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr(live.time, 'monotonic', lambda: clock[0])
+    hold = live.LiveHeldAudio(host)
+    hold.append(b'\1\0' * (59 * 16000 + 8000), 16000, 100, 'a')
+    clock[0] = 160.0
+    hold.append(b'\1\0' * 16000, 16000, 159.5, 'a')
+    await hold.flush()
+    assert [len(data) for data, _, _ in persistence] == [60 * 16000 * 2]
+    assert len(next(iter(hold.buffers.values()))[0]) == 16000
+    await hold.close()
+    assert hold.seconds == 60.5
+
+
+async def test_multisecond_capture_callbacks_fit_the_existing_aggregate_bound(host, persistence):
+    hold = live.LiveHeldAudio(host)
+    hold.append(b'\1\0' * 3 * 16000, 16000, 100, 'a')
+    hold.append(b'\2\0' * 4 * 16000, 16000, 103, 'a')
+    await hold.close()
+    assert hold.seconds == 7
+    assert persistence[0][0] == b'\1\0' * 3 * 16000 + b'\2\0' * 4 * 16000

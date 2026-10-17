@@ -24,7 +24,7 @@ from database import redis_db
 from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from utils.sync.files import get_timestamp_from_path
 from utils.executors import db_executor, storage_executor, run_blocking
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.legal_holds import external_write_fence
 from utils.encryption import encrypt, decrypt, encrypt_audio_chunk, decrypt_audio_chunk
 from utils.other.storage import get_private_cloud_sync_bucket, owner_storage_write_gate
@@ -120,7 +120,8 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
             metadata_digest = hashlib.sha256(encoded_metadata.encode()).hexdigest()
             metadata_path = f'chunks/{uid}/cap-held/{identity}.{metadata_digest}.metadata.enc'
             bucket.blob(metadata_path).upload_from_string(encoded_metadata, content_type='application/octet-stream')
-            fields = {'audio_path': blob_path, 'metadata_path': metadata_path}
+            fields.pop('metadata')
+            fields['metadata_path'] = metadata_path
         return fields
 
 
