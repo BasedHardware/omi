@@ -342,3 +342,17 @@ def test_developer_reopen_passes_saved_active_state_not_prior_cancelled_state():
         developer_module.update_action_item('a1', developer_module.UpdateActionItemRequest(completed=False), uid='uid1')
     assert sync.call_args.kwargs['completed'] is False
     assert sync.call_args.kwargs['status'] == 'active'
+
+
+def test_developer_list_shares_budget_and_returns_honest_partial_array():
+    def slow_list(**kwargs):
+        assert kwargs['limit'] == 1000
+        assert kwargs['start_date'] == datetime(2000, 1, 1, tzinfo=timezone.utc)
+        kwargs['budget'].mark_exhausted('deadline')
+        return [_valid('verified')]
+
+    with patch.object(action_items_db, 'get_action_items', side_effect=slow_list):
+        response = _build().get('/v1/dev/user/action-items?start_date=2000-01-01T00:00:00Z&limit=1000')
+    assert response.status_code == 200
+    assert response.headers['X-Omi-List-Truncated'] == 'true'
+    assert [row['id'] for row in response.json()] == ['verified']

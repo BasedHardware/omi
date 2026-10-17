@@ -818,6 +818,8 @@ def get_action_items(
     end_date: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Get action items with optional filters. Locked action items are excluded.
@@ -833,6 +835,7 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset = max(0, offset)
     limit = max(1, min(limit, 1000))
+    budget = list_read_budget_for_request(request, route='developer-action-items')
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -841,6 +844,7 @@ def get_action_items(
         end_date=end_date,
         limit=limit,
         offset=offset,
+        budget=budget,
     )
 
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
@@ -862,6 +866,7 @@ def get_action_items(
                 f"missing/invalid fields {invalid_fields}"
             )
             continue
+    finish_list_budget(response, budget)
     return valid_action_items
 
 

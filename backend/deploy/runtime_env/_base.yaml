@@ -62,6 +62,8 @@ environment_shared:
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
+        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+        BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_PERCENT:
           value: '0'
           category: rollout
@@ -578,6 +580,8 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+        BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
         REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
@@ -960,6 +964,8 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout
@@ -1395,6 +1401,8 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout
@@ -1798,6 +1806,8 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout
@@ -2181,6 +2191,8 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
             value: '0'
             category: rollout

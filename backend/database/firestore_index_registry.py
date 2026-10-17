@@ -980,6 +980,50 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     index_fields=(_desc('updated_at'), _asc('__name__')),
 )
 
+# Released list candidates use existing required canonical fields. Each branch
+# is a necessary condition, never a replacement for the authority's row policy.
+# In particular processed Short-term remains readable after expiry (§1.3).
+UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_released_processed_list',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('source_state', 'in', 'source_states'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('tier', 'in', 'tiers'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('processing_state'),
+        _asc('tier'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_released_pending_list',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('promotion.required', '==', 'required'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('processing_state'),
+        _asc('tier'),
+        _asc('promotion.required'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+
 # Bounded daily-sweep occupant lookups. The sweep must prove the active
 # subject/slot cohort without scanning an arbitrary memory collection page.
 #
@@ -1898,6 +1942,8 @@ QUERY_SPECS = (
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,
