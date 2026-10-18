@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/home_navigation.dart';
@@ -95,6 +96,27 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => 'https://api.test.omi.me/';
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+}
+
 Widget _wrap(DeviceProvider provider, Widget child) {
   return MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -107,6 +129,8 @@ Widget _wrap(DeviceProvider provider, Widget child) {
 }
 
 void main() {
+  setUpAll(() => Env.init(_TestEnvFields()));
+
   Future<bool> stubOpener(String route, {bool Function()? canOpen}) async => true;
 
   setUp(() {
