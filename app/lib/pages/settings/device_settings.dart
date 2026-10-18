@@ -25,7 +25,6 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/error_message.dart';
@@ -47,15 +46,6 @@ class DeviceSettings extends StatefulWidget {
   @override
   State<DeviceSettings> createState() => _DeviceSettingsState();
 }
-
-/// PostHog flag (default off): keep Diagnostics reachable while the remembered device is
-/// disconnected, so its native disconnect history and BLE log can still be sent to support.
-const String offlineDeviceDiagnosticsFlag = 'mobile-offline-device-diagnostics';
-
-/// Whether the Device page offers Diagnostics. Native diagnostics persist per device id, so a
-/// disconnected device still has a history worth sending; without the flag the row needs a link.
-bool showDeviceDiagnosticsRow({required String? deviceId, required bool isConnected, required bool offlineEnabled}) =>
-    deviceId != null && (isConnected || offlineEnabled);
 
 /// [Provider.of] for a provider the page can live without (streaming metrics, pending sync).
 T? _maybeProvider<T>(BuildContext context, {bool listen = true}) {
@@ -85,7 +75,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
   bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
-  bool _offlineDiagnosticsEnabled = false;
 
   Future<String>? _rayBanMetaCameraStatusFuture;
   String? _rayBanMetaCameraStatusDeviceId;
@@ -93,9 +82,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void initState() {
     super.initState();
-    AnalyticsManager().isFeatureEnabled(offlineDeviceDiagnosticsFlag).then((enabled) {
-      if (mounted && enabled) setState(() => _offlineDiagnosticsEnabled = true);
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       // Register for streaming metrics right away, so an early unmount cannot race the
@@ -535,15 +521,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               SharedPreferencesUtil().autoSyncOfflineRecordings = value;
             },
           ),
-        if (showDeviceDiagnosticsRow(
-          deviceId: diagnosticsId,
-          isConnected: provider.isConnected,
-          offlineEnabled: _offlineDiagnosticsEnabled,
-        ))
+        // Native diagnostics persist per device, so a disconnected pendant can still send its
+        // disconnect history and BLE log to support, which is when they matter most.
+        if (diagnosticsId != null)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.stethoscope),
             title: l10n.diagnostics,
-            onTap: () => routeToPage(context, DeviceDiagnostics(deviceId: diagnosticsId!)),
+            onTap: () => routeToPage(context, DeviceDiagnostics(deviceId: diagnosticsId)),
           ),
         OmiSettingsRow(
           leading: const FaIcon(FontAwesomeIcons.circleQuestion),

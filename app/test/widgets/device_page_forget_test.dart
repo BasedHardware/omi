@@ -13,16 +13,20 @@ import 'package:omi/providers/device_provider.dart';
 /// A device provider with no BLE behind it: paired/connected devices are absent, so the page
 /// never reaches ServiceManager.
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _StubDeviceProvider({required this.connected});
+  _StubDeviceProvider({required this.connected, this.lastDevice});
 
   final bool connected;
+
+  /// The device the page knows about while the link is down. Exposed as [connectedDevice], not
+  /// [pairedDevice], so the page does not probe features through the (absent) device service.
+  final BtDevice? lastDevice;
   int setIsConnectedCalls = 0;
 
   @override
   bool get isConnected => connected;
 
   @override
-  BtDevice? get connectedDevice => null;
+  BtDevice? get connectedDevice => lastDevice;
 
   @override
   BtDevice? get pairedDevice => null;
@@ -110,5 +114,29 @@ void main() {
     await _scrollTo(tester, find.text('Offline Sync'));
     expect(find.text('Offline Sync'), findsOneWidget);
     expect(find.text('SD Card Sync'), findsNothing);
+  });
+
+  testWidgets('a remembered but disconnected pendant still offers Diagnostics', (tester) async {
+    final provider = _StubDeviceProvider(
+      connected: false,
+      lastDevice: BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -60),
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider, const DeviceSettings()));
+    await tester.pump();
+
+    await _scrollTo(tester, find.text('Diagnostics'));
+    expect(find.text('Diagnostics'), findsOneWidget);
+  });
+
+  testWidgets('no remembered device offers no Diagnostics', (tester) async {
+    final provider = _StubDeviceProvider(connected: false);
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider, const DeviceSettings()));
+    await tester.pump();
+
+    expect(find.text('Diagnostics', skipOffstage: false), findsNothing);
   });
 }
