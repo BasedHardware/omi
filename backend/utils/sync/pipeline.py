@@ -1304,7 +1304,7 @@ def _recover_empty_segment(
         component='sync_dispatch',
         from_mode=provider,
         to_mode='modulate',
-        reason='empty_result',
+        reason='empty_streak',
         outcome='recovered',
         log=logger,
     )
