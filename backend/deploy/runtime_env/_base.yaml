@@ -151,6 +151,9 @@ environment_shared:
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
           value: 'true'
           category: ops_kill
+        SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+          value: 'true'
+          category: ops_kill
         SYNC_ASSIGNMENT_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
@@ -1126,6 +1129,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -1581,6 +1587,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -1992,6 +2001,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2388,6 +2400,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout

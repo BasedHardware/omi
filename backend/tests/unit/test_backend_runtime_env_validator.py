@@ -353,6 +353,7 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "SYNC_ASSIGNMENT_RECOVERY_ENABLED", "value": "true"},\n'
+        '        {"name": "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED", "value": "true"},\n'
         '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
     )
 

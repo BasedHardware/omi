@@ -2001,6 +2001,14 @@
     "workqueue_work_duration_seconds_count",
     "workqueue_work_duration_seconds_sum"
   ],
+  "declared_metrics": [
+    "omi_listen_lb_attached_ready_endpoints",
+    "omi_listen_lb_exporter_errors_total",
+    "omi_listen_lb_exporter_last_success_timestamp_seconds",
+    "omi_listen_lb_neg_attached",
+    "omi_listen_lb_neg_endpoints",
+    "omi_listen_lb_ready_pods"
+  ],
   "legacy_debt": {
     "bfobs1syncenq01": {
       "sha256": "736f058e0b07d9e3bb29f77ffc0488a775a2cecbd88c4d306b6f9cd55eff214c",
