@@ -250,7 +250,7 @@ void main() {
         if (call == 1) {
           return gate.future.then((_) => GetMemoriesResult([_row('m2')], true));
         }
-        return Future.value(GetMemoriesResult([], true));
+        return Future.value(const GetMemoriesResult([], true));
       },
       fetchLedgerHistoryRequest: _noHistory(),
     );

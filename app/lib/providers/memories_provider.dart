@@ -439,13 +439,6 @@ class MemoriesProvider extends ChangeNotifier {
     await _startMemoryLoad(limit: limit);
   }
 
-  /// Start a new read even when an older request is still in flight. This is
-  /// reserved for mutations whose confirmation must come from a post-action
-  /// server projection rather than a request that started before the action.
-  Future<void> _loadMemoriesFresh({int limit = 100}) {
-    return _startMemoryLoad(limit: limit);
-  }
-
   Future<void> _startMemoryLoad({required int limit}) async {
     final loadFuture = _loadMemoriesInternal(limit: limit);
     _inFlightLoad = loadFuture;
