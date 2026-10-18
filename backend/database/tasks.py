@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
@@ -13,6 +14,8 @@ def create(task_data: dict[str, Any]) -> None:
     if not task_data or not task_data.get('id'):
         raise ValueError("task_data must contain an 'id' field")
     task_id = str(task_data['id']).strip()
+    if not task_id:
+        raise ValueError("task_data 'id' field must not be empty or whitespace")
     task_ref = db.collection('tasks').document(task_id)
     task_ref.set(task_data)
 
@@ -23,13 +26,11 @@ def update(task_id: str, task_data: dict[str, Any]) -> bool:
     if not clean_id:
         return False
     task_ref = db.collection('tasks').document(clean_id)
-    if not getattr(task_ref.get(), "exists", False):
-        return False
     try:
         task_ref.update(task_data)
         return True
-    except Exception as e:
-        logger.warning("Failed to update task %s: %s", clean_id, e)
+    except NotFound as e:
+        logger.warning("Task %s not found during update (concurrent deletion): %s", clean_id, e)
         return False
 
 

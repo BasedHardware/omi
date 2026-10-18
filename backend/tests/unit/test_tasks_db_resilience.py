@@ -7,13 +7,18 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from unittest.mock import MagicMock
 import pytest
 
+try:
+    from google.api_core.exceptions import NotFound as _NotFound
+except (ImportError, ModuleNotFoundError):
+    class _NotFound(Exception):
+        pass
+
 import database.tasks as tasks_db
 
 
 def test_update_task_success(monkeypatch):
     mock_client = MagicMock()
     mock_doc = MagicMock()
-    mock_doc.get.return_value.exists = True
     mock_client.collection.return_value.document.return_value = mock_doc
     monkeypatch.setattr(tasks_db, "db", mock_client)
 
@@ -22,22 +27,10 @@ def test_update_task_success(monkeypatch):
     mock_doc.update.assert_called_once_with({"status": "completed"})
 
 
-def test_update_task_not_found(monkeypatch):
-    mock_client = MagicMock()
-    mock_doc = MagicMock()
-    mock_doc.get.return_value.exists = False
-    mock_client.collection.return_value.document.return_value = mock_doc
-    monkeypatch.setattr(tasks_db, "db", mock_client)
-
-    res = tasks_db.update("task-missing", {"status": "completed"})
-    assert res is False
-
-
 def test_update_task_toctou_race_guard(monkeypatch):
     mock_client = MagicMock()
     mock_doc = MagicMock()
-    mock_doc.get.return_value.exists = True
-    mock_doc.update.side_effect = Exception("NotFound: Concurrent deletion")
+    mock_doc.update.side_effect = _NotFound("Document deleted concurrently")
     mock_client.collection.return_value.document.return_value = mock_doc
     monkeypatch.setattr(tasks_db, "db", mock_client)
 
@@ -64,3 +57,6 @@ def test_create_task_success(monkeypatch):
 def test_create_task_validation():
     with pytest.raises(ValueError, match="task_data must contain an 'id' field"):
         tasks_db.create({})
+
+    with pytest.raises(ValueError, match="task_data 'id' field must not be empty or whitespace"):
+        tasks_db.create({"id": "   "})
