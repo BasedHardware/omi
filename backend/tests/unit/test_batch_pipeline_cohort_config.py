@@ -71,6 +71,33 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
     assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
+def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, monkeypatch):
+    from config import summary_guarantee
+
+    prod_hosts = hosts(manifest['prod'])
+    for service in ('backend-sync', 'backend-sync-backfill'):
+        env = prod_hosts[service]
+        assert env['SYNC_DURABLE_REDRIVE_GUARD'] == {'value': 'true', 'category': 'rollout'}
+        assert env['SYNC_LEGACY_COMPLETION_CONVERGENCE'] == {'value': 'true', 'category': 'rollout'}
+    for service in ('backend', 'backend-integration', 'backend-listen'):
+        env = prod_hosts[service]
+        assert 'SYNC_DURABLE_REDRIVE_GUARD' not in env
+        assert 'SYNC_LEGACY_COMPLETION_CONVERGENCE' not in env
+
+    for service in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = prod_hosts[service]
+        assert env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'] == 'true'
+        assert env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'] == '0'
+        assert 'FIRST_SUMMARY_UID_ALLOWLIST' not in env
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'])
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'])
+        monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+        assert not summary_guarantee.enabled('any-user')
+        monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary-owner')
+        assert summary_guarantee.enabled('canary-owner')
+        assert not summary_guarantee.enabled('any-user')
+
+
 def test_quarantine_recovery_is_david_only_on_prod_integration(
     manifest,
     recovery_base_hosts,
