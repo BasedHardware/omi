@@ -159,7 +159,7 @@ class ProjectionSession:
     def persist(self, transaction, planned=None, *, superseded=False):
         assigned, created, survivors = planned if planned is not None else ({}, False, [])
         repeat_only = assigned.get('_sync_lineage_repeat_only', False)
-        receipt = {
+        receipt: dict[str, Any] = {
             'state': 'ready' if superseded else 'persisted',
             'conversation_id': assigned.get('id'),
             'created': created,
