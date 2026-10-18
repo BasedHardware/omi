@@ -265,6 +265,15 @@ class QuarantineRecovery:
             return 'held'
 
     def dispatch(self, segment_id, owner_id):
+        try:
+            return self._dispatch(segment_id, owner_id)
+        except BatchPrivacyBlocked:
+            cancel_fenced_recovery(self.store, segment_id)
+            return 'cancelled'
+        except ProjectionBlocked:
+            return 'held'
+
+    def _dispatch(self, segment_id, owner_id):
         if not recovery_enabled_for(owner_id):
             return 'disabled'
         # prepare() is the existing durable privacy/ownership fence. Enqueue

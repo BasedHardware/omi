@@ -609,3 +609,45 @@ def test_invalid_request_target_leaves_prepared_intent_unspent(setup, monkeypatc
     enqueue.assert_not_called()
     stt.assert_not_called()
     artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('blocked', ['account', 'source', 'protection'])
+def test_dispatch_keeps_privacy_cancellation_before_enqueue(setup, monkeypatch, blocked):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    recovery.protocol.prepare('bad', binding.owner_id, 100)
+    if blocked == 'account':
+        client.rows[('users', binding.owner_id)]['deleted'] = True
+    elif blocked == 'source':
+        row(client)['privacy_generation'] = 1
+    else:
+        client.rows[('users', binding.owner_id)]['data_protection_level'] = 'e2ee'
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) in {'cancelled', 'held'}
+    enqueue.assert_not_called()
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+def test_asgi_recovery_delivery_spends_one_fenced_intent(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import batch_pipeline as routes
+    from utils.batch_pipeline.serving import Serving
+    from unittest.mock import AsyncMock
+
+    _, store, _, _, stt, recovery = setup
+    service = Serving(store, recovery=recovery)
+    service.reconcile_async = AsyncMock()
+    monkeypatch.setattr(routes, 'serving_for_stage', lambda stage: service)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.verify_worker] = lambda: 0
+    client = TestClient(app)
+    payload = {'stage': 'prod', 'segment_id': 'bad'}
+    assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'recovered'}
+    assert client.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
+    assert stt.call_count == 1
+    service.reconcile_async.assert_awaited_once_with()
