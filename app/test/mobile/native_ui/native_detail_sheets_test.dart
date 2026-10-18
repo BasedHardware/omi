@@ -17,6 +17,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/audio_download_progress_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header.dart';
@@ -407,6 +408,33 @@ void main() {
       final rows = await summaryRows(tester, {});
       expect(rows.map((row) => row.id), contains('detail_summary_content'));
       expect(rows.any((row) => row.id == 'detail_summary_app'), isFalse);
+    });
+
+    testWidgets('the displayed source, not the canonical one, fills the content, app and edit rows', (tester) async {
+      NativeTestHost.install();
+      final conversation = ServerConversation(
+        id: 'conv-sources',
+        createdAt: DateTime(2026, 7, 1, 9).toUtc(),
+        structured: Structured('Sprint sync', ''),
+        appResults: [AppResponse('Decided to ship Friday.', appId: 'writer'), AppResponse('Ship it.', appId: 'brief')],
+        status: ConversationStatus.processing,
+      );
+      final owner = _detail(_AttributionOwner({'writer': writer, 'brief': _app('brief', 'Brief')}), conversation);
+      final published = <List<NativeSection>>[];
+      await tester.pumpWidget(MultiProvider(
+          providers: [ChangeNotifierProvider<ConversationDetailProvider>.value(value: owner)],
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              home: Scaffold(body: SummaryTab(onNativePresentation: published.add)))));
+      await tester.pump();
+      owner.showSummarySource(ConversationSummarySelection.available(conversation).last);
+      await tester.pump();
+      await tester.pump();
+      final rows = published.last.single.rows;
+      expect(rows.singleWhere((row) => row.id == 'detail_summary_content').title, 'Ship it.');
+      expect(rows.singleWhere((row) => row.id == 'detail_summary_app').title, 'Brief');
+      expect(rows.where((row) => row.id == 'detail_summary_edit'), hasLength(1));
     });
   });
 

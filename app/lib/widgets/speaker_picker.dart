@@ -269,6 +269,11 @@ class _SpeakerPickerState extends State<_SpeakerPicker> {
   }
 }
 
+/// The picker's new-person name dialog on its own: 2 to 40 characters, trimmed, that none of
+/// [existingNames] (lowercased) holds. Null when cancelled.
+Future<String?> showSpeakerNameDialog(BuildContext context, {required Set<String> existingNames}) =>
+    showDialog<String>(context: context, builder: (_) => _NameDialog(existingNames: existingNames));
+
 class _NameDialog extends StatefulWidget {
   const _NameDialog({required this.existingNames});
 

@@ -821,10 +821,11 @@ List<GeneratedSpeakerTagCandidate> speakerPickerCandidates(
 List<Person> speakerPickerPeople(List<Person> people, String? excludePersonId) =>
     people.where((p) => p.id != excludePersonId && !p.id.startsWith('optimistic-person:')).toList();
 
-/// Asks for a new person's name (2 to 40 characters, trimmed): the native text sheet while the
-/// SwiftUI presentation is active, re-presented with the reason while the name is invalid, otherwise
-/// the Flutter dialog. Null when cancelled.
-Future<String?> showSpeakerTagNameDialog(BuildContext context) async {
+/// Asks for a new person's name (2 to 40 characters, trimmed) that none of [existingNames]
+/// (lowercased) holds: the native text sheet while the SwiftUI presentation is active, re-presented
+/// with the reason while the name is invalid, otherwise the picker's Flutter dialog. Null when
+/// cancelled.
+Future<String?> showSpeakerTagNameDialog(BuildContext context, {Set<String> existingNames = const {}}) async {
   var draft = '';
   String? error;
   while (true) {
@@ -843,65 +844,16 @@ Future<String?> showSpeakerTagNameDialog(BuildContext context) async {
     if (native.action != 'save' || !context.mounted) return null;
     draft = native.values['name'] as String;
     final name = draft.trim();
-    if (name.length >= 2 && name.length <= 40) return name;
-    error = name.isEmpty ? l10n.pleaseEnterName : l10n.nameMustBeBetweenCharacters;
+    final duplicate = existingNames.contains(name.toLowerCase());
+    if (name.length >= 2 && name.length <= 40 && !duplicate) return name;
+    error = name.isEmpty
+        ? l10n.pleaseEnterName
+        : duplicate
+            ? l10n.personNameAlreadyExists
+            : l10n.nameMustBeBetweenCharacters;
   }
   if (!context.mounted) return null;
-  return showDialog<String>(context: context, builder: (_) => const _NameDialog());
-}
-
-class _NameDialog extends StatefulWidget {
-  const _NameDialog();
-
-  @override
-  State<_NameDialog> createState() => _NameDialogState();
-}
-
-class _NameDialogState extends State<_NameDialog> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  bool get _valid {
-    final length = _controller.text.trim().length;
-    return length >= 2 && length <= 40;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return OmiAlertDialog(
-      title: context.l10n.speakerTagPromptWhoIsThis,
-      // The Cupertino dialog has no Material ancestor; the text field needs one.
-      content: Material(
-        type: MaterialType.transparency,
-        child: TextField(
-          key: const Key('speaker_tag_prompt_name_field'),
-          controller: _controller,
-          autofocus: true,
-          maxLength: 40,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(hintText: context.l10n.speakerTagPromptNameHint),
-          onChanged: (_) => setState(() {}),
-          onSubmitted: (_) {
-            if (_valid) Navigator.of(context).pop(_controller.text.trim());
-          },
-        ),
-      ),
-      actions: [
-        OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
-        OmiDialogAction(
-          key: const Key('speaker_tag_prompt_name_save'),
-          label: context.l10n.save,
-          isDefault: true,
-          onPressed: _valid ? () => Navigator.of(context).pop(_controller.text.trim()) : null,
-        ),
-      ],
-    );
-  }
+  return showSpeakerNameDialog(context, existingNames: existingNames);
 }
 
 class _SaveVoicesToggle extends StatelessWidget {

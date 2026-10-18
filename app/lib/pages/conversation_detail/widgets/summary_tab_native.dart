@@ -41,7 +41,7 @@ extension _NativeSummaryPresentation on _SummaryTabState {
       if (!mounted || widget.onNativePresentation == null) return;
       final provider = context.read<ConversationDetailProvider>();
       final conversation = provider.conversation;
-      final selection = provider.getSummarySelection();
+      final selection = provider.getDisplayedSummarySelection();
       final l10n = context.l10n;
       final rows = <NativeRow>[];
       if (conversation.discarded || selection.kind == ConversationSummaryKind.empty) {

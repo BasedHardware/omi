@@ -313,16 +313,35 @@ class _NativeSpeakerPickerState extends State<NativeSpeakerPicker> {
     Navigator.of(context).pop(choice);
   }
 
+  List<GeneratedSpeakerTagCandidate> get _candidates =>
+      speakerPickerCandidates(widget.candidates, widget.excludePersonId);
+  List<Person> get _people => speakerPickerPeople(widget.people, widget.excludePersonId);
+
+  /// A new-person answer goes through here: a name that already belongs to a person (people first,
+  /// then candidates the cached people list may not have caught up with) picks that person instead
+  /// of creating a duplicate.
+  void _pickNamed(String rawName) {
+    final name = rawName.trim();
+    final lower = name.toLowerCase();
+    final existing = [for (final p in _people) (p.id, p.name), for (final c in _candidates) (c.personId, c.name)]
+        .firstWhereOrNull((entry) => entry.$1.isNotEmpty && entry.$2.toLowerCase() == lower);
+    _pick(
+        existing == null ? SpeakerPickerChoice.newPerson(name) : SpeakerPickerChoice.person(existing.$1, existing.$2));
+  }
+
   Future<void> _newPerson() async {
-    final name = await showSpeakerTagNameDialog(context);
-    if (name != null && mounted) _pick(SpeakerPickerChoice.newPerson(name));
+    final name = await showSpeakerTagNameDialog(context, existingNames: {
+      for (final p in _people) p.name.toLowerCase(),
+      for (final c in _candidates) c.name.toLowerCase(),
+    });
+    if (name != null && mounted) _pickNamed(name);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final candidates = speakerPickerCandidates(widget.candidates, widget.excludePersonId);
-    final people = speakerPickerPeople(widget.people, widget.excludePersonId);
+    final candidates = _candidates;
+    final people = _people;
     final q = _query.trim();
     final lower = q.toLowerCase();
     bool matches(String name) => lower.isEmpty || name.toLowerCase().contains(lower);
@@ -356,8 +375,7 @@ class _NativeSpeakerPickerState extends State<NativeSpeakerPicker> {
           ]),
         NativeSection('speaker_picker_add', [
           NativeRow('speaker_picker_new_person', canAdd ? l10n.addNamedPersonAction(q) : l10n.newPersonEllipsis,
-              symbol: 'person.badge.plus',
-              action: (_) => canAdd ? _pick(SpeakerPickerChoice.newPerson(q)) : _newPerson()),
+              symbol: 'person.badge.plus', action: (_) => canAdd ? _pickNamed(q) : _newPerson()),
           if (widget.allowUnknown)
             NativeRow('speaker_picker_unknown', l10n.speakerTagPromptDontKnow,
                 symbol: 'questionmark.circle', action: (_) => _pick(const SpeakerPickerChoice.unknown())),

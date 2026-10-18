@@ -220,7 +220,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         count += countIn(segment.text.toLowerCase());
       }
     } else if (selectedTab == ConversationTab.summary) {
-      final summarySelection = provider.getSummarySelection();
+      final summarySelection = provider.getDisplayedSummarySelection();
       if (summarySelection.content.isNotEmpty) {
         final content = _nativeDetail
             ? nativeRichText(summarySelection.content.decodeString).map(nativeRichBlockText).join('\n')
@@ -1161,12 +1161,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
       showError: (error) {
         switch (error) {
           case 'REPROCESS_FAILED':
-            // The redesigned Summary tab explains the failure in place, with its own actions.
-            if (SummaryGenerationV2Gate.isEnabled) break;
             // The provider is shared: a reprocess started on another conversation can fail after
             // the reader opened this one. Report only this page's own failure, and retry only it.
             final failedId = detailProvider.lastFailedReprocessConversationId;
             if (failedId == null || failedId != detailProvider.conversationOrNull?.id) break;
+            // The redesigned Summary tab explains the failure in place, with its own actions. The native
+            // summary has no such card, so it keeps this toast.
+            if (SummaryGenerationV2Gate.isEnabled && !_nativeDetailShown(detailProvider)) break;
             final appId = detailProvider.lastFailedReprocessAppId;
             OmiFeedback.error(
               context,

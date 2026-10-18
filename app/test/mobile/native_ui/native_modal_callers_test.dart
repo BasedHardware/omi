@@ -4,12 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/detail_search_bar.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -19,6 +21,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 
@@ -61,18 +64,21 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  Future<void> pumpNativeDetail(WidgetTester tester) async {
-    NativeTestHost.install();
-    final conversation = ServerConversation(
-        id: 'native-detail',
-        createdAt: DateTime.utc(2026, 10, 4, 10),
-        status: ConversationStatus.completed,
-        structured: Structured('Sprint planning', 'We agreed to ship the native screens.'));
+  /// Mounts the detail page natively, or [native] false for the classic page on the same providers.
+  Future<void> pumpNativeDetail(WidgetTester tester,
+      {ServerConversation? shown, ConversationReprocessCall? reprocess, bool native = true}) async {
+    if (native) NativeTestHost.install();
+    final conversation = shown ??
+        ServerConversation(
+            id: 'native-detail',
+            createdAt: DateTime.utc(2026, 10, 4, 10),
+            status: ConversationStatus.completed,
+            structured: Structured('Sprint planning', 'We agreed to ship the native screens.'));
     final conversations = ConversationProvider(isSignedIn: () => false)
       ..conversations = [conversation]
       ..conversationDetailsFetcherOverride = (_) async => conversation;
     final apps = AppProvider();
-    detail = ConversationDetailProvider()..setProviders(apps, conversations);
+    detail = ConversationDetailProvider(reprocess: reprocess)..setProviders(apps, conversations);
     addTearDown(() {
       detail.dispose();
       conversations.dispose();
@@ -101,8 +107,8 @@ void main() {
     await NativeTestHost.settle(tester);
     await tester.pump(const Duration(milliseconds: 300));
     await NativeTestHost.settle(tester);
-    expect(find.byType(UiKitView), findsOneWidget, reason: 'The page starts native');
-    expect(find.byKey(const Key('conversation_more')), findsNothing);
+    expect(find.byType(UiKitView), native ? findsOneWidget : findsNothing, reason: 'The page starts native');
+    expect(find.byKey(const Key('conversation_more')), native ? findsNothing : findsOneWidget);
   }
 
   NativeRow row(WidgetTester tester, String id) {
@@ -190,5 +196,61 @@ void main() {
     await settle(tester);
     expect(editor, findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  group('with the summary redesign on', () {
+    setUp(() => SummaryGenerationV2Gate.debugOverride = true);
+    tearDown(() => SummaryGenerationV2Gate.debugOverride = null);
+
+    /// Fails every reprocess, counting the requests.
+    ConversationReprocessCall failing(List<String?> requests) => (id, {appId, requireSpeakerReceipt = false}) async {
+          requests.add(appId);
+          return const ReprocessFailed();
+        };
+
+    testWidgets('a failed reprocess still reports itself on the native page, and Try Again retries it', (tester) async {
+      final requests = <String?>[];
+      await pumpNativeDetail(tester, reprocess: failing(requests));
+      await detail.reprocessConversation();
+      await settle(tester);
+      expect(detail.summaryFailure, isNotNull);
+      // The native summary has no failure card: the toast is its only report and retry.
+      expect(find.text(_l10n.errorProcessingConversation), findsOneWidget);
+      await tester.tap(find.text(_l10n.tryAgain));
+      await settle(tester);
+      expect(requests, [null, null]);
+      expect(find.byType(UiKitView), findsOneWidget);
+      await tester.pump(const Duration(seconds: 10));
+    });
+
+    testWidgets('the classic page reports it in its Summary tab card instead of a toast', (tester) async {
+      await pumpNativeDetail(tester, reprocess: failing([]), native: false);
+      await detail.reprocessConversation();
+      await settle(tester);
+      expect(find.byKey(const Key('summary_failure_generic')), findsOneWidget);
+      expect(find.text(_l10n.errorProcessingConversation), findsNothing);
+    });
+  });
+
+  testWidgets('the native summary, its search and its count follow the displayed source', (tester) async {
+    await pumpNativeDetail(tester,
+        shown: ServerConversation(
+            id: 'native-sources',
+            createdAt: DateTime.utc(2026, 10, 4, 10),
+            status: ConversationStatus.completed,
+            structured: Structured('Sprint planning', 'Omi heard the roadmap review.'),
+            appResults: [AppResponse('Template notes only.', appId: 'writer')]));
+    // The template result is canonical; the reader picked Omi's own summary, as the Copy action copies.
+    final omi = ConversationSummarySelection.available(detail.conversation).singleWhere((s) => !s.isApp);
+    detail.showSummarySource(omi);
+    await settle(tester);
+    expect(row(tester, 'detail_summary_content').title, 'Omi heard the roadmap review.');
+    expect(detail.getDisplayedSummarySelection().content, 'Omi heard the roadmap review.');
+
+    await tester.widget<IosNativeSurface>(find.byType(IosNativeSurface)).search!('roadmap');
+    await settle(tester);
+    final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+    expect(surface.reader!.footer.singleWhere((row) => row.id == 'detail_search_count').title, '1 / 1');
+    expect(surface.reader!.targetId, 'detail_summary_content');
   });
 }

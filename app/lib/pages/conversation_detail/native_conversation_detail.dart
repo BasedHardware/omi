@@ -145,8 +145,8 @@ extension _NativeConversationDetail on ConversationDetailPageState {
     if (_searchQuery.isEmpty || _currentSearchIndex <= 0) return null;
     var match = _currentSearchIndex;
     if (selectedTab == ConversationTab.summary) {
-      final blocks =
-          nativeRichText(context.read<ConversationDetailProvider>().getSummarySelection().content.decodeString);
+      final blocks = nativeRichText(
+          context.read<ConversationDetailProvider>().getDisplayedSummarySelection().content.decodeString);
       for (final (index, block) in blocks.indexed) {
         var offset = 0;
         final text = nativeRichBlockText(block).toLowerCase();
@@ -168,14 +168,16 @@ extension _NativeConversationDetail on ConversationDetailPageState {
     return null;
   }
 
+  /// Whether the page presents natively. Oversized editors retain the complete existing surface until
+  /// its larger input contract is migrated.
+  bool _nativeDetailShown(ConversationDetailProvider provider) =>
+      _nativeDetail &&
+      provider.getDisplayedSummarySelection().content.characters.length <= 10000 &&
+      provider.conversation.structured.title.characters.length <= 10000;
+
   Widget _nativeDetailSurface(
       ConversationDetailProvider provider, ServerConversation conversation, bool hasBar, Widget classic) {
-    if (!_nativeDetail) return classic;
-    // Oversized editors retain the complete existing surface until its larger input contract is migrated.
-    if (provider.getSummarySelection().content.characters.length > 10000 ||
-        conversation.structured.title.characters.length > 10000) {
-      return classic;
-    }
+    if (!_nativeDetailShown(provider)) return classic;
     final l10n = context.l10n;
     final title = conversation.discarded
         ? l10n.discardedConversation
@@ -334,7 +336,7 @@ extension _NativeConversationDetail on ConversationDetailPageState {
                       !provider.loadingReprocessConversation &&
                       conversation.status == ConversationStatus.completed &&
                       !conversation.discarded &&
-                      provider.getSummarySelection().content.trim().isNotEmpty,
+                      provider.getDisplayedSummarySelection().content.trim().isNotEmpty,
                   child: view),
               nativeOwner: SizedBox(
                   height: MediaQuery.sizeOf(context).height,

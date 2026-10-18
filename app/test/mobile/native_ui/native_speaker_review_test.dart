@@ -465,6 +465,71 @@ void main() {
       await tester.pumpAndSettle();
       expect(await tooLong, isNull, reason: 'a value the 40-character field would refuse names nobody');
     });
+
+    testWidgets('a typed name that already belongs to someone picks that person', (tester) async {
+      final host = NativeTestHost.install();
+      final result = await openPicker(
+          tester,
+          NativeSpeakerPicker(
+            candidates: const [GeneratedSpeakerTagCandidate(personId: 'p5', name: 'Kai', matchLevel: 1, pinned: false)],
+            people: [_person('p3', 'Zoe')],
+            fallback: const Text('flutter picker'),
+          ));
+      // A ranked voice the cached people list has not caught up with: offered as "Add", answered as that person.
+      expect(await _send(tester, host, '_search', 'KAI'), isTrue);
+      await NativeTestHost.settle(tester);
+      expect(_rows(tester).firstWhere((row) => row.id == 'speaker_picker_new_person').title,
+          _l10n.addNamedPersonAction('KAI'));
+      expect(await _send(tester, host, 'speaker_picker_new_person'), isTrue);
+      await tester.pumpAndSettle();
+      final choice = await result;
+      expect(choice?.personId, 'p5');
+      expect(choice?.displayName, 'Kai');
+      expect(choice?.name, isNull);
+    });
+
+    testWidgets('New Person… re-asks while the name belongs to a person or a candidate', (tester) async {
+      final host = NativeTestHost.install();
+      final config = _Config.install();
+      Map save(String name) => {
+            'action': 'save',
+            'values': {'name': name}
+          };
+      config.presentations.addAll([(_) => save('zoe '), (_) => save('ADA'), (_) => save('Maya')]);
+      final result = await openPicker(tester, picker());
+      expect(await _send(tester, host, 'speaker_picker_new_person'), isTrue);
+      await tester.pumpAndSettle();
+      expect((await result)?.name, 'Maya');
+      List<Map> rows(Map snapshot) =>
+          [for (final section in (snapshot['sections'] as List).cast<Map>()) ...(section['rows'] as List).cast<Map>()];
+      expect(config.presented, hasLength(3));
+      expect(rows(config.presented[1]).last['title'], _l10n.personNameAlreadyExists);
+      expect(rows(config.presented[2]).last['title'], _l10n.personNameAlreadyExists);
+    });
+
+    testWidgets('the Flutter name dialog behind an unavailable native one refuses existing names', (tester) async {
+      NativeTestHost.install();
+      final config = _Config.install();
+      config.presentations.add((_) => throw PlatformException(code: 'invalid_native_presentation'));
+      late BuildContext context;
+      await tester.pumpWidget(_app(Builder(builder: (inner) {
+        context = inner;
+        return const SizedBox();
+      })));
+      final named = showSpeakerTagNameDialog(context, existingNames: {'zoe'});
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('speaker_tag_prompt_name_field')), 'Zoe');
+      await tester.pump();
+      expect(find.text(_l10n.personNameAlreadyExists), findsOneWidget);
+      await tester.tap(find.byKey(const Key('speaker_tag_prompt_name_save')));
+      await tester.pump();
+      expect(find.byKey(const Key('speaker_tag_prompt_name_field')), findsOneWidget, reason: 'Save is disabled');
+      await tester.enterText(find.byKey(const Key('speaker_tag_prompt_name_field')), 'Maya');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('speaker_tag_prompt_name_save')));
+      await tester.pumpAndSettle();
+      expect(await named, 'Maya');
+    });
   });
 
   group('native earlier voice matches', () {
