@@ -938,6 +938,14 @@ def test_hydration_deletes_missing_and_tombstoned_index_ids_and_skips_live_overr
     assert 'users/u1/memory_items/missing' in db_client.document_paths
 
 
+class _AllowGate:
+    def __enter__(self):
+        return 'token'
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
 def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch):
     now = datetime.now(timezone.utc)
     live = _memory_item('live', tier=MemoryTier.long_term, now=now)
@@ -956,8 +964,8 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
         return len(observed)
 
     monkeypatch.setattr(
-        'utils.memory.vector_search_service.assert_account_deletion_permitted',
-        lambda uid, **kwargs: None,
+        'utils.memory.vector_search_service.destructive_operation_gate',
+        lambda uid, **kwargs: _AllowGate(),
     )
     monkeypatch.setattr(
         'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
@@ -1046,7 +1054,7 @@ def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
     def blocked(uid, **kwargs):
         raise LegalHoldActive('held')
 
-    monkeypatch.setattr('utils.memory.vector_search_service.assert_account_deletion_permitted', blocked)
+    monkeypatch.setattr('utils.memory.vector_search_service.destructive_operation_gate', blocked)
     monkeypatch.setattr(
         'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
         lambda uid, observed: deleted.append((uid, list(observed))) or len(observed),

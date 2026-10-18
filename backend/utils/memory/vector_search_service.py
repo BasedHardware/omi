@@ -22,9 +22,10 @@ except (ModuleNotFoundError, ImportError):
     delete_canonical_memory_vectors_by_ids = None
 
 from database.legal_holds import (
+    DestructiveOperationInProgress,
     LegalHoldActive,
     LegalHoldAuthorityUnavailable,
-    assert_account_deletion_permitted,
+    destructive_operation_gate,
 )
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from utils.log_sanitizer import sanitize_pii
@@ -396,17 +397,18 @@ def _delete_stale_canonical_memory_vectors(uid: str, observed: List[Tuple[str, s
 
     The filter matches the projection commit observed on the hit. A later
     reactivation upserts a new commit on the same provider id and is left in
-    place. An active legal hold or an unreadable hold record skips the delete.
+    place. The provider delete runs inside the account destructive-operation
+    gate, so a legal hold cannot land between the check and the delete.
     """
 
-    try:
-        assert_account_deletion_permitted(uid)
-    except (LegalHoldActive, LegalHoldAuthorityUnavailable):
-        logger.warning('stale memory vector delete skipped; legal-hold authority did not permit it')
-        return 0
     if delete_canonical_memory_vectors_by_ids is None:
         return 0
-    return delete_canonical_memory_vectors_by_ids(uid, observed)
+    try:
+        with destructive_operation_gate(uid, kind='stale_vector_index_cleanup'):
+            return delete_canonical_memory_vectors_by_ids(uid, observed)
+    except (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress):
+        logger.warning('stale memory vector delete skipped; destructive authority did not permit it')
+        return 0
 
 
 def _delete_stale_vector_index_ids(
