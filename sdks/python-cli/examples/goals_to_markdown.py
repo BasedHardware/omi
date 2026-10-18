@@ -47,6 +47,11 @@ def number(value: Any) -> Optional[float]:
         return None
 
 
+def fmt_num(value: Optional[float]) -> str:
+    """Compact number formatting — 2 / 2.5 rather than 2.0 / 2.5."""
+    return f"{value:g}" if value is not None else ""
+
+
 def progress_ratio(item: Dict[str, Any]) -> Optional[float]:
     """Progress ratio toward target; None for qualitative/no-target goals."""
     cur, target = number(item.get("current_value")), number(item.get("target_value"))
@@ -89,7 +94,7 @@ def goal_to_markdown(item: Dict[str, Any]) -> str:
     parts.append(f"**Status:** {'active' if active else 'inactive'}")
     cur, target = number(item.get("current_value")), number(item.get("target_value"))
     if cur is not None or target is not None:
-        metric = f"{cur if cur is not None else 0:g} / {target if target is not None else '?':g}"
+        metric = f"{fmt_num(cur) or '0'} / {fmt_num(target) or '?'}"
         if item.get("unit"):
             metric += f" {one_line(item['unit'])}"
         parts.append(f"**Progress:** {metric}")
