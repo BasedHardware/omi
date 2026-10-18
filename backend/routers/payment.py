@@ -98,6 +98,9 @@ def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> s
 class CreateCheckoutRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
+    # A free trial of this many days before the first charge. Honored only for a first-time
+    # subscriber (no Stripe customer yet), so nobody chains trials by cancelling and re-subscribing.
+    trial_days: Optional[int] = Field(None, ge=1, le=30)
 
 
 class UpgradeSubscriptionRequest(BaseModel):
@@ -648,6 +651,11 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
+    # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
+    # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
+    if request.trial_days and existing_customer_id:
+        raise HTTPException(status_code=400, detail="trial_unavailable")
+    trial_period_days = request.trial_days or None
     try:
         session = stripe_utils.create_subscription_checkout_session(
             uid,
@@ -655,6 +663,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
             idempotency_key,
             customer_id=existing_customer_id,
             promotion_code_id=resolved_checkout_promo_id,
+            trial_period_days=trial_period_days,
         )
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)

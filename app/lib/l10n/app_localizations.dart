@@ -23595,6 +23595,192 @@ abstract class AppLocalizations {
   /// **'Never miss a word again.'**
   String get paywallOutlineHeadline;
 
+  /// Paywall header: plan name
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Pro'**
+  String get paywallTrialBrand;
+
+  /// Paywall headline
+  ///
+  /// In en, this message translates to:
+  /// **'Here\'s how your free trial works.'**
+  String get paywallTrialHeadline;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited summaries, kept forever'**
+  String get paywallTrialSlideSummariesTitle;
+
+  /// Paywall carousel card body
+  ///
+  /// In en, this message translates to:
+  /// **'Every conversation becomes a clean summary with next steps, so nothing slips.'**
+  String get paywallTrialSlideSummariesBody;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Best-in-class transcription'**
+  String get paywallTrialSlideTranscriptionTitle;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Catches more details'**
+  String get paywallTrialChipDetails;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Tells speakers apart'**
+  String get paywallTrialChipSpeakers;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Works in noisy rooms'**
+  String get paywallTrialChipNoise;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Handles accents'**
+  String get paywallTrialChipAccents;
+
+  /// Paywall chip
+  ///
+  /// In en, this message translates to:
+  /// **'Knows your jargon and names'**
+  String get paywallTrialChipJargon;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker names, detected automatically'**
+  String get paywallTrialSlideSpeakersTitle;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited questions, across every conversation'**
+  String get paywallTrialSlideAskTitle;
+
+  /// Paywall example question
+  ///
+  /// In en, this message translates to:
+  /// **'Draft a follow-up email from this meeting.'**
+  String get paywallTrialBubbleFollowUp;
+
+  /// Paywall example question
+  ///
+  /// In en, this message translates to:
+  /// **'Any conflicts with what John said on Tuesday?'**
+  String get paywallTrialBubbleConflicts;
+
+  /// Paywall example question
+  ///
+  /// In en, this message translates to:
+  /// **'Find anything that could slow us down.'**
+  String get paywallTrialBubbleBlockers;
+
+  /// Paywall carousel caption
+  ///
+  /// In en, this message translates to:
+  /// **'Works with your favorite apps'**
+  String get paywallTrialSlideAppsTitle;
+
+  /// Paywall timeline row title
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get paywallTrialTodayTitle;
+
+  /// Paywall timeline row body
+  ///
+  /// In en, this message translates to:
+  /// **'Everything in Pro is unlocked.'**
+  String get paywallTrialTodayBody;
+
+  /// Paywall timeline row title
+  ///
+  /// In en, this message translates to:
+  /// **'+ {days} days free'**
+  String paywallTrialFreeDaysTitle(int days);
+
+  /// Paywall timeline row body
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days of Omi Pro, on us.'**
+  String paywallTrialFreeDaysBody(int days);
+
+  /// Paywall timeline row title
+  ///
+  /// In en, this message translates to:
+  /// **'In {days} days'**
+  String paywallTrialInDaysTitle(int days);
+
+  /// Paywall timeline row body
+  ///
+  /// In en, this message translates to:
+  /// **'Trial ends. You\'ll be charged unless you cancel.'**
+  String get paywallTrialEndsBody;
+
+  /// Paywall feature row
+  ///
+  /// In en, this message translates to:
+  /// **'The latest AI models'**
+  String get paywallTrialFeatureModels;
+
+  /// Paywall feature row
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited Ask Omi'**
+  String get paywallTrialFeatureAsk;
+
+  /// Paywall plan card footnote
+  ///
+  /// In en, this message translates to:
+  /// **'Billed monthly'**
+  String get paywallTrialBilledMonthly;
+
+  /// Paywall plan card footnote
+  ///
+  /// In en, this message translates to:
+  /// **'Billed yearly'**
+  String get paywallTrialBilledYearly;
+
+  /// Paywall plan card saving; amount is a formatted price
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount}'**
+  String paywallTrialSaveAmount(String amount);
+
+  /// Paywall primary button; price is a formatted zero price like $0.00
+  ///
+  /// In en, this message translates to:
+  /// **'Start for {price}'**
+  String paywallTrialCta(String price);
+
+  /// Paywall secondary button
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with the free plan'**
+  String get paywallTrialSecondary;
+
+  /// Paywall footnote
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel anytime. No fees, no penalties.'**
+  String get paywallTrialCancelNote;
+
+  /// Toast after a trial checkout completes; days is the trial length
+  ///
+  /// In en, this message translates to:
+  /// **'Your {days}-day free trial of Omi Pro has started.'**
+  String paywallTrialStarted(int days);
+
   /// Caption under the upgrade button on the Outline paywall variant
   ///
   /// In en, this message translates to:

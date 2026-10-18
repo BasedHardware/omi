@@ -13252,6 +13252,112 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paywallOutlineHeadline => 'अब एक भी शब्द न छूटे।';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'आपका मुफ़्त ट्रायल ऐसे काम करता है।';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'असीमित सारांश, हमेशा के लिए सहेजे गए';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'हर बातचीत अगले कदमों के साथ एक साफ़ सारांश बन जाती है, ताकि कुछ भी छूटे नहीं।';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'सर्वोत्तम ट्रांसक्रिप्शन';
+
+  @override
+  String get paywallTrialChipDetails => 'अधिक विवरण कैप्चर करता है';
+
+  @override
+  String get paywallTrialChipSpeakers => 'वक्ताओं को अलग-अलग पहचानता है';
+
+  @override
+  String get paywallTrialChipNoise => 'शोरगुल वाले कमरों में भी काम करता है';
+
+  @override
+  String get paywallTrialChipAccents => 'उच्चारणों को संभालता है';
+
+  @override
+  String get paywallTrialChipJargon => 'आपकी शब्दावली और नामों को जानता है';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'वक्ताओं के नाम, स्वचालित रूप से पहचाने गए';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'हर बातचीत में असीमित प्रश्न';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'इस मीटिंग से एक फॉलो-अप ईमेल ड्राफ्ट करें।';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'क्या जॉन ने मंगलवार को जो कहा था, उससे कोई विरोधाभास है?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'ऐसी कोई भी चीज़ ढूंढें जो हमें धीमा कर सकती है।';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'आपके पसंदीदा ऐप्स के साथ काम करता है';
+
+  @override
+  String get paywallTrialTodayTitle => 'आज';
+
+  @override
+  String get paywallTrialTodayBody => 'Pro में सब कुछ अनलॉक है।';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days दिन मुफ़्त';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days दिनों के लिए Omi Pro, हमारी तरफ से।';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days दिनों में';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'ट्रायल समाप्त। रद्द न करने पर आपसे शुल्क लिया जाएगा।';
+
+  @override
+  String get paywallTrialFeatureModels => 'नवीनतम AI मॉडल';
+
+  @override
+  String get paywallTrialFeatureAsk => 'असीमित Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'मासिक बिलिंग';
+
+  @override
+  String get paywallTrialBilledYearly => 'वार्षिक बिलिंग';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '$amount बचाएं';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '$price में शुरू करें';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'मुफ़्त प्लान के साथ जारी रखें';
+
+  @override
+  String get paywallTrialCancelNote => 'कभी भी रद्द करें। कोई शुल्क नहीं, कोई जुर्माना नहीं।';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'आपका Omi Pro का $days-दिन का मुफ़्त परीक्षण शुरू हो गया है।';
+  }
+
+  @override
   String get paywallCancelAnytime => 'कभी भी रद्द करें।';
 
   @override

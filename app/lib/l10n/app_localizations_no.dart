@@ -13272,6 +13272,112 @@ class AppLocalizationsNo extends AppLocalizations {
   String get paywallOutlineHeadline => 'Gå aldri glipp av et ord igjen.';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Slik fungerer din gratis prøveperiode.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Ubegrenset med sammendrag, lagret for alltid';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Hver samtale blir et oversiktlig sammendrag med neste steg, slik at ingenting glipper.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Førsteklasses transkripsjon';
+
+  @override
+  String get paywallTrialChipDetails => 'Fanger opp flere detaljer';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Skiller mellom talere';
+
+  @override
+  String get paywallTrialChipNoise => 'Fungerer i støyende rom';
+
+  @override
+  String get paywallTrialChipAccents => 'Håndterer aksenter';
+
+  @override
+  String get paywallTrialChipJargon => 'Kjenner din sjargong og navn';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Talernavn, automatisk gjenkjent';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Ubegrenset med spørsmål, på tvers av alle samtaler';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Utkast til oppfølgings-e-post fra dette møtet.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Noen konflikter med det John sa på tirsdag?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Finn alt som kan bremse oss.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Fungerer med dine favorittapper';
+
+  @override
+  String get paywallTrialTodayTitle => 'I dag';
+
+  @override
+  String get paywallTrialTodayBody => 'Alt i Pro er låst opp.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dager gratis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dager med Omi Pro, fra oss.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Om $days dager';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Prøveperioden avsluttes. Du blir belastet med mindre du avbestiller.';
+
+  @override
+  String get paywallTrialFeatureModels => 'De nyeste AI-modellene';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Ubegrenset Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Faktureres månedlig';
+
+  @override
+  String get paywallTrialBilledYearly => 'Faktureres årlig';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Spar $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Start for $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Fortsett med gratisplanen';
+
+  @override
+  String get paywallTrialCancelNote => 'Avbryt når som helst. Ingen gebyrer, ingen straff.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Din $days-dagers gratis prøveperiode av Omi Pro har startet.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Avbryt når som helst.';
 
   @override

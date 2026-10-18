@@ -13269,6 +13269,112 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Không bao giờ bỏ lỡ một lời nào nữa.';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Đây là cách dùng thử miễn phí của bạn hoạt động.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Tóm tắt Unlimited, lưu trữ vĩnh viễn';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Mọi cuộc trò chuyện đều được tóm tắt rõ ràng với các bước tiếp theo, không bỏ sót điều gì.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Phiên âm hàng đầu';
+
+  @override
+  String get paywallTrialChipDetails => 'Nắm bắt nhiều chi tiết hơn';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Phân biệt người nói';
+
+  @override
+  String get paywallTrialChipNoise => 'Hoạt động tốt trong phòng ồn ào';
+
+  @override
+  String get paywallTrialChipAccents => 'Xử lý các giọng điệu khác nhau';
+
+  @override
+  String get paywallTrialChipJargon => 'Hiểu thuật ngữ và tên riêng của bạn';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Tên người nói, tự động nhận diện';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Hỏi Unlimited, trong mọi cuộc trò chuyện';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Soạn email theo dõi từ cuộc họp này.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Có mâu thuẫn nào với những gì John nói vào thứ Ba không?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Tìm bất cứ điều gì có thể làm chúng ta chậm lại.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Hoạt động với các ứng dụng yêu thích của bạn';
+
+  @override
+  String get paywallTrialTodayTitle => 'Hôm nay';
+
+  @override
+  String get paywallTrialTodayBody => 'Mọi thứ trong Pro đều được mở khóa.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days ngày miễn phí';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days ngày dùng Omi Pro, miễn phí.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Trong $days ngày';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Dùng thử kết thúc. Bạn sẽ bị tính phí trừ khi hủy.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Các mô hình AI mới nhất';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Thanh toán hàng tháng';
+
+  @override
+  String get paywallTrialBilledYearly => 'Thanh toán hàng năm';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Tiết kiệm $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Bắt đầu với $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Tiếp tục với gói miễn phí';
+
+  @override
+  String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Bản dùng thử miễn phí $days ngày của Omi Pro của bạn đã bắt đầu.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Hủy bất cứ lúc nào.';
 
   @override

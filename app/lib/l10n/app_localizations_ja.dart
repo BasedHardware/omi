@@ -13085,6 +13085,111 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallOutlineHeadline => 'もう一言も聞き逃さない。';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => '無料トライアルの仕組みはこちら。';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => '無制限の要約、永久保存';
+
+  @override
+  String get paywallTrialSlideSummariesBody => 'すべての会話が次のステップを含む簡潔な要約になり、見落としがなくなります。';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => '最高レベルの文字起こし';
+
+  @override
+  String get paywallTrialChipDetails => 'より多くの詳細をキャッチ';
+
+  @override
+  String get paywallTrialChipSpeakers => '話者を識別';
+
+  @override
+  String get paywallTrialChipNoise => '騒がしい部屋でも機能';
+
+  @override
+  String get paywallTrialChipAccents => 'アクセントに対応';
+
+  @override
+  String get paywallTrialChipJargon => '専門用語や固有名詞を認識';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => '話者名を自動検出';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'すべての会話で無制限の質問';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'この会議からフォローアップメールを作成。';
+
+  @override
+  String get paywallTrialBubbleConflicts => '火曜日にジョンが言ったことと矛盾する点は？';
+
+  @override
+  String get paywallTrialBubbleBlockers => '私たちの進捗を妨げる可能性のあるものを見つけて。';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'お気に入りのアプリと連携';
+
+  @override
+  String get paywallTrialTodayTitle => '今日';
+
+  @override
+  String get paywallTrialTodayBody => 'Proのすべてがアンロックされます。';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days日間無料';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days日間のOmi Proを無料でご利用いただけます。';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days日後';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'トライアル終了。キャンセルしない限り課金されます。';
+
+  @override
+  String get paywallTrialFeatureModels => '最新のAIモデル';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => '月額課金';
+
+  @override
+  String get paywallTrialBilledYearly => '年額課金';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '$amountお得';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '$priceで始める';
+  }
+
+  @override
+  String get paywallTrialSecondary => '無料プランで続行';
+
+  @override
+  String get paywallTrialCancelNote => 'いつでもキャンセル可能。手数料や違約金なし。';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Omi Proの$days日間無料トライアルが開始されました。';
+  }
+
+  @override
   String get paywallCancelAnytime => 'いつでもキャンセルできます。';
 
   @override
