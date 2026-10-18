@@ -5577,3 +5577,21 @@ strict span count and speech seconds; it never includes owner IDs or content.
 Deduplicate by lane/segment reference within one release window and retain unknown
 inspections separately. Speech / valid inspections measures strict-VAD-positive
 double-empty segments even when recovery later fails; it is not ASR accuracy.
+
+### Dark batch projection follow-ups
+
+`BATCH_PIPELINE_HEAD_PRIORITY_ENABLED` (default `false`) prioritizes a ready
+capture-order head within its existing scheduler class and bounded queue scan;
+duration, eligible unit kind and privacy are checked before any splice, so a
+head this pool cannot lease leaves FIFO intact. Strict ordered merge remains authoritative.
+`BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
+owner claim to ordered multipart assignment. Persisted receipts then drive
+bounded tracked async bridge/playback/enrichment follow-ups, including a
+post-playback redirect check for late bridge audio. Each coordinator has a
+120-second deadline and at most two seconds for advisory-claim cleanup; timeout
+frees the slot and retries the durable receipt on a later sweep. All siblings still need
+ready receipts before atomic usage/content/client completion. Both controls
+are independent of new admission; rollback reuses the same queues and receipts.
+See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
+for restart, privacy, ordering and p95 qualification limits. This changes no
+client wire fields or live STT ownership rules.

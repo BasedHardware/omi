@@ -19,6 +19,7 @@ from database.action_item_codec import (
 )
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from database.firestore_index_registry import (
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
@@ -597,7 +598,7 @@ def _count_query(
     if budget is None:
         rows = aggregation.get()
     else:
-        rows = aggregation.get(timeout=budget.rpc_timeout(), retry=None)
+        rows = aggregation.get(timeout=budget.rpc_timeout(), retry=FIRESTORE_NO_RETRY)
     count = int(rows[0][0].value)
     billed_reads = max(1, (count + 999) // 1000)
     if ledger is not None:

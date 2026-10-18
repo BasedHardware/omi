@@ -144,8 +144,8 @@ jobs:
             --region="${{ env.REGION }}" \
             --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
             --service-account="finops-writer@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --set-secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest \
-            --set-env-vars=FINOPS_LOCK_BUCKET=${{ vars.GCP_PROJECT_ID }}-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com \
+            --set-secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest,/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest,/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest \
+            --set-env-vars=FINOPS_LOCK_BUCKET=${{ vars.GCP_PROJECT_ID }}-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com,FINOPS_MERCURY_ENABLED=true \
             --region="${{ env.REGION }}" \
             --max-retries=1 \
             --task-timeout=3600s \
