@@ -70,7 +70,8 @@ final class ScreenEmbeddingRecoveryTests: XCTestCase {
       batchEmbedderForTesting: { texts, _, snapshot in
         XCTAssertTrue(auth.source.isCurrent(snapshot))
         return await spy.embed(texts)
-      }, embeddingWriterForTesting: { _, _ in }, backfillSleeperForTesting: sleep,
+      }, embeddingWriterForTesting: { _, _ in }, missingEmbeddingIDsForTesting: { $0 },
+      backfillSleeperForTesting: sleep,
       losslessSyncEnabledForTesting: { compacted }, nowForTesting: clock.now,
       screenPolicyForTesting: { ScreenEmbeddingPolicy.cached(entitlementService: entitlement) })
   }
@@ -165,7 +166,7 @@ final class ScreenEmbeddingRecoveryTests: XCTestCase {
         entered.fulfill()
         await gate.wait()
         return await spy.embed(texts)
-      }, embeddingWriterForTesting: { _, _ in }, nowForTesting: clock.now,
+      }, embeddingWriterForTesting: { _, _ in }, missingEmbeddingIDsForTesting: { $0 }, nowForTesting: clock.now,
       screenPolicyForTesting: { paidPolicy })
     let first = Task { await service.backfillIfNeeded() }
     await fulfillment(of: [entered], timeout: 2)
@@ -190,6 +191,7 @@ final class ScreenEmbeddingRecoveryTests: XCTestCase {
       ownerAuthorityForTesting: auth.source,
       backfillOnBatteryForTesting: { battery.snapshot() == 1 },
       batchEmbedderForTesting: { texts, _, _ in await spy.embed(texts) }, embeddingWriterForTesting: { _, _ in },
+      missingEmbeddingIDsForTesting: { $0 },
       nowForTesting: clock.now, screenPolicyForTesting: { paidPolicy })
     let deferred = await service.backfillIfNeeded()
     XCTAssertEqual(deferred, .retry)

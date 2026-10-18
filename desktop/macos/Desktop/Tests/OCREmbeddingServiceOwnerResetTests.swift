@@ -24,6 +24,7 @@ final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
         throw CancellationError()
       },
       embeddingWriterForTesting: { _, _ in XCTFail("reset fixture must never write embeddings") },
+      missingEmbeddingIDsForTesting: { $0 },
       flushSleeperForTesting: { _ in throw CancellationError() })
   }
 
@@ -93,7 +94,7 @@ final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
       },
       embeddingWriterForTesting: { screenshotId, _ in
         await writes.record(screenshotId)
-      }
+      }, missingEmbeddingIDsForTesting: { $0 }
     )
 
     await service.embedScreenshot(

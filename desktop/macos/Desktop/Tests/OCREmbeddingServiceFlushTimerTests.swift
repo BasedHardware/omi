@@ -122,7 +122,7 @@ final class OCREmbeddingServiceFlushTimerTests: XCTestCase {
       },
       embeddingWriterForTesting: { screenshotID, _ in
         await writes.record(screenshotID)
-      },
+      }, missingEmbeddingIDsForTesting: { $0 },
       flushSleeperForTesting: { _ in
         try await sleeper.sleep()
       })

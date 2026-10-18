@@ -58,6 +58,7 @@ final class ScreenCloudEntitlementTests: XCTestCase {
           return []
         },
         embeddingWriterForTesting: { _, _ in XCTFail("downgrade wrote cloud vectors") },
+        missingEmbeddingIDsForTesting: { $0 },
         screenPolicyForTesting: { ScreenEmbeddingPolicy.cached(entitlementService: service) })
       await ocr.embedScreenshot(
         id: 1, ocrText: "synthetic OCR exceeding minimum length", appName: "Fixture", windowTitle: nil)
@@ -140,7 +141,7 @@ final class ScreenCloudEntitlementTests: XCTestCase {
         XCTFail("missing owner dispatched")
         return []
       },
-      embeddingWriterForTesting: { _, _ in XCTFail("missing owner wrote") })
+      embeddingWriterForTesting: { _, _ in XCTFail("missing owner wrote") }, missingEmbeddingIDsForTesting: { $0 })
     await service.embedScreenshot(
       id: 1, ocrText: "synthetic OCR exceeding minimum length", appName: "Fixture", windowTitle: nil)
     await service.flushPendingEmbeddings()
@@ -161,7 +162,7 @@ final class ScreenCloudEntitlementTests: XCTestCase {
         XCTFail("old queued OCR dispatched after reauthentication")
         return []
       },
-      embeddingWriterForTesting: { _, _ in XCTFail("old queued OCR wrote") })
+      embeddingWriterForTesting: { _, _ in XCTFail("old queued OCR wrote") }, missingEmbeddingIDsForTesting: { $0 })
     await service.embedScreenshot(
       id: 1, ocrText: "synthetic OCR exceeding minimum length", appName: "Fixture", windowTitle: nil)
     let count = await service.pendingCount

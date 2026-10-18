@@ -28,6 +28,9 @@ actor OCREmbeddingService {
   }
 
   private var pendingItems: [PendingItem] = []
+  // Reservations span provider/database suspension points, shared by live flush and recovery.
+  // Tokens prevent an old owner's release from erasing a new owner's reservation for the same rowid.
+  private var embeddingReservations: [Int64: UUID] = [:]
   private var flushTask: Task<Void, Never>?
   private var flushTaskGeneration: UInt64 = 0
 
@@ -74,6 +77,7 @@ actor OCREmbeddingService {
   private let ownerAuthority: EmbeddingOwnerAuthority
   private let batchEmbedder: BatchEmbedder
   private let embeddingWriter: EmbeddingWriter
+  private let missingEmbeddingIDs: @Sendable (Set<Int64>) async throws -> Set<Int64>
   private let flushSleeper: FlushSleeper
   private let backfillSleeper: FlushSleeper
   private let losslessSyncEnabled: @Sendable () async -> Bool
@@ -91,6 +95,7 @@ actor OCREmbeddingService {
     self.embeddingWriter = { screenshotId, embedding in
       try await RewindDatabase.shared.updateScreenshotEmbedding(id: screenshotId, embedding: embedding)
     }
+    self.missingEmbeddingIDs = { try await RewindDatabase.shared.screenshotIDsMissingEmbeddings($0) }
     self.flushSleeper = { nanoseconds in
       try await Task.sleep(nanoseconds: nanoseconds)
     }
@@ -113,6 +118,7 @@ actor OCREmbeddingService {
     backfillOnBatteryForTesting: @escaping @Sendable () -> Bool = { false },
     batchEmbedderForTesting: @escaping BatchEmbedder,
     embeddingWriterForTesting: @escaping EmbeddingWriter,
+    missingEmbeddingIDsForTesting: @escaping @Sendable (Set<Int64>) async throws -> Set<Int64>,
     flushSleeperForTesting: FlushSleeper? = nil,
     backfillSleeperForTesting: @escaping FlushSleeper = { _ in },
     losslessSyncEnabledForTesting: @escaping @Sendable () async -> Bool = { false },
@@ -127,6 +133,7 @@ actor OCREmbeddingService {
     self.ownerAuthority = ownerAuthorityForTesting
     self.batchEmbedder = batchEmbedderForTesting
     self.embeddingWriter = embeddingWriterForTesting
+    self.missingEmbeddingIDs = missingEmbeddingIDsForTesting
     self.flushSleeper =
       flushSleeperForTesting ?? { nanoseconds in
         try await Task.sleep(nanoseconds: nanoseconds)
@@ -149,6 +156,7 @@ actor OCREmbeddingService {
     ownerGeneration &+= 1
     cancelScheduledFlush()
     pendingItems = []
+    embeddingReservations = [:]
     recentHashes = []
   }
 
@@ -195,6 +203,8 @@ actor OCREmbeddingService {
     let hash = Self.contentHash(formatted)
     let usesLosslessCompaction = await losslessSyncEnabled()
     guard ownerSnapshot.isCurrent(), ownerAuthority.isCurrent(cloudAuthorization) else { return }
+
+    guard embeddingReservations[id] == nil, !pendingItems.contains(where: { $0.id == id }) else { return }
 
     // The flag-off path preserves the old rollback behavior. Lossless mode never drops a row
     // because a prior batch happened to contain the same text.
@@ -303,6 +313,12 @@ actor OCREmbeddingService {
     // Take the current batch and clear the buffer
     let batch = pendingItems.filter { $0.authorization == cloudAuthorization }
     pendingItems = []
+    let reservation = UUID()
+    let claimedIDs = reserve(Set(batch.map(\.id)), token: reservation)
+    defer { release(claimedIDs, token: reservation) }
+    // Another flush/recovery owns blocked rows; leave them retryable without another dispatch.
+    deferItems(batch.filter { !claimedIDs.contains($0.id) })
+    let claimedBatch = batch.filter { claimedIDs.contains($0.id) }
 
     let usesLosslessCompaction = await losslessSyncEnabled()
     guard generation == ownerGeneration, ownerSnapshot.isCurrent(), ownerAuthority.isCurrent(cloudAuthorization) else {
@@ -318,11 +334,11 @@ actor OCREmbeddingService {
       // later rows age in. Same alignment as ScreenActivitySyncService.bucketEligibilityCutoffEpoch.
       let cutoffEpoch = Int64((now().timeIntervalSince1970 - 5 * 60).rounded(.down))
       let isReady: (PendingItem) -> Bool = { (Self.bucketIndex(for: $0.capturedAt) + 1) * 300 <= cutoffEpoch }
-      let ready = batch.filter(isReady)
-      pendingItems.append(contentsOf: batch.filter { !isReady($0) })
+      let ready = claimedBatch.filter(isReady)
+      pendingItems.append(contentsOf: claimedBatch.filter { !isReady($0) })
       itemsToProcess = Self.compactByFiveMinuteBucket(ready)
     } else {
-      itemsToProcess = batch
+      itemsToProcess = claimedBatch
     }
 
     // Legacy rollback path: deduplicate within the batch by content hash.
@@ -347,10 +363,18 @@ actor OCREmbeddingService {
     // Process in chunks of 100 (Gemini batch limit)
     for chunkStart in stride(from: 0, to: uniqueItems.count, by: 100) {
       let chunkEnd = min(chunkStart + 100, uniqueItems.count)
-      let chunk = Array(uniqueItems[chunkStart..<chunkEnd])
-
-      let texts = chunk.map { $0.formattedText }
+      var chunk = Array(uniqueItems[chunkStart..<chunkEnd])
       do {
+        let candidateIDs = Set(
+          chunk.flatMap { usesLosslessCompaction ? [$0.id] : (duplicateGroups[$0.contentHash] ?? [$0.id]) })
+        let missingIDs = try await missingEmbeddingIDs(candidateIDs)
+        chunk = chunk.filter { item in
+          (usesLosslessCompaction ? [item.id] : (duplicateGroups[item.contentHash] ?? [item.id])).contains {
+            missingIDs.contains($0)
+          }
+        }
+        guard !chunk.isEmpty else { continue }
+        let texts = chunk.map(\.formattedText)
         // Re-read after compaction awaits and before every outbound batch. A paid
         // batch queued before downgrade must never spend under the new free plan.
         guard screenPolicy().shouldEmbedWithGemini, ownerAuthority.isCurrent(cloudAuthorization),
@@ -375,7 +399,7 @@ actor OCREmbeddingService {
           log(
             "OCREmbeddingService: Embedding count mismatch (requested=\(chunk.count), received=\(embeddings.count)); deferring batch"
           )
-          pendingItems.append(contentsOf: chunk)
+          deferItems(chunk)
           continue
         }
 
@@ -385,7 +409,7 @@ actor OCREmbeddingService {
 
           // Apply embedding to all IDs that share this content hash
           let allIds = usesLosslessCompaction ? [item.id] : (duplicateGroups[item.contentHash] ?? [item.id])
-          for screenshotId in allIds {
+          for screenshotId in allIds where missingIDs.contains(screenshotId) {
             let authorization = LocalMutationAuthorization { [ownerAuthority] in
               ownerSnapshot.isCurrent() && ownerAuthority.isCurrent(cloudAuthorization)
             }
@@ -438,11 +462,26 @@ actor OCREmbeddingService {
 
   /// Re-queue a batch that could not be embedded, keeping the buffer bounded.
   private func deferItems(_ chunk: [PendingItem]) {
-    pendingItems.append(contentsOf: chunk)
+    let queued = Set(pendingItems.map(\.id))
+    pendingItems.append(contentsOf: chunk.filter { !queued.contains($0.id) })
     guard pendingItems.count > maxDeferredItems else { return }
     let shed = pendingItems.count - maxDeferredItems
     pendingItems.removeFirst(shed)
     log("OCREmbeddingService: Deferred buffer at capacity — shed \(shed) oldest items")
+  }
+
+  private var liveEmbeddingIDs: Set<Int64> {
+    Set(pendingItems.map(\.id)).union(embeddingReservations.keys)
+  }
+
+  private func reserve(_ ids: Set<Int64>, token: UUID) -> Set<Int64> {
+    let claimed = ids.filter { embeddingReservations[$0] == nil }
+    for id in claimed { embeddingReservations[id] = token }
+    return claimed
+  }
+
+  private func release(_ ids: Set<Int64>, token: UUID) {
+    for id in ids where embeddingReservations[id] == token { embeddingReservations.removeValue(forKey: id) }
   }
 
   private static func compactByFiveMinuteBucket(_ items: [PendingItem]) -> [PendingItem] {
@@ -504,10 +543,10 @@ actor OCREmbeddingService {
         outcome = .capped
         return outcome
       }
+      let cutoff = now().addingTimeInterval(-5 * 60)
       var status = try await RewindDatabase.shared.getScreenshotEmbeddingBackfillStatus()
       try authorization.require()
       if status.completed {
-        let cutoff = now().addingTimeInterval(-5 * 60)
         let rearmed = try await authorization.withCommitLease {
           try await RewindDatabase.shared.rearmScreenshotEmbeddingBackfillIfNeeded(
             olderThan: cutoff, compacted: compacted)
@@ -523,13 +562,17 @@ actor OCREmbeddingService {
         try authorization.require()
         guard !Task.isCancelled, !backfillOnBattery(), screenPolicy().shouldEmbedWithGemini else { return .retry }
         let batchSize = min(100, limit - backfillAttemptsThisLaunch)
-        let items =
+        let excludedIDs = liveEmbeddingIDs
+        let candidates =
           compacted
           ? try await RewindDatabase.shared.getCompactedScreenshotsMissingEmbeddings(
-            limit: batchSize, olderThan: now().addingTimeInterval(-5 * 60))
-          : try await RewindDatabase.shared.getScreenshotsMissingEmbeddings(limit: batchSize)
+            limit: batchSize, olderThan: cutoff, excludingIDs: excludedIDs)
+          : try await RewindDatabase.shared.getScreenshotsMissingEmbeddings(
+            limit: batchSize, olderThan: cutoff, excludingIDs: excludedIDs)
         try authorization.require()
-        if items.isEmpty {
+        if candidates.isEmpty {
+          // Excluded work is still live, not evidence that recovery has finished.
+          guard liveEmbeddingIDs.isEmpty else { return .retry }
           let processed = totalProcessed
           try await authorization.withCommitLease {
             try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
@@ -538,26 +581,36 @@ actor OCREmbeddingService {
           outcome = .complete
           return outcome
         }
-        guard !Task.isCancelled, !backfillOnBattery(), screenPolicy().shouldEmbedWithGemini else { return .retry }
-        let texts = items.map {
-          Self.formatForEmbedding(ocrText: $0.ocrText, appName: $0.appName, windowTitle: $0.windowTitle)
-        }
-        // Reserve before suspension: failed/revoked requests cannot multiply the launch spend cap.
-        backfillAttemptsThisLaunch += texts.count
-        let embeddings = try await batchEmbedder(texts, "RETRIEVAL_DOCUMENT", cloudAuthorization)
-        try authorization.require()
-        guard embeddings.count == items.count else { return .retry }
-        for (item, embedding) in zip(items, embeddings) {
-          let data = await EmbeddingService.shared.floatsToData(embedding)
-          try await authorization.withCommitLease {
-            try await RewindDatabase.shared.updateScreenshotEmbedding(id: item.id, embedding: data)
+        let reservation = UUID()
+        let claimedIDs = reserve(Set(candidates.map(\.id)).subtracting(liveEmbeddingIDs), token: reservation)
+        // Scope reservations to this batch, never the whole recovery run.
+        do {
+          defer { release(claimedIDs, token: reservation) }
+          let missingIDs = try await missingEmbeddingIDs(claimedIDs)
+          try authorization.require()
+          let items = candidates.filter { claimedIDs.contains($0.id) && missingIDs.contains($0.id) }
+          guard !items.isEmpty else { return .retry }
+          guard !Task.isCancelled, !backfillOnBattery(), screenPolicy().shouldEmbedWithGemini else { return .retry }
+          let texts = items.map {
+            Self.formatForEmbedding(ocrText: $0.ocrText, appName: $0.appName, windowTitle: $0.windowTitle)
           }
-        }
-        totalProcessed += items.count
-        let processed = totalProcessed
-        try await authorization.withCommitLease {
-          try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-            completed: false, processedCount: processed)
+          // Reserve before suspension: failed/revoked requests cannot multiply the launch spend cap.
+          backfillAttemptsThisLaunch += texts.count
+          let embeddings = try await batchEmbedder(texts, "RETRIEVAL_DOCUMENT", cloudAuthorization)
+          try authorization.require()
+          guard embeddings.count == items.count else { return .retry }
+          for (item, embedding) in zip(items, embeddings) {
+            let data = await EmbeddingService.shared.floatsToData(embedding)
+            try await authorization.withCommitLease {
+              try await RewindDatabase.shared.updateScreenshotEmbedding(id: item.id, embedding: data)
+            }
+          }
+          totalProcessed += items.count
+          let processed = totalProcessed
+          try await authorization.withCommitLease {
+            try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
+              completed: false, processedCount: processed)
+          }
         }
         try await backfillSleeper(200_000_000)
       }

@@ -71,7 +71,7 @@ final class OCREmbeddingLosslessTests: XCTestCase {
     OCREmbeddingService(
       ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
       batchEmbedderForTesting: embedder,
-      embeddingWriterForTesting: { id, _ in await spy.recordID(id) },
+      embeddingWriterForTesting: { id, _ in await spy.recordID(id) }, missingEmbeddingIDsForTesting: { $0 },
       losslessSyncEnabledForTesting: { true },
       nowForTesting: { now })
   }

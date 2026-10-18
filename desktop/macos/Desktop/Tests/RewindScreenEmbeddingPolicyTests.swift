@@ -180,7 +180,7 @@ final class RewindScreenEmbeddingPolicyTests: XCTestCase {
     let cloud = OCREmbeddingService(
       ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
       batchEmbedderForTesting: { texts, _, _ in await spy.embed(texts) },
-      embeddingWriterForTesting: { _, _ in },
+      embeddingWriterForTesting: { _, _ in }, missingEmbeddingIDsForTesting: { $0 },
       losslessSyncEnabledForTesting: {
         box.set(free)
         return false
@@ -207,7 +207,7 @@ final class RewindScreenEmbeddingPolicyTests: XCTestCase {
     OCREmbeddingService(
       ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
       batchEmbedderForTesting: { texts, _, _ in await spy.embed(texts) },
-      embeddingWriterForTesting: { _, _ in },
+      embeddingWriterForTesting: { _, _ in }, missingEmbeddingIDsForTesting: { $0 },
       flushSleeperForTesting: { _ in throw CancellationError() },
       screenPolicyForTesting: policy, recordRouteForTesting: record)
   }
