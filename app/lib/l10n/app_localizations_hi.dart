@@ -13555,10 +13555,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get activityAttentionStorageTitle => 'स्टोरेज भर गया है — रिकॉर्डिंग रोक दी गई हैं';
 
   @override
-  String get activityAttentionManage => 'प्रबंधित करें';
+  String get activityAttentionStorageUnknownTitle => 'स्टोरेज की जाँच संभव नहीं — रिकॉर्डिंग रोक दी गई हैं';
 
   @override
-  String get activityAttentionRetry => 'पुनः प्रयास करें';
+  String get activityAttentionManage => 'प्रबंधित करें';
 
   @override
   String get activityAttentionStorageSubtitle => 'जगह खाली करें या ऑटो-सिंक बदलें';

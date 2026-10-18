@@ -13613,10 +13613,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get activityAttentionStorageTitle => 'ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ — ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
 
   @override
-  String get activityAttentionManage => 'ನಿರ್ವಹಿಸಿ';
+  String get activityAttentionStorageUnknownTitle => 'ಸಂಗ್ರಹಣೆಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿಲ್ಲ — ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
 
   @override
-  String get activityAttentionRetry => 'ಮರುಪ್ರಯತ್ನಿಸಿ';
+  String get activityAttentionManage => 'ನಿರ್ವಹಿಸಿ';
 
   @override
   String get activityAttentionStorageSubtitle => 'ಸ್ಥಳಾವಕಾಶ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ಸ್ವಯಂ-ಸಿಂಕ್ ಬದಲಾಯಿಸಿ';

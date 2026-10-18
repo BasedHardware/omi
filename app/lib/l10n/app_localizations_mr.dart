@@ -13580,10 +13580,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'स्टोरेज भरले — रेकॉर्डिंग थांबवल्या';
 
   @override
-  String get activityAttentionManage => 'व्यवस्थापित करा';
+  String get activityAttentionStorageUnknownTitle => 'स्टोरेज तपासता येत नाही — रेकॉर्डिंग थांबवल्या';
 
   @override
-  String get activityAttentionRetry => 'पुन्हा प्रयत्न करा';
+  String get activityAttentionManage => 'व्यवस्थापित करा';
 
   @override
   String get activityAttentionStorageSubtitle => 'जागा रिकामी करा किंवा ऑटो-सिंक बदला';

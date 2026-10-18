@@ -13392,10 +13392,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get activityAttentionStorageTitle => '저장 공간이 가득 참 — 녹음 일시중지됨';
 
   @override
-  String get activityAttentionManage => '관리';
+  String get activityAttentionStorageUnknownTitle => '저장 공간을 확인할 수 없음 — 녹음 일시중지됨';
 
   @override
-  String get activityAttentionRetry => '다시 시도';
+  String get activityAttentionManage => '관리';
 
   @override
   String get activityAttentionStorageSubtitle => '공간을 확보하거나 자동 동기화를 조정하세요';

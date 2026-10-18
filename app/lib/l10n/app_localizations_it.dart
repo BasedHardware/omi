@@ -13646,10 +13646,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Spazio esaurito — registrazioni in pausa';
 
   @override
-  String get activityAttentionManage => 'Gestisci';
+  String get activityAttentionStorageUnknownTitle => 'Impossibile verificare lo spazio — registrazioni in pausa';
 
   @override
-  String get activityAttentionRetry => 'Riprova';
+  String get activityAttentionManage => 'Gestisci';
 
   @override
   String get activityAttentionStorageSubtitle => 'Libera spazio o modifica la sincronizzazione automatica';

@@ -1182,6 +1182,31 @@ void main() {
       monitor.dispose();
     });
 
+    test('marking seen through a build snapshot never swallows a newer incident', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final builtAt = now;
+      monitor.observeStorageAtRisk(engagedAt: builtAt, blockedCount: 2, retainedCount: 720, reason: 'disk_reserve');
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+
+      // The frame renders the row that existed at build time; an incident
+      // declared after the build (before the post-frame callback runs) must
+      // stay unseen — the bell keeps warning until a frame shows its row.
+      now = now.add(const Duration(minutes: 1));
+      monitor.markCaptureAttentionSeen(through: builtAt);
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+
+      now = now.add(const Duration(minutes: 1));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 4, retainedCount: 720, reason: 'disk_reserve');
+      monitor.markCaptureAttentionSeen(through: builtAt);
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue,
+          reason: 'a stale callback cannot extinguish the bell for an incident it never rendered');
+
+      // The seen timestamp never rewinds: marking through an older build is a no-op.
+      monitor.markCaptureAttentionSeen();
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+      monitor.dispose();
+    });
+
     test('reset clears the rows and the bell', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(

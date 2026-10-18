@@ -24117,17 +24117,17 @@ abstract class AppLocalizations {
   /// **'Storage full — recordings paused'**
   String get activityAttentionStorageTitle;
 
+  /// Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t check storage — recordings paused'**
+  String get activityAttentionStorageUnknownTitle;
+
   /// Action pill on the Activity storage-full row; opens Offline Sync
   ///
   /// In en, this message translates to:
   /// **'Manage'**
   String get activityAttentionManage;
-
-  /// Action pill on the Activity upload-stalled row; opens Offline Sync
-  ///
-  /// In en, this message translates to:
-  /// **'Retry'**
-  String get activityAttentionRetry;
 
   /// Needs attention row subtitle: how to fix a full phone disk
   ///

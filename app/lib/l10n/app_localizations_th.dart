@@ -13508,10 +13508,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityAttentionStorageTitle => 'พื้นที่เก็บข้อมูลเต็ม — การบันทึกหยุดชั่วคราว';
 
   @override
-  String get activityAttentionManage => 'จัดการ';
+  String get activityAttentionStorageUnknownTitle => 'ตรวจสอบพื้นที่เก็บข้อมูลไม่ได้ — การบันทึกหยุดชั่วคราว';
 
   @override
-  String get activityAttentionRetry => 'ลองใหม่';
+  String get activityAttentionManage => 'จัดการ';
 
   @override
   String get activityAttentionStorageSubtitle => 'ล้างพื้นที่หรือปรับการซิงก์อัตโนมัติ';

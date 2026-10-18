@@ -13570,10 +13570,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Úložisko je plné — nahrávky pozastavené';
 
   @override
-  String get activityAttentionManage => 'Spravovať';
+  String get activityAttentionStorageUnknownTitle => 'Úložisko sa nepodarilo skontrolovať — nahrávky pozastavené';
 
   @override
-  String get activityAttentionRetry => 'Skúsiť znova';
+  String get activityAttentionManage => 'Spravovať';
 
   @override
   String get activityAttentionStorageSubtitle => 'Uvoľnite miesto alebo upravte automatickú synchronizáciu';

@@ -130,8 +130,12 @@ class NeedsAttentionSection extends StatelessWidget {
                       key: const Key('activity_attention_storage'),
                       // blockedCount counts admission attempts, not recordings:
                       // one recording's repeated retries must not read as many
-                      // paused recordings. The uncounted title stays truthful.
-                      title: l.activityAttentionStorageTitle,
+                      // paused recordings. The uncounted title stays truthful,
+                      // and names the condition the retention risk proved: a
+                      // failed free-space probe is not a full disk.
+                      title: storage.reason == 'disk_space_unknown'
+                          ? l.activityAttentionStorageUnknownTitle
+                          : l.activityAttentionStorageTitle,
                       subtitle: l.activityAttentionStorageSubtitle,
                       actionLabel: l.activityAttentionManage,
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
@@ -146,7 +150,7 @@ class NeedsAttentionSection extends StatelessWidget {
                       subtitle: upload.pendingSeconds > 0
                           ? l.activityAttentionUploadKept(OmiDuration.compact(upload.pendingSeconds, l))
                           : l.activityAttentionUploadWaiting,
-                      actionLabel: l.activityAttentionRetry,
+                      actionLabel: l.tryAgain,
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
                     ),
                   ],

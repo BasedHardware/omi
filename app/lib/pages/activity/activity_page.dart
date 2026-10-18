@@ -264,10 +264,20 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       // above never mount the section). Marking after the frame — not in the
       // load path — keeps the bell lit when a failed load would have hidden
       // rows the user never saw, and covers attention that arrives while the
-      // page is already open.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _captureMonitor.markCaptureAttentionSeen();
-      });
+      // page is already open. Only the episodes this build included count as
+      // seen: an incident declared after the build stays unseen until a frame
+      // shows its row, so a stale callback cannot extinguish the bell first.
+      final builtThrough = <DateTime>[
+        if (_captureMonitor.storageAtRisk != null) _captureMonitor.storageAtRisk!.engagedAt,
+        if (_captureMonitor.uploadStall != null) _captureMonitor.uploadStall!.since,
+      ].fold<DateTime?>(null, (a, b) => a == null || b.isAfter(a) ? b : a);
+      // A build with no capture rows shows nothing to mark seen; advancing the
+      // timestamp then would be the stale-callback bug this snapshot prevents.
+      if (builtThrough != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _captureMonitor.markCaptureAttentionSeen(through: builtThrough);
+        });
+      }
       final groups = <(String, List<_ActivityItem>)>[];
       for (final item in _items) {
         final header = dates.dayHeader(item.at);

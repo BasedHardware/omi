@@ -13580,10 +13580,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Lagringen är full — inspelningar pausade';
 
   @override
-  String get activityAttentionManage => 'Hantera';
+  String get activityAttentionStorageUnknownTitle => 'Lagringen kunde inte kontrolleras — inspelningar pausade';
 
   @override
-  String get activityAttentionRetry => 'Försök igen';
+  String get activityAttentionManage => 'Hantera';
 
   @override
   String get activityAttentionStorageSubtitle => 'Frigör utrymme eller justera autosynkronisering';

@@ -13621,10 +13621,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Память заполнена — записи приостановлены';
 
   @override
-  String get activityAttentionManage => 'Управлять';
+  String get activityAttentionStorageUnknownTitle => 'Не удалось проверить память — записи приостановлены';
 
   @override
-  String get activityAttentionRetry => 'Повторить';
+  String get activityAttentionManage => 'Управлять';
 
   @override
   String get activityAttentionStorageSubtitle => 'Освободите место или настройте автосинхронизацию';

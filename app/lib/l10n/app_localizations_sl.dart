@@ -13605,10 +13605,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Shramba je polna — posnetki so pavzirani';
 
   @override
-  String get activityAttentionManage => 'Upravljaj';
+  String get activityAttentionStorageUnknownTitle => 'Shrambe ni mogoče preveriti — posnetki so pavzirani';
 
   @override
-  String get activityAttentionRetry => 'Poskusi znova';
+  String get activityAttentionManage => 'Upravljaj';
 
   @override
   String get activityAttentionStorageSubtitle => 'Sprostite prostor ali prilagodite samodejno sinhronizacijo';

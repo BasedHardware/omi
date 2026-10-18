@@ -13614,10 +13614,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Pamięć pełna — nagrania wstrzymane';
 
   @override
-  String get activityAttentionManage => 'Zarządzaj';
+  String get activityAttentionStorageUnknownTitle => 'Nie można sprawdzić pamięci — nagrania wstrzymane';
 
   @override
-  String get activityAttentionRetry => 'Ponów';
+  String get activityAttentionManage => 'Zarządzaj';
 
   @override
   String get activityAttentionStorageSubtitle => 'Zwolnij miejsce lub dostosuj autosynchronizację';

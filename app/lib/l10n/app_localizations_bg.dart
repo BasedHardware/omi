@@ -13623,10 +13623,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Хранилището е пълно — записите са спрени';
 
   @override
-  String get activityAttentionManage => 'Управление';
+  String get activityAttentionStorageUnknownTitle => 'Хранилището не може да се провери — записите са спрени';
 
   @override
-  String get activityAttentionRetry => 'Опитай отново';
+  String get activityAttentionManage => 'Управление';
 
   @override
   String get activityAttentionStorageSubtitle => 'Освободете място или променете автосинхронизацията';

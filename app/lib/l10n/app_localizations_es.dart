@@ -13614,10 +13614,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Almacenamiento lleno — grabaciones en pausa';
 
   @override
-  String get activityAttentionManage => 'Gestionar';
+  String get activityAttentionStorageUnknownTitle => 'No se puede comprobar el almacenamiento — grabaciones en pausa';
 
   @override
-  String get activityAttentionRetry => 'Reintentar';
+  String get activityAttentionManage => 'Gestionar';
 
   @override
   String get activityAttentionStorageSubtitle => 'Libera espacio o ajusta la sincronización automática';

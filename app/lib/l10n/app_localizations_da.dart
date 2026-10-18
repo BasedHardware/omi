@@ -13562,10 +13562,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Lageret er fuldt — optagelser sat på pause';
 
   @override
-  String get activityAttentionManage => 'Administrer';
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres — optagelser sat på pause';
 
   @override
-  String get activityAttentionRetry => 'Prøv igen';
+  String get activityAttentionManage => 'Administrer';
 
   @override
   String get activityAttentionStorageSubtitle => 'Frigør plads eller juster autosynkronisering';

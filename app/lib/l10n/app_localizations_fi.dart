@@ -13579,10 +13579,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Tallennustila täynnä — tallenteet keskeytetty';
 
   @override
-  String get activityAttentionManage => 'Hallitse';
+  String get activityAttentionStorageUnknownTitle => 'Tallennustilaa ei voitu tarkistaa — tallenteet keskeytetty';
 
   @override
-  String get activityAttentionRetry => 'Yritä uudelleen';
+  String get activityAttentionManage => 'Hallitse';
 
   @override
   String get activityAttentionStorageSubtitle => 'Vapauta tilaa tai muuta automaattista synkronointia';

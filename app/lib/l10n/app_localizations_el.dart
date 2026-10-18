@@ -13659,10 +13659,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Ο αποθηκευτικός χώρος γέμισε — οι ηχογραφήσεις τέθηκαν σε παύση';
 
   @override
-  String get activityAttentionManage => 'Διαχείριση';
+  String get activityAttentionStorageUnknownTitle =>
+      'Δεν είναι δυνατός ο έλεγχος του αποθηκευτικού χώρου — οι ηχογραφήσεις τέθηκαν σε παύση';
 
   @override
-  String get activityAttentionRetry => 'Επανάληψη';
+  String get activityAttentionManage => 'Διαχείριση';
 
   @override
   String get activityAttentionStorageSubtitle => 'Απελευθερώστε χώρο ή προσαρμόστε τον αυτόματο συγχρονισμό';

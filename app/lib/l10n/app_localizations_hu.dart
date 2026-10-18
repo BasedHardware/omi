@@ -13627,10 +13627,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityAttentionStorageTitle => 'A tárhely megtelt — a felvételek szünetelnek';
 
   @override
-  String get activityAttentionManage => 'Kezelés';
+  String get activityAttentionStorageUnknownTitle => 'A tárhely ellenőrzése nem sikerült — a felvételek szünetelnek';
 
   @override
-  String get activityAttentionRetry => 'Újra';
+  String get activityAttentionManage => 'Kezelés';
 
   @override
   String get activityAttentionStorageSubtitle =>

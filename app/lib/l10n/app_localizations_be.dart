@@ -13609,10 +13609,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Памяць запоўнена — запісы прыпынены';
 
   @override
-  String get activityAttentionManage => 'Кіраваць';
+  String get activityAttentionStorageUnknownTitle => 'Немагчыма праверыць памяць — запісы прыпынены';
 
   @override
-  String get activityAttentionRetry => 'Паўтарыць';
+  String get activityAttentionManage => 'Кіраваць';
 
   @override
   String get activityAttentionStorageSubtitle => 'Вызваліце месца або наладзьце аўтасінхранізацыю';

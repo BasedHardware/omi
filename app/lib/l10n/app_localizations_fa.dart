@@ -13569,10 +13569,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get activityAttentionStorageTitle => 'حافظه پر شده — ضبط‌ها متوقف شده‌اند';
 
   @override
-  String get activityAttentionManage => 'مدیریت';
+  String get activityAttentionStorageUnknownTitle => 'امکان بررسی حافظه نیست — ضبط‌ها متوقف شده‌اند';
 
   @override
-  String get activityAttentionRetry => 'تلاش مجدد';
+  String get activityAttentionManage => 'مدیریت';
 
   @override
   String get activityAttentionStorageSubtitle => 'فضا آزاد کنید یا همگام‌سازی خودکار را تنظیم کنید';

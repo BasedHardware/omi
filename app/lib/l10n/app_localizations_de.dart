@@ -13674,10 +13674,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Speicher voll — Aufnahmen pausiert';
 
   @override
-  String get activityAttentionManage => 'Verwalten';
+  String get activityAttentionStorageUnknownTitle => 'Speicher konnte nicht geprüft werden — Aufnahmen pausiert';
 
   @override
-  String get activityAttentionRetry => 'Wiederholen';
+  String get activityAttentionManage => 'Verwalten';
 
   @override
   String get activityAttentionStorageSubtitle => 'Speicherplatz freigeben oder Auto-Sync anpassen';

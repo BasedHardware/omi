@@ -13577,10 +13577,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Lageret er fullt — opptak satt på pause';
 
   @override
-  String get activityAttentionManage => 'Administrer';
+  String get activityAttentionStorageUnknownTitle => 'Lageret kunne ikke kontrolleres — opptak satt på pause';
 
   @override
-  String get activityAttentionRetry => 'Prøv igjen';
+  String get activityAttentionManage => 'Administrer';
 
   @override
   String get activityAttentionStorageSubtitle => 'Frigjør plass eller juster autosynkronisering';

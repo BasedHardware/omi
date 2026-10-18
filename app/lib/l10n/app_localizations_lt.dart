@@ -13598,10 +13598,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Atmintis pilna — įrašai pristabdyti';
 
   @override
-  String get activityAttentionManage => 'Tvarkyti';
+  String get activityAttentionStorageUnknownTitle => 'Nepavyko patikrinti atminties — įrašai pristabdyti';
 
   @override
-  String get activityAttentionRetry => 'Bandyti dar kartą';
+  String get activityAttentionManage => 'Tvarkyti';
 
   @override
   String get activityAttentionStorageSubtitle => 'Atlaisvinkite vietos arba pakoreguokite automatinį sinchronizavimą';

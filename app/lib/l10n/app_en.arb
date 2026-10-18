@@ -16374,13 +16374,13 @@
     "@activityAttentionStorageTitle": {
         "description": "Needs attention row: phone disk is full, so recordings cannot be written"
     },
+    "activityAttentionStorageUnknownTitle": "Can't check storage — recordings paused",
+    "@activityAttentionStorageUnknownTitle": {
+        "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
+    },
     "activityAttentionManage": "Manage",
     "@activityAttentionManage": {
         "description": "Action pill on the Activity storage-full row; opens Offline Sync"
-    },
-    "activityAttentionRetry": "Retry",
-    "@activityAttentionRetry": {
-        "description": "Action pill on the Activity upload-stalled row; opens Offline Sync"
     },
     "activityAttentionStorageSubtitle": "Free space or adjust auto-sync",
     "@activityAttentionStorageSubtitle": {

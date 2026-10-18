@@ -13568,10 +13568,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Salvestusruum on täis — salvestised peatatud';
 
   @override
-  String get activityAttentionManage => 'Halda';
+  String get activityAttentionStorageUnknownTitle => 'Salvestusruumi ei õnnestunud kontrollida — salvestised peatatud';
 
   @override
-  String get activityAttentionRetry => 'Proovi uuesti';
+  String get activityAttentionManage => 'Halda';
 
   @override
   String get activityAttentionStorageSubtitle => 'Vabastage ruumi või kohandage automaatset sünkroonimist';

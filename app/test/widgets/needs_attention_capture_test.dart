@@ -150,9 +150,28 @@ void main() {
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
       expect(find.text('Upload stalled — 5 recordings waiting'), findsOneWidget);
       expect(find.text('47m of audio saved on this phone'), findsOneWidget);
-      expect(find.text('Retry'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
+      expect(find.text('Try Again'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
       expect(find.byIcon(Icons.chevron_right), findsNothing);
       expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
+    });
+
+    testWidgets('a storage row whose probe failed does not claim the disk is full', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      // Fail-closed free-space check: the disk may have ample capacity; the row
+      // must diagnose the unreadable probe, not assert a full disk.
+      monitor.observeStorageAtRisk(
+        engagedAt: DateTime.now().subtract(const Duration(minutes: 30)),
+        blockedCount: 2,
+        retainedCount: 720,
+        reason: 'disk_space_unknown',
+      );
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
+      expect(find.text("Can't check storage — recordings paused"), findsOneWidget);
+      expect(find.text('Storage full — recordings paused'), findsNothing,
+          reason: 'an unavailable probe is not a proven full disk');
     });
 
     testWidgets('the Manage pill opens Offline Sync once, without the row gesture double-firing', (tester) async {
@@ -217,6 +236,28 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
       expect(find.byKey(const Key('activity_needs_attention')), findsNothing);
+    });
+
+    testWidgets('a cleared storage row ends the storage episode the capturing banner reads', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor);
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      await tester.pumpAndSettle();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk,
+          reason: 'the capturing page banner shows the storage problem');
+
+      // The disk recovers: the row ends, and with it the episode — the banner
+      // must stop reporting a recovered problem, and a later disk incident
+      // must be able to declare a fresh episode.
+      monitor.clearStorageAtRisk();
+      await tester.pump();
+      expect(monitor.visiblePrompt, isNull, reason: 'the banner stops reporting the recovered storage problem');
+
+      _seedStorage(monitor);
+      await tester.pumpAndSettle();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk,
+          reason: 'a returning disk failure declares a fresh episode');
     });
 
     test('hasContent stays consistent with the rows', () async {

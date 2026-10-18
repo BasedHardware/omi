@@ -13584,10 +13584,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Penyimpanan penuh — rekaman dijeda';
 
   @override
-  String get activityAttentionManage => 'Kelola';
+  String get activityAttentionStorageUnknownTitle => 'Penyimpanan tidak dapat diperiksa — rekaman dijeda';
 
   @override
-  String get activityAttentionRetry => 'Coba Lagi';
+  String get activityAttentionManage => 'Kelola';
 
   @override
   String get activityAttentionStorageSubtitle => 'Kosongkan ruang atau sesuaikan sinkronisasi otomatis';

@@ -13680,10 +13680,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Puno ang storage — naka-pause ang mga recording';
 
   @override
-  String get activityAttentionManage => 'Pamahalaan';
+  String get activityAttentionStorageUnknownTitle => 'Hindi masuri ang storage — naka-pause ang mga recording';
 
   @override
-  String get activityAttentionRetry => 'Subukan Muli';
+  String get activityAttentionManage => 'Pamahalaan';
 
   @override
   String get activityAttentionStorageSubtitle => 'Mag-free ng space o i-adjust ang auto-sync';

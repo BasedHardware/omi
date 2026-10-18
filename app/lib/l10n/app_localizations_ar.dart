@@ -13501,10 +13501,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'مساحة التخزين ممتلئة — تم إيقاف التسجيلات مؤقتًا';
 
   @override
-  String get activityAttentionManage => 'إدارة';
+  String get activityAttentionStorageUnknownTitle => 'تعذّر التحقق من مساحة التخزين — تم إيقاف التسجيلات مؤقتًا';
 
   @override
-  String get activityAttentionRetry => 'إعادة المحاولة';
+  String get activityAttentionManage => 'إدارة';
 
   @override
   String get activityAttentionStorageSubtitle => 'حرّر مساحة أو عدّل المزامنة التلقائية';

@@ -13571,10 +13571,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get activityAttentionStorageTitle => 'স্টোরেজ পূর্ণ — রেকর্ডিং বিরত';
 
   @override
-  String get activityAttentionManage => 'পরিচালনা করুন';
+  String get activityAttentionStorageUnknownTitle => 'স্টোরেজ যাচাই করা যাচ্ছে না — রেকর্ডিং বিরত';
 
   @override
-  String get activityAttentionRetry => 'পুনঃচেষ্টা';
+  String get activityAttentionManage => 'পরিচালনা করুন';
 
   @override
   String get activityAttentionStorageSubtitle => 'জায়গা খালি করুন বা অটো-সিঙ্ক ঠিক করুন';

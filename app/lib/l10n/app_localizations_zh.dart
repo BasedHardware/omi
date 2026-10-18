@@ -13367,10 +13367,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityAttentionStorageTitle => '存储空间已满 — 录音已暂停';
 
   @override
-  String get activityAttentionManage => '管理';
+  String get activityAttentionStorageUnknownTitle => '无法检查存储空间 — 录音已暂停';
 
   @override
-  String get activityAttentionRetry => '重试';
+  String get activityAttentionManage => '管理';
 
   @override
   String get activityAttentionStorageSubtitle => '请释放空间或调整自动同步设置';

@@ -13576,10 +13576,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Úložiště je plné — nahrávky pozastaveny';
 
   @override
-  String get activityAttentionManage => 'Spravovat';
+  String get activityAttentionStorageUnknownTitle => 'Úložiště se nepodařilo zkontrolovat — nahrávky pozastaveny';
 
   @override
-  String get activityAttentionRetry => 'Opakovat';
+  String get activityAttentionManage => 'Spravovat';
 
   @override
   String get activityAttentionStorageSubtitle => 'Uvolněte místo nebo upravte automatickou synchronizaci';

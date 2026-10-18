@@ -13605,10 +13605,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Storan penuh — rakaman dijedakan';
 
   @override
-  String get activityAttentionManage => 'Urus';
+  String get activityAttentionStorageUnknownTitle => 'Storan tidak dapat disemak — rakaman dijedakan';
 
   @override
-  String get activityAttentionRetry => 'Cuba Lagi';
+  String get activityAttentionManage => 'Urus';
 
   @override
   String get activityAttentionStorageSubtitle => 'Kosongkan ruang atau laraskan segerak automatik';

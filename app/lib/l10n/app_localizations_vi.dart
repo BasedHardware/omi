@@ -13572,10 +13572,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Bộ nhớ đầy — bản ghi đã tạm dừng';
 
   @override
-  String get activityAttentionManage => 'Quản lý';
+  String get activityAttentionStorageUnknownTitle => 'Không thể kiểm tra bộ nhớ — bản ghi đã tạm dừng';
 
   @override
-  String get activityAttentionRetry => 'Thử lại';
+  String get activityAttentionManage => 'Quản lý';
 
   @override
   String get activityAttentionStorageSubtitle => 'Giải phóng dung lượng hoặc điều chỉnh tự động đồng bộ';

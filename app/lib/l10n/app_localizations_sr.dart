@@ -13584,10 +13584,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Складиште је пуно — снимке су паузиране';
 
   @override
-  String get activityAttentionManage => 'Управљај';
+  String get activityAttentionStorageUnknownTitle => 'Складиште није могуће проверити — снимке су паузиране';
 
   @override
-  String get activityAttentionRetry => 'Покушај поново';
+  String get activityAttentionManage => 'Управљај';
 
   @override
   String get activityAttentionStorageSubtitle => 'Ослободите простор или прилагодите аутоматску синхронизацију';

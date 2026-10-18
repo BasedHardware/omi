@@ -13588,10 +13588,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Depolama alanı dolu — kayıtlar duraklatıldı';
 
   @override
-  String get activityAttentionManage => 'Yönet';
+  String get activityAttentionStorageUnknownTitle => 'Depolama alanı kontrol edilemedi — kayıtlar duraklatıldı';
 
   @override
-  String get activityAttentionRetry => 'Yeniden Dene';
+  String get activityAttentionManage => 'Yönet';
 
   @override
   String get activityAttentionStorageSubtitle => 'Yer açın veya otomatik eşitlemeyi ayarlayın';

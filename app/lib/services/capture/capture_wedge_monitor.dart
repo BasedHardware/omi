@@ -149,14 +149,21 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// lights the bell's warning dot. A new episode re-lights it.
   final ValueNotifier<bool> hasUnseenCaptureAttention = ValueNotifier(false);
 
-  /// Activity showed its capture attention rows: the bell goes dark until a new
-  /// episode arrives. In memory only — after a restart the live observations
-  /// re-declare any condition that still holds.
-  void markCaptureAttentionSeen() {
-    _captureAttentionSeenAt = _now();
+  /// Records that Activity rendered its capture rows. With [through], marks
+  /// seen only the episodes a build actually included: the timestamp of the
+  /// newest row on screen at build time. An incident declared after that build
+  /// stays unseen — the bell keeps warning — until a frame shows its row. The
+  /// seen timestamp never rewinds.
+  void markCaptureAttentionSeen({DateTime? through}) {
+    final at = through ?? _now();
+    final seen = _captureAttentionSeenAt;
+    _captureAttentionSeenAt = seen == null || seen.isBefore(at) ? at : seen;
     _updateUnseenCaptureAttention();
   }
 
+  /// Activity showed its capture attention rows: the bell goes dark until a new
+  /// episode arrives. In memory only — after a restart the live observations
+  /// re-declare any condition that still holds.
   void _updateUnseenCaptureAttention() {
     final seen = _captureAttentionSeenAt;
     final storage = _storageAtRisk;
@@ -183,6 +190,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     if (_storageAtRisk == null) return;
     _storageAtRisk = null;
     _lastRetentionRiskFingerprint = null;
+    _resolveStorageEpisodeIfAny();
     _updateUnseenCaptureAttention();
     notifyListeners();
   }
@@ -194,8 +202,23 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   void _endStorageAtRiskRow() {
     if (_storageAtRisk == null) return;
     _storageAtRisk = null;
+    _resolveStorageEpisodeIfAny();
     _updateUnseenCaptureAttention();
     notifyListeners();
+  }
+
+  /// A storage row ending with its own condition also ends the local-WAL
+  /// episode that declared it: the capturing page's banner must stop reporting
+  /// a recovered storage problem, and `_canDeclare` must let a later disk
+  /// incident start a fresh recovery. The upload-silence telemetry episode is
+  /// independent and stays for `onUploadCompleted` to later resolve on its own
+  /// terms.
+  void _resolveStorageEpisodeIfAny() {
+    final state = _devices[localWalDeviceId];
+    if (state?.episode?.trigger == triggerStorageAtRisk) {
+      _safeTrack('Capture Recovery Resolved', {'source': state!.episode!.source, 'trigger': triggerStorageAtRisk});
+      state.episode = null;
+    }
   }
 
   void setNativeIngressOwner(String deviceId, bool active) {
