@@ -4977,6 +4977,21 @@ the obligation with `empty_output_exhausted`, outside the indexed due scan,
 without clearing any structured content. Intake discards never enter that index.
 Appends and retries preserve the original time; later enriched revisions retain coalescing.
 
+`FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED=false` is an independent dark drain
+control on integration and both sync task handlers. With the deadline master switch
+still on, an existing finite `summary_deadline_at` keeps its dispatch ceiling,
+demand bypass, short lease/heartbeat, repair cadence and output requirement after
+percent/allowlist rollback. A scoped owner context carries that policy through the
+synchronous processing/persistence callback and resets on every exit. New outbox
+marks ignore that context, so nested marks cannot widen cohort admission. A callback
+returning no output retains the admitted obligation without consuming the existing
+three-empty-model-result budget. A confirmed persisted rule discard settles normally. Completed/effects-only rows and new out-of-cohort conversations
+retain their existing coalescing behavior. No read, new queue or paid-intent reset
+is added. It cannot reconstruct already-deleted outboxes; existing debt repair
+requires its own explicit enablement and eligible owner cohort. Turning the
+preserve control off restores legacy rollout behavior; turning the deadline master
+off disables deadline handling entirely.
+
 `SUMMARY_DEBT_REPAIR_ENABLED` (default false) adds completed server-minimum debt
 to the existing repair owner: one globally leased two-minute page, at most 100
 rows and ten admission attempts. It reuses the same outbox/generation, checks
@@ -5243,6 +5258,27 @@ back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
 
 ### Batch projection contention and replay
+
+`BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED=false` is a dark control on integration.
+When it and `BATCH_PIPELINE_SERVING_ENABLED=true` are enabled, the authenticated
+batch metrics route only refreshes queue gauges on the database executor. It no
+longer runs cleanup, enrichment repair, lease recovery, ordered merge or projection
+on each scrape. The supervised serving loop and explicit reconcile RPC retain those
+obligations, including after admission rollback. Without the serving switch, the
+metrics route retains its legacy drain so this control cannot silently remove the
+only configured drain. Replica/revision overlap still requires Firestore fences and
+owner claims; this control does not serialize the remaining reconcilers.
+
+`BATCH_PIPELINE_PROJECTION_TIMING_ENABLED=false` independently enables static,
+content-free `event=batch_projection_phase` start/finish/error logs around read,
+assignment, bridge, private playback, enrichment scheduling, accounting, completion
+and publication. Durations use the monotonic clock. No owner, segment, conversation,
+payload, or exception message is logged. A started phase without its terminal event
+helps locate a stalled RPC or process shutdown; it is not a completed latency sample.
+Keep first-summary eligibility and repair enabled for admitted owners while rolling
+back batch admission: lowering `FIRST_SUMMARY_DEADLINE_PERCENT` also removes their
+short dispatch/repair/lease policy, even when durable summary debt already exists.
+These controls do not bypass predecessor ordering or the all-sibling completion fence.
 
 `BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
 Enable it on integration to coalesce concurrent projection per owner using an advisory Redis

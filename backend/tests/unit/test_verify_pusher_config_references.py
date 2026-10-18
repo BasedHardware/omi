@@ -190,6 +190,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert literals == {
         "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
         "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
+        "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": "false",
+        "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED": "false",
+        "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED": "false",
         "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED": "false",
         "DEMAND_PROCESSING_ENABLED": "false",
         "DEMAND_PROCESSING_LAZY_ENABLED": "false",

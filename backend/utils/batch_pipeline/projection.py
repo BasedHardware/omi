@@ -9,7 +9,10 @@ from config.batch_pipeline import (
     authoritative_labels_enabled,
     require_live_target_enabled,
     projection_contention_enabled,
+    projection_timing_enabled,
 )
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import time
 import math
@@ -27,6 +30,32 @@ from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def projection_phase(phase: str) -> Iterator[None]:
+    """Static phase tokens only; never log bindings, payloads or exception text."""
+    if not projection_timing_enabled():
+        yield
+        return
+    started = time.monotonic()
+    logger.info('event=batch_projection_phase phase=%s outcome=started', phase)
+    try:
+        yield
+    except Exception as error:
+        logger.info(
+            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s',
+            phase,
+            int((time.monotonic() - started) * 1000),
+            type(error).__name__,
+        )
+        raise
+    else:
+        logger.info(
+            'event=batch_projection_phase phase=%s outcome=completed elapsed_ms=%d',
+            phase,
+            int((time.monotonic() - started) * 1000),
+        )
 
 
 def build_incoming(item: WorkItem, binding, payload: dict, *, geolocation=None, batch_segment_id=None) -> dict:
@@ -161,25 +190,29 @@ class Projector:
         self.fetch_audio = fetch_audio
 
     def project(self, segment_id: str) -> dict | None:
-        job, entry, binding = self.store.read(segment_id)
+        with projection_phase('read'):
+            job, entry, binding = self.store.read(segment_id)
         if projection_contention_enabled():
             with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
                 if not acquired:
                     logger.info('event=batch_projection action=claim outcome=busy')
                     return None
-                result = self._project(segment_id, job, entry, binding)
+                with projection_phase('project'):
+                    result = self._project(segment_id, job, entry, binding)
                 logger.info(
                     'event=batch_projection action=project outcome=%s',
                     'completed' if result is not None else 'waiting',
                 )
                 return result
-        return self._project(segment_id, job, entry, binding)
+        with projection_phase('project'):
+            return self._project(segment_id, job, entry, binding)
 
     def _project(self, segment_id, job, entry, binding):
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock())
         try:
-            self.store.check(session)
+            with projection_phase('predecessor'):
+                self.store.check(session)
         except ProjectionReplay:
             pass
         else:
@@ -203,39 +236,45 @@ class Projector:
                     # A receipt is assignment progress, not completion. Resume
                     # every post-persist obligation after losing the empty race.
             else:
-                self.assign_parts(item, entry, binding)
+                with projection_phase('assignment'):
+                    self.assign_parts(item, entry, binding)
         entry = self.store.ref('results', segment_id).get().to_dict() or {}
         parts = entry.get('projection_parts')
         for index, receipt in (
             sorted(parts.items(), key=lambda pair: int(pair[0])) if parts else [(None, entry['projection'])]
         ):
             self.finish_part(item, binding, receipt, int(index) if index is not None else None)
-        accounting = self.store.prepare_accounting(binding, self.clock())
+        with projection_phase('accounting'):
+            accounting = self.store.prepare_accounting(binding, self.clock())
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock())
             return None
         if accounting['seconds'] > 0 and not accounting['completed']:
             from utils.fair_use import record_speech_ms
 
-            record_speech_ms(
-                binding.owner_id,
-                int(accounting['seconds'] * 1000),
-                source=accounting['source'],
-                idempotency_key=binding.content_id,
-                raise_on_error=True,
-            )
-        result = self.store.complete(segment_id, binding, self.clock(), accounting)
+            with projection_phase('usage'):
+                record_speech_ms(
+                    binding.owner_id,
+                    int(accounting['seconds'] * 1000),
+                    source=accounting['source'],
+                    idempotency_key=binding.content_id,
+                    raise_on_error=True,
+                )
+        with projection_phase('completion'):
+            result = self.store.complete(segment_id, binding, self.clock(), accounting)
         if result is not None:
-            self.publish(binding, result)
+            with projection_phase('publication'):
+                self.publish(binding, result)
             from utils.batch_pipeline.retention import expire_completed_segment
 
             for sibling in binding.segment_ids:
                 retained = self.store.ref('results', sibling).get().to_dict() or {}
                 if retained.get('projection_state') == 'erased':
                     continue
-                if not expire_completed_segment(self.store.store, binding.owner_id, sibling, self.clock()):
-                    raise ProjectionBlocked('completion retention receipt unavailable')
-                self.store.acknowledge(sibling, binding, self.clock())
+                with projection_phase('retention'):
+                    if not expire_completed_segment(self.store.store, binding.owner_id, sibling, self.clock()):
+                        raise ProjectionBlocked('completion retention receipt unavailable')
+                    self.store.acknowledge(sibling, binding, self.clock())
         return result
 
     def assign_record_silence(self, item, binding, session):
@@ -361,25 +400,28 @@ class Projector:
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 
-            canonical = (
-                receipt['conversation_id']
-                if binding.record_origin
-                else finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
-            )
-            if receipt.get('audio_required') and not binding.native_record:
-                if self.playback is not None:
-                    self.playback(item, canonical)
-                else:
-                    self.persist_playback(item, binding, canonical, receipt)
-            if receipt['enrichment_required']:
-                self.store.mark_enrichment(
-                    item.segment_id,
-                    binding,
-                    self.clock(),
-                    canonical,
-                    receipt['language'],
-                    part_index=index,
+            with projection_phase('bridge'):
+                canonical = (
+                    receipt['conversation_id']
+                    if binding.record_origin
+                    else finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
                 )
+            if receipt.get('audio_required') and not binding.native_record:
+                with projection_phase('playback'):
+                    if self.playback is not None:
+                        self.playback(item, canonical)
+                    else:
+                        self.persist_playback(item, binding, canonical, receipt)
+            if receipt['enrichment_required']:
+                with projection_phase('enrichment'):
+                    self.store.mark_enrichment(
+                        item.segment_id,
+                        binding,
+                        self.clock(),
+                        canonical,
+                        receipt['language'],
+                        part_index=index,
+                    )
                 return
         self.store.ready(item.segment_id, binding, self.clock(), part_index=index)
 

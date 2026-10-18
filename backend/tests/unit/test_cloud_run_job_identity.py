@@ -12,7 +12,8 @@ KEY_ENV = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
 
 @pytest.mark.parametrize('job', ['notifications-job', 'day3-reengagement-email-job'])
 def test_prod_job_runs_as_jobs_runtime_and_drops_the_key(job):
-    manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    # Preserve safe YAML semantics without spending the call-phase CPU budget on tokenization.
+    manifest = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=yaml.CSafeLoader)
     config = manifest['environments']['prod']['cloud_run']['jobs'][job]
 
     assert config['flags']['--service-account'] == JOBS_RUNTIME_SA

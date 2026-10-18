@@ -25,7 +25,13 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFou
 from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
-from config.summary_guarantee import enabled as summary_enabled, deadline_seconds
+from config.summary_guarantee import (
+    ADMITTED_OWNER,
+    deadline_seconds,
+    enabled as summary_enabled,
+    first_summary_pending,
+    preserves_admitted,
+)
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
@@ -43,6 +49,10 @@ FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
+
+
+class FirstSummaryCallbackPending(RuntimeError):
+    """No processing output exists yet; retain the lease/debt without empty-result spend."""
 
 
 def key(uid: str, conversation_id: str) -> str:
@@ -173,7 +183,7 @@ def _enqueue(row: dict[str, Any]) -> None:
     if row.get('wake_generation'):
         name += f"-repair-{row['wake_generation']}"
 
-    first_summary = summary_enabled(row['uid']) and not row.get('effects_only') and not row.get('summary_seen')
+    first_summary = first_summary_pending(row)
     if not first_summary and schedule(
         row['uid'],
         document_id,
@@ -236,8 +246,9 @@ def mark(
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
         row['dormant'] = False
         row['summary_repair'] = False
+        row['effects_only'] = effects_only
 
-        if summary_enabled(uid) and not effects_only and not row.get('summary_seen'):
+        if first_summary_pending(row):
             row['summary_deadline_at'] = min(
                 row.get('summary_deadline_at', float('inf')),
                 row['first_pending_at'] + deadline_seconds(),
@@ -252,7 +263,6 @@ def mark(
             row['first_pending_at'] = row.get('first_pending_at', current)
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
-        row.update(effects_only=effects_only)
 
         row.setdefault('summary_lane', 'batch' if mutate is not None else summary_delivery.lane({}))
         if old is None:
@@ -339,7 +349,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
-        first_summary = summary_enabled(row['uid']) and not row.get('summary_seen') and not row.get('effects_only')
+        first_summary = first_summary_pending(row)
         lease_seconds = FIRST_SUMMARY_LEASE_SECONDS if first_summary else LEASE_SECONDS
         row.update(lease_until=current + lease_seconds, owner=owner)
         return row, ('claimed', row)
@@ -353,6 +363,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return status
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
+    summary_policy = summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
     summary_seen = False
     superseded = False
     retry_revision = None
@@ -371,21 +382,26 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         )
         process_context = (
             {'owner': owner, 'lease_until': row['lease_until']}
-            if summary_enabled(row['uid']) and not row.get('summary_seen')
+            if summary_policy and not row.get('summary_seen')
             else None
         )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
         context_token = summary_delivery.REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
+        admitted_token = ADMITTED_OWNER.set(row['uid'] if preserves_admitted(row) else None)
         try:
             with _heartbeat(document_id, task_token, owner, process_context) if process_context else nullcontext():
                 output = process(row['uid'], row['conversation_id'], row['language'])
-                if summary_enabled(row['uid']):
+                if summary_policy:
                     summary_seen = output is not None and summary_delivery.present(
                         summary_delivery.field(output, 'structured')
                     )
-                    discarded = output is not None and summary_delivery.field(output, 'discarded', False)
+                    discarded = (output is not None and summary_delivery.field(output, 'discarded', False)) or (
+                        preserves_admitted(row) and bool(process_context and process_context.get('discarded'))
+                    )
                     blocked = bool(process_context and process_context.get('blocked_reason'))
+                    if output is None and preserves_admitted(row) and not discarded and not blocked:
+                        raise FirstSummaryCallbackPending('first-summary callback has no output yet')
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except summary_delivery.SummaryRepairSuperseded as error:
@@ -399,6 +415,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 raise
             empty_blocked = True
         finally:
+            ADMITTED_OWNER.reset(admitted_token)
             summary_delivery.REPAIR_CONTEXT.reset(context_token)
             summary_delivery.LANE_CONTEXT.reset(lane_token)
             summary_delivery.ACCEPT_CONTEXT.reset(accept_token)
@@ -426,7 +443,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return pending, pending
 
         if old['version'] == row['version']:
-            if summary_enabled(row['uid']) and summary_seen:
+            if summary_policy and summary_seen:
                 # Retain only scheduling metadata as the first-summary receipt.
                 # Future revisions keep their trailing-edge coalescing policy.
                 settled = dict(old)
@@ -445,7 +462,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 return settled, None
             return None, None
         pending = dict(old)
-        if summary_seen and summary_enabled(row['uid']):
+        if summary_seen and summary_policy:
             pending['summary_seen'] = True
             pending['first_pending_at'] = current
             pending['summary_repair'] = False
@@ -488,11 +505,7 @@ def sweep(*, now: float | None = None, limit: int = 100) -> dict[str, int]:
                 # task delivery becomes stale; valid backfill bindings stay put.
                 row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
 
-            repair_seconds = (
-                FIRST_SUMMARY_LEASE_SECONDS
-                if summary_enabled(row['uid']) and not row.get('summary_seen') and not row.get('effects_only')
-                else REPAIR_SECONDS
-            )
+            repair_seconds = FIRST_SUMMARY_LEASE_SECONDS if first_summary_pending(row) else REPAIR_SECONDS
             if row['task_due_at'] + repair_seconds <= current:
                 if repair_seconds == FIRST_SUMMARY_LEASE_SECONDS:
                     # Preserve every already-queued valid wake. A short repair
