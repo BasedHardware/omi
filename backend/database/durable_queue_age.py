@@ -45,7 +45,7 @@ def _sample_budget_enabled() -> bool:
         key = os.getenv('HOSTNAME') or f"{os.getenv('K_REVISION', '')}:{socket.gethostname()}"
         return lever_enabled('queue_age_sample_budget', key)
     except ValueError:
-        # The integrator registers this new lever; until then preserve the off path.
+        # An unregistered lever must preserve the off path.
         return False
 
 
@@ -320,6 +320,13 @@ def _publish_queue_ages(
         publish_sampled_queue_oldest_ready_ages(_sample_cache[1])
         QUEUE_AGE_BUDGET_EVENTS.labels(outcome='cache_hit').inc()
         return
+    if budget_enabled:
+        # A stalled fresh scan must not leave an expired age (especially zero)
+        # visible to scrapes. Only a completed scan can replace unknown or
+        # advance the fresh-scan timestamp; invalidate before any summary I/O.
+        check_leader_lease(require_ownership=True)
+        _sample_cache = None
+        publish_sampled_queue_oldest_ready_ages({})
     sample_time = (_utc_timestamp(now) or datetime.now(timezone.utc)) if budget_enabled else now
     summary = finalization_summary
     if summary is None:
