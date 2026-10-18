@@ -567,11 +567,14 @@ final class ConversationRepository {
     let removedVisibleRow = conversations.contains { $0.id == id }
     conversations.removeAll { $0.id == id }
     pendingMutations.removeValue(forKey: id)
-    if removedVisibleRow, let count {
-      self.count = max(0, count - 1)
+    if removedVisibleRow {
+      if let count {
+        self.count = max(0, count - 1)
+      }
       // Every conversation below the deleted one shifts up a server
       // slot — without this the next page starts one row too late and
-      // skips a conversation (issue #21596).
+      // skips a conversation (issue #21596). This adjustment holds even
+      // when the count request failed and `count` is nil.
       nextPageOffset = max(0, nextPageOffset - 1)
     }
     emit(.server)
@@ -774,10 +777,13 @@ final class ConversationRepository {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
-      if removedVisibleRow, let count {
-        self.count = max(0, count - 1)
+      if removedVisibleRow {
+        if let count {
+          self.count = max(0, count - 1)
+        }
         // Same as remove(): a row leaving the viewed window shifts the
-        // paging window — keep nextPageOffset honest (issue #21596).
+        // paging window — keep nextPageOffset honest even when the count
+        // request failed and `count` is nil (issue #21596).
         nextPageOffset = max(0, nextPageOffset - 1)
       }
       return
