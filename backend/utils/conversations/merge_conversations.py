@@ -99,9 +99,7 @@ def _merge_order_key(conv: Dict) -> datetime:
     next-best ordering hint; sources with neither keep the sentinel and
     their given order.
     """
-    return (_coerce_dt(conv.get("started_at"))
-            or _coerce_dt(conv.get("created_at"))
-            or _UTC_MIN)
+    return _coerce_dt(conv.get("started_at")) or _coerce_dt(conv.get("created_at")) or _UTC_MIN
 
 
 # Timestamp fields touched by the merge pipeline. Coerced once at the entry
