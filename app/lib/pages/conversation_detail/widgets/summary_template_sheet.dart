@@ -102,7 +102,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
 
   Future<void> _summarize() async {
     final provider = _provider;
-    if (provider.loadingReprocessConversation || _installingAppId != null) return;
+    if (provider.anyReprocessInFlight || _installingAppId != null) return;
     // An inherited selection that no offered row backs (the template was deleted) is not a real
     // choice: fall back to Omi instead of submitting an invisible id.
     if (!_selectionResolves) _selectedAppId = null;
@@ -124,7 +124,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
         return;
       }
     }
-    if (provider.loadingReprocessConversation) return;
+    if (provider.anyReprocessInFlight) return;
     final previous = provider.getSummarySelection();
     PlatformManager.instance.analytics.summarizedAppSelected(
       conversationId: provider.conversation.id,
@@ -147,7 +147,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
     final load = provider.enabledTemplatesLoad;
     // An inherited selection with no offered row behind it is not a choice yet: Summarize waits
     // for the lists to back it (or the provider change to drop it onto Omi).
-    final busy = provider.loadingReprocessConversation || _installingAppId != null || !_selectionResolves;
+    final busy = provider.anyReprocessInFlight || _installingAppId != null || !_selectionResolves;
 
     final templates = <Widget>[
       if (enabled.isNotEmpty)

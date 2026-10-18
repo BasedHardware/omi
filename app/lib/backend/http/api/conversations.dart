@@ -184,8 +184,8 @@ final class ReprocessFailed extends ReprocessResult {
   final int? statusCode;
 }
 
-/// A reprocess runs the whole summary pipeline and can take minutes. It is not idempotent, so the
-/// pool must never retry it (a timeout or 5xx retry starts a second, duplicate reprocess).
+/// A reprocess (summary or transcription) runs the whole summary pipeline and can take minutes. It
+/// is not idempotent, so the pool must never retry it (a timeout or 5xx retry starts a duplicate).
 const Duration reprocessRequestTimeout = Duration(seconds: 180);
 
 Future<ReprocessResult> reProcessConversationServer(
@@ -282,6 +282,8 @@ Future<TranscriptionReprocessResult> reProcessTranscriptionServer(String convers
     headers: {},
     method: 'POST',
     body: '',
+    timeout: reprocessRequestTimeout,
+    retries: 0,
   );
   if (response == null) {
     return const TranscriptionReprocessResult(errorCode: 'failed');

@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
+import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
@@ -65,6 +66,36 @@ void main() {
 
       await expectLater(KnowledgeGraphApi.getKnowledgeGraph(), throwsA(isA<Exception>()));
 
+      expect(attempts, 1);
+    });
+  });
+
+  group('non-idempotent reprocess retry policy', () {
+    late HttpServer server;
+
+    setUp(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
+    });
+
+    tearDown(() async {
+      await server.close(force: true);
+    });
+
+    test('reProcessTranscriptionServer never re-posts the STT replay after a 502', () async {
+      var attempts = 0;
+      server.listen((request) async {
+        attempts++;
+        expect(request.method, 'POST');
+        expect(request.uri.path, '/v1/conversations/c1/reprocess-transcription');
+        request.response.statusCode = HttpStatus.badGateway;
+        await request.response.close();
+      });
+
+      final result = await conversations_api.reProcessTranscriptionServer('c1');
+
+      expect(result.conversation, isNull);
+      expect(result.errorCode, 'failed');
       expect(attempts, 1);
     });
   });

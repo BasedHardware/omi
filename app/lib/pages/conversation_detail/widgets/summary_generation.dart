@@ -32,7 +32,7 @@ String? resolvedDefaultSummaryTemplateId(ConversationDetailProvider provider) {
 
 /// Starts a summary with [appId]'s template (null: Omi), remembering a template as last used.
 Future<void> startSummary(ConversationDetailProvider provider, String? appId) async {
-  if (provider.loadingReprocessConversation) return;
+  if (provider.anyReprocessInFlight) return;
   if (appId != null) {
     final app = provider.findAppById(appId);
     if (app != null) provider.setSelectedAppForReprocessing(app);
@@ -89,7 +89,7 @@ class SummaryEmptyState extends StatelessWidget {
     final provider = context.watch<ConversationDetailProvider>();
     final l10n = context.l10n;
     final defaultAppId = resolvedDefaultSummaryTemplateId(provider);
-    final busy = provider.loadingReprocessConversation;
+    final busy = provider.anyReprocessInFlight;
     final segments = provider.conversationOrNull?.transcriptSegments ?? const <TranscriptSegment>[];
     final firstSegment = segments.where((segment) => segment.text.trim().isNotEmpty).firstOrNull;
 
@@ -284,7 +284,7 @@ class SummaryFailureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.read<ConversationDetailProvider>();
     final l10n = context.l10n;
-    final busy = context.select<ConversationDetailProvider, bool>((p) => p.loadingReprocessConversation);
+    final busy = context.select<ConversationDetailProvider, bool>((p) => p.anyReprocessInFlight);
     final (
       String title,
       String body,

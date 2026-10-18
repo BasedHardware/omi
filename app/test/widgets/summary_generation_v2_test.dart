@@ -118,6 +118,19 @@ void main() {
       expect(find.text(l10n.summaryNotSummarizedYet), findsNothing);
     });
 
+    testWidgets('both actions wait while the transcription is being redone', (tester) async {
+      final response = Completer<TranscriptionReprocessResult>();
+      final provider = summaryProvider(summaryConversation());
+      addTearDown(provider.dispose);
+      unawaited(provider.reprocessTranscription(client: (_) => response.future));
+      await tester.pumpWidget(summaryHarness(provider, _summaryTab()));
+      for (final key in ['summary_empty_primary', 'summary_empty_choose_template']) {
+        expect(tester.widget<OmiButton>(find.byKey(Key(key))).onPressed, isNull, reason: key);
+      }
+      response.complete(const TranscriptionReprocessResult(errorCode: 'failed'));
+      await tester.pump();
+    });
+
     testWidgets('"Use a Different Template" is the one way to the sheet', (tester) async {
       final provider = summaryProvider(summaryConversation());
       addTearDown(provider.dispose);
@@ -254,6 +267,19 @@ void main() {
       final button = tester.widget<OmiButton>(find.byKey(const Key('summary_template_confirm')));
       expect(button.onPressed, isNull);
       reprocess.gate!.complete(const ReprocessBusy());
+      await tester.pump();
+    });
+
+    testWidgets('Summarize is disabled while the transcription is being redone', (tester) async {
+      final response = Completer<TranscriptionReprocessResult>();
+      final provider = summaryProvider(summaryConversation());
+      addTearDown(provider.dispose);
+      unawaited(provider.reprocessTranscription(client: (_) => response.future));
+      await tester.pumpWidget(summaryHarness(provider, _sheetLauncher()));
+      await _openSheet(tester);
+      final button = tester.widget<OmiButton>(find.byKey(const Key('summary_template_confirm')));
+      expect(button.onPressed, isNull);
+      response.complete(const TranscriptionReprocessResult(errorCode: 'failed'));
       await tester.pump();
     });
   });
