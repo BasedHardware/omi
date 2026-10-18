@@ -1102,6 +1102,9 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             )
             if persisted:
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
+                context = PROCESS_CONTEXT.get()
+                if context is not None:
+                    context['discarded'] = True
             return
 
     if PROCESS_CONTEXT.get() is not None and not claim_from_snapshot(

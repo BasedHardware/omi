@@ -161,6 +161,18 @@ def terminal_empty_disposition_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
 
 
+def read_only_metrics_enabled() -> bool:
+    """A scrape may stop draining only while the supervised drain is enabled."""
+    return (
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    )
+
+
+def projection_timing_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', 'false').strip().lower() == 'true'
+
+
 def worker_silence_disposition_enabled() -> bool:
     """Dark worker-side use of integration's strict local silence evidence."""
     return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
