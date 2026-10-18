@@ -1988,12 +1988,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get memoryHistory => 'Ajalugu';
 
   @override
-  String get memoryAllowUse => 'Luba kasutamine';
-
-  @override
-  String get memoryDontUse => 'Ära kasuta';
-
-  @override
   String get undo => 'Tühista';
 
   @override
@@ -13163,6 +13157,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Ühenda oma Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Paarista Omi ja see salvestab vestlused käed-vabalt kogu päeva.';
+
+  @override
+  String get firstCaptureConnect => 'Ühenda minu Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Mul ei ole veel Omit';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13269,6 +13275,112 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Ära jäta enam ühtegi sõna vahele.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Nii töötab sinu tasuta prooviperiood.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Piiramatult kokkuvõtteid, hoitud igavesti';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Iga vestlusest saab selge kokkuvõte koos järgmiste sammudega, et midagi ei ununeks.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Parim transkriptsioon';
+
+  @override
+  String get paywallTrialChipDetails => 'Püüab kinni rohkem detaile';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Eristab kõnelejaid';
+
+  @override
+  String get paywallTrialChipNoise => 'Töötab mürarikkas keskkonnas';
+
+  @override
+  String get paywallTrialChipAccents => 'Tuleb toime aktsentidega';
+
+  @override
+  String get paywallTrialChipJargon => 'Tunneb sinu žargooni ja nimesid';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Kõnelejate nimed, tuvastatud automaatselt';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Piiramatult küsimusi, igas vestluses';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Koosta sellelt koosolekult järelmeil.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Kas on mingeid vastuolusid sellega, mida John teisipäeval ütles?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Leia kõik, mis võiks meid aeglustada.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Töötab sinu lemmikrakendustega';
+
+  @override
+  String get paywallTrialTodayTitle => 'Täna';
+
+  @override
+  String get paywallTrialTodayBody => 'Kõik Pro funktsioonid on avatud.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days tasuta päeva';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days päeva Omi Pro\'d, meie kulul.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days päeva pärast';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Prooviperiood lõpeb. Sulle esitatakse arve, kui sa ei tühista.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Uusimad AI mudelid';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Piiramatu Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Arveldatakse igakuiselt';
+
+  @override
+  String get paywallTrialBilledYearly => 'Arveldatakse iga-aastaselt';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Säästa $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Alusta hinnaga $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Jätka tasuta plaaniga';
+
+  @override
+  String get paywallTrialCancelNote => 'Tühista igal ajal. Ei mingeid tasusid ega trahve.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Sinu $days-päevane Omi Pro tasuta prooviperiood on alanud.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Tühista igal ajal.';

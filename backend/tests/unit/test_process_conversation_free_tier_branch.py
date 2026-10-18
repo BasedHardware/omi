@@ -1,4 +1,4 @@
-"""Surviving memory policy, enrichment, replay and retired-flag parity contracts.
+"""Enrichment, replay and retired-flag parity contracts.
 
 The coordinator is loaded with scoped offline fakes; no provider or database
 network is permitted. Capped projection/backlog coverage lives in the entrypoint
@@ -7,32 +7,23 @@ matrix and processing-backlog suites.
 
 from __future__ import annotations
 
-
 import os
-
 
 from datetime import datetime, timedelta, timezone
 
-
 from pathlib import Path
-
 
 from types import ModuleType, SimpleNamespace
 
-
 from typing import Any
 
-
 from unittest.mock import AsyncMock, MagicMock
-
 
 import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-
 from config.plan_catalog import PlanType
-
 
 from models.client_processing import (
     ClientProcessing,
@@ -40,30 +31,19 @@ from models.client_processing import (
     ProjectedStructure,
 )
 
-
 from models.conversation import Conversation, CreateConversation
-
 
 from models.conversation_enums import ConversationProcessingState, ConversationSource, ConversationStatus
 
-
 from models.structured import Structured
-
 
 from models.transcript_segment import TranscriptSegment
 
-
 from testing.import_isolation import AutoMockModule, load_module_fresh, package_submodule_stubs, stub_modules
-
 
 import utils.managed_compute as managed_compute
 
-
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-
-
-from database.first_open_obligations import claim_first_open_work
-
 
 from utils.conversations import meeting_receipt as meeting_receipt_mod
 
@@ -259,7 +239,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     # The finalizer's smart-merge step is off by default; its own tests drive it.
     smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
     smart_merge.smart_merge_step = AsyncMock(return_value=False)
-    add('utils.jit_rollout', AutoMockModule('utils.jit_rollout'))
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
     services_pkg = ModuleType('services')
@@ -320,7 +299,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
         'extract_memories_inner': MagicMock(),
         'trigger_apps': MagicMock(),
         'assign_folder': MagicMock(return_value=(None, 0.0, '')),
-        'init_first_open': MagicMock(return_value=True),
         'should_defer': MagicMock(return_value=True),
     }
     monkeypatch.setattr(pc, '_get_structured', spies['get_structured'])
@@ -328,7 +306,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
@@ -353,8 +330,6 @@ def _stub_completed_for_normal_path(monkeypatch, pc, conv_id: str = 'paid-conv')
     completed.private_cloud_sync_enabled = False
     monkeypatch.setattr(pc, '_get_conversation_obj', lambda *args, **kwargs: completed)
     monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', MagicMock(return_value=True))
-    jit_plan = SimpleNamespace(defer_derived_work=True)
-    monkeypatch.setattr(pc, 'resolve_authorized_first_open_plan', lambda **kwargs: jit_plan)
     return completed
 
 
@@ -618,7 +593,6 @@ async def test_finalizer_retry_after_minimum_persist_suppresses_intelligence(mon
         conv.status = ConversationStatus.completed
         doc['status'] = ConversationStatus.completed.value
         doc[field] = True
-        doc['jit_first_open'] = None
         return conv
 
     def receipt(*_args, **_kwargs):
@@ -686,119 +660,6 @@ def _memory_decision(pc, *, allowed: bool, reason: str, plan: Any = None):
         plan=plan,
         plan_resolved=plan is not None,
     )
-
-
-def _extract_memories_probe(monkeypatch, pc, *, suppression_on: bool, decision) -> MagicMock:
-    """Drive the real `extract_memories` down to (or past) the §1.8 gate."""
-    # A MagicMock result, not a SimpleNamespace: past the gate the real
-    # telemetry reads attributes this test does not care about, and the point
-    # here is only whether the extractor was reached.
-    inner = MagicMock(return_value=MagicMock(count=1, path='eager'))
-    monkeypatch.setattr(pc, '_extract_memories_inner', inner)
-    monkeypatch.setattr(pc, 'MemoryService', MagicMock())
-    monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: None)
-    monkeypatch.setattr(pc, 'free_tier_memory_suppression_enabled', _flag_double(suppression_on))
-    # The §1.8 gate's decision_for closure lives in utils.managed_compute, so
-    # its authorize seam patches there. The funding-owner resolution is not
-    # controlled by any stub in this file: managed_compute binds utils.byok's
-    # functions at its own import, and only the stubbed
-    # authorize_managed_compute (which ignores its funding_owner argument)
-    # matters for the verdict.
-    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', lambda *args, **kwargs: decision)
-    return inner
-
-
-def test_basic_uid_forms_no_managed_memory(monkeypatch, pc) -> None:
-    """Named proof (a): a finalized conversation on basic makes zero
-    memory-extraction provider-lane calls."""
-    inner = _extract_memories_probe(
-        monkeypatch,
-        pc,
-        suppression_on=True,
-        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
-    )
-    pc.extract_memories('basic-uid', _existing_desktop('basic-conv'))
-    inner.assert_not_called()
-
-
-def test_paid_uid_still_forms_memories_with_the_flag_on(monkeypatch, pc) -> None:
-    inner = _extract_memories_probe(
-        monkeypatch,
-        pc,
-        suppression_on=True,
-        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
-    )
-    pc.extract_memories('paid-uid', _existing_desktop('paid-conv'))
-    inner.assert_called_once()
-
-
-def test_flag_off_is_byte_identical_for_basic(monkeypatch, pc) -> None:
-    """Dark rollout: with the flag off, a basic uid extracts exactly as today —
-    the policy is not even consulted."""
-    consulted: list[str] = []
-    inner = _extract_memories_probe(
-        monkeypatch,
-        pc,
-        suppression_on=False,
-        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
-    )
-    monkeypatch.setattr(
-        pc,
-        'memory_formation_verdict',
-        lambda **kwargs: consulted.append('called') or pytest.fail('policy consulted with the flag off'),
-    )
-    pc.extract_memories('basic-uid', _existing_desktop('flag-off-conv'))
-    inner.assert_called_once()
-    assert consulted == []
-
-
-def test_sweep_owned_writer_still_short_circuits_before_the_plan_gate(monkeypatch, pc) -> None:
-    """The plan gate is a *second* early return in the same boundary, not a
-    replacement: a ledger-cutover account is still skipped for its own reason,
-    and the plan lookup never runs for it."""
-    inner = _extract_memories_probe(
-        monkeypatch,
-        pc,
-        suppression_on=True,
-        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
-    )
-    monkeypatch.setattr(pc, '_sweep_owned_writer_mode', lambda _uid: 'ledger')
-    asked: list[str] = []
-    monkeypatch.setattr(pc, 'memory_formation_verdict', lambda **kwargs: asked.append('asked'))
-    pc.extract_memories('ledger-uid', _existing_desktop('ledger-conv'))
-    inner.assert_not_called()
-    assert asked == [], 'the sweep-owned early return must win before any plan lookup'
-
-
-def test_replayed_finalization_of_a_suppressed_conversation_still_spends_nothing(monkeypatch, pc) -> None:
-    """S6's worst defect was request-scoped terminal state: a Cloud Task retry
-    re-ran memory extraction for a basic user. The gate must hold on replay."""
-    inner = _extract_memories_probe(
-        monkeypatch,
-        pc,
-        suppression_on=True,
-        decision=_memory_decision(pc, allowed=False, reason='basic_not_entitled', plan=PlanType.basic),
-    )
-    conversation = _existing_desktop('replayed-conv')
-    for _ in range(3):
-        pc.extract_memories('basic-uid', conversation)
-    inner.assert_not_called()
-
-
-def test_a_raising_plan_lookup_suppresses_instead_of_failing_finalization(monkeypatch, pc) -> None:
-    inner = _extract_memories_probe(
-        monkeypatch,
-        pc,
-        suppression_on=True,
-        decision=_memory_decision(pc, allowed=True, reason='plan_paid', plan=PlanType.unlimited),
-    )
-
-    def boom(*_args, **_kwargs):
-        raise RuntimeError('authorization exploded')
-
-    monkeypatch.setattr(managed_compute, 'authorize_managed_compute', boom)
-    pc.extract_memories('erroring-uid', _existing_desktop('erroring-conv'))
-    inner.assert_not_called()
 
 
 def _capture_all_persists(monkeypatch, pc, *, store: Any = None, path: Any = None) -> list[dict[str, Any]]:
@@ -972,7 +833,7 @@ def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted
 @pytest.mark.parametrize(
     'mode',
     [
-        'jit_processing',
+        'funded_processing',
         'completed_replay',
         'terminal_replay',
         'budget_waiting_replay',
@@ -985,14 +846,14 @@ def test_legacy_deferral_records_lazy_store_lifecycle(monkeypatch, pc, persisted
 async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, anyio_backend, mode, claim_status):
     """#21111: replay and suppressed intelligence still index behind the claim.
 
-    The processing case exercises the real JIT coordinator and deferred bundle.
-    Vector writes cannot consume or complete folder/apps obligation receipts.
+    The processing case exercises the current coordinator and deferred bundle.
+    Replay guards must prevent canonical work for budget-waiting captures.
     """
     del anyio_backend
     finalizer = load_module_fresh('utils.conversations.finalizer', _BACKEND / 'utils/conversations/finalizer.py')
     conversation = _existing_desktop('vector-conv')
     conversation.source = ConversationSource.omi
-    if mode == 'jit_processing':
+    if mode == 'funded_processing':
         conversation.status = ConversationStatus.processing
     row = {'id': conversation.id, 'status': conversation.status.value, 'source': 'omi'}
     if mode == 'terminal_replay':
@@ -1044,19 +905,16 @@ async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, 
     monkeypatch.setattr(pc, '_get_structured', lambda *a, **k: (conversation.structured, False))
     monkeypatch.setattr(pc, '_get_conversation_obj', lambda *a, **k: conversation)
     monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=True))
-    monkeypatch.setattr(pc, 'resolve_authorized_first_open_plan', lambda **k: SimpleNamespace(defer_derived_work=True))
-    initialize = MagicMock(return_value=True)
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', initialize)
     apps = MagicMock()
-    folders = MagicMock()
+    folders = MagicMock(return_value=[])
     submit = MagicMock()
     monkeypatch.setattr(pc, 'trigger_conversation_apps', apps)
     monkeypatch.setattr(pc.folders_db, 'get_folders', folders)
     monkeypatch.setattr(pc, 'submit_with_context', submit)
     monkeypatch.setattr(pc, '_extract_memories', MagicMock())
     monkeypatch.setattr(pc, '_save_action_items', MagicMock())
-    receipt = MagicMock()
-    monkeypatch.setattr(pc.conversations_db, 'complete_first_open_effect', receipt)
+    monkeypatch.setattr(pc, 'assign_conversation_to_folder', MagicMock(return_value=(None, 0.0, '')))
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *a, **k: False)
 
     result = await finalizer.finalize_persisted_conversation(
         'uid',
@@ -1075,23 +933,16 @@ async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, 
     if claim_status == 'claimed':
         expected.append('complete')
     assert events == expected
-    if mode == 'jit_processing':
-        initialize.assert_called_once_with('uid', conversation.id)
-    apps.assert_not_called()
-    folders.assert_not_called()
-    receipt.assert_not_called()
+    if mode == 'funded_processing' and claim_status == 'claimed':
+        apps.assert_called_once()
+        folders.assert_called_once_with('uid')
+    else:
+        apps.assert_not_called()
+        folders.assert_not_called()
     assert all(call.args[1] is not pc.save_structured_vector for call in submit.call_args_list)
-    if mode == 'terminal_replay':
+    if mode in {'terminal_replay', 'budget_waiting_replay'}:
         finalizer.extract_memories.assert_not_called()
         finalizer.trigger_external_integrations.assert_not_called()
-
-
-def _flag_double(answer):
-    def decide(uid):
-        assert uid
-        return answer
-
-    return decide
 
 
 def _load_finalizer():

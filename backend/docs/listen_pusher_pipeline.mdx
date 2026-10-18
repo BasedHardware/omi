@@ -647,7 +647,7 @@ utterances before longer ones.
 Realtime mentor dispatch validates `MENTOR_PIPELINE=cohort` locally before
 running `process_mentor_notification`, the shared paid/opt-in, buffering and
 debounce admission. Only when admission returns conversation messages does the
-cohort resolve the PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
+cohort resolve the independent PostHog flag: `proactivity_v2` true dispatches the v2 mentor;
 false, unknown or a flag error dispatches nothing (fail closed) — the legacy
 mentor lane was deleted after v2 reached 100%. Any other env value invokes
 neither path. The shared bounded flag cache, failure diagnostics and rollback
@@ -892,8 +892,9 @@ The finalizer writes summary vectors only after successful lifecycle persistence
 and a winning fanout claim, after smart-merge donor handling. It indexes every
 structured, non-discarded, non-deleted conversation it processes, including
 already-completed replays and rows whose intelligence bundle is suppressed.
-JIT deferral does not defer this write: `FIRST_OPEN_EFFECTS` remains folder
-assignment and app fanout only, and indexing does not mutate obligation receipts.
+A separate first-open processing path no longer defers this write; indexing
+runs in the normal conversation processing pass and does not mutate processing
+receipts.
 A persistence loss or losing fanout claim emits no vector or other canonical
 side effect. Completed fanout replays do not repeat the write.
 
@@ -1113,7 +1114,7 @@ the fanout claim is `claimed` and before duplicate-capture linking or any derive
 effect. `CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
 variable is unset or blank), `shadow` (decide and record, never merge) or `off`
 (the kill switch: one env read, no I/O; an unrecognized value also means `off`);
-`CONVERSATION_SMART_MERGE_UID_ALLOWLIST` optionally narrows the users.
+
 
 The candidate is the newest visible conversation of the same source created
 before this one, then the first row of the same device partition; a busy
@@ -1160,48 +1161,14 @@ read rows before planning or any write, so a discard committed between the
 decision and the absorb still rejects with the same reason. No flags or
 thresholds changed.
 
-`CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` (`off` default, `shadow`, `on`;
-unset/blank/unknown = `off`) relaxes the recorded/speech-gap window for one
-narrow case: two rows proven to be generations of the same client recording.
-Live creators stamp `external_data.recording_session_id` (per server rollover
-generation) and `external_data.recording_origin_id` (the client's stable
-recording id); proof requires both stamps nonempty on both rows plus equal
-origin ids — generation ids are never equated — and the usual source,
-device-partition and lock gates still apply. Under `on` the legacy gate runs
-first and the wall-clock path is rescue-only: a pair the legacy gate accepts
-keeps the exact legacy result (same reason, recorded and speech gaps, Jev
-state and metrics as `off`), and the wall-clock check runs only on a legacy
-skip. There the gap is `new.created_at` minus the newest fragment's own row
-`finished_at`,
-where "newest" is the maximum `finished_at` in the survivor's
-`smart_merge.fragments` ledger (the ledger stays on the drifted speech axis,
-so selection never trusts `started_at`). When that fragment is a donor
-tombstone rather than the survivor, its full row is read once at decision
-time — only when the rescue path actually runs — and re-read inside the
-absorb transaction — reusing the flatten ancestry
-read when possible — and the plan re-verifies lineage, wall times and span
-against that fresh row, so a mutation such as a moved `finished_at` is
-decided on the transaction's current data rather than the decision-time
-read. The absorb transaction re-applies the same union rule — legacy pass
-or wall-clock pass — so planning and the transaction cannot disagree.
-Gaps of `0..3600` s are eligible, negative or malformed wall times get
-the bounded `wallclock_gap_negative`/`wallclock_time_invalid` reasons, and
-the 3 h span cap is measured on `created_at`/`finished_at`. The existing
-`event=smart_merge` lines carry `gap_path=legacy` or `gap_path=wallclock`
-under `on` (absent otherwise): the decision-time keep line names the gate
-that admitted the pair at planning, while the absorb transaction's
-merged/kept lines name the gate that admitted it on the transaction's
-fresh rows. `shadow` keeps
-the legacy verdict but asks Jev once with corrected timing for proven pairs
-the legacy gate skipped, logging `event=smart_merge_wallclock_shadow` and
-counting `omi_conversation_smart_merge_wallclock_shadow_total`. The setting
-ships `off` in the shared base and `shadow` in both the dev and prod
-overlays on all six smart-merge hosts (`backend`, `backend-sync`,
-`backend-sync-backfill`, `backend-integration`, `backend-listen`,
-`pusher`). No timestamp computation changes: `started_at` still anchors
-rebasing and stored ledger fragments; only the decision-time gap and the
-Jev state endpoints use server wall times. No further timestamp behavior
-changes are intended here.
+For a pair proven to share a client recording, the wall-clock rescue now runs
+unconditionally when the legacy gate skips it. The legacy gate runs first and
+keeps its exact verdict when it accepts; otherwise the rescue uses the new row's
+`created_at` and newest fragment's own `finished_at`. The absorb transaction
+rechecks that same legacy-first decision on fresh rows. Existing smart-merge
+logs retain `gap_path=legacy|wallclock`; the shadow-only log and metric were
+removed. This admits about 800 additional merges per day fleet-wide. The
+`CONVERSATION_SMART_MERGE_MODE=off` kill switch still stops merging.
 
 A merge keeps the earlier conversation's id. One transaction appends the new
 transcript on the survivor's absolute timeline and turns the new row into the
@@ -1969,8 +1936,7 @@ once its transcript fixes a trusted content window), and the judge stores
 `visible_participant_names` and `screen_summary` on approved frame docs only.
 Tile names join the roster as
 `screen_activity` participants where no better source named them and each frame
-adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
-`MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED`, up to four frames (≤1024 px JPEG,
+adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; up to four frames (≤1024 px JPEG,
 6 s total GCS read budget) ride the notes call as image parts. Frame docs record
 `storage_bucket`; every host reads only docs whose bucket equals its own
 `BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
@@ -3914,37 +3880,15 @@ request. Per the owner decision of 2026-09-29 these switches ship enabled
 (default on) with kill switches back to legacy behavior. Current clients send
 visibility edges but do not renew a lease or opt into detail translation.
 
-### Jev population measurement (EXP-004)
+### Jev relevance control
 
-Conversation processing assigns stable per-conversation keep-all selection and
-otherwise uses the existing per-user Jev relevance ramp (`relevance_arm`).
-The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
-stays candidate-sampled. Existing live flags are dev-on, prod-off; dev pins
-relevance and universal owner live percentages to zero for shadow coverage.
-Owner percentage permits only 100 (everyone) or 0 (off); invalid/intermediate
-values fail closed. Malformed keep-all percentages select no conversations;
-malformed Jev percentages admit no Jev users. The ambiguous model tier can be
-policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
-rules, restores, calendar retention and plan gates retain their precedence.
-
-Both processing hosts submit advisory relevance/owner questions through
-`utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
-sample conversation IDs for relevance and conversation+full-scoring hashes for
-owner (candidate, speaker-labelled evidence/context, question owner name and
-pipeline subject metadata). Same text with different evidence remains distinct.
-Defaults are off, and Redis atomically dedupes these identities and caps
-daily calls (60000 per lane). Owner hash selection sees the complete eligible
-batch before submission and selects at most eight unique candidates; eight owner
-slots and two relevance slots bound queued/active work on a ten-worker pool. IO stays in the worker; slow or unavailable services drop measurement without
-changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
-are text-free and have a 60-day expiry. Owner records carry integer candidate
-position/population metadata: original extraction index and unique eligible
-scoring identities before percentage filtering and the cap. First-write-wins records preserve scores and expiry
-on retries; aborted concurrent commit losers count as `deduped` while preserving
-the transactional deletion fence. Late commits after a worker timeout are valid and counted once by
-(uid, document ID), separately from attempt metrics. Drops are coverage losses.
-The protocol and TTL deployment prerequisite
-are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).
+The ambiguous relevance tier uses Jev when the stable conversation bucket is
+below `CONVERSATION_RELEVANCE_JEV_PERCENT`. That percentage is the sole Jev
+relevance control; unset means 0, production remains at 100, and dev remains at
+0. Restores, deterministic rules, calendar retention, and plan gates keep their
+precedence. Owner flips, relevance shadows, keep-all, and keep-rescue were
+retired under David's 2026-10-18 rulings. Existing shadow records are not
+migrated or deleted and expire under their existing TTL. See [EXP-004 closure](experiments/EXP-004-jev-relevance-owner-ramp.md).
 
 ### Empty-title presentation and diagnosis
 
@@ -5182,21 +5126,6 @@ final-pass adapter receives existing words and does not add an STT request.
 No Nemotron cascade is routed. WAL pre-STT proof matching is unchanged; bounded
 coverage outcome/reason diagnostics now explain conservative abstention.
 
-### Default-off desktop call + pendant links
-
-`DESKTOP_PENDANT_CALL_LINK_MODE=off|shadow|on` adds a metadata-only path at the
-existing duplicate-capture finalizer seam, in either arrival order. A completed
-desktop `external_data.conversation_role=meeting` and same-owner `omi` capture
-need at least 30 seconds and 50% shorter-window overlap; complementary speech
-needs no text confirmation. One-to-one selection and transactional group fences
-preserve exclusions and prevent transitive bridging. Desktop is primary.
-`DESKTOP_PENDANT_CALL_LINK_PERCENT` selects a stable owner cohort under `on`;
-shadow observes everyone. Defaults ship `off`, with percentage 100 inert until
-mode changes. Grouped pendant continuations may join after normal smart-merge
-checks and Jev approval; genuine user edits stay protected. No transcripts or
-audio are combined. Rollout, rollback limits and the separate wall-clock shadow
-review are in [the runbook](runbooks/desktop-pendant-call-link.md).
-
 ### Repeat-work cuts (plan v3, default off)
 
 `PLAYBACK_ON_DEMAND_ENABLED=false` preserves eager playback warming. When enabled,
@@ -5929,6 +5858,7 @@ on from-segments/finalize/late-bind ingress and keeps ordinary cap deferral.
 Stored projections survive rollback and processor persists omit them so a stale
 worker cannot overwrite a newer ingress mutation. The old basic embed/eager gates,
 local-processing flag and UID cohort are retired; their env values have no effect.
-`FREE_TIER_EMERGENCY_STOP` and the remote `free-tier-kill-switch-v1` remain with
-surviving memory-suppression consumers. The remote stop also covers macOS local
-inference through its existing client adapter; it grants no cloud entitlement.
+Upstream retired memory suppression, leaving no backend cohort consumer;
+`FREE_TIER_EMERGENCY_STOP` and the unused backend control plane are retired too.
+The existing remote `free-tier-kill-switch-v1` still covers macOS local inference
+through its client adapter; it grants no cloud entitlement.

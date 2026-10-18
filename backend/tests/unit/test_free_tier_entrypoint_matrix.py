@@ -243,7 +243,6 @@ def test_capped_entrypoint_preserves_backlog_without_model_or_derived_work(
     assert result.client_processing == (projection if summary_enabled else None)
     assert payload['processing_deferred'] is True
     assert payload['terminal_no_derived_effects'] is True
-    assert payload['jit_first_open'] is None
     assert 'Untrusted local summary' not in str(payload['structured'])
     assert owned == [True] and runners == []
     assert dispositions == [pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]

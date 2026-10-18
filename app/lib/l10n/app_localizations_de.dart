@@ -2009,12 +2009,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get memoryHistory => 'Verlauf';
 
   @override
-  String get memoryAllowUse => 'Verwendung erlauben';
-
-  @override
-  String get memoryDontUse => 'Nicht verwenden';
-
-  @override
   String get undo => 'Rückgängig';
 
   @override
@@ -13268,6 +13262,19 @@ class AppLocalizationsDe extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Verbinde dein Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Kopple dein Omi, um deine Gespräche den ganzen Tag freihändig aufzuzeichnen.';
+
+  @override
+  String get firstCaptureConnect => 'Mein Omi verbinden';
+
+  @override
+  String get firstCaptureNoDevice => 'Ich habe noch kein Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13374,6 +13381,112 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Verpasse nie wieder ein Wort.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'So funktioniert Ihre kostenlose Testphase.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unbegrenzte Zusammenfassungen, für immer gespeichert';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Jedes Gespräch wird zu einer übersichtlichen Zusammenfassung mit nächsten Schritten, damit nichts vergessen wird.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Erstklassige Transkription';
+
+  @override
+  String get paywallTrialChipDetails => 'Erfasst mehr Details';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Unterscheidet Sprecher';
+
+  @override
+  String get paywallTrialChipNoise => 'Funktioniert in lauten Umgebungen';
+
+  @override
+  String get paywallTrialChipAccents => 'Versteht Akzente';
+
+  @override
+  String get paywallTrialChipJargon => 'Kennt Ihren Fachjargon und Namen';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Sprechernamen, automatisch erkannt';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unbegrenzte Fragen, in jedem Gespräch';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Entwerfen Sie eine Follow-up-E-Mail zu diesem Meeting.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Gibt es Konflikte mit dem, was John am Dienstag gesagt hat?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Finden Sie alles, was uns verlangsamen könnte.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funktioniert mit Ihren Lieblings-Apps';
+
+  @override
+  String get paywallTrialTodayTitle => 'Heute';
+
+  @override
+  String get paywallTrialTodayBody => 'Alles in Pro ist freigeschaltet.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days Tage kostenlos';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days Tage Omi Pro, auf uns.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'In $days Tagen';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Testphase endet. Ihnen wird der Betrag berechnet, wenn Sie nicht kündigen.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Die neuesten KI-Modelle';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Monatlich abgerechnet';
+
+  @override
+  String get paywallTrialBilledYearly => 'Jährlich abgerechnet';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Sparen Sie $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Starten für $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Mit dem kostenlosen Plan fortfahren';
+
+  @override
+  String get paywallTrialCancelNote => 'Jederzeit kündbar. Keine Gebühren, keine Strafen.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Ihre $days-tägige kostenlose Testversion von Omi Pro hat begonnen.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Jederzeit kündbar.';

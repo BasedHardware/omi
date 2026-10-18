@@ -76,7 +76,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.get_customer_firestore_client = lambda: client_mod.db
     client_mod.run_transactional = lambda client, operation: operation(client.transaction())
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
-    # memory_apply_store, jit_proactivity_store, and screen/frame sync import
+    # memory_apply_store and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
     # Default it to the same stub client so callers that never set
     # OMI_FIRESTORE_DATA_PLANE_PROJECT see identical behavior under test too.
@@ -216,7 +216,6 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     usage_tracker_mod = types.ModuleType("utils.llm.usage_tracker")
     usage_tracker_mod.track_usage = lambda *args, **kwargs: None
-    # jev_shadow sets a dedicated shadow-lane context around ask_jev; the stub
     # must accept the token-based setters without touching real contextvars.
     usage_tracker_mod.set_usage_context = lambda *args, **kwargs: object()
     usage_tracker_mod.reset_usage_context = lambda *args, **kwargs: None

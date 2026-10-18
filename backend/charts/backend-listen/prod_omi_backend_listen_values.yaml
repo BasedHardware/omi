@@ -245,8 +245,6 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
-    value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
@@ -255,10 +253,6 @@ env:
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
-  - name: DESKTOP_PENDANT_CALL_LINK_MODE
-    value: "shadow"
-  - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
-    value: "100"
   # Keep these aligned with the production GitHub environment variables used
   # by the Cloud Run backend; api.omi.me is served by backend-listen.
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
@@ -269,8 +263,6 @@ env:
     value: "https://omi.me"
   - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
     value: "true"
-  - name: FREE_TIER_EMERGENCY_STOP
-    value: "false"
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
@@ -350,34 +342,14 @@ env:
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
     value: "true"
-  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
-    value: "true"
-  - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "true"
-  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
-    value: "true"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
     value: "25"
-  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
-    value: "100"
-  - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
-    value: "100"
-  - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
-    value: "0"
-  - name: CONVERSATION_RELEVANCE_JEV_RESCUE
-    value: "shadow"
-  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
-    value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_PERCENT
     value: "100"
   - name: NOTES_TIER_ESCALATION_ENABLED
     value: 'true'
-  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
-    value: "60000"
-  - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
-    value: "60000"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
@@ -401,10 +373,6 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
     value: "on"
-  - name: MEMORY_BELIEF_MODEL_ENABLED
-    value: "false"
-  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
-    value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:

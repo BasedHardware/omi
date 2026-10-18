@@ -293,7 +293,6 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch):
         'shutdown_sync_metrics': metrics.shutdown_sync_metrics,
         'close_all_clients': AsyncMock(),
         'close_posthog_control_plane': Mock(),
-        'close_free_tier_control_plane': Mock(),
         'stop_metrics_sidecar_server': Mock(),
     }
     exec(compile(ast.Module(body=[handler], type_ignores=[]), str(main_path), 'exec'), namespace)

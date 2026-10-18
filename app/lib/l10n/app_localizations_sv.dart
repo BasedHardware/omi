@@ -1993,12 +1993,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
-  String get memoryAllowUse => 'Tillåt användning';
-
-  @override
-  String get memoryDontUse => 'Använd inte';
-
-  @override
   String get undo => 'Ångra';
 
   @override
@@ -13174,6 +13168,19 @@ class AppLocalizationsSv extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Anslut din Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Parkoppla din Omi så spelar den in dina konversationer handsfree, hela dagen.';
+
+  @override
+  String get firstCaptureConnect => 'Anslut min Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Jag har ingen Omi än';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13280,6 +13287,112 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Missa aldrig ett ord igen.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Så fungerar din gratis provperiod.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Obegränsade sammanfattningar, sparade för alltid';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Varje konversation blir en tydlig sammanfattning med nästa steg, så inget missas.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Transkribering i toppklass';
+
+  @override
+  String get paywallTrialChipDetails => 'Fångar fler detaljer';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Skiljer på talare';
+
+  @override
+  String get paywallTrialChipNoise => 'Fungerar i bullriga rum';
+
+  @override
+  String get paywallTrialChipAccents => 'Hantera accenter';
+
+  @override
+  String get paywallTrialChipJargon => 'Känner till din jargong och namn';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Talarnamn, identifieras automatiskt';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Obegränsade frågor, i varje konversation';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Skapa ett uppföljningsmejl från det här mötet.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Några konflikter med vad John sa i tisdags?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Hitta allt som kan bromsa oss.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Fungerar med dina favoritappar';
+
+  @override
+  String get paywallTrialTodayTitle => 'Idag';
+
+  @override
+  String get paywallTrialTodayBody => 'Allt i Pro är upplåst.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days dagar gratis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days dagar med Omi Pro, på oss.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Om $days dagar';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Provperioden avslutas. Du debiteras om du inte avbryter.';
+
+  @override
+  String get paywallTrialFeatureModels => 'De senaste AI-modellerna';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Obegränsad Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Debiteras månadsvis';
+
+  @override
+  String get paywallTrialBilledYearly => 'Debiteras årligen';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Spara $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Starta för $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Fortsätt med gratisplanen';
+
+  @override
+  String get paywallTrialCancelNote => 'Avbryt när som helst. Inga avgifter, inga påföljder.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Din $days-dagars gratis provperiod av Omi Pro har startat.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Avsluta när som helst.';

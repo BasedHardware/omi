@@ -1991,12 +1991,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistory => 'Riwayat';
 
   @override
-  String get memoryAllowUse => 'Izinkan penggunaan';
-
-  @override
-  String get memoryDontUse => 'Jangan gunakan';
-
-  @override
   String get undo => 'Batalkan';
 
   @override
@@ -13179,6 +13173,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Hubungkan Omi Anda';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Pasangkan Omi Anda, Omi merekam percakapan Anda bebas genggam, sepanjang hari.';
+
+  @override
+  String get firstCaptureConnect => 'Hubungkan Omi saya';
+
+  @override
+  String get firstCaptureNoDevice => 'Saya belum punya Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13285,6 +13292,112 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Jangan pernah melewatkan satu kata pun lagi.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Begini cara kerja uji coba gratis Anda.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited ringkasan, disimpan selamanya';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Setiap percakapan menjadi ringkasan yang rapi dengan langkah selanjutnya, agar tidak ada yang terlewat.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Transkripsi terbaik di kelasnya';
+
+  @override
+  String get paywallTrialChipDetails => 'Menangkap lebih banyak detail';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Membedakan pembicara';
+
+  @override
+  String get paywallTrialChipNoise => 'Berfungsi di ruangan bising';
+
+  @override
+  String get paywallTrialChipAccents => 'Menangani aksen';
+
+  @override
+  String get paywallTrialChipJargon => 'Memahami jargon dan nama Anda';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Nama pembicara, terdeteksi otomatis';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Unlimited pertanyaan, di setiap percakapan';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Buat draf email tindak lanjut dari rapat ini.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Ada konflik dengan apa yang John katakan pada hari Selasa?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Temukan apa pun yang bisa memperlambat kita.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Berfungsi dengan aplikasi favorit Anda';
+
+  @override
+  String get paywallTrialTodayTitle => 'Hari Ini';
+
+  @override
+  String get paywallTrialTodayBody => 'Semua fitur di Pro terbuka.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days hari gratis';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days hari Omi Pro, dari kami.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'Dalam $days hari';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Uji coba berakhir. Anda akan dikenakan biaya kecuali Anda membatalkan.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Model AI terbaru';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Ditagih bulanan';
+
+  @override
+  String get paywallTrialBilledYearly => 'Ditagih tahunan';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Hemat $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Mulai dengan $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Lanjutkan dengan paket gratis';
+
+  @override
+  String get paywallTrialCancelNote => 'Batalkan kapan saja. Tanpa biaya, tanpa penalti.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Uji coba gratis $days hari Omi Pro Anda telah dimulai.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Batalkan kapan saja.';

@@ -120,23 +120,11 @@ class Memory {
   final bool intentBacked;
   final int curationWeight;
 
-  /// Server-owned auxiliary state.  In particular, `memory_use.suppressed`
-  /// records an owner's explicit use decision.  Keep the bag intact so an
-  /// owner can inspect history and a retry can converge on the server state.
+  /// Server-owned auxiliary state is retained for forward-compatible decoding.
   Map<String, dynamic>? arguments;
   final Map<String, dynamic> triggerCondition;
   final String? writeReason;
   final List<Map<String, dynamic>> evidence;
-
-  /// Server-assessed temporal evidence. These fields are optional so an older
-  /// response remains decodable, but absence must never be treated as a
-  /// currentness assertion.
-  final DateTime? asOf;
-  final String? beliefClass;
-  final double? currency;
-  final String? currencyBand;
-  final double? halfLifeDays;
-  final DateTime? beliefComputedAt;
 
   Memory({
     required this.id,
@@ -178,60 +166,14 @@ class Memory {
     this.triggerCondition = const {},
     this.writeReason,
     this.evidence = const [],
-    this.asOf,
-    this.beliefClass,
-    this.currency,
-    this.currencyBand,
-    this.halfLifeDays,
-    this.beliefComputedAt,
   });
-
-  /// True when the response carries an assessment made at a known time.
-  /// Older clients/backends may omit this marker; those rows remain usable as
-  /// legacy records but are never presented as freshly assessed current facts.
-  bool get hasCurrencyAssessment => beliefComputedAt != null;
-
-  /// Unknown assessment is distinct from a deliberately non-decaying record.
-  /// The backend represents it with an assessment timestamp but no currency
-  /// value/band, so clients do not reimplement the decay formula.
-  bool get hasUnknownCurrency =>
-      hasCurrencyAssessment && currency == null && (currencyBand == null || currencyBand == 'unknown');
-
-  /// A client must only use the server's band. Missing assessment metadata is
-  /// intentionally false; it is a compatibility/legacy state, not currentness.
-  bool get isCurrentForUse {
-    if (!hasCurrencyAssessment || deleted || isHistoricalKnowledgeLedgerRow) {
-      return false;
-    }
-    return hasUnknownCurrency || currencyBand == 'current' || currencyBand == 'fading';
-  }
 
   /// Rows without a server assessment stay visible in the useful-now list so
   /// an older response cannot make memories disappear. They are rendered as
   /// unassessed and are not eligible for current claims or proactive use.
   /// A deleted row never re-enters the list, even when a legacy or cached row
   /// predates assessments entirely.
-  bool get isUsefulNow {
-    if (isHistoricalKnowledgeLedgerRow) return false;
-    return !deleted && (!hasCurrencyAssessment || isCurrentForUse);
-  }
-
-  /// Whether the owner has explicitly suppressed this memory from agent use.
-  /// A null result means the server has not recorded a use decision yet.
-  bool? get memoryUseSuppressed {
-    final use = arguments?['memory_use'];
-    if (use is! Map) return null;
-    final suppressed = use['suppressed'];
-    return suppressed is bool ? suppressed : null;
-  }
-
-  /// The last server-recorded memory-use action, if present.
-  String? get memoryUseAction {
-    final use = arguments?['memory_use'];
-    if (use is! Map) return null;
-    final action = use['last_action'] ?? use['state'];
-    return action is String ? action : null;
-  }
+  bool get isUsefulNow => !deleted && !isHistoricalKnowledgeLedgerRow;
 
   static DateTime? _parseOptionalDateTime(Object? value) {
     if (value is DateTime) return value;
@@ -324,12 +266,6 @@ class Memory {
       triggerCondition: generated.triggerCondition ?? const {},
       writeReason: generated.writeReason,
       evidence: generated.evidence?.map((item) => item.toJson()).toList(growable: false) ?? const [],
-      asOf: generated.asOf,
-      beliefClass: generated.beliefClass,
-      currency: generated.currency,
-      currencyBand: generated.currencyBand,
-      halfLifeDays: generated.halfLifeDays,
-      beliefComputedAt: generated.beliefComputedAt ?? _parseOptionalDateTime(json['belief_computed_at']),
     );
   }
 
@@ -371,12 +307,6 @@ class Memory {
       if (triggerCondition.isNotEmpty) 'trigger_condition': triggerCondition,
       if (writeReason != null) 'write_reason': writeReason,
       if (evidence.isNotEmpty) 'evidence': evidence,
-      if (asOf != null) 'as_of': asOf!.toUtc().toIso8601String(),
-      if (beliefClass != null) 'belief_class': beliefClass,
-      if (currency != null) 'currency': currency,
-      if (currencyBand != null) 'currency_band': currencyBand,
-      if (halfLifeDays != null) 'half_life_days': halfLifeDays,
-      if (beliefComputedAt != null) 'belief_computed_at': beliefComputedAt!.toUtc().toIso8601String(),
       if (layerIsExplicit && layer != null) 'layer': layer!.apiValue,
     };
   }

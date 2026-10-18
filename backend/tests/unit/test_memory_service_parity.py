@@ -257,33 +257,11 @@ def test_manual_memory_without_route_capability_stays_on_external_contract(servi
         memory_system=service_mod.MemorySystem.CANONICAL,
         consumer="internal-test",
         operation="create",
-        direct_user_authority=None,
     )
 
     assert result is memory_db
     compatibility_result.assert_called_once()
     direct_result.assert_not_called()
-
-
-def test_direct_user_ledger_admission_requires_fresh_ingress_and_ledger_mode(monkeypatch, service_mod):
-    service = service_mod.MemoryService(db_client=_FirestoreFake())
-    authority = object()
-    calls = []
-    monkeypatch.setattr(service_mod, "is_direct_user_write_authority", lambda value: value is authority)
-
-    def resolve(uid, *, stage, force_refresh):
-        calls.append((uid, stage, force_refresh))
-        return SimpleNamespace(permits_work=True)
-
-    monkeypatch.setattr(service_mod, "resolve_jit_rollout_sync", resolve)
-    monkeypatch.setattr(
-        service_mod,
-        "ensure_canonical_apply_control_state",
-        lambda uid, *, db_client: SimpleNamespace(writer_mode=service_mod.WriterMode.ledger),
-    )
-
-    assert service._direct_user_ledger_admitted("uid-test", authority) is True
-    assert calls == [("uid-test", service_mod.JITDecisionStage.INGRESS, True)]
 
 
 def test_canonical_backend_preserves_released_adapter_signatures(service_mod):

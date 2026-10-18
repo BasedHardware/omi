@@ -23,3 +23,24 @@ def test_retired_environment_cannot_control_summary_acceptance(monkeypatch, valu
     ):
         monkeypatch.setenv(key, value)
     assert client_summaries_at_cap_enabled()
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_summary_acceptance_is_default_on_on_every_finalization_host(environment):
+    from pathlib import Path
+    import yaml
+
+    manifest = yaml.load(
+        (Path(__file__).resolve().parents[2] / 'deploy/runtime_env.yaml').read_text(),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
+    config = manifest['environments'][environment]
+    hosts = [
+        config['gke']['backend-listen'],
+        config['gke']['pusher'],
+        *config['cloud_run']['services'].values(),
+        config['desktop_backend'],
+    ]
+    for host in hosts:
+        assert host['env']['CLIENT_SUMMARIES_AT_CAP_ENABLED']['value'] == 'true'
+        assert 'FREE_TIER_EMERGENCY_STOP' not in host['env']

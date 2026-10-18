@@ -237,7 +237,8 @@ Installed-app tools occupy the existing entitled/connected lane. Adapters regist
 tools through `Adapter.tools(sink)`; future workspace tools can join the entitled input.
 A name collision with a different implementation is an error, never silent replacement.
 Channel turns have no live device callback and omit device tools. The enabled app surface
-retains declared device tools. Existing tool-level JIT/privacy/entitlement gates still apply.
+retains declared device tools. Existing per-invocation privacy and entitlement
+checks still apply.
 
 One immutable `ToolProjection.registry` supplies schemas and `_execute_tool` authority.
 The harness test advertises a surface-only tool, scripts its provider call through the real

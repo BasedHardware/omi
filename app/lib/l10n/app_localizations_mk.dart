@@ -1997,12 +1997,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
-  String get memoryAllowUse => 'Дозволи употреба';
-
-  @override
-  String get memoryDontUse => 'Не користи';
-
-  @override
   String get undo => 'Врати';
 
   @override
@@ -13230,6 +13224,19 @@ class AppLocalizationsMk extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Поврзете го вашиот Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Спарете го вашиот Omi и тој ќе ги снима вашите разговори без раце, цел ден.';
+
+  @override
+  String get firstCaptureConnect => 'Поврзи го мојот Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Сè уште немам Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
@@ -13336,6 +13343,112 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'Никогаш повеќе не пропуштајте ниту збор.';
+
+  @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Еве како функционира вашиот бесплатен пробен период.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Неограничени резимеа, зачувани засекогаш';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Секој разговор станува чисто резиме со следни чекори, за ништо да не се пропушти.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Најдобра транскрипција во класата';
+
+  @override
+  String get paywallTrialChipDetails => 'Фаќа повеќе детали';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Разликува говорници';
+
+  @override
+  String get paywallTrialChipNoise => 'Работи во бучни простории';
+
+  @override
+  String get paywallTrialChipAccents => 'Се справува со акценти';
+
+  @override
+  String get paywallTrialChipJargon => 'Ги знае вашиот жаргон и имиња';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Имиња на говорници, автоматски детектирани';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Неограничени прашања, низ секој разговор';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Напишете follow-up е-пошта од овој состанок.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Има ли конфликти со она што Џон го кажа во вторник?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Најдете сè што може да нè забави.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Работи со вашите омилени апликации';
+
+  @override
+  String get paywallTrialTodayTitle => 'Денес';
+
+  @override
+  String get paywallTrialTodayBody => 'Сè во Pro е отклучено.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days дена бесплатно';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days дена Omi Pro, од нас.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'За $days дена';
+  }
+
+  @override
+  String get paywallTrialEndsBody => 'Пробниот период завршува. Ќе ви биде наплатено освен ако не откажете.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Најновите AI модели';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Неограничен Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Се наплаќа месечно';
+
+  @override
+  String get paywallTrialBilledYearly => 'Се наплаќа годишно';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Заштедете $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Започнете за $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Продолжете со бесплатниот план';
+
+  @override
+  String get paywallTrialCancelNote => 'Откажете во секое време. Без надоместоци, без казни.';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return 'Вашиот $days-дневен бесплатен пробен период на Omi Pro започна.';
+  }
 
   @override
   String get paywallCancelAnytime => 'Откажете во секое време.';

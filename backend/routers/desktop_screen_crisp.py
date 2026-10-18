@@ -14,7 +14,6 @@ from database.screen_activity import (
 from database.vector_db import upsert_screen_activity_vectors
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.executors import db_executor, run_blocking
-from utils.jit_rollout import JITDecisionStage
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -189,10 +188,7 @@ async def sync_screen_activity(
         # the per-uid coalescer and hammer the control plane once per device
         # per minute. Frame-request delivery is metadata-only; the paid
         # boundaries downstream re-resolve with force_refresh themselves.
-        decision = await resolve_frame_request_authority(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-        )
+        decision = await resolve_frame_request_authority(uid)
         if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
             try:
                 await _timed_phase(

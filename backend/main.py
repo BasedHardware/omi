@@ -67,7 +67,6 @@ from routers import (
     conversations,
     conversation_mutations,
     memories,
-    memory_use,
     api_key_management,
     mcp,
     mcp_sse,
@@ -117,6 +116,7 @@ from routers import (
     desktop_realtime,
     desktop_screen_crisp,
     frame_requests,
+    retired_app_client_contracts,
     referrals,
     desktop_tts_updates,
     scores,
@@ -130,9 +130,7 @@ from routers import (
     commitment_followup,
     public_shared_conversation_chat,
     screen_frames,
-    jit_ledger_snapshot,
     csat,
-    jit_rollout,
     email_preferences,
     mobile_feedback,
     device_diagnostics,
@@ -144,8 +142,6 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
-from utils.jit_rollout import close_posthog_control_plane
-from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.observability.sync_phases import shutdown_sync_metrics
 from utils.executors import (
@@ -226,8 +222,6 @@ app.add_middleware(
         'X-Omi-Next-Cursor',
         'X-Next-Cursor',
         'X-Scan-Truncated',
-        'X-Omi-Memory-As-Of',
-        'X-Omi-Memory-Belief-Enabled',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
         'X-Omi-Memory-Default-Delete-Supported',
         'X-Omi-Memory-Device-Scope-Supported',
@@ -266,7 +260,6 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
-app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(chat_receipts.router)
 app.include_router(speech_profile.router)
@@ -338,8 +331,6 @@ app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
 app.include_router(task_recommendations.router)
-app.include_router(jit_ledger_snapshot.router)
-app.include_router(jit_rollout.router)
 app.include_router(desktop_core.router)
 app.include_router(desktop_agent_vm.router)
 app.include_router(desktop_chat.router)
@@ -348,10 +339,10 @@ app.include_router(desktop_task_gate.router)
 app.include_router(desktop_realtime.router)
 app.include_router(desktop_screen_crisp.router)
 app.include_router(frame_requests.router)
+app.include_router(retired_app_client_contracts.router)
 app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
 app.include_router(review.router)
-jit_rollout.validate_jit_rollout_contract(app)
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
@@ -700,8 +691,7 @@ async def shutdown_event():
     await shutdown_managed_spend_ledger()
     await shutdown_sync_metrics()
     await close_all_clients()
-    close_posthog_control_plane()
-    close_free_tier_control_plane()
+
     stop_metrics_sidecar_server()
 
 
