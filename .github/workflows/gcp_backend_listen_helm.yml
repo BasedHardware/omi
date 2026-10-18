@@ -444,7 +444,10 @@ jobs:
   deploy-neg-coverage-exporter:
     name: Deploy NEG coverage exporter
     needs: helm-upgrade
-    if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}
+    # The tag output is emitted only by the explicit deploy resolver; rollback
+    # and kept-tag paths leave it empty. `needs` also requires the listen job
+    # (including its readiness gate and rollout verification) to succeed.
+    if: ${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}
     environment: prod
     permissions:
       contents: 'read'
