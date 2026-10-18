@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db, get_firestore_client
@@ -36,6 +37,15 @@ from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
 DESKTOP_DAILY_USAGE_COLLECTION = 'desktop_daily_usage'
+
+
+def _require_id(value: Any, field: str) -> str:
+    """Reject empty/whitespace/non-string identifiers before path building."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f'{field} must be a non-empty string')
+    return value.strip()
+
+
 DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
     'watching_seconds',
     'listening_seconds',
@@ -92,6 +102,8 @@ def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
 
     A date with no usage documents returns every counter as zero.
     """
+    uid = _require_id(uid, 'uid')
+    date = _require_id(date, 'date')
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', date))
     totals = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
@@ -117,10 +129,14 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     Returns:
         The summary ID
     """
+    uid = _require_id(uid, 'uid')
+    summary_id = summary_data.get('id')
+    if not isinstance(summary_id, str) or not summary_id.strip():
+        raise ValueError('summary_data must carry a non-empty id')
     user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
-    summary_ref.set(summary_data)
-    return summary_data['id']
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id.strip())
+    summary_ref.set(summary_data, merge=True)
+    return summary_id
 
 
 def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
@@ -134,6 +150,8 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
+    uid = _require_id(uid, 'uid')
+    summary_id = _require_id(summary_id, 'summary_id')
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     doc = summary_ref.get()
@@ -155,6 +173,8 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
+    uid = _require_id(uid, 'uid')
+    date = _require_id(date, 'date')
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).where(filter=FieldFilter('date', '==', date)).limit(1)
 
@@ -185,6 +205,7 @@ def get_daily_summaries(
     Returns:
         List of summary data dicts
     """
+    uid = _require_id(uid, 'uid')
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION)
 
@@ -212,6 +233,8 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     contents of the summary the user is looking at instead of spawning a
     duplicate doc for the same date.
     """
+    uid = _require_id(uid, 'uid')
+    summary_id = _require_id(summary_id, 'summary_id')
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     # Force id back to the existing doc id: the generator always allocates a
@@ -227,6 +250,8 @@ def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestor
     Patch only delivery metadata, preserving concurrent edits to the recap.
     A tokenless recap also completes push handling without sending anything.
     """
+    uid = _require_id(uid, 'uid')
+    summary_id = _require_id(summary_id, 'summary_id')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     summary_ref = client.collection('users').document(uid).collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.update({'notification_delivery_completed': True})
@@ -243,17 +268,29 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     Returns:
         True if deleted successfully
     """
+    uid = _require_id(uid, 'uid')
+    summary_id = _require_id(summary_id, 'summary_id')
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.delete()
+    try:
+        summary_ref.delete()
+    except NotFound:
+        return False
     redis_db.remove_daily_summary_to_uid(summary_id)
     return True
 
 
-def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
+def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> bool:
+    uid = _require_id(uid, 'uid')
+    summary_id = _require_id(summary_id, 'summary_id')
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.update({'visibility': visibility})
+    try:
+        summary_ref.update({'visibility': visibility})
+    except NotFound:
+        # Concurrent prune — the row is gone; reporting "not updated" is honest.
+        return False
+    return True
 
 
 def get_summaries_count(uid: str) -> int:
@@ -266,6 +303,7 @@ def get_summaries_count(uid: str) -> int:
     Returns:
         Count of summaries
     """
+    uid = _require_id(uid, 'uid')
     user_ref = db.collection('users').document(uid)
     count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
     result = count_query.get()
