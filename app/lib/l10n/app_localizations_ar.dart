@@ -9263,6 +9263,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'انتقل إلى $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count أخرى';
+  }
+
+  @override
   String get jumpToLatestMessage => 'الانتقال إلى أحدث رسالة';
 
   @override

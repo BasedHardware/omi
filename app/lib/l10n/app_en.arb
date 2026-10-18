@@ -11105,6 +11105,24 @@
     "@deviceOnboardingIntroDuration": {
         "description": "Onboarding intro screen estimated duration hint"
     },
+    "quoteJumpToTime": "Jump to {duration}",
+    "@quoteJumpToTime": {
+        "description": "Accessibility label for a supporting transcript timestamp; duration uses localized time units",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "quoteMoreTimestamps": "+{count} more",
+    "@quoteMoreTimestamps": {
+        "description": "Expand the remaining supporting transcript timestamps in this summary section",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "jumpToLatestMessage": "Jump to latest message",
     "@jumpToLatestMessage": {
         "description": "Accessibility label and tooltip for the jump-to-latest button in chat"

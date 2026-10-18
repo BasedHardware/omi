@@ -9322,6 +9322,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Chuyển đến $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count nữa';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
 
   @override

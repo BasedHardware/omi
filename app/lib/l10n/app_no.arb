@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Bli kjent med din Omi",
     "deviceOnboardingIntroSubtitle": "Prøv live transkripsjon, å stille et spørsmål og snarveien med dobbelttrykk.",
     "deviceOnboardingIntroDuration": "Cirka 1 minutt",
+    "quoteJumpToTime": "Gå til {duration}",
+    "quoteMoreTimestamps": "+{count} til",
     "jumpToLatestMessage": "Gå til nyeste melding",
     "latest": "Nyeste",
     "flashFirmware": "Flash fastvare",

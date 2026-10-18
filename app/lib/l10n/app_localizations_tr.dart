@@ -9331,6 +9331,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$duration konumuna git';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count daha';
+  }
+
+  @override
   String get jumpToLatestMessage => 'En son mesaja git';
 
   @override

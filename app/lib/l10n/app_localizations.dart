@@ -17379,6 +17379,18 @@ abstract class AppLocalizations {
   /// **'About 1 minute'**
   String get deviceOnboardingIntroDuration;
 
+  /// Accessibility label for a supporting transcript timestamp; duration uses localized time units
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to {duration}'**
+  String quoteJumpToTime(String duration);
+
+  /// Expand the remaining supporting transcript timestamps in this summary section
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more'**
+  String quoteMoreTimestamps(int count);
+
   /// Accessibility label and tooltip for the jump-to-latest button in chat
   ///
   /// In en, this message translates to:

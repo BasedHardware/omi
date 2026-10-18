@@ -2998,6 +2998,8 @@
     "deviceOnboardingIntroTitle": "Lerne dein Omi kennen",
     "deviceOnboardingIntroSubtitle": "Probiere Live-Transkription, Fragen stellen und die Doppeltipp-Verknüpfung aus.",
     "deviceOnboardingIntroDuration": "Etwa 1 Minute",
+    "quoteJumpToTime": "Zu {duration} springen",
+    "quoteMoreTimestamps": "+{count} weitere",
     "jumpToLatestMessage": "Zur neuesten Nachricht springen",
     "latest": "Neueste",
     "flashFirmware": "Firmware flashen",

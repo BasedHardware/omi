@@ -71,7 +71,103 @@ Future<void> _pumpSummary(
 }
 
 void main() {
-  testWidgets('typed section chips navigate and highlight through the existing transcript controller', (tester) async {
+  testWidgets('timestamps use real starts and expand independently per section', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final starts = [42.9, 312.0, 460.0, 3912.0, 3600.0];
+    final conversation = _conversationWithSections(transcriptSegments: [
+      for (var i = 0; i < starts.length; i++)
+        TranscriptSegment(
+            id: 's$i',
+            text: 'Source $i',
+            speaker: null,
+            isUser: false,
+            personId: null,
+            start: starts[i],
+            end: starts[i] + 1,
+            translations: []),
+    ]);
+    conversation.structured.sections = [
+      for (final heading in ['Main', 'Other'])
+        Section(
+            heading: heading, bodyMarkdown: 'Body', sourceSegmentIds: ['missing', 's0', 's1', 's2', 's3', 's4', 's0']),
+    ];
+    final opened = <String>[];
+    await _pumpSummary(tester, conversation, onOpenSource: opened.add);
+    expect(find.text('0:42'), findsNWidgets(2));
+    expect(find.text('5:12'), findsNWidgets(2));
+    expect(find.text('7:40'), findsNWidgets(2));
+    expect(find.text('1:05:12'), findsNothing);
+    expect(find.text('+2 more'), findsNWidgets(2));
+    await tester.tap(find.text('+2 more').first);
+    await tester.pump();
+    expect(find.text('+2 more'), findsOneWidget);
+    expect(find.text('1:00:00'), findsOneWidget);
+    expect(find.text('1:05:12'), findsOneWidget);
+    await tester.tap(find.text('1:05:12'));
+    expect(opened, ['s3']);
+    expect(find.bySemanticsLabel('Jump to 5 mins 12 secs'), findsNWidgets(2));
+    semantics.dispose();
+  });
+
+  testWidgets('unresolvable sources render no timestamp row', (tester) async {
+    final conversation = _conversationWithSections();
+    conversation.structured.sections = [
+      const Section(heading: 'Missing', bodyMarkdown: 'Body', sourceSegmentIds: ['missing']),
+    ];
+    await _pumpSummary(tester, conversation, onOpenSource: (_) => fail('No source should open'));
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    expect(find.byKey(const ValueKey('quote-times-more')), findsNothing);
+  });
+
+  testWidgets('an absent transcript ID cannot resolve an empty source ID', (tester) async {
+    final segment = TranscriptSegment.fromJson({
+      'text': 'Missing identity',
+      'is_user': false,
+      'start': 42.0,
+      'end': 43.0,
+    });
+    expect(segment.id, '');
+    final conversation = _conversationWithSections(transcriptSegments: [segment]);
+    conversation.structured.sections = [
+      const Section(heading: 'Missing', bodyMarkdown: 'Body', sourceSegmentIds: ['']),
+    ];
+    await _pumpSummary(tester, conversation, onOpenSource: (_) => fail('No source should open'));
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    expect(find.text('0:42'), findsNothing);
+    expect(find.byKey(const ValueKey('quote-time-')), findsNothing);
+    expect(find.byKey(const ValueKey('quote-times-more')), findsNothing);
+  });
+
+  testWidgets('hour timestamps speak singular hours and seconds precisely', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final conversation = _conversationWithSections(transcriptSegments: [
+        for (final start in [3600.0, 3601.0])
+          TranscriptSegment(
+              id: '$start',
+              text: 'Evidence',
+              speaker: null,
+              isUser: false,
+              personId: null,
+              start: start,
+              end: start + 1,
+              translations: []),
+      ]);
+      conversation.structured.sections = [
+        const Section(heading: 'Hour', bodyMarkdown: 'Body', sourceSegmentIds: ['3600.0', '3601.0']),
+      ];
+      await _pumpSummary(tester, conversation, onOpenSource: (_) {});
+      expect(find.text('1:00:00'), findsOneWidget);
+      expect(find.text('1:00:01'), findsOneWidget);
+      expect(find.bySemanticsLabel('Jump to 1 hour, 0 mins, 0 secs'), findsOneWidget);
+      expect(find.bySemanticsLabel('Jump to 1 hour, 0 mins, 1 sec'), findsOneWidget);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('typed section timestamps navigate and highlight through the existing transcript controller',
+      (tester) async {
     final conversation = _conversationWithSections(transcriptSegments: [
       TranscriptSegment(
           id: 's1', text: 'Approved', speaker: null, isUser: false, personId: null, start: 3, end: 5, translations: [])
@@ -89,9 +185,9 @@ void main() {
       final segment = conversation.transcriptSegments.singleWhere((segment) => segment.id == id);
       controller.seek(segment.start, strict: true);
     });
-    expect(find.byKey(const ValueKey('note-source-0-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey('note-source-1-0')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('note-source-0-0')));
+    expect(find.byKey(const ValueKey('quote-time-s1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('quote-time-missing')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('quote-time-s1')));
     await tester.pump();
     expect(controller.highlightedSegment.value, 's1');
     expect(controller.followTargetSegmentId, 's1');

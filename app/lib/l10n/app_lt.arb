@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Susipažinkite su savo Omi",
     "deviceOnboardingIntroSubtitle": "Išbandykite tiesioginį transkribavimą, klausimo uždavimą ir dvigubo palietimo spartųjį veiksmą.",
     "deviceOnboardingIntroDuration": "Maždaug 1 minutė",
+    "quoteJumpToTime": "Pereiti į {duration}",
+    "quoteMoreTimestamps": "+ dar {count}",
     "jumpToLatestMessage": "Peršokti į naujausią pranešimą",
     "latest": "Naujausias",
     "flashFirmware": "Įrašyti programinę aparatinę įrangą",

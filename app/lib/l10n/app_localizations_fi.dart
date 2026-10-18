@@ -9323,6 +9323,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Siirry kohtaan $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count lisää';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';
 
   @override

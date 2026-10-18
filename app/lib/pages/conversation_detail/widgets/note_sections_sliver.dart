@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'conversation_quote_timestamps.dart';
 import 'conversation_markdown_widget.dart';
 
 /// First-party notes retain section provenance; editing still addresses the complete summary.
 class NoteSectionsSliver extends StatelessWidget {
   final List<Section> sections;
+  final List<TranscriptSegment> transcriptSegments;
   final ValueChanged<String>? onOpenSource;
   final VoidCallback? onDoubleTap;
 
-  const NoteSectionsSliver({super.key, required this.sections, this.onOpenSource, this.onDoubleTap});
+  const NoteSectionsSliver(
+      {super.key, required this.sections, required this.transcriptSegments, this.onOpenSource, this.onDoubleTap});
 
   @override
   Widget build(BuildContext context) {
@@ -25,18 +28,11 @@ class NoteSectionsSliver extends StatelessWidget {
         ),
         if (onOpenSource != null && (sections[index].sourceSegmentIds ?? []).isNotEmpty)
           SliverToBoxAdapter(
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Wrap(spacing: OmiSpacing.xs, children: [
-                for (var source = 0; source < sections[index].sourceSegmentIds!.length; source++)
-                  OmiButton.secondary(
-                    key: ValueKey('note-source-$index-$source'),
-                    label: '${context.l10n.transcriptTab} ${source + 1}',
-                    icon: Icons.format_quote_rounded,
-                    size: OmiButtonSize.compact,
-                    onPressed: () => onOpenSource!(sections[index].sourceSegmentIds![source]),
-                  ),
-              ]),
+            child: ConversationQuoteTimestamps(
+              key: ValueKey(Object.hash(index, Object.hashAll(sections[index].sourceSegmentIds ?? []))),
+              sourceIDs: sections[index].sourceSegmentIds ?? [],
+              transcriptSegments: transcriptSegments,
+              onOpenSource: onOpenSource!,
             ),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),

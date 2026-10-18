@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Пазнаёмцеся з Omi",
     "deviceOnboardingIntroSubtitle": "Паспрабуйце жывую расшыфроўку, пытанне і хуткі доступ двайным дотыкам.",
     "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
+    "quoteJumpToTime": "Перайсці да {duration}",
+    "quoteMoreTimestamps": "+ яшчэ {count}",
     "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
     "latest": "Апошні",
     "flashFirmware": "Усталяваць прашыўку",

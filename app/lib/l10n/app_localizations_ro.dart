@@ -9366,6 +9366,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Mergi la $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ încă $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
 
   @override

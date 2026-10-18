@@ -9301,6 +9301,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'लगभग 1 मिनट';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$duration पर जाएँ';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count और';
+  }
+
+  @override
   String get jumpToLatestMessage => 'नवीनतम संदेश पर जाएं';
 
   @override

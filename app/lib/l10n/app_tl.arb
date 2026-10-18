@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
     "deviceOnboardingIntroSubtitle": "Subukan ang live transcription, magtanong, at ang double-tap shortcut.",
     "deviceOnboardingIntroDuration": "Mga 1 minuto",
+    "quoteJumpToTime": "Pumunta sa {duration}",
+    "quoteMoreTimestamps": "+{count} pa",
     "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
     "latest": "Pinakabago",
     "flashFirmware": "I-flash ang Firmware",

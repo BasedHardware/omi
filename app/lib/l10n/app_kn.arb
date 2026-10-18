@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ",
     "deviceOnboardingIntroSubtitle": "ಲೈವ್ ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್, ಪ್ರಶ್ನೆ ಕೇಳುವುದು ಮತ್ತು ಡಬಲ್-ಟ್ಯಾಪ್ ಶಾರ್ಟ್‌ಕಟ್ ಅನ್ನು ಪ್ರಯತ್ನಿಸಿ.",
     "deviceOnboardingIntroDuration": "ಸುಮಾರು 1 ನಿಮಿಷ",
+    "quoteJumpToTime": "{duration}ಗೆ ಹೋಗಿ",
+    "quoteMoreTimestamps": "+ಇನ್ನೂ {count}",
     "jumpToLatestMessage": "ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ",
     "latest": "ಇತ್ತೀಚಿನ",
     "flashFirmware": "ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ",

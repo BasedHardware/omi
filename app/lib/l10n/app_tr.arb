@@ -3042,6 +3042,8 @@
     "deviceOnboardingIntroTitle": "Omi'nizi Tanıyın",
     "deviceOnboardingIntroSubtitle": "Canlı transkripsiyonu, bir soru sormayı ve çift dokunma kısayolunu deneyin.",
     "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika",
+    "quoteJumpToTime": "{duration} konumuna git",
+    "quoteMoreTimestamps": "+{count} daha",
     "jumpToLatestMessage": "En son mesaja git",
     "latest": "En son",
     "flashFirmware": "Donanım Yazılımını Yükle",

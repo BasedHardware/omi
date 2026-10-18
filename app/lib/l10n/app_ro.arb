@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Cunoaște-ți Omi-ul",
     "deviceOnboardingIntroSubtitle": "Încearcă transcrierea live, adresarea unei întrebări și scurtătura cu dublu clic.",
     "deviceOnboardingIntroDuration": "Aproximativ 1 minut",
+    "quoteJumpToTime": "Mergi la {duration}",
+    "quoteMoreTimestamps": "+ încă {count}",
     "jumpToLatestMessage": "Sari la cel mai recent mesaj",
     "latest": "Recent",
     "flashFirmware": "Instalați firmware-ul",

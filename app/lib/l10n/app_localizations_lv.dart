@@ -9345,6 +9345,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Apmēram 1 minūte';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Pāriet uz $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ vēl $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Pārlēkt uz jaunāko ziņojumu';
 
   @override

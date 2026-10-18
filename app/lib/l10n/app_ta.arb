@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்",
     "deviceOnboardingIntroSubtitle": "நேரடி எழுத்தாக்கம், கேள்வி கேட்பது, இருமுறை தட்டும் குறுக்குவழி ஆகியவற்றை முயன்று பாருங்கள்.",
     "deviceOnboardingIntroDuration": "சுமார் 1 நிமிடம்",
+    "quoteJumpToTime": "{duration}க்குச் செல்",
+    "quoteMoreTimestamps": "+மேலும் {count}",
     "jumpToLatestMessage": "சமீபத்திய செய்திக்குச் செல்",
     "latest": "சமீபத்தியது",
     "flashFirmware": "ஃபார்ம்வேரை ஃபிளாஷ் செய்யவும்",

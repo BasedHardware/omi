@@ -9349,6 +9349,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Каля 1 хвіліны';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Перайсці да $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ яшчэ $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Перайсці да апошняга паведамлення';
 
   @override

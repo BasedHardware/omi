@@ -1,6 +1,6 @@
 'use client';
 
-import { Quote } from 'lucide-react';
+import { QuoteTimestamps } from './QuoteTimestamps';
 import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
 import ReactMarkdown from 'react-markdown';
 import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
@@ -33,15 +33,18 @@ function NoteMarkdown({ body, quiet }: { body: string; quiet?: boolean }) {
 
 interface NoteSectionsProps {
   sections: NoteSectionInput[];
-  transcriptIDs?: string[];
+  transcriptSegments?: { id?: string | null; start: number }[];
   onOpenSource?: (id: string) => void;
 }
 
 export function NoteSections({
   sections,
-  transcriptIDs = [],
+  transcriptSegments = [],
   onOpenSource,
 }: NoteSectionsProps) {
+  const transcriptIDs = transcriptSegments.flatMap((segment) =>
+    segment.id ? [segment.id] : [],
+  );
   const presentable = sections.map((section) => {
     const valid = [...transcriptIDs, ...(section.source_segment_ids ?? [])];
     return {
@@ -52,24 +55,21 @@ export function NoteSections({
   });
   const { mains, sideNotes } = splitNoteSections(presentable);
 
-  const sourceChip = (sourceIDs?: string[] | null) => {
+  const sourceRow = (sourceIDs?: string[] | null) => {
     const ids = resolvableNoteSources(sourceIDs ?? [], transcriptIDs);
-    if (!ids.length || !onOpenSource) return null;
+    const sources = ids.flatMap((id) => {
+      const segment = transcriptSegments.find((segment) => segment.id === id);
+      return segment && Number.isFinite(segment.start) && segment.start >= 0
+        ? [{ id, start: segment.start }]
+        : [];
+    });
+    if (!sources.length || !onOpenSource) return null;
     return (
-      <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Transcript sources">
-        {ids.map((id, index) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onOpenSource(id)}
-            aria-label={`View transcript source ${index + 1} of ${ids.length}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-stroke px-2.5 py-1 text-xs text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary focus-visible:ring-2 focus-visible:ring-white/25"
-          >
-            <Quote aria-hidden="true" className="h-3 w-3" />{' '}
-            {index === 0 ? `Sources (${ids.length})` : index + 1}
-          </button>
-        ))}
-      </div>
+      <QuoteTimestamps
+        key={JSON.stringify(ids)}
+        sources={sources}
+        onOpenSource={onOpenSource}
+      />
     );
   };
 
@@ -84,7 +84,7 @@ export function NoteSections({
               <h2 className="mb-2 text-lg font-semibold text-text-primary">{heading}</h2>
             ) : null}
             {body ? <NoteMarkdown body={body} /> : null}
-            {sourceChip(section.source_segment_ids)}
+            {sourceRow(section.source_segment_ids)}
           </section>
         );
       })}
@@ -99,7 +99,7 @@ export function NoteSections({
                   {heading}
                 </h2>
                 {body ? <NoteMarkdown body={body} quiet /> : null}
-                {sourceChip(section.source_segment_ids)}
+                {sourceRow(section.source_segment_ids)}
               </div>
             );
           })}

@@ -9393,6 +9393,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationக்குச் செல்';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+மேலும் $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';
 
   @override
