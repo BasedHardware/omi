@@ -1206,6 +1206,47 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(sum by (zone) (omi_listen_lb_attached_ready_endpoints) / on (zone) sum by (zone) (omi_listen_lb_ready_pods) < bool 0.8) and on (zone) (sum by (zone) (omi_listen_lb_ready_pods) >= bool 5)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_attached_ready_endpoints",
+        "omi_listen_lb_ready_pods"
+      ],
+      "owner_title": "Backend-listen - attached Ready endpoint coverage is below 80%",
+      "owner_uid": "omi-listen-neg-endpoint-coverage",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (zone) (omi_listen_lb_neg_attached) == bool 0) and on (zone) (sum by (zone) (omi_listen_lb_neg_endpoints) > bool 0)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_neg_attached",
+        "omi_listen_lb_neg_endpoints"
+      ],
+      "owner_title": "Backend-listen - zonal NEG endpoints are not attached",
+      "owner_uid": "omi-listen-neg-endpoints-unattached",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_listen_lb_exporter_last_success_timestamp_seconds) > bool 300) or on () absent(omi_listen_lb_exporter_last_success_timestamp_seconds)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_exporter_last_success_timestamp_seconds"
+      ],
+      "owner_title": "Backend-listen - NEG coverage exporter is stale",
+      "owner_uid": "omi-listen-neg-exporter-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "100 * sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[$__range])) / sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2765,7 +2806,7 @@
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 180
+    "query_consumers": 183
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
