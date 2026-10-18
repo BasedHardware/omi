@@ -217,6 +217,51 @@ and per-pod `parakeet_active_requests_total`; a missing metric/adapter error blo
 application. Prove scale-out under paced/burst peak traffic, then 900s stabilization
 and active-session-safe scale-down in dev. Merely rendering an HPA is not this proof.
 
+### Dark workload-only HPA option
+
+`autoscaling.workloadOnly: false` preserves the policy above. After mixed-load
+qualification, changing that one production value to `true` omits only
+`parakeet_request_latency_p99`. Request concurrency (Pods AverageValue 2),
+GPU utilization (External Value 35), floor 3/cap 12, and both scaling behaviors
+remain unchanged. This option is independent of packing and of
+`autoscaling.demand.enabled`; it does not activate the demand scaler or change
+its existing queue-age metrics.
+
+The omitted metric combines request durations across callers and audio lengths.
+It includes upload/file work, queuing and response processing; `/v2` can also
+include diarization. An External Value recommendation multiplies the current
+replica count by latency/target, so an intrinsic processing tail can request
+extra GPUs without a backlog. A value below target is not a permanent replica
+floor: tolerance, tail spikes and down stabilization also determine the result.
+Do not simply convert this global percentile to External AverageValue, which
+divides a single fleet percentile across replicas. Preserve the GPU Value type:
+the adapter already returns a fleet average percentage.
+
+Observe live POST p95/p99 (`omi_stt_window_post_seconds_bucket`), lane queue p99
+(`parakeet_batch_lane_queue_wait_seconds_bucket{lane="live"}`), refusals, ready
+capacity, and real DCGM alongside this option. A lane queue percentile is useful
+for diagnosis but is not an additive queue-size metric. First qualify any new
+scaling target and adapter semantics separately. The existing demand scaler's
+queue-age policy is a separate experiment.
+
+Before production activation, demonstrate POST p95 <3s under paced and burst
+live traffic plus legacy sync/recovery traffic at the proposed minimum. Use the
+live routing runbook's stricter sustained 2s warning/abort gate during a trial;
+also verify first text <30s, transcript success and vendor fallback exposure.
+Low current utilization or a read-only counterfactual does not qualify three
+pods, especially while cost routing benches Parakeet and suppresses its demand.
+
+Deploy path: workflow `gcp_parakeet.yml` (Deploy Parakeet ASR to GKE), input
+`environment=prod`, service `parakeet`, Helm release `prod-omi-parakeet` in
+`prod-omi-backend` on `based-hardware/us-central1/prod-omi-gke`. Dispatch the
+approved ref; the workflow checks out the dispatch ref (its `branch` input is
+not used by checkout). It builds an image and upgrades the whole release, so
+review image and chart drift as well as the HPA diff before dispatching.
+Rollback: restore `workloadOnly: false` and deploy the reviewed ref through the
+same workflow; verify all three HPA metrics return. Avoid an unrelated historical
+Helm rollback that could also revert runtime configuration. No deployment or
+flag activation is implied by adding this dark option.
+
 At the baseline's L4 node list price $0.8536/hour, floor 3 is **$61.46/day**
 and cap 12 is **$245.84/day**. The ceiling is headroom, not expected steady spend.
 The 6.2-node baseline mean is $127.02/day list equivalent; reaching three nodes

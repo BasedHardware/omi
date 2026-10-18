@@ -590,6 +590,7 @@
         ".github/workflows/sync_ledger_fence_cutover.yml",
         "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/check_cloud_run_env_drift.py",
         "backend/scripts/resolve_cloud_run_tagged_url.py",
         "backend/scripts/sync_ledger_fence_cutover.py",
         "backend/scripts/verify_backend_release_vector.py",
@@ -610,6 +611,7 @@
       "tests": [
         "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_check_cloud_run_env_drift.py",
         "tests/unit/test_plan_quota_env_retirement.py",
         "tests/unit/test_verify_backend_release_vector.py",
         "tests/unit/test_resolve_cloud_run_tagged_url.py",

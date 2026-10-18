@@ -176,10 +176,10 @@ def test_absent_keys_cannot_widen_legacy_enable_all_gates(monkeypatch):
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
     assert not summary_guarantee.enabled('owner')
     assert not sync_lineage.sync_lineage_resolve_uid_allowed('owner')
-    # Explicit old empty values remain available as the legacy global contract.
+    # Main #22113 makes first-summary empty deny; lineage retains its legacy empty contract.
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
-    assert summary_guarantee.enabled('owner')
+    assert not summary_guarantee.enabled('owner')
     assert sync_lineage.sync_lineage_resolve_uid_allowed('owner')
 
 

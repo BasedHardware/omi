@@ -18,18 +18,13 @@ def enabled(uid: str | None = None, *, include_admitted_context: bool = True) ->
         return False
     if include_admitted_context and uid is not None and ADMITTED_OWNER.get() == uid:
         return True
-    owners = {v.strip() for v in os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', '').split(',') if v.strip()}
     try:
         percent = float(os.getenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0'))
     except ValueError:
         percent = float('nan')
-    legacy_all = 'FIRST_SUMMARY_UID_ALLOWLIST' in os.environ and not owners and percent == 0
-    if uid is None or in_rollout_cohort(uid, 'first-summary', legacy_all=legacy_all):
+    if uid is None or in_rollout_cohort(uid, 'first-summary'):
         return True
     if not math.isfinite(percent) or not 0 <= percent <= 100:
-        return False
-    # Preserve the existing explicit enable-all contract at zero only.
-    if percent == 0:
         return False
     return in_percent_cohort(uid, percent)
 
