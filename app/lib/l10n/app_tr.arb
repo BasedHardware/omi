@@ -4263,5 +4263,6 @@
     "summaryLimitTitle": "Özet sınırına ulaşıldı",
     "summaryLimitBody": "Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.",
     "summaryFailedTitle": "Özetlenemedi",
-    "summaryFailedBody": "Bu konuşma özetlenirken bir sorun oluştu."
+    "summaryFailedBody": "Bu konuşma özetlenirken bir sorun oluştu.",
+    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})"
 }

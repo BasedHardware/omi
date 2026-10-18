@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "ถึงขีดจำกัดการสรุปแล้ว",
     "summaryLimitBody": "คุณสร้างสรุปใหม่หลายครั้งในชั่วโมงที่ผ่านมา โปรดลองอีกครั้งในภายหลัง",
     "summaryFailedTitle": "สรุปไม่ได้",
-    "summaryFailedBody": "เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้"
+    "summaryFailedBody": "เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้",
+    "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}"
 }

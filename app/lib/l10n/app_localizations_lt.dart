@@ -13847,4 +13847,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Apibendrinant šį pokalbį kažkas nutiko.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Išsaugota $saved iš $total garso';
+  }
 }

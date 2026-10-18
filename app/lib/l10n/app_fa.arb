@@ -11651,5 +11651,6 @@
     "summaryLimitTitle": "به سقف خلاصه‌ها رسیدید",
     "summaryLimitBody": "در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.",
     "summaryFailedTitle": "خلاصه‌سازی انجام نشد",
-    "summaryFailedBody": "هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد."
+    "summaryFailedBody": "هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد.",
+    "playbackPartialAudioSaved": "{saved} از {total} صدا ذخیره شد"
 }
