@@ -78,6 +78,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get reprocessConversation => 'Proses Ulang Percakapan';
 
   @override
+  String get reprocessTranscription => 'Proses Ulang Transkripsi';
+
+  @override
+  String get retranscribingConversation =>
+      'Mentranskripsi ulang percakapan...\nIni bisa memakan waktu cukup lama untuk percakapan yang lebih panjang';
+
+  @override
+  String get errorReprocessingTranscription => 'Kesalahan saat memproses ulang transkripsi. Coba lagi nanti.';
+
+  @override
+  String get errorNoStoredAudio => 'Tidak ada audio tersimpan untuk percakapan ini.';
+
+  @override
   String get deleteConversation => 'Hapus Percakapan';
 
   @override

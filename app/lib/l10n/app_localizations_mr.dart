@@ -78,6 +78,20 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reprocessConversation => 'संभाषण पुन: प्रक्रिया करा';
 
   @override
+  String get reprocessTranscription => 'ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करा';
+
+  @override
+  String get retranscribingConversation =>
+      'संभाषणाचे पुन्हा लिप्यंतरण सुरू आहे...\nलांब संभाषणांसाठी याला थोडा वेळ लागू शकतो';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करताना त्रुटी. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get errorNoStoredAudio => 'या संभाषणासाठी संग्रहित ऑडिओ उपलब्ध नाही.';
+
+  @override
   String get deleteConversation => 'संभाषण हटवा';
 
   @override

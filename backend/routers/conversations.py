@@ -70,6 +70,7 @@ from models.geolocation import Geolocation
 from models.app import App
 from pydantic import BaseModel, Field, ValidationError
 from models.transcript_segment import TranscriptSegment
+from models.transcription_reprocess import TranscriptionReprocessErrorResponse
 from models.other import Person
 from models.shared import StatusResponse
 
@@ -83,6 +84,12 @@ from utils.conversations.process_conversation import (
     process_conversation,
     run_first_open_derived_work,
     retrieve_in_progress_conversation,
+)
+from utils.conversations.reprocess_transcription import (
+    StoredAudioEmptyTranscriptError,
+    StoredAudioTranscriptionFailedError,
+    StoredAudioUnavailableError,
+    transcribe_stored_conversation_audio,
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
@@ -885,6 +892,63 @@ def execute_reprocess(
         background_tasks,
         response=response,
         receipt_applied=bool(receipt_applied and receipt_applied[-1]),
+    )
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/reprocess-transcription',
+    response_model=Conversation,
+    responses={
+        400: {
+            'model': TranscriptionReprocessErrorResponse,
+            'description': 'No stored audio is available, or STT produced no speech',
+        },
+        404: {'description': 'The conversation does not exist'},
+        502: {
+            'model': TranscriptionReprocessErrorResponse,
+            'description': 'Stored audio could not be loaded or the transcription provider failed',
+        },
+    },
+    tags=['conversations'],
+)
+def reprocess_conversation_transcription(
+    conversation_id: str,
+    language_code: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+):
+    """Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.
+
+    Unlike ``POST .../reprocess``, which only regenerates the summary from the
+    current transcript, this replaces transcript segments from stored audio and
+    then calls ``process_conversation`` with the same ``USER_REPROCESS`` trigger.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = deserialize_conversation(conversation)
+    if not language_code:
+        language_code = conversation.language or 'en'
+
+    try:
+        conversation.transcript_segments = transcribe_stored_conversation_audio(uid, conversation, language_code)
+    except StoredAudioUnavailableError:
+        raise HTTPException(
+            status_code=400,
+            detail={'code': 'no_audio', 'message': 'No stored audio available to retranscribe'},
+        )
+    except StoredAudioEmptyTranscriptError:
+        raise HTTPException(
+            status_code=400, detail={'code': 'no_speech', 'message': 'Transcription produced no speech'}
+        )
+    except StoredAudioTranscriptionFailedError:
+        raise HTTPException(status_code=502, detail={'code': 'failed', 'message': 'Stored audio transcription failed'})
+
+    return process_conversation(
+        uid,
+        language_code,
+        conversation,
+        trigger=ProcessingTrigger.USER_REPROCESS,
+        app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
     )
 
 

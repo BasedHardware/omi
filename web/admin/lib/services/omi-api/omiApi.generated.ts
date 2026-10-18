@@ -5668,6 +5668,15 @@ export interface TranscriptionPreferencesUpdate {
   vocabulary?: Array<string> | null;
 }
 
+export interface TranscriptionReprocessErrorDetail {
+  code: string;
+  message?: string | null;
+}
+
+export interface TranscriptionReprocessErrorResponse {
+  detail: TranscriptionReprocessErrorDetail;
+}
+
 export interface Translation {
   lang: string;
   text: string;
@@ -6933,6 +6942,8 @@ export interface OmiApiSchemas {
   "TranscriptionOutcome": TranscriptionOutcome;
   "TranscriptionPreferencesResponse": TranscriptionPreferencesResponse;
   "TranscriptionPreferencesUpdate": TranscriptionPreferencesUpdate;
+  "TranscriptionReprocessErrorDetail": TranscriptionReprocessErrorDetail;
+  "TranscriptionReprocessErrorResponse": TranscriptionReprocessErrorResponse;
   "Translation": Translation;
   "TriState": TriState;
   "TrialMetadata": TrialMetadata;
@@ -8314,6 +8325,19 @@ export interface OmiApiPaths {
         "409": void;
         "422": HTTPValidationError;
         "502": void;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/reprocess-transcription": {
+    post: {
+      operationId: "reprocess_conversation_transcription_v1_conversations__conversation_id__reprocess_transcription_post";
+      responses: {
+        "200": Conversation;
+        "400": TranscriptionReprocessErrorResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+        "502": TranscriptionReprocessErrorResponse;
       };
     };
   };
@@ -14839,6 +14863,28 @@ export async function conversation_has_audio_recording_v1_conversations__convers
 export async function reprocess_conversation_v1_conversations__conversation_id__reprocess_post(path: { conversation_id: string }, query: { language_code?: string | null, app_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/reprocess`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function reprocess_conversation_transcription_v1_conversations__conversation_id__reprocess_transcription_post(path: { conversation_id: string }, query: { language_code?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/reprocess-transcription`;
   const _params = query ? Object.entries(query)
     .filter(([, v]) => v !== undefined && v !== null)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
@@ -22515,4 +22561,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 514 client methods generated.
+// Total: 515 client methods generated.
