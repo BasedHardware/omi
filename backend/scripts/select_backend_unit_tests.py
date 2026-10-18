@@ -391,6 +391,25 @@ AREA_TESTS = (
             'tests/unit/test_firestore_shape_recorder.py',
         ),
     ),
+    (
+        # Cloud Tasks handler request paths: background work there must survive revision draining.
+        (
+            'backend/routers/sync.py',
+            'backend/routers/batch_pipeline.py',
+            'backend/routers/users.py',
+            'backend/routers/conversation_finalization.py',
+            'backend/utils/sync/',
+            'backend/utils/batch_pipeline/',
+            'backend/utils/conversations/',
+            'backend/tests/unit/fixtures/revision_drain.py',
+            'backend/tests/unit/fixtures/background_task_baseline.json',
+        ),
+        (),
+        (
+            'tests/unit/test_background_task_ratchet.py',
+            'tests/unit/test_revision_drain_harness.py',
+        ),
+    ),
 )
 
 
