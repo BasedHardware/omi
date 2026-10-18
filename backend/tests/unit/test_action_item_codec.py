@@ -104,3 +104,13 @@ class TestReadDefaults:
         out = prepare_action_item_for_read({})
         for k in ('owner', 'source', 'provenance', 'sort_order', 'indent_level'):
             assert k in out
+
+
+class TestReadResponseShape:
+    def test_iso_string_in_returns_aware_datetime(self):
+        """Read normalization: ISO-string input must come back as an aware
+        datetime — the API-visible shape change is intentional."""
+        out = prepare_action_item_for_read({'due_at': '2026-03-04T15:30:00Z'})
+        assert isinstance(out['due_at'], datetime)
+        assert out['due_at'].tzinfo is not None
+        assert out['due_at'] == datetime(2026, 3, 4, 15, 30, tzinfo=timezone.utc)

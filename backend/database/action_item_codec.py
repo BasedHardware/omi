@@ -28,7 +28,6 @@ def prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: 
         action_item_data.setdefault('source', 'legacy')
         if not isinstance(action_item_data.get('provenance'), list):
             action_item_data['provenance'] = []
-        action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
     else:

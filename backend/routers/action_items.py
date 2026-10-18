@@ -771,6 +771,10 @@ def update_action_item(
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        # Codec validation rejects dirty status/completed pairs — a client
+        # error, not a server fault.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
