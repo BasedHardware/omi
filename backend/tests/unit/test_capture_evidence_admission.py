@@ -33,7 +33,7 @@ def test_code_default_stays_off(monkeypatch):
 
 
 def test_composed_declarations_admit_s1_on_evidence_hosts():
-    composed = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    composed = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=yaml.CSafeLoader)
     for environment in ('dev', 'prod'):
         env = composed['environments'][environment]
         scopes = {
