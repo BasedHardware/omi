@@ -100,13 +100,38 @@ class TestBuildVerify(unittest.TestCase):
                 m.build([str(a)], str(Path(td) / "o.tar.gz"))
 
     def test_deterministic_archive(self):
+        """Two builds of identical inputs are byte-identical — the whole
+        point of the determinism guarantee (a checksum can detect a
+        change). Compares archive BYTES, not just member counts, so a
+        gzip-header mtime regression fails."""
         with tempfile.TemporaryDirectory() as td:
             a = Path(td) / "a.json"
             a.write_text("x")
-            with tarfile.open(str(Path(td) / "b.tar.gz"), "w:gz"):
-                pass
-            manifest = m.build([str(a)], str(Path(td) / "b2.tar.gz"))
-            self.assertEqual(len(manifest["files"]), 1)
+            b1 = Path(td) / "b1.tar.gz"
+            b2 = Path(td) / "b2.tar.gz"
+            m.build([str(a)], str(b1))
+            m.build([str(a)], str(b2))
+            self.assertEqual(b1.read_bytes(), b2.read_bytes())
+
+    def test_verify_rejects_unmanifested_members(self):
+        """An extra member not in the manifest fails verify — an injected
+        file can't ride along unnoticed."""
+        with tempfile.TemporaryDirectory() as td:
+            a = Path(td) / "a.json"
+            a.write_text("x")
+            bundle = Path(td) / "b.tar.gz"
+            m.build([str(a)], str(bundle))
+            # inject an extra member into a copy of the archive
+            with tempfile.TemporaryDirectory() as td2:
+                out = Path(td2) / "bad.tar.gz"
+                with tarfile.open(bundle) as src, tarfile.open(out, "w:gz") as dst:
+                    for mem in src:
+                        dst.addfile(mem, src.extractfile(mem))
+                    info = tarfile.TarInfo("extra.json")
+                    info.size = 1
+                    dst.addfile(info, io.BytesIO(b"9"))
+                with self.assertRaises(ValueError):
+                    m.verify(str(out))
 
 
 if __name__ == "__main__":

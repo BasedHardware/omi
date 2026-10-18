@@ -17,6 +17,7 @@ member against it. Normalized mtime keeps bundles deterministic.
 
 import argparse
 import hashlib
+import gzip
 import io
 import json
 import sys
@@ -76,9 +77,14 @@ def build(sources: List[str], destination: str) -> Dict[str, Any]:
         raise ValueError(f"cannot create {destination}: {e}") from e
     try:
         with fd:
-            with tarfile.open(fileobj=fd, mode="w:gz") as tar:
-                for name, data in members:
-                    tar.addfile(_entry_payload(name, data), io.BytesIO(data))
+            # tarfile's own "w:gz" stamps the wall clock into the gzip
+            # container header — nondeterministic even though member
+            # mtimes are fixed. Wrap the fd in a GzipFile with a fixed
+            # mtime so two builds of identical inputs are byte-identical.
+            with gzip.GzipFile(filename="", mode="wb", fileobj=fd, mtime=EPOCH_MTIME) as gzf:
+                with tarfile.open(fileobj=gzf, mode="w") as tar:
+                    for name, data in members:
+                        tar.addfile(_entry_payload(name, data), io.BytesIO(data))
     except OSError:
         dest.unlink(missing_ok=True)
         raise
@@ -98,6 +104,13 @@ def verify(bundle: str) -> Dict[str, Any]:
             if MANIFEST_NAME not in names:
                 raise ValueError(f"{bundle}: missing {MANIFEST_NAME}")
             manifest = json.loads(tar.extractfile(MANIFEST_NAME).read().decode("utf-8"))
+            listed = set(manifest.get("files", {})) | {MANIFEST_NAME}
+            extra = names - listed
+            if extra:
+                raise ValueError(
+                    f"{bundle}: unmanifested member(s) {sorted(extra)} — "
+                    "refusing extras not in the manifest"
+                )
             for name, expected in manifest.get("files", {}).items():
                 if name not in names:
                     raise ValueError(f"{bundle}: missing member {name}")
@@ -117,10 +130,14 @@ def verify(bundle: str) -> Dict[str, Any]:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description="Bundle Omi CLI exports into a verified .tar.gz backup, or verify one.")
+    ap = argparse.ArgumentParser(
+        description="Bundle Omi CLI exports into a verified .tar.gz backup, or verify one."
+    )
     ap.add_argument("inputs", nargs="*", help="JSON/text export files to bundle")
     ap.add_argument("-o", "--output", help="Destination .tar.gz path (exclusive create)")
-    ap.add_argument("--verify", metavar="BUNDLE", help="Verify an existing bundle without extracting")
+    ap.add_argument(
+        "--verify", metavar="BUNDLE", help="Verify an existing bundle without extracting"
+    )
     args = ap.parse_args(argv)
 
     if args.verify:
