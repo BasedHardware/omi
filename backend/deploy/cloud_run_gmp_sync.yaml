@@ -3,7 +3,8 @@
 apiVersion: monitoring.googleapis.com/v1beta
 kind: RunMonitoring
 metadata:
-  name: omi-cloud-run-sync-metrics
+  # The name becomes GMP job: preserve existing direct-query selectors.
+  name: omi-cloud-run-application-metrics
 spec:
   endpoints:
     - port: 9090
