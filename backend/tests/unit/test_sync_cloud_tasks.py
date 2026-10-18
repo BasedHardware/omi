@@ -1486,6 +1486,7 @@ def _load_sync_router_for_fast_path():
 
     sys.modules.pop('routers.sync', None)
     sys.modules.pop('utils.sync.pipeline', None)
+    sys.modules.pop('utils.sync.ledger_completion', None)
     spec = importlib.util.spec_from_file_location(
         'sync_post_enqueue_cleanup',
         os.path.join(BACKEND_DIR, 'routers', 'sync.py'),
@@ -1642,6 +1643,7 @@ def test_polling_stale_job_releases_retry_claim_through_owned_finalizer():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1685,6 +1687,7 @@ def test_polling_never_dispatched_queued_job_finalizes_as_dispatch_lost():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1738,6 +1741,7 @@ def test_polling_stale_job_lease_loss_preserves_newer_owner_retry_material():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1771,6 +1775,7 @@ def test_polling_never_finalizes_stale_job_while_an_active_run_owns_lease():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1802,6 +1807,7 @@ def test_polling_never_finalizes_a_stale_inline_job():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1867,6 +1873,7 @@ def test_polling_active_terminal_retries_claim_cleanup_before_exposing_result():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(mod_name, None)
@@ -1911,6 +1918,7 @@ async def test_sync_task_retry_retains_staged_audio_and_safe_failure_code():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -1948,6 +1956,7 @@ async def test_sync_task_converged_binding_skips_download_and_pipeline():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -1982,6 +1991,7 @@ async def test_sync_task_binding_loss_returns_locked_without_download_or_pipelin
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2036,6 +2046,7 @@ async def test_legacy_sync_task_skips_epoch_binding_and_uses_generic_lock():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2068,6 +2079,7 @@ async def test_standby_sync_task_does_not_parse_or_consume_work():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2140,6 +2152,7 @@ async def test_post_terminal_retired_claim_cleanup_retries_through_terminal_bran
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2174,6 +2187,7 @@ async def test_sync_task_cancellation_preserves_run_lock_and_retry_material():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2212,6 +2226,7 @@ async def test_sync_task_lease_rejection_preserves_claim_and_staged_audio():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2261,6 +2276,7 @@ async def test_sync_task_persistence_fence_terminalizes_backfill_and_releases_it
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2289,6 +2305,7 @@ async def test_expired_task_releases_only_its_matching_claim_for_404_reupload_re
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2328,6 +2345,7 @@ async def test_duplicate_terminal_task_releases_only_retryable_matching_claim(st
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2375,6 +2393,7 @@ async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_faili
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2415,6 +2434,7 @@ async def test_sync_task_final_attempt_ledger_bind_loss_preserves_retry_material
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2460,6 +2480,7 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2502,6 +2523,7 @@ async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2541,6 +2563,7 @@ async def test_sync_task_destructive_operation_fence_retries_with_typed_error_co
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2573,6 +2596,7 @@ async def test_sync_task_retryable_failure_still_retries_before_exhaustion():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2621,6 +2645,7 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2669,6 +2694,7 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2706,6 +2732,7 @@ async def test_backfill_admission_does_not_consume_fresh_daily_ceiling():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2731,6 +2758,7 @@ async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2856,6 +2884,7 @@ async def test_sync_dispatch_enqueue_uncertain_keeps_durable_work_and_never_star
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2884,6 +2913,7 @@ async def test_sync_dispatch_named_enqueue_retry_recovers_an_ambiguous_first_ack
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2933,6 +2963,7 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -2983,6 +3014,7 @@ async def test_sync_inline_releases_run_lock_when_ledger_bind_loses_lease():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3027,6 +3059,7 @@ async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3071,6 +3104,7 @@ async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3114,6 +3148,7 @@ async def test_backfill_enqueue_failure_never_falls_back_inline(monkeypatch):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3155,6 +3190,7 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3191,6 +3227,7 @@ async def test_backfill_registration_error_never_acks_202_or_releases_ambiguous_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3229,6 +3266,7 @@ async def test_known_unregistered_backfill_cleans_up_and_returns_retryable_503()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3282,6 +3320,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off(id
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3329,6 +3368,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3358,6 +3398,7 @@ async def test_old_processing_backfill_emits_cutover_overlap_log(caplog):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3398,6 +3439,7 @@ async def test_sequenced_worker_retries_then_releases_terminal_failure_and_acks_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3450,11 +3492,75 @@ async def test_sequenced_request_budget_is_anchored_at_route_entry():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sequenced_request_budget_is_anchored_at_middleware_request_start():
+    """A slow verify_cloud_tasks_oidc resolves before the route handler runs,
+    so anchoring the budget at route entry would hand the handler a deadline
+    that can cross HTTP_SYNC_JOBS_RUN_TIMEOUT after an auth stall — the exact
+    lingering-request path this budget exists to prevent. The deadline must
+    derive from the middleware's request-start stamp (the same
+    omi_request_started_monotonic state utils.other.list_budget anchors read
+    budgets on), falling back to route entry only when no stamp exists."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    # Simulate the TimeoutMiddleware stamp written before call_next: the
+    # request started 42s before the handler began resolving dependencies.
+    request.state = types.SimpleNamespace(omi_request_started_monotonic=time.monotonic() - 42.0)
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'completed', 'attempt': 1})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    captured = {}
+
+    async def _capture_body(req, retry_count, attempt_state=None):
+        captured['state'] = attempt_state
+        return module.JSONResponse(status_code=200, content={'status': 'completed_final'})
+
+    module._run_sync_job_body = AsyncMock(side_effect=_capture_body)
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        anchor = captured['state'].get('budget_deadline_monotonic')
+        assert isinstance(anchor, float)
+        # The anchor sits a full handler budget after the middleware's
+        # request start, not after route entry: with a 42s-old stamp the
+        # deadline must already be 42s closer than a freshly granted budget.
+        now = module.time.monotonic()
+        assert anchor <= now + module.SYNC_JOB_HANDLER_BUDGET_SECONDS - 40
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+def test_sync_task_budget_expiry_during_route_preamble_records_preamble_timeout_reason():
+    """The preamble-deadline branches record reason='preamble_timeout'; the
+    fallback vocabulary must contain it or bucket_reason silently exports it
+    as 'other' and operators cannot distinguish route-setup expiry from
+    unrelated fallback failures (backend/AGENTS.md fallback telemetry rule)."""
+
+    from utils.observability.fallback import ALLOWED_REASONS, bucket_reason
+
+    assert 'preamble_timeout' in ALLOWED_REASONS
+    assert bucket_reason('preamble_timeout') == 'preamble_timeout'
 
 
 @pytest.mark.asyncio
@@ -3487,6 +3593,7 @@ async def test_backfill_requires_isolated_dispatch(dispatch_enabled, byok):
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3522,6 +3629,7 @@ async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3574,6 +3682,7 @@ async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeyp
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3627,6 +3736,7 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3704,6 +3814,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3743,6 +3854,7 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)
@@ -3783,6 +3895,7 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3816,6 +3929,7 @@ async def test_batch_cohort_upload_never_dispatches_or_claims_legacy(monkeypatch
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3839,6 +3953,7 @@ async def test_coalesced_enrichment_task_uses_adapter_before_legacy_job_parsing(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3865,6 +3980,7 @@ async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(m
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3896,6 +4012,7 @@ async def test_legacy_completion_convergence_before_provider_under_lock(monkeypa
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -3973,6 +4090,7 @@ async def test_sync_task_pipeline_budget_ends_attempt_before_platform_timeout():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4022,6 +4140,7 @@ async def test_sync_task_budget_counts_pre_pipeline_io_from_handler_entry():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4047,6 +4166,7 @@ async def test_missing_job_guard_retains_payload_before_ack_and_keeps_staged_byt
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4107,6 +4227,7 @@ async def test_sync_task_budget_expiry_falls_back_to_409_when_replacement_not_sc
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4157,6 +4278,7 @@ async def test_sync_task_budget_deferral_marker_clear_failure_keeps_409():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4198,6 +4320,7 @@ async def test_sync_task_budget_expiry_keeps_409_when_cloud_tasks_dispatch_disab
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4255,6 +4378,7 @@ async def test_sync_task_budget_deferral_chain_ends_at_queue_attempt_contract():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4290,6 +4414,7 @@ def test_sync_task_replacement_enqueue_timeout_fits_inside_route_margin():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4444,6 +4569,7 @@ async def test_sequenced_budget_deferral_acks_without_finishing_sequencer_owner(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4501,6 +4627,7 @@ async def test_sequenced_delivery_heartbeat_drain_is_bounded():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4563,6 +4690,7 @@ async def test_sync_task_budget_deferral_requires_marker_before_ack():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4612,6 +4740,7 @@ async def test_sync_task_budget_deferral_treats_missing_marker_update_as_failed(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4677,6 +4806,7 @@ async def test_sync_task_budget_expiry_before_run_lock_keeps_queue_owned_retry()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4743,6 +4873,7 @@ async def test_sync_task_budget_expiry_during_lock_acquire_still_defers():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4796,6 +4927,7 @@ async def test_sync_task_budget_deferral_enqueue_failure_clears_deferred_marker(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4862,6 +4994,7 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -4955,6 +5088,7 @@ async def test_sequenced_budget_deferral_owner_write_failure_records_fallback():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5052,6 +5186,7 @@ async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_dead
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5130,6 +5265,7 @@ async def test_sequenced_budget_deferral_persists_chain_count_on_owner():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5176,6 +5312,7 @@ def test_sync_task_handler_budget_derives_from_route_timeout():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5227,6 +5364,7 @@ async def test_sync_task_budget_deferral_uncertain_enqueue_keeps_deferred_marker
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5313,6 +5451,7 @@ async def test_sync_task_budget_deferral_timeout_during_marker_is_not_uncertain_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5388,6 +5527,7 @@ async def test_sync_task_budget_deferral_marker_drain_failure_skips_clear():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5441,6 +5581,7 @@ async def test_sync_task_budget_deferral_unsettleable_acquire_keeps_queue_retry(
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5488,6 +5629,7 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5557,6 +5699,7 @@ async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5671,6 +5814,7 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5724,6 +5868,7 @@ async def test_route_preamble_stall_in_begin_job_ends_request_at_the_route_deadl
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5767,6 +5912,7 @@ async def test_route_preamble_stall_in_fence_read_ends_request_at_the_route_dead
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5839,6 +5985,7 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
@@ -5900,6 +6047,7 @@ async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)

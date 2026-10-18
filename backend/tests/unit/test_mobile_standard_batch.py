@@ -207,6 +207,7 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(arc
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved.items():
             if original is None:
                 sys.modules.pop(name, None)

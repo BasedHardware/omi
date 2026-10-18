@@ -1028,6 +1028,7 @@ class TestProcessSegmentReal:
         sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
         sys.modules['utils.sync'] = sync_pkg
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
 
         sys.modules['utils.sync.bridge'].finish_sync_segment = lambda *a, **kw: None
 
@@ -1042,6 +1043,7 @@ class TestProcessSegmentReal:
     @classmethod
     def teardown_class(cls):
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         # Restore original modules
         for name, orig in cls._saved_modules.items():
             if orig is None:

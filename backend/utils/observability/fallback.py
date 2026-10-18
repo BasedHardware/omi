@@ -148,6 +148,7 @@ ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
         'marker_clear_failed',
         'owner_write_failed',
         'pre_lock_expiry',
+        'preamble_timeout',
         'deferrals_exhausted',
         'config_incomplete',
         'circuit_open',

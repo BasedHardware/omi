@@ -1664,6 +1664,7 @@ class TestAsyncCoordinatorBehavioral:
 
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -1689,6 +1690,7 @@ class TestAsyncCoordinatorBehavioral:
     def _cleanup(saved_modules):
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         sys.modules.pop('sync_behavioral', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -3670,6 +3672,7 @@ class TestV2EndpointExecution:
     def _cleanup_modules(saved_modules):
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
                 sys.modules.pop(mod_name, None)

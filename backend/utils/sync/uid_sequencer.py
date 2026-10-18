@@ -34,6 +34,7 @@ from utils.cloud_tasks import enqueue_sync_job, get_sync_tasks_max_attempts
 from utils.sync import backfill_cutover, stage as sync_stage
 from utils.sync.backfill import release_backfill_slot
 from utils.sync.backfill_order import newest_first
+from utils.sync.ledger_completion import bind_or_converge_sync_ledger_completion
 
 logger = logging.getLogger(__name__)
 MAX_EXPIRED_RETIREMENTS = 50
@@ -220,12 +221,11 @@ def _converge_capped_ledger_completion(*, job_id: str, uid: Any, content_id: Any
     write; failing such a job unconditionally would dead-letter transcription
     whose side effects already committed. ``bind_or_converge_sync_ledger_completion``
     converges exactly that ordering (it is the same helper the final-attempt
-    exception path uses). Imported lazily so the sequencer module stays
-    importable without the pipeline's heavy dependency graph; tests
-    monkeypatch this seam directly.
+    exception path uses). Kept as a named wrapper over the module-scope
+    import from ``utils.sync.ledger_completion`` — the lightweight top-level
+    seam that keeps this module importable without the pipeline's heavy
+    dependency graph; tests monkeypatch this wrapper directly.
     """
-    from utils.sync.pipeline import bind_or_converge_sync_ledger_completion
-
     return bind_or_converge_sync_ledger_completion(
         job_id=job_id, uid=uid, content_id=content_id, run_lock_token=run_lock_token
     )

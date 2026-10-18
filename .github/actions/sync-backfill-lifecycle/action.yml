@@ -284,6 +284,18 @@ runs:
             --min-backoff=5s \
             --max-backoff=60s
         fi
+        # The fresh lane and the fallback route in _enqueue_sync_job_routed
+        # deliver through the main sync-jobs queue (SYNC_TASKS_QUEUE), whose
+        # throughput limits another team owns; update-only reconciliation
+        # here still caps attempts so a deferral chain ended through the 409
+        # cannot outlive the code-side contract the same way. Without this
+        # the queue keeps Google's default of 100 attempts.
+        if gcloud tasks queues describe sync-jobs --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update sync-jobs \
+            --location=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --max-attempts=5
+        fi
 
     - name: Reconcile backfill UID sequencer sweep
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}

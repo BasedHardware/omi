@@ -1969,14 +1969,12 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
-    # One absolute budget deadline for the whole request, captured — and
-    # enforced — before the first await: every preamble await below (fence
-    # read, payload parse, begin_job, prior-job read) runs inside a
-    # timeout_at against this deadline, so a stall in any of them ends the
-    # request through the queue-owned 409 instead of hanging open past the
-    # Cloud Tasks dispatch deadline or the middleware cap this budget exists
-    # to stay under. Recording the timestamp alone would charge preamble
-    # time against the attempt's budget without ever ending the request.
+    # One absolute budget deadline for the whole request, anchored at the
+    # middleware's request-start stamp (the same omi_request_started_monotonic
+    # utils.other.list_budget derives read deadlines from; TimeoutMiddleware
+    # writes it before call_next, so verify_cloud_tasks_oidc time is charged
+    # against this wall — a stalled dependency cannot push the budget past the
+    # middleware cap). Callers without the stamp fall back to route entry.
     # The dict rides every path — direct deliveries pass it into the attempt
     # body, whose own budget anchors at the same absolute deadline; sequenced
     # deliveries also use it for the bounded completion drain after the
@@ -1984,7 +1982,9 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     # awaited: the body brings its own budget anchored at this same deadline,
     # and two timeout contexts armed at the same instant would deliver a
     # second cancellation into the body's post-expiry recovery work.
-    entry_state: dict = {'budget_deadline_monotonic': time.monotonic() + SYNC_JOB_HANDLER_BUDGET_SECONDS}
+    middleware_request_start = getattr(getattr(request, 'state', None), 'omi_request_started_monotonic', None)
+    budget_anchor = middleware_request_start if isinstance(middleware_request_start, float) else time.monotonic()
+    entry_state: dict = {'budget_deadline_monotonic': budget_anchor + SYNC_JOB_HANDLER_BUDGET_SECONDS}
     route_deadline = entry_state['budget_deadline_monotonic']
     try:
         async with asyncio.timeout_at(route_deadline):
