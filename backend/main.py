@@ -408,6 +408,12 @@ def _run_fsr_loop(loop_name, callback, interval_seconds):
     return loop_lease(loop_name).run(attributed, interval_seconds, on_skip=on_skip) or {}
 
 
+# Install while importing on the main thread, after the server's signal setup.
+from utils.other.fsr_leader_lease import install_loop_lease_sigterm_handler
+
+install_loop_lease_sigterm_handler()
+
+
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
@@ -683,7 +689,10 @@ async def shutdown_event():
     from database.durable_queue_age import withdraw_queue_oldest_ready_ages
 
     try:
-        await run_blocking(db_executor, release_loop_leases)
+        if singleton_loops_enabled():
+            await asyncio.to_thread(release_loop_leases)
+        else:
+            await run_blocking(db_executor, release_loop_leases)
     except Exception:
         logging.getLogger(__name__).warning('fsr_leader_lease release scheduling failed; leases will expire')
     if singleton_loops_enabled():

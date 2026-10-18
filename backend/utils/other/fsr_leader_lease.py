@@ -1,9 +1,10 @@
 """Best-effort fleet maintenance admission, default off; Redis outages fail open.
 
 The opaque owner token fences renew/release, and a monotonically increasing
-generation identifies each ownership epoch. A separate tick key survives owner
-shutdown for recovery loops. Queue sampling ties cooldown to a live owner so a
-dead publisher cannot delay alert-visible takeover. Callbacks are admitted
+generation identifies each ownership epoch. A separate tick key limits recovery
+scans to one admission per interval. Once it expires, even a heartbeating owner
+cannot block takeover. Queue sampling ties cooldown to a live owner so a dead
+publisher cannot delay alert-visible takeover. Callbacks are admitted
 only after revalidating ownership; cooperative scan boundaries can call
 ``check_leader_lease``. This is not a replacement for transactional job claims:
 already-issued external operations cannot be revoked by a Redis lease.
@@ -14,6 +15,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import signal
 import socket
 import threading
 import time
@@ -37,13 +39,28 @@ _ADMIT = """
 -- fsr_admit
 local owner = redis.call('GET', KEYS[1])
 local generation = 0
+local tick_ttl = redis.call('PTTL', KEYS[3])
+-- A recovery heartbeat proves ownership, not progress. An expired admission
+-- must allow another pod to work, even if the previous callback is wedged.
+-- Queue publishing has its separate live-owner/120s handoff protocol.
+local stale = ARGV[5] == '0' and tick_ttl < 0
+if stale then
+    redis.call('DEL', KEYS[3])
+end
 if ARGV[1] ~= '' and owner == ARGV[1] then
     redis.call('PEXPIRE', KEYS[1], ARGV[3])
     generation = tonumber(redis.call('GET', KEYS[2]))
+elseif stale then
+    redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+    generation = redis.call('INCR', KEYS[2])
 elseif redis.call('SET', KEYS[1], ARGV[2], 'NX', 'PX', ARGV[3]) then
     generation = redis.call('INCR', KEYS[2])
 else
-    return {0, 0, 0, redis.call('PTTL', KEYS[1])}
+    local retry = redis.call('PTTL', KEYS[1])
+    if ARGV[5] == '0' and tick_ttl >= 0 then
+        retry = math.min(retry, tick_ttl)
+    end
+    return {0, 0, 0, retry}
 end
 -- Queue cooldown belongs to a live owner, never to an expired ownership epoch.
 if ARGV[5] == '1' and owner ~= ARGV[1] then
@@ -62,6 +79,9 @@ return 0
 _RELEASE = """
 -- fsr_release
 if redis.call('GET', KEYS[1]) == ARGV[1] then
+    if ARGV[2] == '1' then
+        redis.call('DEL', KEYS[2])
+    end
     return redis.call('DEL', KEYS[1])
 end
 return 0
@@ -231,6 +251,8 @@ class LeaderLease:
         self.closed = False
         self.next_check_at: float | None = None
         self._lock = threading.Lock()
+        self._lock_started: float | None = None
+        self._blocked_since: float | None = None
         self._idle_permit: _Permit | None = None
         self._idle_stopped = threading.Event()
         self._idle_renewal: threading.Thread | None = None
@@ -273,9 +295,39 @@ class LeaderLease:
     ) -> T | None:
         if not singleton_loops_enabled():
             return callback()
+        if self.closed:
+            return None
         if not self._lock.acquire(blocking=False):
+            now = self.clock()
+            if self.loop != QUEUE_AGE_LOOP:
+                self.next_check_at = now + interval_seconds
+            if self._blocked_since is None:
+                self._blocked_since = now
+            started = self._lock_started if self._lock_started is not None else self._blocked_since
+            if self.loop != QUEUE_AGE_LOOP and now - started >= _max_hold_seconds(interval_seconds):
+                # Do not steal/unlock a running callback's mutex or inherit its
+                # fenced context. Later calls must retain lever-off capacity.
+                _count(self.loop, 'fail_open_local')
+                from utils.observability.fallback import record_fallback
+
+                record_fallback(
+                    component='firestore_read',
+                    from_mode='singleton_loop',
+                    to_mode='local',
+                    reason='timeout',
+                    outcome='degraded',
+                    log=logger,
+                )
+                context_token = _current_permit.set(None)
+                try:
+                    return callback()
+                finally:
+                    _current_permit.reset(context_token)
+            _count(self.loop, 'skipped_local_busy')
             _count(self.loop, 'skipped')
             return None
+        self._lock_started = self.clock()
+        self._blocked_since = None
         try:
             if self.closed:
                 return None
@@ -333,6 +385,7 @@ class LeaderLease:
             elif queue_age:
                 self._stop_idle_heartbeat()
             if not admitted:
+                _count(self.loop, 'skipped_cooldown' if generation else 'skipped_owner')
                 _count(self.loop, 'skipped')
                 # A retained leader's cooldown is not ownership loss.
                 if not generation and on_skip is not None:
@@ -372,18 +425,19 @@ class LeaderLease:
                     renewal.join(timeout=1)
                 _current_permit.reset(context_token)
         finally:
+            self._lock_started = None
             self._lock.release()
 
-    def release(self) -> None:
+    def release(self, *, clear_tick: bool = False) -> None:
         self.closed = True
         self._stop_idle_heartbeat()
-        self._release_token()
+        self._release_token(clear_tick=clear_tick)
 
-    def _release_token(self) -> None:
+    def _release_token(self, *, clear_tick: bool = False) -> None:
         if not self.token:
             return
         try:
-            self.client.eval(_RELEASE, 1, self.keys[0], self.token)
+            self.client.eval(_RELEASE, 2, self.keys[0], self.keys[2], self.token, int(clear_tick))
         except Exception:
             _count(self.loop, 'redis_error')
             logger.warning('fsr_leader_lease loop=%s outcome=redis_error on release', self.loop)
@@ -412,10 +466,10 @@ def poll_delay(interval_seconds: float, *, deletion: bool = False, queue_age: bo
     return delay
 
 
-def release_loop_leases() -> None:
+def release_loop_leases(*, clear_tick: bool = False) -> None:
     # Only the fixed main.py inventory is registered; never unbounded uid labels.
     for loop in _LOOPS:
-        loop_lease(loop).release()
+        loop_lease(loop).release(clear_tick=clear_tick)
 
 
 _LOOPS = (
@@ -426,3 +480,47 @@ _LOOPS = (
     'reconcile_abandoned_byok_finalization_jobs',
     'publish_all_queue_oldest_ready_ages',
 )
+
+
+_sigterm_installed = False
+_sigterm_release_started = False
+
+
+def release_loop_leases_on_sigterm(signum: int, frame: Any) -> None:
+    """Start bounded-client cleanup outside asyncio and the busy DB executor.
+
+    Never perform Redis work in a Python signal handler: it can interrupt a
+    thread while that same thread owns a Redis/permit lock.
+    """
+    global _sigterm_release_started
+    if _sigterm_release_started or not singleton_loops_enabled():
+        return
+    _sigterm_release_started = True
+    worker = threading.Thread(
+        target=lambda: release_loop_leases(clear_tick=True), name='fsr-sigterm-release', daemon=True
+    )
+    worker.start()
+
+
+def install_loop_lease_sigterm_handler() -> None:
+    """Chain the server's SIGTERM handler; preserve normal graceful shutdown."""
+    global _sigterm_installed
+    if _sigterm_installed or not singleton_loops_enabled() or threading.current_thread() is not threading.main_thread():
+        return
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def handle(signum: int, frame: Any) -> None:
+        release_loop_leases_on_sigterm(signum, frame)
+        if callable(previous):
+            previous(signum, frame)
+        elif previous == signal.SIG_DFL:
+            # An embedding without a server handler still gets a short cleanup
+            # opportunity, then the original default termination semantics.
+            for thread in threading.enumerate():
+                if thread.name == 'fsr-sigterm-release':
+                    thread.join(timeout=2)
+            signal.signal(signum, signal.SIG_DFL)
+            signal.raise_signal(signum)
+
+    signal.signal(signal.SIGTERM, handle)
+    _sigterm_installed = True

@@ -4863,6 +4863,10 @@ Backfill ownership and expired-head retirement are defined in [the two-lane runb
 
 Backfill admission transactionally creates or repairs its sequencer owner. Completion and retirement transactionally park empty owners outside the hot reconcile query while retaining their fencing epochs; admission wakes them atomically. The bounded pending reconcile scan self-heals legacy missing owners over a configurable window (default 30 minutes), honors the staggered deadline before claiming or retiring waiting work, and meters `sync_backfill_owner_repaired`. The operator-only dry-run/apply procedure is in [backfill owner repair](runbooks/sync-two-lane.md#backfill-owner-repair).
 
+### Bounded backfill preparation
+
+The per-owner sequencer can warm a bounded prefix of staged-audio downloads while its head runs. Execution remains serial, including adjacent recordings, assignment, merge and billing. `SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED=off` stops preparation and ignores cached bytes; the default width is 2 only with at least 8 pending jobs. Generation validation protects deletion and replacement. Queue limits and backfill maxScale are unchanged. Bounds, fairness and throughput limits are in [bounded owner preparation](runbooks/sync-owner-concurrency.md).
+
 ### Sync VAD segment cache
 
 `vad_is_empty(..., cache=True)` stores sync VAD segments in Redis for 24 hours by
