@@ -18,8 +18,7 @@
   ],
   "evidence_prs": [
     13667,
-    14364,
-    22089
+    14364
   ],
   "scope_hints": [
     ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
