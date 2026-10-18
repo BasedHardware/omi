@@ -114,9 +114,10 @@ class _DeviceGroupPageState extends State<DeviceGroupPage> with _GroupRows {
     final l10n = context.l10n;
     final deviceConnected = context.select<DeviceProvider, bool>((p) => p.isConnected);
     // The Device Settings page also serves remembered-but-disconnected devices (its Diagnostics
-    // row reads per-device native history that survives a drop), so keep the destination while the
+    // row reads per-device native history that survives a drop, and the persisted pairing exists
+    // before the provider hydrates it on the connect path), so keep the destination while the
     // app remembers any device instead of only while the link is up.
-    final rememberedDevice = context.select<DeviceProvider, bool>((p) => p.pairedDevice?.id.isNotEmpty ?? false);
+    final rememberedDevice = context.select<DeviceProvider, bool>((p) => p.hasRememberedDevice);
     return _GroupPage(
       pageKey: 'settings_page_device',
       title: l10n.device,

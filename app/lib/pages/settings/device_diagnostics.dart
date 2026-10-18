@@ -157,8 +157,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'hardware_revision': device?.hardwareRevision,
       'firmware': device?.firmwareRevision,
       'timezone_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
-      'battery': deviceProvider.batteryLevel,
-      'charging': deviceProvider.isCharging,
+      // Live readings, only valid while the link is up: onDeviceDisconnected() forces
+      // isCharging false on link loss, so report null (unknown) instead of a stale snapshot.
+      'battery': deviceProvider.isConnected ? deviceProvider.batteryLevel : null,
+      'charging': deviceProvider.isConnected ? deviceProvider.isCharging : null,
       'connected_at': diagnostics.connectedAt,
       'reconnection_count': diagnostics.reconnectionCount,
       'fail_to_connect_count': diagnostics.failToConnectCount,

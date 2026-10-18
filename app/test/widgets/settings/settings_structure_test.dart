@@ -28,15 +28,22 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// which rows each page draws. Depth = taps from the open sheet to see the row.
 
 class _Device extends ChangeNotifier implements DeviceProvider {
-  _Device({this.connected = true, this.paired});
+  _Device({this.connected = true, this.paired, this.persistedPairing = false});
 
   final bool connected;
 
   /// What the provider remembers across a drop; null means nothing remembered.
   final BtDevice? paired;
 
+  /// The persisted pairing in SharedPreferences, present on a cold start before the provider
+  /// hydrates [paired] on the connect path.
+  final bool persistedPairing;
+
   @override
   bool get isConnected => connected;
+
+  @override
+  bool get hasRememberedDevice => paired?.id.isNotEmpty ?? persistedPairing;
 
   @override
   BtDevice? get pairedDevice => paired;
@@ -379,5 +386,24 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings_group_device')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('settings_row_device')), findsNothing);
+  });
+
+  testWidgets('a cold start with only the persisted pairing still shows the Device Settings row', (tester) async {
+    // pairedDevice is null until the connect path hydrates it; the persisted pairing in
+    // SharedPreferences must keep the row reachable meanwhile.
+    await pumpSheet(tester, device: _Device(connected: false, persistedPairing: true));
+
+    await tester.tap(find.byKey(const ValueKey('settings_group_device')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings_row_device')), findsOneWidget);
+
+    // Search follows the same rule: the page is findable, its live-link rows are not.
+    await tester.tap(find.byType(OmiBackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel(en.search));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), en.deviceSettings);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(OmiSettingsRow, en.deviceSettings), findsWidgets);
   });
 }

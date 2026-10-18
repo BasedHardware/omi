@@ -30,6 +30,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => connected;
 
   @override
+  bool get hasRememberedDevice => paired?.id.isNotEmpty ?? false;
+
+  @override
   BtDevice? get connectedDevice => lastDevice;
 
   @override

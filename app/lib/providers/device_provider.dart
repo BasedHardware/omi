@@ -64,6 +64,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
 
+  /// Whether the app remembers any device, including before [getDeviceInfo] hydrates
+  /// [pairedDevice] on the connect path. A cold start with a pendant that never reconnects
+  /// still has the persisted pairing in `SharedPreferencesUtil().btDevice`.
+  bool get hasRememberedDevice => pairedDevice?.id.isNotEmpty ?? SharedPreferencesUtil().btDevice.id.isNotEmpty;
+
   /// Capability-normalized identity for capture/home restarts.
   ///
   /// `getDeviceInfo()` reclassifies image-stream hardware as
