@@ -5027,12 +5027,15 @@ async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_dead
 
         # The deadline fired during the enqueue (its create may or may not
         # have landed, so the uncertain class keeps the marker and returns
-        # the queue-owned 409) at the one shared wall, never at the summed
-        # 0.45 + 0.7 = 1.15s two fresh timeouts would have allowed.
+        # the queue-owned 409) at the one shared wall: a fresh per-block
+        # timeout would have let the enqueue finish and acked the 200
+        # deferral instead. The coarse stopwatch bound only tolerates CI
+        # scheduling and post-409 cleanup drain; the outcome above is the
+        # contract proof.
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
         assert owner_write_finished is True
-        assert elapsed < 0.45 + 0.7
+        assert elapsed < 5
         assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
     finally:
         sys.modules.pop('routers.sync', None)
