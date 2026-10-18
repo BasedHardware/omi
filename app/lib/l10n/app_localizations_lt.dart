@@ -13615,17 +13615,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Įrašai saugūs ir bus įkelti, kai tik bus galima';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'pristabdyta $count įrašų',
-      one: 'pristabdytas 1 įrašas',
-    );
-    return 'Atmintis pilna — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -13518,17 +13518,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'التسجيلات آمنة وسيتم رفعها عندما يصبح ذلك ممكنًا';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'تم إيقاف $count تسجيلًا مؤقتًا',
-      one: 'تم إيقاف تسجيل واحد مؤقتًا',
-    );
-    return 'مساحة التخزين ممتلئة — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

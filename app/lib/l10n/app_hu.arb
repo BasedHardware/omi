@@ -4256,7 +4256,6 @@
     "activityAttentionStorageSubtitle": "Szabadítson fel helyet, vagy módosítsa az automatikus szinkronizálást",
     "activityAttentionUploadKept": "{duration} hang mentve ezen a telefonon",
     "activityAttentionUploadWaiting": "A felvételek biztonságban vannak, és feltöltésre kerülnek, amint lehetséges",
-    "activityAttentionStorageBlocked": "A tárhely megtelt — {count, plural, =1{1 felvétel szünetel} other{{count} felvétel szünetel}}",
     "activityAttentionUploadStalled": "A feltöltés elakadt — {count, plural, =1{1 felvétel várakozik} other{{count} felvétel várakozik}}",
     "attentionSummaryFailed": "Ezt a beszélgetést nem sikerült összefoglalni",
     "activityAttentionSemantics": "Tevékenység, figyelmet igényel",

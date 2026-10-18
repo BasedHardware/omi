@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Libera spazio o modifica la sincronizzazione automatica",
     "activityAttentionUploadKept": "{duration} di audio salvato su questo telefono",
     "activityAttentionUploadWaiting": "Le registrazioni sono al sicuro e verranno caricate appena possibile",
-    "activityAttentionStorageBlocked": "Spazio esaurito — {count, plural, =1{1 registrazione in pausa} other{{count} registrazioni in pausa}}",
     "activityAttentionUploadStalled": "Caricamento bloccato — {count, plural, =1{1 registrazione in attesa} other{{count} registrazioni in attesa}}",
     "attentionSummaryFailed": "Impossibile riassumere questa conversazione",
     "activityAttentionSemantics": "Attività, richiede attenzione",

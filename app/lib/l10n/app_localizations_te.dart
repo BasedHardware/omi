@@ -13644,17 +13644,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, వీలైనప్పుడు అప్‌లోడ్ అవుతాయి';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి',
-      one: '1 రికార్డింగ్ పాజ్ చేయబడింది',
-    );
-    return 'నిల్వ నిండింది — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

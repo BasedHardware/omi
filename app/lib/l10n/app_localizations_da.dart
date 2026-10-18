@@ -13579,17 +13579,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Optagelserne er i sikkerhed og uploades, så snart det er muligt';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count optagelser sat på pause',
-      one: '1 optagelse sat på pause',
-    );
-    return 'Lageret er fuldt — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -13638,17 +13638,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Записи в безопасности и будут загружены при первой возможности';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count записи приостановлены',
-      one: '1 запись приостановлена',
-    );
-    return 'Память заполнена — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

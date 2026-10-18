@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "জায়গা খালি করুন বা অটো-সিঙ্ক ঠিক করুন",
     "activityAttentionUploadKept": "এই ফোনে {duration} অডিও সংরক্ষিত",
     "activityAttentionUploadWaiting": "রেকর্ডিংগুলো নিরাপদ এবং সম্ভব হলেই আপলোড হবে",
-    "activityAttentionStorageBlocked": "স্টোরেজ পূর্ণ — {count, plural, =1{1টি রেকর্ডিং বিরত} other{{count}টি রেকর্ডিং বিরত}}",
     "activityAttentionUploadStalled": "আপলোড থেমে আছে — {count, plural, =1{1টি রেকর্ডিং অপেক্ষায়} other{{count}টি রেকর্ডিং অপেক্ষায়}}",
     "attentionSummaryFailed": "এই কথোপকথনের সারাংশ তৈরি করা যায়নি",
     "activityAttentionSemantics": "অ্যাক্টিভিটি, মনোযোগ দরকার",

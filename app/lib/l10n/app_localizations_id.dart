@@ -13601,17 +13601,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Rekaman aman dan akan diunggah saat memungkinkan';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rekaman dijeda',
-      one: '1 rekaman dijeda',
-    );
-    return 'Penyimpanan penuh — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

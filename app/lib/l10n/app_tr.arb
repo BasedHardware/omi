@@ -4195,7 +4195,6 @@
     "activityAttentionStorageSubtitle": "Yer açın veya otomatik eşitlemeyi ayarlayın",
     "activityAttentionUploadKept": "Bu telefona kaydedilmiş {duration} ses",
     "activityAttentionUploadWaiting": "Kayıtlar güvende ve olduğunda yüklenecek",
-    "activityAttentionStorageBlocked": "Depolama alanı dolu — {count, plural, =1{1 kayıt duraklatıldı} other{{count} kayıt duraklatıldı}}",
     "activityAttentionUploadStalled": "Yükleme durdu — {count, plural, =1{1 kayıt bekliyor} other{{count} kayıt bekliyor}}",
     "attentionSummaryFailed": "Bu konuşma özetlenemedi",
     "activityAttentionSemantics": "Etkinlik, ilgilenilmesi gerekiyor",

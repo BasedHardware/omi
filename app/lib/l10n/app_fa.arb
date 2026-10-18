@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "فضا آزاد کنید یا همگام‌سازی خودکار را تنظیم کنید",
     "activityAttentionUploadKept": "{duration} صدا در این گوشی ذخیره شده",
     "activityAttentionUploadWaiting": "ضبط‌ها در امان هستند و به محض امکان بارگذاری می‌شوند",
-    "activityAttentionStorageBlocked": "حافظه پر شده — {count, plural, =1{1 ضبط متوقف شده} other{{count} ضبط متوقف شده‌اند}}",
     "activityAttentionUploadStalled": "بارگذاری متوقف شده — {count, plural, =1{1 ضبط در انتظار} other{{count} ضبط در انتظار}}",
     "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد",
     "activityAttentionSemantics": "فعالیت، نیاز به توجه",

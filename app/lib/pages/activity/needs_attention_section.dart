@@ -128,12 +128,13 @@ class NeedsAttentionSection extends StatelessWidget {
                       Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
                     _CaptureAttentionRow(
                       key: const Key('activity_attention_storage'),
-                      title: storage.blockedCount > 0
-                          ? l.activityAttentionStorageBlocked(storage.blockedCount)
-                          : l.activityAttentionStorageTitle,
+                      // blockedCount counts admission attempts, not recordings:
+                      // one recording's repeated retries must not read as many
+                      // paused recordings. The uncounted title stays truthful.
+                      title: l.activityAttentionStorageTitle,
                       subtitle: l.activityAttentionStorageSubtitle,
                       actionLabel: l.activityAttentionManage,
-                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
+                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
                     ),
                   ],
                   if (upload != null) ...[
@@ -146,7 +147,7 @@ class NeedsAttentionSection extends StatelessWidget {
                           ? l.activityAttentionUploadKept(OmiDuration.compact(upload.pendingSeconds, l))
                           : l.activityAttentionUploadWaiting,
                       actionLabel: l.activityAttentionRetry,
-                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
+                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
                     ),
                   ],
                 ],

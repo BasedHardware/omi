@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "حرّر مساحة أو عدّل المزامنة التلقائية",
     "activityAttentionUploadKept": "{duration} من الصوت محفوظة على هذا الهاتف",
     "activityAttentionUploadWaiting": "التسجيلات آمنة وسيتم رفعها عندما يصبح ذلك ممكنًا",
-    "activityAttentionStorageBlocked": "مساحة التخزين ممتلئة — {count, plural, =1{تم إيقاف تسجيل واحد مؤقتًا} other{تم إيقاف {count} تسجيلًا مؤقتًا}}",
     "activityAttentionUploadStalled": "توقف الرفع — {count, plural, =1{تسجيل واحد في الانتظار} other{{count} تسجيلًا في الانتظار}}",
     "attentionSummaryFailed": "تعذّر تلخيص هذه المحادثة",
     "activityAttentionSemantics": "النشاط، يتطلب انتباهًا",

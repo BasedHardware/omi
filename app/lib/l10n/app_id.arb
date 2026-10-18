@@ -4195,7 +4195,6 @@
     "activityAttentionStorageSubtitle": "Kosongkan ruang atau sesuaikan sinkronisasi otomatis",
     "activityAttentionUploadKept": "{duration} audio tersimpan di telepon ini",
     "activityAttentionUploadWaiting": "Rekaman aman dan akan diunggah saat memungkinkan",
-    "activityAttentionStorageBlocked": "Penyimpanan penuh — {count, plural, =1{1 rekaman dijeda} other{{count} rekaman dijeda}}",
     "activityAttentionUploadStalled": "Unggahan terhenti — {count, plural, =1{1 rekaman menunggu} other{{count} rekaman menunggu}}",
     "attentionSummaryFailed": "Percakapan ini tidak dapat diringkas",
     "activityAttentionSemantics": "Aktivitas, perlu perhatian",

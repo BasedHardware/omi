@@ -13628,17 +13628,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Opnames zijn veilig en worden geüpload zodra dat kan';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count opnames gepauzeerd',
-      one: '1 opname gepauzeerd',
-    );
-    return 'Opslag vol — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

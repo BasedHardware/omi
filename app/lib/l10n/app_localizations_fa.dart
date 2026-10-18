@@ -13586,17 +13586,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'ضبط‌ها در امان هستند و به محض امکان بارگذاری می‌شوند';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ضبط متوقف شده‌اند',
-      one: '1 ضبط متوقف شده',
-    );
-    return 'حافظه پر شده — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

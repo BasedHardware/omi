@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "స్థలాన్ని ఖాళీ చేయండి లేదా ఆటో-సింక్ సర్దుబాటు చేయండి",
     "activityAttentionUploadKept": "ఈ ఫోన్‌లో {duration} ఆడియో సేవ్ చేయబడింది",
     "activityAttentionUploadWaiting": "రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, వీలైనప్పుడు అప్‌లోడ్ అవుతాయి",
-    "activityAttentionStorageBlocked": "నిల్వ నిండింది — {count, plural, =1{1 రికార్డింగ్ పాజ్ చేయబడింది} other{{count} రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి}}",
     "activityAttentionUploadStalled": "అప్‌లోడ్ ఆగిపోయింది — {count, plural, =1{1 రికార్డింగ్ వేచి ఉంది} other{{count} రికార్డింగ్‌లు వేచి ఉన్నాయి}}",
     "attentionSummaryFailed": "ఈ సంభాషణను సంగ్రహించలేకపోయాం",
     "activityAttentionSemantics": "యాక్టివిటీ, శ్రద్ధ అవసరం",

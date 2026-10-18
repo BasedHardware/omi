@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Vabastage ruumi või kohandage automaatset sünkroonimist",
     "activityAttentionUploadKept": "{duration} heli on sellesse telefoni salvestatud",
     "activityAttentionUploadWaiting": "Salvestised on turvalised ja laaditakse üles niipea kui võimalik",
-    "activityAttentionStorageBlocked": "Salvestusruum on täis — {count, plural, =1{peatatud on 1 salvestis} other{peatatud on {count} salvestist}}",
     "activityAttentionUploadStalled": "Üleslaadimine on seiskunud — {count, plural, =1{ootab 1 salvestis} other{ootab {count} salvestist}}",
     "attentionSummaryFailed": "Seda vestlust ei õnnestunud kokku võtta",
     "activityAttentionSemantics": "Tegevus, vajab tähelepanu",

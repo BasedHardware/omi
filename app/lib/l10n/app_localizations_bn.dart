@@ -13588,17 +13588,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'রেকর্ডিংগুলো নিরাপদ এবং সম্ভব হলেই আপলোড হবে';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$countটি রেকর্ডিং বিরত',
-      one: '1টি রেকর্ডিং বিরত',
-    );
-    return 'স্টোরেজ পূর্ণ — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

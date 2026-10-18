@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "جگہ خالی کریں یا آٹو-سنک تبدیل کریں",
     "activityAttentionUploadKept": "اس فون پر {duration} آڈیو محفوظ ہے",
     "activityAttentionUploadWaiting": "ریکارڈنگز محفوظ ہیں اور جیسے ہی ممکن ہوگا اپ لوڈ ہو جائیں گی",
-    "activityAttentionStorageBlocked": "اسٹوریج بھر چکا ہے — {count, plural, =1{1 ریکارڈنگ روک دی گئی ہے} other{{count} ریکارڈنگز روک دی گئی ہیں}}",
     "activityAttentionUploadStalled": "اپ لوڈ رک گیا ہے — {count, plural, =1{1 ریکارڈنگ انتظار میں ہے} other{{count} ریکارڈنگز انتظار میں ہیں}}",
     "attentionSummaryFailed": "اس گفتگو کا خلاصہ نہیں بن سکا",
     "activityAttentionSemantics": "ایکٹیویٹی، توجہ درکار ہے",

@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Allibera espai o ajusta la sincronització automàtica",
     "activityAttentionUploadKept": "{duration} d'àudio desat en aquest telèfon",
     "activityAttentionUploadWaiting": "Els enregistraments estan segurs i es pujaran quan sigui possible",
-    "activityAttentionStorageBlocked": "Emmagatzematge ple — {count, plural, =1{1 enregistrament en pausa} other{{count} enregistraments en pausa}}",
     "activityAttentionUploadStalled": "La pujada s'ha aturat — {count, plural, =1{1 enregistrament en espera} other{{count} enregistraments en espera}}",
     "attentionSummaryFailed": "No s'ha pogut resumir aquesta conversa",
     "activityAttentionSemantics": "Activitat, requereix atenció",

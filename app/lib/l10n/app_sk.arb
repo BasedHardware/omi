@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Uvoľnite miesto alebo upravte automatickú synchronizáciu",
     "activityAttentionUploadKept": "{duration} zvuku uloženého v tomto telefóne",
     "activityAttentionUploadWaiting": "Nahrávky sú v bezpečí a odoselia sa, hneď ako to bude možné",
-    "activityAttentionStorageBlocked": "Úložisko je plné — {count, plural, =1{pozastavená 1 nahrávka} other{pozastavených {count} nahrávok}}",
     "activityAttentionUploadStalled": "Odosielanie zastavené — {count, plural, =1{čaká 1 nahrávka} other{čaká {count} nahrávok}}",
     "attentionSummaryFailed": "Tento rozhovor sa nepodarilo zhrnúť",
     "activityAttentionSemantics": "Aktivita, vyžaduje pozornosť",

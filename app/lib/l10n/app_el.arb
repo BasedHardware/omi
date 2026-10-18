@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Απελευθερώστε χώρο ή προσαρμόστε τον αυτόματο συγχρονισμό",
     "activityAttentionUploadKept": "{duration} ήχου αποθηκεύτηκαν σε αυτό το τηλέφωνο",
     "activityAttentionUploadWaiting": "Οι ηχογραφήσεις είναι ασφαλείς και θα αποσταλούν μόλις είναι δυνατόν",
-    "activityAttentionStorageBlocked": "Ο αποθηκευτικός χώρος γέμισε — {count, plural, =1{σε παύση 1 ηχογράφηση} other{σε παύση {count} ηχογραφήσεις}}",
     "activityAttentionUploadStalled": "Η αποστολή σταμάτησε — {count, plural, =1{αναμένει 1 ηχογράφηση} other{αναμένουν {count} ηχογραφήσεις}}",
     "attentionSummaryFailed": "Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας",
     "activityAttentionSemantics": "Δραστηριότητα, απαιτεί προσοχή",

@@ -13589,17 +13589,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Các bản ghi đang an toàn và sẽ được tải lên khi có thể';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'đã tạm dừng $count bản ghi',
-      one: 'đã tạm dừng 1 bản ghi',
-    );
-    return 'Bộ nhớ đầy — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

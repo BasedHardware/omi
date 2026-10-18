@@ -13605,17 +13605,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'ریکارڈنگز محفوظ ہیں اور جیسے ہی ممکن ہوگا اپ لوڈ ہو جائیں گی';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ریکارڈنگز روک دی گئی ہیں',
-      one: '1 ریکارڈنگ روک دی گئی ہے',
-    );
-    return 'اسٹوریج بھر چکا ہے — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

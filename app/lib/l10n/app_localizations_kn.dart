@@ -13630,17 +13630,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ ಮತ್ತು ಸಾಧ್ಯವಾದ ತಕ್ಷಣ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತವೆ';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ',
-      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ವಿರಾಮದಲ್ಲಿದೆ',
-    );
-    return 'ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

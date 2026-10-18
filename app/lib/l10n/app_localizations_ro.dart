@@ -13647,17 +13647,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Înregistrările sunt în siguranță și vor fi încărcate când va fi posibil';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count înregistrări puse pe pauză',
-      one: '1 înregistrare pusă pe pauză',
-    );
-    return 'Stocarea este plină — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

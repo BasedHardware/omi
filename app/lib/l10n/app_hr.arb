@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "Oslobodite prostor ili prilagodite automatsku sinkronizaciju",
     "activityAttentionUploadKept": "{duration} zvuka spremljeno na ovom telefonu",
     "activityAttentionUploadWaiting": "Snimke su sigurne i poslat će se čim bude moguće",
-    "activityAttentionStorageBlocked": "Pohrana je puna — {count, plural, =1{pauzirana je 1 snimka} other{pauzirano je {count} snimki}}",
     "activityAttentionUploadStalled": "Prijenos je zastao — {count, plural, =1{čeka 1 snimka} other{čeka {count} snimki}}",
     "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti",
     "activityAttentionSemantics": "Aktivnost, zahtijeva pažnju",

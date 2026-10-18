@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "Sprostite prostor ali prilagodite samodejno sinhronizacijo",
     "activityAttentionUploadKept": "{duration} zvoka shranjenega na tem telefonu",
     "activityAttentionUploadWaiting": "Posnetki so varni in se bodo naložili, ko bo to mogoče",
-    "activityAttentionStorageBlocked": "Shramba je polna — {count, plural, =1{pavziran 1 posnetek} other{pavziranih je {count} posnetkov}}",
     "activityAttentionUploadStalled": "Nalaganje se je ustavilo — {count, plural, =1{čaka 1 posnetek} other{čaka {count} posnetkov}}",
     "attentionSummaryFailed": "Tega pogovora ni bilo mogoče povzeti",
     "activityAttentionSemantics": "Dejavnost, zahteva pozornost",

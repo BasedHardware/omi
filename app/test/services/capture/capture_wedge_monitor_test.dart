@@ -1004,6 +1004,16 @@ void main() {
         containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]),
       );
       expect(forEvent('Capture Recovery Resolved'), hasLength(2));
+      // The episodes resolved, but upload progress proves nothing about the
+      // disk: the storage ROW — what Activity and the bell read — must survive
+      // while the retention risk keeps refusing recordings.
+      expect(monitor.storageAtRisk, isNotNull, reason: 'upload progress must not clear the storage row');
+      expect(monitor.hasCaptureAttention, isTrue);
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue, reason: 'the bell keeps warning about the disk');
+
+      monitor.clearStorageAtRisk();
+      expect(monitor.storageAtRisk, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
     });
   });
 
@@ -1089,8 +1099,11 @@ void main() {
       expect(monitor.hasCaptureAttention, isTrue);
 
       monitor.onUploadCompleted();
-      expect(monitor.storageAtRisk, isNull);
       expect(monitor.uploadStall, isNull);
+      // Upload progress is not disk recovery: the storage row survives it.
+      expect(monitor.storageAtRisk, isNotNull);
+      expect(monitor.hasCaptureAttention, isTrue);
+      monitor.clearStorageAtRisk();
       expect(monitor.hasCaptureAttention, isFalse);
 
       // Hours later the disk is still full: a fresh engagement brings the row back.
@@ -1102,6 +1115,9 @@ void main() {
       expect(monitor.hasCaptureAttention, isTrue);
 
       monitor.observeWalBacklog(pendingCount: 0, oldestPendingAt: null);
+      expect(monitor.uploadStall, isNull, reason: 'an empty backlog ends the upload row');
+      expect(monitor.storageAtRisk, isNotNull, reason: 'the disk is still full; only its own observation ends the row');
+      monitor.clearStorageAtRisk();
       expect(monitor.hasCaptureAttention, isFalse);
       monitor.dispose();
     });

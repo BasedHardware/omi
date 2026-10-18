@@ -13403,17 +13403,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityAttentionUploadWaiting => '録音は安全に保たれ、可能になり次第アップロードされます';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 件の録音を一時停止中',
-      one: '1 件の録音を一時停止中',
-    );
-    return 'ストレージがいっぱいです — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "जगह खाली करें या ऑटो-सिंक बदलें",
     "activityAttentionUploadKept": "इस फ़ोन पर {duration} का ऑडियो सहेजा गया है",
     "activityAttentionUploadWaiting": "रिकॉर्डिंग सुरक्षित हैं और संभव होते ही अपलोड हो जाएँगी",
-    "activityAttentionStorageBlocked": "स्टोरेज भर गया है — {count, plural, =1{1 रिकॉर्डिंग रोकी गई है} other{{count} रिकॉर्डिंग रोक दी गई हैं}}",
     "activityAttentionUploadStalled": "अपलोड रुक गया है — {count, plural, =1{1 रिकॉर्डिंग प्रतीक्षारत} other{{count} रिकॉर्डिंग प्रतीक्षारत}}",
     "attentionSummaryFailed": "इस बातचीत का सारांश नहीं बन सका",
     "activityAttentionSemantics": "गतिविधि, ध्यान देना ज़रूरी",

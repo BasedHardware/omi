@@ -13596,17 +13596,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Tallenteet ovat turvassa ja ladataan, kun se on mahdollista';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count tallennetta keskeytetty',
-      one: '1 tallenne keskeytetty',
-    );
-    return 'Tallennustila täynnä — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

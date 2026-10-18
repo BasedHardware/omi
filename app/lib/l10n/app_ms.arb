@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Kosongkan ruang atau laraskan segerak automatik",
     "activityAttentionUploadKept": "{duration} audio disimpan pada telefon ini",
     "activityAttentionUploadWaiting": "Rakaman selamat dan akan dimuat naik apabila boleh",
-    "activityAttentionStorageBlocked": "Storan penuh — {count, plural, =1{1 rakaman dijedakan} other{{count} rakaman dijedakan}}",
     "activityAttentionUploadStalled": "Muat naik terhenti — {count, plural, =1{1 rakaman menunggu} other{{count} rakaman menunggu}}",
     "attentionSummaryFailed": "Perbualan ini tidak dapat diringkaskan",
     "activityAttentionSemantics": "Aktiviti, memerlukan perhatian",

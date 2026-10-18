@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Frigör utrymme eller justera autosynkronisering",
     "activityAttentionUploadKept": "{duration} ljud sparat på den här telefonen",
     "activityAttentionUploadWaiting": "Inspelningarna är säkra och laddas upp när det är möjligt",
-    "activityAttentionStorageBlocked": "Lagringen är full — {count, plural, =1{1 inspelning pausad} other{{count} inspelningar pausade}}",
     "activityAttentionUploadStalled": "Uppladdningen har stannat — {count, plural, =1{1 inspelning väntar} other{{count} inspelningar väntar}}",
     "attentionSummaryFailed": "Det gick inte att sammanfatta samtalet",
     "activityAttentionSemantics": "Aktivitet, kräver uppmärksamhet",

@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "இடத்தை காலியாக்கவும் அல்லது ஆட்டோ-சிங்கை மாற்றவும்",
     "activityAttentionUploadKept": "இந்த ஃபோனில் {duration} ஆடியோ சேமிக்கப்பட்டது",
     "activityAttentionUploadWaiting": "பதிவுகள் பாதுகாப்பாக உள்ளன, சாத்தியமானதும் பதிவேற்றப்படும்",
-    "activityAttentionStorageBlocked": "சேமிப்பு நிரம்பியது — {count, plural, =1{1 பதிவு இடைநிறுத்தப்பட்டது} other{{count} பதிவுகள் இடைநிறுத்தப்பட்டன}}",
     "activityAttentionUploadStalled": "பதிவேற்றம் நின்றுவிட்டது — {count, plural, =1{1 பதிவு காத்திருக்கிறது} other{{count} பதிவுகள் காத்திருக்கின்றன}}",
     "attentionSummaryFailed": "இந்த உரையாடலைச் சுருக்க முடியவில்லை",
     "activityAttentionSemantics": "ஆக்டிவிட்டி, கவனம் தேவை",

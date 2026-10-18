@@ -24147,12 +24147,6 @@ abstract class AppLocalizations {
   /// **'Recordings are safe and will upload when possible'**
   String get activityAttentionUploadWaiting;
 
-  /// Needs attention row: phone disk is full and blocked recordings are counted
-  ///
-  /// In en, this message translates to:
-  /// **'Storage full — {count, plural, =1{1 recording paused} other{{count} recordings paused}}'**
-  String activityAttentionStorageBlocked(int count);
-
   /// Needs attention row: uploads made no progress long enough to need attention
   ///
   /// In en, this message translates to:

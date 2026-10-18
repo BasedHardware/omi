@@ -13409,17 +13409,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get activityAttentionUploadWaiting => '녹음은 안전하게 보관되며 가능해지면 업로드됩니다';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '녹음 $count개 일시중지됨',
-      one: '녹음 1개 일시중지됨',
-    );
-    return '저장 공간이 가득 참 — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

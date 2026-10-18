@@ -13384,17 +13384,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityAttentionUploadWaiting => '录音是安全的，将在条件允许时上传';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已暂停 $count 条录音',
-      one: '已暂停 1 条录音',
-    );
-    return '存储空间已满 — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

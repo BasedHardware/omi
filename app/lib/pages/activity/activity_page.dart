@@ -99,11 +99,20 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   DateTime? _shownThrough;
   StreamSubscription<void>? _arrivals;
 
+  /// Rebuild when capture attention arrives or leaves: an empty feed otherwise
+  /// commits the build to the empty-state branch, where nothing listens to the
+  /// monitor, and a capture problem that begins while the reader stays on the
+  /// page would light the bell without ever showing its row.
+  void _onCaptureAttentionChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _previousVisitMs = _seen.seenAtMs;
+    _captureMonitor.addListener(_onCaptureAttentionChanged);
     // A daily-summary notification while Activity is on screen shows here, not only on Home.
     _arrivals = recapArrivals.listen((_) => _refresh());
     _refresh();
@@ -118,6 +127,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _captureMonitor.removeListener(_onCaptureAttentionChanged);
     _arrivals?.cancel();
     final shown = _shownThrough;
     if (shown != null) _seen.markSeen(through: shown);
@@ -146,7 +156,6 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     if (!mounted || generation != _generation) return;
     // The section is on screen now: its items stop lighting the bell here and on the Mac.
     unawaited(_pendingWork.markSeen());
-    _captureMonitor.markCaptureAttentionSeen();
     final loaded = results[0] as ({List<DailySummary> items, bool ok});
     // A refresh that started before a deletion may still return the deleted recap.
     final recaps = (items: loaded.items.where((r) => !_deletedIds.contains(r.id)).toList(), ok: loaded.ok);
@@ -251,6 +260,14 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       );
     } else {
       final dates = OmiDateFormat.of(context);
+      // The capture rows are on screen in this build (the failed/empty branches
+      // above never mount the section). Marking after the frame — not in the
+      // load path — keeps the bell lit when a failed load would have hidden
+      // rows the user never saw, and covers attention that arrives while the
+      // page is already open.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _captureMonitor.markCaptureAttentionSeen();
+      });
       final groups = <(String, List<_ActivityItem>)>[];
       for (final item in _items) {
         final header = dates.dayHeader(item.at);

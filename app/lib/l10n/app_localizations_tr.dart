@@ -13605,17 +13605,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Kayıtlar güvende ve olduğunda yüklenecek';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kayıt duraklatıldı',
-      one: '1 kayıt duraklatıldı',
-    );
-    return 'Depolama alanı dolu — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "פנו מקום או שנו את הסנכרון האוטומטי",
     "activityAttentionUploadKept": "{duration} של אודיו נשמרו בטלפון הזה",
     "activityAttentionUploadWaiting": "ההקלטות בטוחות ויועלו ברגע שיהיה אפשרי",
-    "activityAttentionStorageBlocked": "האחסון מלא — {count, plural, =1{הקלטה אחת מושהית} other{{count} הקלטות מושהות}}",
     "activityAttentionUploadStalled": "ההעלאה נתקעה — {count, plural, =1{הקלטה אחת ממתינה} other{{count} הקלטות ממתינות}}",
     "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו",
     "activityAttentionSemantics": "פעילות, דורש תשומת לב",

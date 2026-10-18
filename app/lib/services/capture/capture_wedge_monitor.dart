@@ -174,6 +174,19 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ends the storage row the way its own condition ends: the disk admitted a
+  /// write again (or the retention diagnostic stopped reporting a risk). Upload
+  /// progress must not clear it — a full disk keeps refusing recordings while
+  /// an unrelated backlog drains. The retention fingerprint resets so a risk
+  /// that re-reports after a clear re-engages the row instead of being ignored.
+  void clearStorageAtRisk() {
+    if (_storageAtRisk == null) return;
+    _storageAtRisk = null;
+    _lastRetentionRiskFingerprint = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
   void setNativeIngressOwner(String deviceId, bool active) {
     if (active) {
       _nativeIngressDevices.add(deviceId);
@@ -797,7 +810,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state, {bool bleIngressOnly = false}) {
     if (bleIngressOnly && !_isBleIngressTrigger(state.episode?.trigger ?? '')) return;
-    if (deviceId == localWalDeviceId) _clearCaptureAttention();
+    if (deviceId == localWalDeviceId) {
+      // A resolving local-WAL observation proves upload progress, not recovered
+      // disk: the storage row ends only with its own retention observation.
+      if (_uploadStall != null) {
+        _uploadStall = null;
+        _updateUnseenCaptureAttention();
+        notifyListeners();
+      }
+    }
     if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       // The ingress failure stays (native owns it), but a transcript during
       // the alert must still release the telemetry slot: native-owned devices

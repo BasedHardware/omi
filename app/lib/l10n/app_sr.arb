@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "Ослободите простор или прилагодите аутоматску синхронизацију",
     "activityAttentionUploadKept": "{duration} звука сачувано на овом телефону",
     "activityAttentionUploadWaiting": "Снимке су безбедне и биће отпремљене чим буде могуће",
-    "activityAttentionStorageBlocked": "Складиште је пуно — {count, plural, =1{паузирана је 1 снимка} other{паузирано је {count} снимки}}",
     "activityAttentionUploadStalled": "Отпремање је застало — {count, plural, =1{чека 1 снимка} other{чека {count} снимки}}",
     "attentionSummaryFailed": "Овај разговор није могуће сажети",
     "activityAttentionSemantics": "Активност, захтева пажњу",

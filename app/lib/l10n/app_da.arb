@@ -4202,7 +4202,6 @@
     "activityAttentionStorageSubtitle": "Frigør plads eller juster autosynkronisering",
     "activityAttentionUploadKept": "{duration} lyd gemt på denne telefon",
     "activityAttentionUploadWaiting": "Optagelserne er i sikkerhed og uploades, så snart det er muligt",
-    "activityAttentionStorageBlocked": "Lageret er fuldt — {count, plural, =1{1 optagelse sat på pause} other{{count} optagelser sat på pause}}",
     "activityAttentionUploadStalled": "Upload er gået i stå — {count, plural, =1{1 optagelse venter} other{{count} optagelser venter}}",
     "attentionSummaryFailed": "Samtalen kunne ikke opsummeres",
     "activityAttentionSemantics": "Aktivitet, kræver opmærksomhed",

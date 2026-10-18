@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Frigjør plass eller juster autosynkronisering",
     "activityAttentionUploadKept": "{duration} lyd lagret på denne telefonen",
     "activityAttentionUploadWaiting": "Opptakene er trygge og lastes opp så snart det er mulig",
-    "activityAttentionStorageBlocked": "Lageret er fullt — {count, plural, =1{1 opptak satt på pause} other{{count} opptak satt på pause}}",
     "activityAttentionUploadStalled": "Opplastingen har stoppet — {count, plural, =1{1 opptak venter} other{{count} opptak venter}}",
     "attentionSummaryFailed": "Kunne ikke oppsummere denne samtalen",
     "activityAttentionSemantics": "Aktivitet, krever oppmerksomhet",

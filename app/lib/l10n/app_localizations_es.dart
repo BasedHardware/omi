@@ -13631,17 +13631,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Las grabaciones están a salvo y se subirán cuando sea posible';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count grabaciones en pausa',
-      one: '1 grabación en pausa',
-    );
-    return 'Almacenamiento lleno — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

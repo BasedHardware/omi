@@ -13601,17 +13601,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Снимке су безбедне и биће отпремљене чим буде могуће';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'паузирано је $count снимки',
-      one: 'паузирана је 1 снимка',
-    );
-    return 'Складиште је пуно — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

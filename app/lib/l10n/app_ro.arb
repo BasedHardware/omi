@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Eliberează spațiu sau ajustează sincronizarea automată",
     "activityAttentionUploadKept": "{duration} de audio salvat pe acest telefon",
     "activityAttentionUploadWaiting": "Înregistrările sunt în siguranță și vor fi încărcate când va fi posibil",
-    "activityAttentionStorageBlocked": "Stocarea este plină — {count, plural, =1{1 înregistrare pusă pe pauză} other{{count} înregistrări puse pe pauză}}",
     "activityAttentionUploadStalled": "Încărcarea s-a oprit — {count, plural, =1{1 înregistrare așteaptă} other{{count} înregistrări așteaptă}}",
     "attentionSummaryFailed": "Conversația nu a putut fi rezumată",
     "activityAttentionSemantics": "Activitate, necesită atenție",

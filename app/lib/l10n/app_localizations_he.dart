@@ -13498,17 +13498,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'ההקלטות בטוחות ויועלו ברגע שיהיה אפשרי';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count הקלטות מושהות',
-      one: 'הקלטה אחת מושהית',
-    );
-    return 'האחסון מלא — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

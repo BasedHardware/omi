@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Maak ruimte vrij of pas autosync aan",
     "activityAttentionUploadKept": "{duration} audio opgeslagen op deze telefoon",
     "activityAttentionUploadWaiting": "Opnames zijn veilig en worden geüpload zodra dat kan",
-    "activityAttentionStorageBlocked": "Opslag vol — {count, plural, =1{1 opname gepauzeerd} other{{count} opnames gepauzeerd}}",
     "activityAttentionUploadStalled": "Upload vastgelopen — {count, plural, =1{1 opname wacht} other{{count} opnames wachten}}",
     "attentionSummaryFailed": "Dit gesprek kon niet worden samengevat",
     "activityAttentionSemantics": "Activiteit, aandacht nodig",

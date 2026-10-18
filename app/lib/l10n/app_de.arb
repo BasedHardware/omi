@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Speicherplatz freigeben oder Auto-Sync anpassen",
     "activityAttentionUploadKept": "{duration} Audio auf diesem Telefon gespeichert",
     "activityAttentionUploadWaiting": "Aufnahmen sind sicher und werden hochgeladen, sobald möglich",
-    "activityAttentionStorageBlocked": "Speicher voll — {count, plural, =1{1 Aufnahme pausiert} other{{count} Aufnahmen pausiert}}",
     "activityAttentionUploadStalled": "Upload stockt — {count, plural, =1{1 Aufnahme wartet} other{{count} Aufnahmen warten}}",
     "attentionSummaryFailed": "Diese Unterhaltung konnte nicht zusammengefasst werden",
     "activityAttentionSemantics": "Aktivität, Aufmerksamkeit erforderlich",

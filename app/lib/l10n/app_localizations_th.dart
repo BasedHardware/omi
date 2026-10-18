@@ -13525,17 +13525,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'การบันทึกปลอดภัยและจะอัปโหลดเมื่อทำได้';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'หยุดชั่วคราว $count รายการ',
-      one: 'หยุดชั่วคราว 1 รายการ',
-    );
-    return 'พื้นที่เก็บข้อมูลเต็ม — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

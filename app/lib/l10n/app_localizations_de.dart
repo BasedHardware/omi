@@ -13691,17 +13691,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Aufnahmen sind sicher und werden hochgeladen, sobald möglich';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count Aufnahmen pausiert',
-      one: '1 Aufnahme pausiert',
-    );
-    return 'Speicher voll — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

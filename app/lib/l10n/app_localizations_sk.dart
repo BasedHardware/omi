@@ -13587,17 +13587,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Nahrávky sú v bezpečí a odoselia sa, hneď ako to bude možné';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'pozastavených $count nahrávok',
-      one: 'pozastavená 1 nahrávka',
-    );
-    return 'Úložisko je plné — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

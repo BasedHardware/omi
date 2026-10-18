@@ -13697,17 +13697,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Ligtas ang mga recording at ia-upload kapag nagawa';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'naka-pause ang $count na recording',
-      one: 'naka-pause ang 1 recording',
-    );
-    return 'Puno ang storage — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

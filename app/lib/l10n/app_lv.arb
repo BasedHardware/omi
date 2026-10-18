@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "Atbrīvojiet vietu vai pielāgojiet automātisko sinhronizāciju",
     "activityAttentionUploadKept": "{duration} audio saglabāts šajā tālrunī",
     "activityAttentionUploadWaiting": "Ieraksti ir drošībā un tiks augšupielādēti, tiklīdz tas būs iespējams",
-    "activityAttentionStorageBlocked": "Atmiņa pilna — {count, plural, =1{apturēts 1 ieraksts} other{apturēti {count} ieraksti}}",
     "activityAttentionUploadStalled": "Augšupielāde apstājusies — {count, plural, =1{gaida 1 ieraksts} other{gaida {count} ieraksti}}",
     "attentionSummaryFailed": "Šo sarunu neizdevās apkopot",
     "activityAttentionSemantics": "Aktivitāte, pieprasa uzmanību",

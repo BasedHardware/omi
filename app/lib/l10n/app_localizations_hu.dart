@@ -13646,17 +13646,6 @@ class AppLocalizationsHu extends AppLocalizations {
       'A felvételek biztonságban vannak, és feltöltésre kerülnek, amint lehetséges';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count felvétel szünetel',
-      one: '1 felvétel szünetel',
-    );
-    return 'A tárhely megtelt — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

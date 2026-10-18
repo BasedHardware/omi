@@ -13676,17 +13676,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Οι ηχογραφήσεις είναι ασφαλείς και θα αποσταλούν μόλις είναι δυνατόν';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'σε παύση $count ηχογραφήσεις',
-      one: 'σε παύση 1 ηχογράφηση',
-    );
-    return 'Ο αποθηκευτικός χώρος γέμισε — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

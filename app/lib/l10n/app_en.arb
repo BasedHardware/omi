@@ -16399,15 +16399,6 @@
     "@activityAttentionUploadWaiting": {
         "description": "Needs attention row subtitle for a stalled upload when the kept-audio length is unknown"
     },
-    "activityAttentionStorageBlocked": "Storage full — {count, plural, =1{1 recording paused} other{{count} recordings paused}}",
-    "@activityAttentionStorageBlocked": {
-        "description": "Needs attention row: phone disk is full and blocked recordings are counted",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "activityAttentionUploadStalled": "Upload stalled — {count, plural, =1{1 recording waiting} other{{count} recordings waiting}}",
     "@activityAttentionUploadStalled": {
         "description": "Needs attention row: uploads made no progress long enough to need attention",

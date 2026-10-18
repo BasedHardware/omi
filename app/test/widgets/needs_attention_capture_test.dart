@@ -124,27 +124,21 @@ void main() {
       );
 
   group('NeedsAttentionSection capture rows', () {
-    testWidgets('storage at risk renders its row with the blocked count', (tester) async {
+    testWidgets('storage at risk renders its row without an attempt count', (tester) async {
       final monitor = _monitor();
       addTearDown(monitor.dispose);
       _seedStorage(monitor, blockedCount: 3);
 
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
-      expect(find.text('Storage full — 3 recordings paused'), findsOneWidget);
+      // blockedCount counts admission attempts, not recordings, so the row never
+      // renders it as a count of paused recordings.
+      expect(find.text('Storage full — recordings paused'), findsOneWidget);
+      expect(find.text('Storage full — 3 recordings paused'), findsNothing);
       expect(find.text('Free space or adjust auto-sync'), findsOneWidget);
       expect(find.text('Manage'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
       expect(find.byIcon(Icons.chevron_right), findsNothing);
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
-    });
-
-    testWidgets('storage with no blocked count yet reads as recordings paused', (tester) async {
-      final monitor = _monitor();
-      addTearDown(monitor.dispose);
-      _seedStorage(monitor, blockedCount: 0);
-
-      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
-      expect(find.text('Storage full — recordings paused'), findsOneWidget);
     });
 
     testWidgets('an upload stall renders its row with the kept-audio length', (tester) async {
@@ -176,7 +170,7 @@ void main() {
       // Pop back so the row body is hittable again, then tap it away from the pill.
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pump();
-      await tester.tap(find.text('Storage full — 3 recordings paused'));
+      await tester.tap(find.text('Storage full — recordings paused'));
       expect(pushes.count - baseline, 2, reason: 'the row body still opens the same Offline Sync entry');
     });
 
@@ -212,10 +206,16 @@ void main() {
       await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
       expect(find.byKey(const Key('activity_needs_attention')), findsOneWidget);
 
+      // Upload progress ends the stall row only; the storage row survives it.
       monitor.onUploadCompleted();
       await tester.pump();
-      expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
+      expect(find.byKey(const Key('activity_needs_attention')), findsOneWidget);
+
+      monitor.clearStorageAtRisk();
+      await tester.pump();
+      expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
       expect(find.byKey(const Key('activity_needs_attention')), findsNothing);
     });
 
@@ -231,6 +231,9 @@ void main() {
       expect(NeedsAttentionSection.hasContent(store, idle, storage), isTrue);
 
       storage.onUploadCompleted();
+      expect(NeedsAttentionSection.hasContent(store, idle, storage), isTrue,
+          reason: 'the storage row survives uploads');
+      storage.clearStorageAtRisk();
       expect(NeedsAttentionSection.hasContent(store, idle, storage), isFalse);
 
       // A finished upload arms the silence threshold's freshness guard, so the

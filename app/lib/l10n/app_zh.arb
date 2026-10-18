@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "请释放空间或调整自动同步设置",
     "activityAttentionUploadKept": "已在此手机上保存 {duration} 的音频",
     "activityAttentionUploadWaiting": "录音是安全的，将在条件允许时上传",
-    "activityAttentionStorageBlocked": "存储空间已满 — {count, plural, =1{已暂停 1 条录音} other{已暂停 {count} 条录音}}",
     "activityAttentionUploadStalled": "上传停滞 — {count, plural, =1{1 条录音等待中} other{{count} 条录音等待中}}",
     "attentionSummaryFailed": "无法总结这段对话",
     "activityAttentionSemantics": "活动，需要关注",

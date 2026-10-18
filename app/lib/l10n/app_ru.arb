@@ -4195,7 +4195,6 @@
     "activityAttentionStorageSubtitle": "Освободите место или настройте автосинхронизацию",
     "activityAttentionUploadKept": "{duration} аудио сохранено на этом телефоне",
     "activityAttentionUploadWaiting": "Записи в безопасности и будут загружены при первой возможности",
-    "activityAttentionStorageBlocked": "Память заполнена — {count, plural, =1{1 запись приостановлена} other{{count} записи приостановлены}}",
     "activityAttentionUploadStalled": "Загрузка остановлена — {count, plural, =1{ждёт 1 запись} other{ждут {count} записи}}",
     "attentionSummaryFailed": "Не удалось подвести итоги этого разговора",
     "activityAttentionSemantics": "Активность, требует внимания",

@@ -13684,17 +13684,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'பதிவுகள் பாதுகாப்பாக உள்ளன, சாத்தியமானதும் பதிவேற்றப்படும்';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பதிவுகள் இடைநிறுத்தப்பட்டன',
-      one: '1 பதிவு இடைநிறுத்தப்பட்டது',
-    );
-    return 'சேமிப்பு நிரம்பியது — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

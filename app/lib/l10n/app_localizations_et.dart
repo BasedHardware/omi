@@ -13585,17 +13585,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Salvestised on turvalised ja laaditakse üles niipea kui võimalik';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'peatatud on $count salvestist',
-      one: 'peatatud on 1 salvestis',
-    );
-    return 'Salvestusruum on täis — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

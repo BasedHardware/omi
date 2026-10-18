@@ -13626,17 +13626,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get activityAttentionUploadWaiting => 'Запісы ў бяспецы і будуць загружаны, як толькі з\'явіцца магчымасць';
 
   @override
-  String activityAttentionStorageBlocked(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'прыпынены $count запісы',
-      one: 'прыпынены 1 запіс',
-    );
-    return 'Памяць запоўнена — $_temp0';
-  }
-
-  @override
   String activityAttentionUploadStalled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

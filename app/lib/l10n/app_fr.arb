@@ -4195,7 +4195,6 @@
     "activityAttentionStorageSubtitle": "Libérez de l'espace ou ajustez la synchro auto",
     "activityAttentionUploadKept": "{duration} d'audio enregistré sur ce téléphone",
     "activityAttentionUploadWaiting": "Les enregistrements sont en sécurité et seront envoyés dès que possible",
-    "activityAttentionStorageBlocked": "Stockage plein — {count, plural, =1{1 enregistrement en pause} other{{count} enregistrements en pause}}",
     "activityAttentionUploadStalled": "Envoi bloqué — {count, plural, =1{1 enregistrement en attente} other{{count} enregistrements en attente}}",
     "attentionSummaryFailed": "Impossible de résumer cette conversation",
     "activityAttentionSemantics": "Activité, attention requise",

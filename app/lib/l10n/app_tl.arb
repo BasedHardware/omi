@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "Mag-free ng space o i-adjust ang auto-sync",
     "activityAttentionUploadKept": "{duration} ng audio naka-save sa phone na ito",
     "activityAttentionUploadWaiting": "Ligtas ang mga recording at ia-upload kapag nagawa",
-    "activityAttentionStorageBlocked": "Puno ang storage — {count, plural, =1{naka-pause ang 1 recording} other{naka-pause ang {count} na recording}}",
     "activityAttentionUploadStalled": "Naka-stall ang upload — {count, plural, =1{1 recording ang naghihintay} other{{count} na recording ang naghihintay}}",
     "attentionSummaryFailed": "Hindi ma-summarize ang usapang ito",
     "activityAttentionSemantics": "Aktibidad, kailangan ng pansin",

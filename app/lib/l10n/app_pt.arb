@@ -4195,7 +4195,6 @@
     "activityAttentionStorageSubtitle": "Libere espaço ou ajuste a sincronização automática",
     "activityAttentionUploadKept": "{duration} de áudio salvo neste telefone",
     "activityAttentionUploadWaiting": "As gravações estão seguras e serão enviadas quando possível",
-    "activityAttentionStorageBlocked": "Armazenamento cheio — {count, plural, =1{1 gravação pausada} other{{count} gravações pausadas}}",
     "activityAttentionUploadStalled": "Envio parado — {count, plural, =1{1 gravação aguardando} other{{count} gravações aguardando}}",
     "attentionSummaryFailed": "Não foi possível resumir esta conversa",
     "activityAttentionSemantics": "Atividade, requer atenção",

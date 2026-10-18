@@ -4160,7 +4160,6 @@
     "activityAttentionStorageSubtitle": "ล้างพื้นที่หรือปรับการซิงก์อัตโนมัติ",
     "activityAttentionUploadKept": "บันทึกเสียงไว้ {duration} บนเครื่องนี้",
     "activityAttentionUploadWaiting": "การบันทึกปลอดภัยและจะอัปโหลดเมื่อทำได้",
-    "activityAttentionStorageBlocked": "พื้นที่เก็บข้อมูลเต็ม — {count, plural, =1{หยุดชั่วคราว 1 รายการ} other{หยุดชั่วคราว {count} รายการ}}",
     "activityAttentionUploadStalled": "การอัปโหลดหยุดชะงัก — {count, plural, =1{1 รายการกำลังรอ} other{{count} รายการกำลังรอ}}",
     "attentionSummaryFailed": "ไม่สามารถสรุปบทสนทนานี้ได้",
     "activityAttentionSemantics": "กิจกรรม ต้องดำเนินการ",

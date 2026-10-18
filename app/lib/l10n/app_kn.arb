@@ -11583,7 +11583,6 @@
     "activityAttentionStorageSubtitle": "ಸ್ಥಳಾವಕಾಶ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ಸ್ವಯಂ-ಸಿಂಕ್ ಬದಲಾಯಿಸಿ",
     "activityAttentionUploadKept": "ಈ ಫೋನ್‌ನಲ್ಲಿ {duration} ಆಡಿಯೊ ಉಳಿಸಲಾಗಿದೆ",
     "activityAttentionUploadWaiting": "ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ ಮತ್ತು ಸಾಧ್ಯವಾದ ತಕ್ಷಣ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತವೆ",
-    "activityAttentionStorageBlocked": "ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ — {count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್ ವಿರಾಮದಲ್ಲಿದೆ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ}}",
     "activityAttentionUploadStalled": "ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ — {count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್ ಕಾಯುತ್ತಿದೆ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತಿವೆ}}",
     "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "activityAttentionSemantics": "ಚಟುವಟಿಕೆ, ಗಮನ ಬೇಕು",
