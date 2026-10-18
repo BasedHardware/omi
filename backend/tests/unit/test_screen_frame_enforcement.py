@@ -84,6 +84,42 @@ class TestCapIsApplied:
         assert {d["id"] for d in evicted} == {"old0", "old1", "old2"}
 
 
+class TestCapturedAtCoercion:
+    """Persisted docs reach the sort as datetime, ISO string, naive, or
+    None — sorting mixed raw values raised TypeError/'can't compare
+    offset-naive and offset-aware datetimes'. Regression tests for the
+    coercion."""
+
+    def test_iso_string_timestamps_do_not_crash_sorting(self):
+        frames = [_new_frame(f"f{i}", i, 0.1) for i in range(4)]
+        docs = [enforcement_mod._frame_doc(f) for f in frames]
+        docs[1]["captured_at"] = docs[1]["captured_at"].isoformat()  # ISO str
+        docs[3]["captured_at"] = "2026-01-01T00:00:03Z"  # Z-suffixed str
+        survivors, _ = _apply_cap_and_roles([], docs, max_persisted=7)
+        ordered = [
+            d["id"] for d in sorted(survivors, key=lambda d: enforcement_mod._coerce_captured_at(d["captured_at"]))
+        ]
+        assert ordered == ["f0", "f1", "f2", "f3"]
+
+    def test_naive_and_aware_datetimes_sort_together(self):
+        frames = [_new_frame(f"f{i}", i, 0.1) for i in range(3)]
+        docs = [enforcement_mod._frame_doc(f) for f in frames]
+        docs[0]["captured_at"] = docs[0]["captured_at"].replace(tzinfo=None)  # naive
+        # Must not raise 'can't compare offset-naive and offset-aware'
+        survivors, _ = _apply_cap_and_roles([], docs, max_persisted=7)
+        assert len(survivors) == 3
+
+    def test_missing_or_garbage_captured_at_sorts_oldest(self):
+        frames = [_new_frame(f"f{i}", i, 0.1) for i in range(3)]
+        docs = [enforcement_mod._frame_doc(f) for f in frames]
+        docs[0]["captured_at"] = None  # missing
+        docs[1]["captured_at"] = "not-a-timestamp"  # garbage
+        # None/garbage coerce to the oldest sentinel — they're evicted first.
+        survivors, evicted = _apply_cap_and_roles([], docs, max_persisted=1)
+        assert {d["id"] for d in evicted} == {"f0", "f1"}
+        assert [d["id"] for d in survivors] == ["f2"]
+
+
 class TestBannerThreshold:
     def test_banner_below_threshold_yields_none(self):
         frames = [_new_frame("f0", 0, 0.10), _new_frame("f1", 1, 0.20), _new_frame("f2", 2, 0.34)]

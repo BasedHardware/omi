@@ -83,6 +83,32 @@ def _frame_doc(frame: NewPersistedFrame, bucket: Optional[str] = None) -> Dict[s
     }
 
 
+# Minimum sentinel for missing/garbage timestamps — an unparseable
+# captured_at sorts as the OLDEST frame (evicted first), never crashes
+# the sort. Aware so it can compare against any coerced value.
+_MIN_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _coerce_captured_at(value: Any) -> datetime:
+    """Normalize a persisted captured_at to an aware UTC datetime for sorting.
+
+    Persisted Firestore docs and API-boundary payloads reach the sort sites
+    as datetime, ISO string, or missing/None. Sorting them raw raises
+    TypeError ('<' between datetime and str) or
+    'can't compare offset-naive and offset-aware datetimes'. Coerce every
+    shape; on garbage, fall back to the oldest-position sentinel.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return _MIN_TIMESTAMP
+    return _MIN_TIMESTAMP
+
+
 def _apply_cap_and_roles(
     existing: List[Dict[str, Any]], new_docs: List[Dict[str, Any]], max_persisted: int
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -95,7 +121,7 @@ def _apply_cap_and_roles(
     by_id: Dict[str, Dict[str, Any]] = {}
     for doc in [*existing, *new_docs]:
         by_id[doc['id']] = doc
-    pool = sorted(by_id.values(), key=lambda d: d['captured_at'])
+    pool = sorted(by_id.values(), key=lambda d: _coerce_captured_at(d.get('captured_at')))
 
     if len(pool) > max_persisted:
         evicted = pool[: len(pool) - max_persisted]
@@ -112,7 +138,9 @@ def _apply_cap_and_roles(
             banner_id = doc['id']
             best = suitability
 
-    strip_candidates = sorted((d for d in survivors if d['id'] != banner_id), key=lambda d: d['captured_at'])
+    strip_candidates = sorted(
+        (d for d in survivors if d['id'] != banner_id), key=lambda d: _coerce_captured_at(d.get('captured_at'))
+    )
     strip_candidates = strip_candidates[:STRIP_MAX]
     strip_rank = {d['id']: rank for rank, d in enumerate(strip_candidates)}
 
@@ -194,7 +222,7 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
             banner = api_frame
         else:
             strip.append(api_frame)
-    strip.sort(key=lambda f: f.captured_at)
+    strip.sort(key=lambda f: _coerce_captured_at(f.captured_at))
     adjudicated_at = screen_frames_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id, bucket=bucket)
     selection_fingerprint = screen_frames_db.get_conversation_screen_frames_selection_fingerprint(
         uid, conversation_id, bucket=bucket
