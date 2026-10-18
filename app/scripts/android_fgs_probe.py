@@ -90,6 +90,7 @@ def main():
                     mode,
                 )
                 active_verified = mode not in ("burst", "restart")
+                stop_marker = f"STOP_REQUESTED mode={mode}"
                 # Android enforces its own foreground deadline. Give the
                 # emulator enough bounded wall time to deliver Activity.onStop
                 # and emit the terminal marker on a busy CI host.
@@ -116,8 +117,8 @@ def main():
                             .split("Suspend Blockers:", 1)[0]
                         )
                         active_verified = "isForeground=true" in active and "omi:sync-transfer" in active_power
-                        if not active_verified:
-                            raise SystemExit("A queued stop terminated the later active transfer.")
+                        if not active_verified and stop_marker in log:
+                            raise SystemExit("The later active transfer was not foreground before the stop request.")
                     if f"SURVIVED mode={mode}" in log or "FATAL EXCEPTION" in log:
                         break
                     time.sleep(0.5)
@@ -136,6 +137,7 @@ def main():
                     and (mode != "background-stop" or "BACKGROUND_STOP" in log)
                     and f"SURVIVED mode={mode}" in log
                     and "FATAL EXCEPTION" not in log
+                    and (mode not in ("burst", "restart") or stop_marker in log)
                     and "ServiceRecord{" not in services
                     and "omi:sync-transfer" not in power.split("Wake Locks:", 1)[1].split("Suspend Blockers:", 1)[0]
                     and f"|{PACKAGE}|" not in notifications
