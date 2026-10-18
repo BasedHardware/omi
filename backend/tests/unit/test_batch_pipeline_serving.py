@@ -314,3 +314,65 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     assert client.get('/v2/batch-pipeline/metrics').status_code == 200
     service.reconcile.assert_called_once_with()
     service.metrics.refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch):
+    import asyncio
+    from routers import batch_pipeline as routes
+
+    _, store = api
+    service = routes.serving_for_stage('dev')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    entered, release = threading.Event(), threading.Event()
+
+    def recover(segment, owner):
+        entered.set()
+        assert release.wait(5)
+        return 'recovered'
+
+    service.recovery = Mock()
+    service.recovery.recover.side_effect = recover
+    from unittest.mock import AsyncMock
+
+    service.reconcile_async = AsyncMock()
+    task = asyncio.create_task(routes.recover_quarantine(routes.RedriveRequest(stage='dev', segment_id='synthetic')))
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        assert not task.done()  # The request stays active during the provider call.
+        service.reconcile_async.assert_not_awaited()
+    finally:
+        release.set()
+    assert await task == {'status': 'recovered'}
+    service.reconcile_async.assert_awaited_once_with()
+    assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+
+
+def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
+    client, _ = api
+    path = '/v2/batch-pipeline/recover-quarantine'
+    assert client.post(path, json={'stage': 'prod', 'segment_id': 'synthetic'}).status_code == 409
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
+    app = FastAPI()
+    app.include_router(module.router)
+    assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
+
+
+@pytest.mark.parametrize(
+    'path,expected', [('/v2/batch-pipeline/recover-quarantine', 'tasks-sa'), ('/v2/batch-pipeline/pull', 'worker-sa')]
+)
+def test_recovery_invoker_cannot_gain_worker_authority(monkeypatch, path, expected):
+    from starlette.requests import Request
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', 'https://worker.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://integration.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', 'worker-sa')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'tasks-sa')
+    verify = Mock(return_value=0)
+    monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verify)
+    module.verify_worker(Request({'type': 'http', 'path': path, 'headers': []}))
+    assert verify.call_args.kwargs['invoker_sa'] == expected
+    assert verify.call_args.kwargs['audience'] == (
+        'https://integration.run.app' if expected == 'tasks-sa' else 'https://worker.run.app'
+    )

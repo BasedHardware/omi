@@ -447,6 +447,14 @@ def with_backend_storage_env(payload: str) -> str:
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
+    # Keep integration snapshots complete while tests remove unrelated fields.
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"flags":\s*\{)',
+        r'\1"--timeout": "3600s", ',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     payload = with_account_cutover_enforcement(payload)
     payload = with_sync_ledger_fence_mode(payload)
     payload = with_memory_env(payload)
@@ -619,6 +627,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             flags=re.DOTALL,
         )
     payload = with_backend_integration_events_secret(payload)
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"env":\s*\[)',
+        r'\1{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
+        r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     return with_firestore_read_runtime_env(payload)
 
 

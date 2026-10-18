@@ -264,3 +264,41 @@ Silero inspection after empty ASR, before quarantine; ONNX and the VAD asset
 are packaged in this image. Enable only with an approved worker image rollout
 and worker flag change; setting it back to false restores empty-ASR quarantine.
 See `docs/listen_pusher_pipeline.mdx` for payload and recovery semantics.
+
+
+### Paid quarantine recovery request lifetime
+
+`BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
+serving reconciliation loop prepares the existing fenced recovery intent and
+queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
+origin, declared separately from the worker audience in dev and prod) plus
+`/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
+The handler awaits the sole provider call and result persistence before replying,
+so ordinary Cloud Run revision draining sees an active request. Background sweeps
+enqueue prepared work or reconcile running artifacts. Any dispatch failure
+(including missing configuration or a lost enqueue acknowledgement) falls back
+to inline recovery with the same token. The task and inline path race through
+the same transactional start fence, so at most one can invoke paid STT. The
+shared fallback metric records this degraded inline execution. A disabled
+handler host or owner cohort returns retryable HTTP 503, never a successful ack.
+A two-minute wake-name generation repairs exhausted tasks without authorizing a
+second provider call. Existing privacy, lease, content ownership and intent-token
+fences apply to every delivery, including duplicates and admission rollback.
+
+Integration declares a 3,600-second Cloud Run request timeout in both manifests,
+above the 1,500-second task dispatch deadline and application path timeout.
+Modulate has a 300-second client budget. If the application returns 504,
+cancelling the ASGI await does not stop its executor thread: that thread may
+still persist the result while its instance survives. A retry adopts the same
+`running` token and only reconciles artifacts; it never starts a second paid
+call. Ordinary drain protection ends with the request; a timeout followed by
+instance death can still leave uncertain work held (including the existing
+900-second abandonment fence). This is not permission to reset the token.
+
+Kill switch: set `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false` to restore inline
+sweeping. Already enqueued tasks still use the same intent fence. No historical
+`failed_held` intent is reset. An exceptional instance kill can still leave an
+uncertain paid call held; this requires provider result reconciliation or an
+explicit new epoch, never blind retry. Do not weaken the quarantine-to-completion
+gate or exclude censored held work to hide this residual obligation.

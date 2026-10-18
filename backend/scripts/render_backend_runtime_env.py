@@ -217,6 +217,7 @@ def main() -> int:
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
+                    (f'{output_prefix}_flags', _render_flags(service_config.get('flags', {}))),
                     (f'{output_prefix}_forbidden_env_names', ','.join(sorted(service_config.get('forbidden_env', [])))),
                     (f'{output_prefix}_remove_env_extra', _remove_env_extra(service, service_config)),
                 )
@@ -370,7 +371,7 @@ def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
             raise ValueError(f'Cloud Run service {service_name} must be a mapping')
         service_state: ConfigDict = {
             'env': _render_state_env(service_config),
-            'flags': dict(network_flags),
+            'flags': {**network_flags, **_render_flag_values(_as_config_dict(service_config.get('flags')) or {})},
         }
         service_account = _service_account(str(service_name), service_config)
         if service_account:
