@@ -312,6 +312,8 @@ class CaptureReplayWorld {
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
   CalendarCaptureGapMonitor? calendarGapMonitor;
+  Future<void> Function(String, bool)? deviceMuteWriter;
+  Future<bool?> Function(String)? deviceMuteReader;
   CaptureWedgeMonitor? captureWedgeMonitor;
 
   bool _disposed = false;
@@ -326,6 +328,8 @@ class CaptureReplayWorld {
     bool supportsBatch = true,
     BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
     CalendarCaptureGapMonitor? calendarGapMonitor,
+    Future<void> Function(String, bool)? deviceMuteWriter,
+    Future<bool?> Function(String)? deviceMuteReader,
     CaptureWedgeMonitor? captureWedgeMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -337,6 +341,8 @@ class CaptureReplayWorld {
       pendantCodec: pendantCodec,
     );
     world.calendarGapMonitor = calendarGapMonitor;
+    world.deviceMuteWriter = deviceMuteWriter;
+    world.deviceMuteReader = deviceMuteReader;
     world.captureWedgeMonitor = captureWedgeMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
@@ -421,6 +427,8 @@ class CaptureReplayWorld {
       scheduling: scheduler,
       inProgressConversationLoader: () async {},
       deviceConnectionLoader: (deviceId) async => deviceConnection,
+      deviceMuteWriter: deviceMuteWriter,
+      deviceMuteReader: deviceMuteReader,
       omiCallState: omiCall,
       processInProgressOutcome: () async {
         processCalls++;
@@ -622,6 +630,8 @@ class _ReplayCaptureController extends CaptureController {
     super.processInProgressOutcome,
     super.omiCallState,
     super.calendarGapMonitor,
+    super.deviceMuteWriter,
+    super.deviceMuteReader,
     super.captureWedgeMonitor,
   });
 
