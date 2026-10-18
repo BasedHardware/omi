@@ -73,14 +73,17 @@ def test_non_overlap_and_touching_boundary_create_normal_sync(start):
 
 
 @pytest.mark.parametrize('start', [995, 1005])
-def test_partial_overlap_keeps_all_new_speech_and_live_origin(start):
+@pytest.mark.parametrize('timeline', [None, {'version': 2}])
+@pytest.mark.parametrize('explicit_target', [False, True])
+def test_partial_overlap_keeps_all_new_speech_and_live_origin(start, timeline, explicit_target):
     live = live_row('in_progress')
-    live['audio_timeline'] = {'version': 2}
+    if timeline is not None:
+        live['audio_timeline'] = timeline
     store = seeded(live)
     incoming = dict(
         chunk('wal', start, text='New speech outside the existing live transcript.'), data_protection_level='standard'
     )
-    row, created, _ = assign(store, incoming)
+    row, created, _ = assign(store, incoming, target_id='live' if explicit_target else None)
     assert not created and row['id'] == 'live'
     assert row['started_at'] == live['started_at']
     assert {s['text'] for s in row['transcript_segments']} == {
@@ -88,6 +91,58 @@ def test_partial_overlap_keeps_all_new_speech_and_live_origin(start):
         incoming['transcript_segments'][0]['text'],
     }
     assert sorted(s['start'] for s in row['transcript_segments']) == sorted([0, start - 1000])
+
+
+@pytest.mark.parametrize('status', ['completed', 'in_progress'])
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_adoption_outside_lineage_allowlist_keeps_cached_origin_and_fences_late_live(monkeypatch, status, level):
+    from config.sync_lineage import sync_lineage_resolve_active_for
+    from database import conversations as db
+
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'another-synthetic-owner')
+    assert not sync_lineage_resolve_active_for('u')
+    live = live_row(status)
+    assert 'audio_timeline' not in live
+    cached_origin = live['started_at']
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'live')
+    store.rows[path] = db._prepare_conversation_for_write(live, 'u', level)
+    monkeypatch.setattr(db, 'find_sync_live_overlap_candidates', lambda *a, **kw: ('live',))
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'db', store)
+    # Keep storage codecs and the read-before-write transaction boundary real.
+    incoming = dict(chunk('wal', 995, text='Earlier retained sync speech.'), data_protection_level=level)
+    stale, created, _ = db.assign_sync_conversation('u', incoming, firestore_client=store)
+    assert not created and stale['id'] == 'live' and stale['sync_live_target']
+    assert stale['started_at'] == cached_origin
+    early = next(s for s in stale['transcript_segments'] if s['text'] == 'Earlier retained sync speech.')
+    assert early['start'] == -5 and early['audio_alignment'] == 'unplaced'
+    assert stale['sync_content_revision'] == 1
+
+    # The listener's 30-second cache still computes offsets from the old origin.
+    late = dict(
+        id='late', start=12, end=14, text='Delayed live final.', speaker='SPEAKER_01', speaker_id=1, is_user=True
+    )
+    for _ in range(2):  # an unchanged live retry must not advance the fence
+        db.update_conversation_segments('u', 'live', [], live_segments=[late], firestore_client=store)
+        assert store.rows[path]['sync_content_revision'] == 2
+    stale['status'] = 'completed'
+    writes_before = sum(len(t.sets) + len(t.updates) for t in store.transactions)
+    assert not db.persist_processing_result_with_lifecycle('u', stale)
+    assert sum(len(t.sets) + len(t.updates) for t in store.transactions) == writes_before
+    saved = deepcopy(store.rows[path])
+    saved['transcript_segments'] = db._decode_transcript_segments_strict(
+        'u', saved['transcript_segments'], bool(saved.get('transcript_segments_compressed'))
+    )
+    assert saved['started_at'] == cached_origin
+    final = next(s for s in saved['transcript_segments'] if s.get('id') == 'late')
+    assert saved['started_at'] + timedelta(seconds=final['start']) == cached_origin + timedelta(seconds=12)
+    assert {s['text'] for s in saved['transcript_segments']} == {
+        live['transcript_segments'][0]['text'],
+        'Earlier retained sync speech.',
+        'Delayed live final.',
+    }
 
 
 @pytest.mark.parametrize(

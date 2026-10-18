@@ -299,9 +299,11 @@ or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
-empty admits everyone) limits per-segment binding, the pinned live origin, the
-live revision fence and the open-live enrichment deferral to listed owners; any
-other uid behaves exactly as with the kill switch off, and the kill switch wins.
+empty admits everyone) limits per-segment binding to listed owners; other uids
+use the kill-switch-off binding behavior.
+Sync appends to live targets always preserve the live origin,
+and fresh live speech on any `sync_live_target` always advances its revision,
+independent of this allowlist or kill switch. Open-live enrichment stays deferred.
 The listen origin stamp is metadata only and ignores the list, so widening finds
 lineage stamped. Prod lists one uid on all five identical services (unset
 admits everyone); dev leaves it unset. Refused eligible uploads log
@@ -3651,8 +3653,13 @@ transaction rereads and validates all candidates, preferring the greatest
 overlap. Empty reconnect stubs, touching intervals, other devices and deleted
 rows stay excluded. Explicit targets retain priority. The existing merge path
 owns transcript dedupe, speaker assignments, lifecycle and revision fencing;
-live identities are never donated into each other. Pinned live audio origins
-remain stable.
+live identities are never donated into each other. Adoption pins `started_at`
+even without `audio_timeline` (production listen has v2 disabled), preserving
+offsets from the listener's cached origin. Earlier sync speech keeps its exact
+negative offset and is marked `unplaced`; it remains visible without claiming
+seek alignment. Fresh live writes advance `sync_content_revision` for every
+adopted target, so an older processor cannot overwrite a delayed live final.
+Neither safeguard depends on the lineage rollout allowlist.
 
 This admission creates no hidden donor and no pending merge debt. Lookup failure
 uses ordinary retained sync publication immediately; live document capacity

@@ -91,7 +91,6 @@ from .first_open_obligations import (
     initialize_first_open_work,
 )
 from config.translation import resolve_ondemand_config
-from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current
 from utils.llm.model_constants import LUNA_MODEL
 
@@ -3427,18 +3426,13 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
-        if (
-            live_segments is not None
-            and sync_lineage_resolve_active_for(uid)
-            and current.get('sync_live_target')
-            and current.get('sync_content_revision') is not None
-            and accepted != persisted
-        ):
+        if live_segments is not None and current.get('sync_live_target') and accepted != persisted:
             # Sync and live now share this transcript. A processor that read
             # before fresh live speech must lose the same revision fence as
             # one that read before a sync append. Retries with no change do
-            # not invalidate a current processor.
-            update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
+            # not invalidate a current processor. Adoption is fleet-wide, so
+            # this fence must not depend on the lineage rollout allowlist.
+            update_payload['sync_content_revision'] = (current.get('sync_content_revision') or 0) + 1
         if score_updates and match_scores.enabled():
             try:
                 score_current = dict(current)

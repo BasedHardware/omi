@@ -12,7 +12,6 @@ import math
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
 from config.conversation_smart_merge import smart_merge_flatten_enabled
-from config.sync_lineage import sync_lineage_resolve_active_for
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
@@ -430,15 +429,10 @@ def assign_in_transaction(
         if not result['sync_live_target']:
             result['created_at'] = extent['started_at']
         capture_start = extent['started_at']
-        pinned_live_origin = bool(
-            result['sync_live_target']
-            and plan_target
-            and isinstance(plan_target.get('audio_timeline'), dict)
-            and plan_target.get('audio_timeline')
-            and (temporal_live or sync_lineage_resolve_active_for(user_ref.id))
-        )
+        pinned_live_origin = bool(result['sync_live_target'] and plan_target)
         if pinned_live_origin and plan_target:
-            # Live keeps emitting offsets against this durable first-audio pin.
+            # Live keeps emitting offsets against its cached started_at even
+            # when audio-timeline v2 is disabled. Adoption must pin that origin.
             # Rebasing the row on an early safety WAL would move all future live
             # words. Preserve the pin and represent buffered pre-pin speech with
             # its exact (possibly negative) relative offset instead.
