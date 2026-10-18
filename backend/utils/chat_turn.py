@@ -522,13 +522,13 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
 
         return ai_message, ask_for_nps
 
-    journey_attempt = JourneyAttempt('chat_response')
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(options.headers),
     )
 
     async def generate_stream():
+        journey_attempt = JourneyAttempt('chat_response')
         callback_data = {}
         app_context = None
         app_store = None

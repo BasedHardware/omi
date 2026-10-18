@@ -26,6 +26,7 @@ from utils.stt.live_metrics import (
     COST_VOTES,
     COST_ALL_DEGRADED,
     FLEET_HEALTH_WRITE_DROPPED,
+    FLEET_HEALTH_WRITE_WRITTEN,
     MANAGED_LEGS_OPENED,
     MANAGED_LEGS_SETTLED,
     MANAGED_LEGS_OPEN,
@@ -80,7 +81,7 @@ class CostHealthMixin(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def schedule(self, coroutine: Any) -> None:
+    def schedule(self, coroutine: Any, *, write_path: str, kind: str) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -311,7 +312,9 @@ class CostHealthMixin(ABC):
         self.schedule(
             self._write_cost_result(
                 target, language, failed, generations, witness, minimum_share, expected_identity=identity
-            )
+            ),
+            write_path='cost_routing_result',
+            kind='result',
         )
         return True
 
@@ -332,7 +335,11 @@ class CostHealthMixin(ABC):
         with self._lock:
             self._cost_local[(target, 'all')] = update(self._cost_local.get((target, 'all'), GateState()))
             self._cost_unreconciled.add((target, 'all'))
-        self.schedule(self._write_cost_quarantine(target, update, expected_identity=identity))
+        self.schedule(
+            self._write_cost_quarantine(target, update, expected_identity=identity),
+            write_path='cost_bench',
+            kind='bench',
+        )
 
     async def _write_cost_quarantine(
         self,
@@ -341,20 +348,42 @@ class CostHealthMixin(ABC):
         *,
         expected_identity: str | None = None,
     ) -> None:
+        write_committed = False
+        write_dropped = False
+
+        def record_commit() -> None:
+            nonlocal write_committed
+            if not write_committed:
+                FLEET_HEALTH_WRITE_WRITTEN.labels(write_path='cost_bench', kind='bench').inc()
+                write_committed = True
+
+        def record_drop(reason: str) -> None:
+            nonlocal write_dropped
+            if not write_dropped:
+                FLEET_HEALTH_WRITE_DROPPED.labels(write_path='cost_bench', kind='bench', reason=reason).inc()
+                write_dropped = True
+
         async def write():
             identity = self._check_identity()
             if expected_identity is not None and identity != expected_identity:
                 raise _IdentityChanged('live STT state identity changed')
             await self._server_now(identity)
-            await self._cost_update((target, 'all'), update, expected_identity=identity)
+            await self._cost_update(
+                (target, 'all'),
+                update,
+                expected_identity=identity,
+                on_commit=record_commit,
+                on_identity_changed=record_drop,
+            )
 
         try:
             await self._bounded(write())
         except _IdentityChanged:
+            record_drop('identity_changed')
             return
         except Exception:
             self._redis_retry_at = self._clock() + 10
-            FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench').inc()
+            FLEET_HEALTH_WRITE_DROPPED.labels(write_path='cost_bench', kind='bench', reason='redis_error').inc()
 
     def cost_generations(self, target: str, language: str) -> dict[str, int]:
         self._check_identity()
@@ -406,6 +435,8 @@ class CostHealthMixin(ABC):
         failed: bool | None = None,
         *,
         expected_identity: str | None = None,
+        on_commit: Callable[[], None] | None = None,
+        on_identity_changed: Callable[[str], None] | None = None,
     ) -> GateState:
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -431,7 +462,11 @@ class CostHealthMixin(ABC):
             # and recovery trials have no healthy_users and must not expire
             # into a fresh stage-100 state (especially unprobed expensive legs).
             if await self._redis().eval(CAS, 1, redis_key, raw or '', encoded, 900 if new.stage == 100 else 0):
+                if on_commit is not None:
+                    on_commit()
                 if self._check_identity() != identity:
+                    if on_identity_changed is not None:
+                        on_identity_changed('identity_changed_after_commit')
                     return new
                 with self._lock:
                     self._cost_cached[key] = new
@@ -451,6 +486,21 @@ class CostHealthMixin(ABC):
         *,
         expected_identity: str | None = None,
     ) -> None:
+        write_committed = False
+        write_dropped = False
+
+        def record_commit() -> None:
+            nonlocal write_committed
+            if not write_committed:
+                FLEET_HEALTH_WRITE_WRITTEN.labels(write_path='cost_routing_result', kind='result').inc()
+                write_committed = True
+
+        def record_drop(reason: str) -> None:
+            nonlocal write_dropped
+            if not write_dropped:
+                FLEET_HEALTH_WRITE_DROPPED.labels(write_path='cost_routing_result', kind='result', reason=reason).inc()
+                write_dropped = True
+
         async def write():
             identity = self._check_identity()
             if expected_identity is not None and identity != expected_identity:
@@ -482,10 +532,20 @@ class CostHealthMixin(ABC):
                     return updated
 
                 key = (target, lang)
-                written = await self._cost_update(key, update, failed, expected_identity=identity)
+                written = await self._cost_update(
+                    key,
+                    update,
+                    failed,
+                    expected_identity=identity,
+                    on_commit=record_commit,
+                    on_identity_changed=record_drop,
+                )
+                # The counter records the logical write once, after the first successful CAS.
+                # Repeated scope updates belong to the same scheduled write.
                 COST_VOTES.labels(target=target, scope='global' if lang == 'all' else 'language', result=result).inc()
                 with self._lock:
                     if self._identity != identity:
+                        record_drop('identity_changed')
                         return
                     local = self._cost_local.get(key, GateState())
                     if key not in self._cost_unreconciled and (
@@ -498,11 +558,14 @@ class CostHealthMixin(ABC):
                             self._cost_local.pop(evicted)
                             self._cost_unreconciled.discard(evicted)
 
+        failure_reason = 'redis_error'
         try:
             if self._clock() < self._redis_retry_at:
+                failure_reason = 'redis_backoff'
                 raise RuntimeError('Redis backoff')
             await self._bounded(write())
         except _IdentityChanged:
+            record_drop('identity_changed')
             return
         except Exception:
             with self._lock:
@@ -513,7 +576,9 @@ class CostHealthMixin(ABC):
                         if key not in self._cost_unreconciled:
                             self._cost_event(target, lang, GateState(), local, local=True)
                         self._cost_unreconciled.add(key)
-            FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
+            FLEET_HEALTH_WRITE_DROPPED.labels(
+                write_path='cost_routing_result', kind='result', reason=failure_reason
+            ).inc()
             self._redis_retry_at = self._clock() + 10
 
     async def refresh_cost_once(self) -> None:

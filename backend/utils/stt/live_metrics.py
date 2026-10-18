@@ -173,8 +173,18 @@ LEG_TRANSCRIPT_OUTCOME = Counter(
 ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
 FLEET_HEALTH_WRITE_DROPPED = Counter(
     'omi_stt_fleet_health_write_dropped_total',
-    'Fleet outcome Redis writes dropped when the bounded background slots are full or unavailable',
-    ['kind'],
+    'Fleet-health Redis writes dropped before persistence by bounded path, kind, and reason',
+    ['write_path', 'kind', 'reason'],
+)
+FLEET_HEALTH_WRITE_ATTEMPTED = Counter(
+    'omi_stt_fleet_health_write_attempted_total',
+    'Fleet-health Redis write attempts by bounded path and kind',
+    ['write_path', 'kind'],
+)
+FLEET_HEALTH_WRITE_WRITTEN = Counter(
+    'omi_stt_fleet_health_write_written_total',
+    'Fleet-health writes acknowledged by Redis by bounded path and kind',
+    ['write_path', 'kind'],
 )
 ROUTING_DECISION_LATENCY = Histogram(
     'omi_stt_routing_decision_seconds',

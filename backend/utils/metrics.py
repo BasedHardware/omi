@@ -11,6 +11,7 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
+    REGISTRY,
     disable_created_metrics,
     generate_latest,
     start_http_server,
@@ -775,13 +776,40 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
     'Global age of the oldest queued or leased listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+    registry=None,
 )
 
 LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_blocked_byok_age_seconds',
     'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
     'replicated per process, aggregate with max() not sum(); informational only',
+    registry=None,
 )
+
+LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS = Gauge(
+    'listen_finalization_summary_last_success_timestamp_seconds',
+    'Unix timestamp of the last successful Firestore finalization summary in this process',
+    registry=None,
+)
+
+_LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK = threading.Lock()
+_LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED = False
+
+
+def register_listen_finalization_summary_metrics() -> None:
+    """Expose Firestore-derived gauges only after a successful summary is ready."""
+    global _LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED
+    with _LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK:
+        if _LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED:
+            return
+        for metric in (
+            LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
+            LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+            LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
+        ):
+            REGISTRY.register(metric)
+        _LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED = True
+
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived
 # value for a given queue name; aggregate with max(), never sum(). Do not

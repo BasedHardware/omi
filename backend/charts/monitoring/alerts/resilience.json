@@ -2463,6 +2463,155 @@
     "record": null
   },
   {
+    "uid": "omi-capture-summary-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - Firestore summary absent or stale",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "absent(listen_finalization_summary_last_success_timestamp_seconds) or max(listen_finalization_summary_last_success_timestamp_seconds) < bool time() - 600",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "30",
+      "summary": "Capture finalization - Firestore summary is absent or stale",
+      "threshold": "Summary absent or last successful Firestore summary older than 600s (2x the production reconcile interval of 300s), for 2m.",
+      "user_impact": "The oldest unfinished capture age is unknown until Firestore summary reads recover.",
+      "scope": "The per-process last-success timestamp for the Firestore-derived finalization summary.",
+      "verification": "Check the summary freshness metric and backend-listen Firestore query logs before intervention.",
+      "safe_next_action": "Restore summary reads and verify that a successful Firestore summary republishes the age and status gauges.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-summary-stale",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
     "uid": "omi-capture-dead-letter-surge",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",

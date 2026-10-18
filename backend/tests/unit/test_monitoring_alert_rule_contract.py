@@ -621,6 +621,64 @@ def test_finalization_queue_rules_read_the_replicated_series_correctly():
         assert dead_expr == "sum(increase(listen_finalization_dead_letter_total[1h]))", export_name
 
 
+def test_finalization_summary_freshness_rule_detects_missing_or_stale_samples():
+    expected = (
+        "absent(listen_finalization_summary_last_success_timestamp_seconds) or "
+        "max(listen_finalization_summary_last_success_timestamp_seconds) < bool time() - 600"
+    )
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-capture-summary-stale"]
+        assert rule["data"][0]["model"]["expr"] == expected, export_name
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [0]
+        assert rule["for"] == "2m", export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["noDataState"] == "Alerting", export_name
+
+
+def test_live_stt_evidence_loss_rules_are_volume_gated_settlement_proxies():
+    for export_name, rules in _all_rule_exports().items():
+        warning = rules["omi-stt-evidence-loss"]
+        critical = rules["omi-stt-evidence-loss-critical"]
+        for rule, duration, threshold, severity in (
+            (warning, "15m", "0.01", "warning"),
+            (critical, "10m", "0.03", "critical"),
+        ):
+            assert rule["for"] == duration, f"{export_name}:{rule['uid']}"
+            assert rule["data"][0]["relativeTimeRange"]["from"] == 900
+            assert rule["data"][1]["relativeTimeRange"]["from"] == 900
+            assert "increase(omi_stt_cost_routing_settlements_total" in rule["data"][0]["model"]["expr"]
+            assert "$A >= 100 && $B > " + threshold == rule["data"][2]["model"]["expression"]
+            assert "omi_stt_fleet_health_write_dropped_total" in rule["data"][1]["model"]["expr"]
+            assert "omi_stt_cost_routing_evidence_errors_total" in rule["data"][1]["model"]["expr"]
+            assert "omi_stt_cost_routing_emission_ack_errors_total" in rule["data"][1]["model"]["expr"]
+            assert "Settlement-normalized proxy" in rule["annotations"]["threshold"]
+            assert "day of data" in rule["annotations"]["threshold"]
+            assert rule["labels"]["severity"] == severity
+        assert warning["uid"] != critical["uid"]
+
+
+def test_live_stt_gate_sentinel_is_excluded_from_provider_health_and_alerted_separately():
+    for export_name, rules in _all_rule_exports().items():
+        provider = rules["omi-stt-fallback-leg-dead"]
+        gate = rules["omi-stt-gate-unavailable"]
+        assert 'to_mode!="vendor"' in provider["data"][0]["model"]["expr"], export_name
+        assert 'to_mode!="vendor"' in provider["data"][1]["model"]["expr"], export_name
+        assert 'to_mode="vendor"' in gate["data"][0]["model"]["expr"], export_name
+        assert 'reason="gate_unavailable"' in gate["data"][0]["model"]["expr"], export_name
+        assert gate["folderUID"] == provider["folderUID"], export_name
+        assert gate["notification_settings"]["receiver"] == provider["notification_settings"]["receiver"]
+
+
+def test_backend_sync_alert_sums_revisions_and_states_before_its_service_threshold():
+    rules = _all_rule_exports()
+    for export_name, rule_set in rules.items():
+        rule = rule_set["cew97x299of7kb"]
+        query = rule["data"][0]["model"]["timeSeriesList"]
+        assert query["crossSeriesReducer"] == "REDUCE_SUM", export_name
+        assert query["groupBys"] == [], export_name
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [72]
+
+
 RESILIENCE_DASHBOARD = MONITORING / "dashboards/omi-services/resilience-fallbacks.json"
 SILENT_FAILURE_PANELS = {
     PRE_ROUTE_REJECTION_RULE: "12",
@@ -784,7 +842,7 @@ STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
 STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
 STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session",to_mode!="unavailable"}[6h]))'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",to_mode!="vendor"}[6h]))'
     ' unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1),'
     ' "to_mode", "$1", "provider", "(.*)")'
 )
@@ -793,9 +851,9 @@ STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
 # including it made the rule fire on every evaluation (2026-10-13 replay).
 STT_FALLBACK_LEG_RECOVERED_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",outcome="recovered"}[6h])) or sum by (to_mode) '
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",to_mode!="vendor",outcome="recovered"}[6h])) or sum by (to_mode) '
     '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session",'
-    'to_mode!="unavailable"}[6h])) * 0'
+    'to_mode!="unavailable",to_mode!="vendor"}[6h])) * 0'
 )
 STT_PROVIDER_BUDGET_EXPR = (
     '(sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
