@@ -433,10 +433,13 @@ def _stream_memory_list_index_window(
     candidate_limit: int,
     *,
     budget: Optional[ListReadBudget] = None,
+    cursor_snapshot: Any = None,
 ) -> List[Any]:
     query = memories_ref.select(list(_MEMORY_LIST_INDEX_FIELDS)).order_by(
         order_field, direction=firestore.Query.DESCENDING
     )
+    if cursor_snapshot is not None:
+        query = query.start_after(cursor_snapshot)
     return budgeted_stream_list(query.limit(candidate_limit), budget)
 
 
@@ -480,7 +483,7 @@ def list_memory_updated_or_created_index(
     Streams two candidate windows of ``min(limit+offset, 5000)`` metadata
     documents (``updated_at`` DESC and ``created_at`` DESC), merges them, and
     returns the requested slice. A window that hidden rows leave short of
-    ``limit+offset`` visible rows is re-read at double size, by at most the
+    ``limit+offset`` visible rows grows to double size via snapshot seeks, by at most the
     scoring scan's flat slack beyond the rows the page needs.
     Callers hydrate only the page they will emit.
     With a ``budget`` both windows charge their fetched rows and each stream
@@ -502,14 +505,38 @@ def list_memory_updated_or_created_index(
         # visible rows returns a short page that callers read as end-of-data, so grow it
         # until it holds the page, its order is exhausted, or it spends the flat slack.
         window_limit = candidate_limit
+        window_docs: List[Any] = []
+        # Date inequalities can normalize additional SDK order fields for a
+        # snapshot cursor. Preserve the released prefix query for those callers.
+        incremental = (
+            start_date is None
+            and end_date is None
+            and os.getenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', '').strip().lower() != 'false'
+        )
         while True:
-            window_docs = _stream_memory_list_index_window(memories_ref, order_field, window_limit, budget=budget)
+            if incremental:
+                # Retain each fetched prefix and seek after its last snapshot.
+                # Projection contains both ordering fields; snapshots also carry
+                # the implicit document-name tiebreaker used by Firestore.
+                batch_limit = window_limit - len(window_docs)
+                batch = _stream_memory_list_index_window(
+                    memories_ref,
+                    order_field,
+                    batch_limit,
+                    budget=budget,
+                    cursor_snapshot=window_docs[-1] if window_docs else None,
+                )
+                window_docs.extend(batch)
+                exhausted = len(batch) < batch_limit
+            else:
+                window_docs = _stream_memory_list_index_window(memories_ref, order_field, window_limit, budget=budget)
+                exhausted = len(window_docs) < window_limit
             visible = sum(
                 1
                 for doc in window_docs
                 if _memory_passes_list_visibility(_typed_doc(doc), include_invalidated=include_invalidated)
             )
-            if visible >= candidate_limit or len(window_docs) < window_limit or window_limit >= window_cap:
+            if visible >= candidate_limit or exhausted or window_limit >= window_cap:
                 break
             window_limit = min(window_limit * 2, window_cap)
         candidate_docs.extend(window_docs)

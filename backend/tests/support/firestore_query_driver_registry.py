@@ -1703,10 +1703,32 @@ _add(
         'database.memories.get_user_public_memories', base={'uid': UID}, neutrals={'limit': _LIMIT, 'offset': _OFFSET}
     )
 )
+
+
+def _queue_hidden_memory_index_page(client, combo, trial):
+    # A full hidden prefix forces the new snapshot-cursor suffix query.
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{UID}/memories/hidden-{index}',
+                {
+                    'created_at': T0,
+                    'updated_at': T0,
+                    'user_review': False,
+                },
+            )
+            for index in range(50)
+        ]
+    )
+    client.queue_results([])
+    client.queue_results([])
+
+
 _add(
     DriverEntry(
         'database.memories.list_memory_updated_or_created_index',
         base={'uid': UID},
+        setup=_queue_hidden_memory_index_page,
         neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
         profiles=(
             CallerProfile(
@@ -1714,6 +1736,14 @@ _add(
                 {'categories': [[]], 'start_date': [None], 'end_date': [None], 'include_invalidated': [False]},
             ),
         ),
+    )
+)
+_add(
+    DriverEntry(
+        'database.action_item_completion_backfill.backfill_completion_page',
+        base={'uid': UID},
+        domains={'cursor': [None, 'previous-task']},
+        neutrals={'limit': _LIMIT, 'apply': (False, 'operator dry-run; same read query as apply')},
     )
 )
 _add(
