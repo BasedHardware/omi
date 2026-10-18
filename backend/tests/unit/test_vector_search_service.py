@@ -976,6 +976,7 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
         vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(
             hits=[
                 _hit(missing, score=0.99),
+                _hit(missing, score=0.97, projection_commit_id='commit-residue', vector_id='legacy-missing'),
                 _hit(tombstoned, score=0.90),
                 _hit(live, score=0.80),
             ]
@@ -988,10 +989,14 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
     assert deleted == [
         (
             'u1',
-            [('missing', missing.ledger_commit_id), ('tombstoned', tombstoned.ledger_commit_id)],
+            [
+                ('missing', missing.ledger_commit_id),
+                ('missing', 'commit-residue'),
+                ('tombstoned', tombstoned.ledger_commit_id),
+            ],
         )
     ]
-    assert response['stale_index_deleted_count'] == 2
+    assert response['stale_index_deleted_count'] == 3
     assert [item['memory_id'] for item in response['items']] == ['live']
 
 
@@ -1008,10 +1013,16 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
 
     deleted = delete_canonical_memory_vectors_by_ids(
         'u1',
-        [('stale-a', 'commit-a'), ('stale-b', 'commit-b'), ('stale-a', 'commit-a'), ('', 'commit-a')],
+        [
+            ('stale-a', 'commit-a'),
+            ('stale-b', 'commit-b'),
+            ('stale-a', 'commit-a'),
+            ('', 'commit-a'),
+            ('stale-a', 'commit-a-old'),
+        ],
     )
 
-    assert deleted == 2
+    assert deleted == 3
     assert calls == [
         {
             'ids': None,
@@ -1032,6 +1043,12 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
                                     {'projection_commit_id': {'$eq': 'commit-b'}},
                                 ]
                             },
+                            {
+                                '$and': [
+                                    {'memory_id': {'$eq': 'stale-a'}},
+                                    {'projection_commit_id': {'$eq': 'commit-a-old'}},
+                                ]
+                            },
                         ]
                     },
                 ]
@@ -1039,6 +1056,36 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
             'namespace': 'ns2',
         }
     ]
+
+
+def test_canonical_delete_retries_gate_finish_when_exit_fails(monkeypatch):
+    finishes = []
+
+    class _Index:
+        def delete(self, *, ids=None, filter=None, namespace):
+            return None
+
+    class _ExitFails:
+        def __enter__(self):
+            return 'token-1'
+
+        def __exit__(self, exc_type, exc, tb):
+            if exc_type is None:
+                raise RuntimeError('finish failed')
+            return False
+
+    monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _ExitFails())
+    monkeypatch.setattr(
+        'database.vector_db.finish_destructive_operation',
+        lambda uid, *, kind, token, outcome: finishes.append((uid, kind, token, outcome)),
+    )
+    from database.vector_db import delete_canonical_memory_vectors_by_ids
+
+    deleted = delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
+
+    assert deleted == 1
+    assert finishes == [('u1', 'stale_vector_index_cleanup', 'token-1', 'completed')]
 
 
 def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):

@@ -349,6 +349,13 @@ def _hydrate_vector_candidate_items_by_id(
     timeout_exhausted = False
     for hit in hits:
         if hit.memory_id in hydrated_items or hit.memory_id in missing_authoritative_memory_ids:
+            # A second index row for an already-stale id can carry another
+            # projection commit. Record that pair without another Firestore read.
+            item = hydrated_items.get(hit.memory_id)
+            if hit.memory_id in missing_authoritative_memory_ids or (
+                item is not None and item.status == MemoryItemStatus.tombstoned
+            ):
+                _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id, hit.projection_commit_id)
             continue
         if _is_deadline_exhausted(deadline=deadline, clock=clock):
             timeout_exhausted = True
@@ -390,7 +397,10 @@ def _note_stale_index_memory_id(
 ) -> None:
     if not memory_id or not projection_commit_id or not projection_commit_id.strip():
         return
-    if any(existing_id == memory_id for existing_id, _commit_id in stale_index_memory_ids):
+    if any(
+        existing_id == memory_id and existing_commit == projection_commit_id
+        for existing_id, existing_commit in stale_index_memory_ids
+    ):
         return
     stale_index_memory_ids.append((memory_id, projection_commit_id))
 
