@@ -1,6 +1,11 @@
 """Private pull/complete RPC enforces identity and stage while admission is off."""
 
+from copy import deepcopy
 from dataclasses import asdict
+import threading
+from unittest.mock import Mock
+
+from prometheus_client import CollectorRegistry
 import time
 
 from fastapi import FastAPI
@@ -11,6 +16,7 @@ from routers import batch_pipeline as module
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import PoolCapacity
 from utils.batch_pipeline.serving import Serving
+from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 
 
@@ -256,3 +262,48 @@ def test_reconcile_and_metrics_routes_share_flagged_async_coordinator(api, monke
     assert service.projector.sweep.call_count == 2
     assert service.projector.start_followups.await_count == (2 if enabled else 0)
     service.recovery.sweep.assert_called_once()
+
+
+def test_read_only_metrics_serves_fresh_gauges_while_drain_is_blocked(api, monkeypatch):
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    entered, release = threading.Event(), threading.Event()
+
+    def blocked_enrichment():
+        entered.set()
+        assert release.wait(5)
+
+    enrichment = Mock(side_effect=blocked_enrichment)
+    gauges = QueueMetrics(registry=CollectorRegistry())
+    service = Serving(store, metrics=gauges, enrichment_sweep=enrichment)
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+    initial = deepcopy(store.rows)
+    drain = threading.Thread(target=service.reconcile)
+    drain.start()
+    try:
+        assert entered.wait(2)
+        response = client.get('/v2/batch-pipeline/metrics')
+        assert response.status_code == 200
+        assert gauges.refreshed_at.labels(*gauges.scope)._value.get() > 0
+        assert gauges.ready_age.labels('fresh', *gauges.scope)._value.get() >= 0
+        assert enrichment.call_count == 1
+        assert store.rows == initial
+    finally:
+        release.set()
+        drain.join(timeout=2)
+    assert not drain.is_alive()
+
+
+@pytest.mark.parametrize('scrape_flag,serving_flag', [(None, 'true'), ('true', 'false')])
+def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatch, scrape_flag, serving_flag):
+    client, store = api
+    monkeypatch.delenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', raising=False)
+    if scrape_flag is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', scrape_flag)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_flag)
+    service = Mock(store=store)
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    service.reconcile.assert_called_once_with()
+    service.metrics.refresh.assert_not_called()

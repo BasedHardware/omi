@@ -1,14 +1,21 @@
 """Independent dark rollout; invalid configuration never admits more owners."""
 
+from contextvars import ContextVar
+from collections.abc import Mapping
 import math
 import os
+from typing import Any
 
 from config.batch_pipeline import in_percent_cohort
 
+ADMITTED_OWNER: ContextVar[str | None] = ContextVar('admitted_first_summary_owner', default=None)
 
-def enabled(uid: str | None = None) -> bool:
+
+def enabled(uid: str | None = None, *, include_admitted_context: bool = True) -> bool:
     if os.getenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false').strip().lower() != 'true':
         return False
+    if include_admitted_context and uid is not None and ADMITTED_OWNER.get() == uid:
+        return True
     owners = {v.strip() for v in os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', '').split(',') if v.strip()}
     if uid is None or uid in owners:
         return True
@@ -39,3 +46,25 @@ def deadline_seconds() -> int:
 REPAIR_INTERVAL_SECONDS = 120
 REPAIR_SCAN_LIMIT = 100
 REPAIR_ADMISSION_LIMIT = 10
+
+
+def preserves_admitted(row: Mapping[str, Any]) -> bool:
+    """A durable deadline retains its policy after percent/allowlist rollback."""
+    deadline = row.get('summary_deadline_at')
+    return (
+        enabled()
+        and os.getenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'false').strip().lower() == 'true'
+        and not row.get('summary_seen')
+        and not row.get('effects_only')
+        and isinstance(deadline, (int, float))
+        and not isinstance(deadline, bool)
+        and math.isfinite(deadline)
+    )
+
+
+def first_summary_pending(row: Mapping[str, Any]) -> bool:
+    return (
+        not row.get('effects_only')
+        and not row.get('summary_seen')
+        and (enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row))
+    )

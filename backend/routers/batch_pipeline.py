@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response, JSONResponse
 
+from config.batch_pipeline import read_only_metrics_enabled, async_projection_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
@@ -139,14 +140,22 @@ async def gpu_idle(body: IdleRequest):
 
 @router.post('/reconcile', include_in_schema=False)
 async def reconcile(body: WorkerRequest):
-    await body.service().reconcile_async(recover_quarantine=True)
+    if async_projection_enabled():
+        await body.service().reconcile_async(recover_quarantine=True)
+    else:
+        await run_blocking(sync_executor, body.service().reconcile, recover_quarantine=True)
     return {'status': 'reconciled'}
 
 
 @router.get('/metrics', include_in_schema=False)
 async def metrics():
     service = serving_for_stage(current_stage())
-    await service.reconcile_async()
+    if read_only_metrics_enabled() and service.metrics is not None:
+        await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
+    elif async_projection_enabled():
+        await service.reconcile_async()
+    else:
+        await run_blocking(sync_executor, service.reconcile)
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 

@@ -107,6 +107,8 @@ env:
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_PERCENT
     value: "0"
+  - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
+    value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_PERCENT
@@ -156,6 +158,10 @@ env:
   - name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
