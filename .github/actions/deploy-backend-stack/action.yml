@@ -938,6 +938,17 @@ runs:
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
           --check-live-cloud-run
 
+    - name: Report live Cloud Run env drift from manifest
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --summary-file "$GITHUB_STEP_SUMMARY"
+
     - name: Gate candidate revisions with the acceptance manifest
       if: ${{ inputs.deploy_profile == 'auto-dev' }}
       shell: bash

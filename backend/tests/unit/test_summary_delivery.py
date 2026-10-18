@@ -12,6 +12,7 @@ from utils.conversations.deterministic_minimum import build_deterministic_minimu
 @pytest.fixture
 def enabled(monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
 
 
@@ -145,6 +146,8 @@ def test_generation_fence_and_manual_edit_after_admission(enabled):
 
 
 def test_allowlist_and_invalid_deadline_fail_closed(enabled, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
+    assert not flags.enabled('canary') and not flags.enabled('other')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary')
     assert flags.enabled('canary') and not flags.enabled('other')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', 'invalid')
