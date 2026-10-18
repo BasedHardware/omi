@@ -376,3 +376,24 @@ async def test_four_stuck_followups_timeout_without_closing_process_drain(follow
     await f.runner.schedule()
     await asyncio.wait_for(drain(), 1)
     assert {call.args[0] for call in f.runner._run.await_args_list} == set(segments)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('after_playback', [False, True])
+async def test_deleted_bridge_keeps_existing_supersession_contract(followup, monkeypatch, after_playback):
+    from dataclasses import replace
+    from utils.sync import bridge
+    from utils.sync.assignment_errors import SyncAssignmentSuperseded
+
+    f = followup
+    binding = replace(f.binding, native_record=False, private_cloud_sync_enabled=True)
+    receipt = {**f.receipts['head'], 'audio_required': True}
+    failure = SyncAssignmentSuperseded('deleted fixture target')
+    finish = Mock(side_effect=['head', failure] if after_playback else failure)
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', finish)
+    f.projector.playback = Mock()
+    with pytest.raises(SyncAssignmentSuperseded):
+        await f.runner.finish_part(WorkItem(**f.jobs['head']), binding, receipt, None)
+    assert f.projector.playback.call_count == int(after_playback)
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
