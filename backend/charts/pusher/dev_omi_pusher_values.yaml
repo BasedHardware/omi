@@ -138,6 +138,8 @@ env:
     value: "false"
   - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
     value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
@@ -164,6 +166,8 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -215,6 +219,8 @@ env:
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
     value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: "omi-release-probe"
   - name: TRANSCRIPTION_SHADOW_PERCENT
     value: "0"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
@@ -306,6 +312,8 @@ env:
     value: "on"
   - name: DREAM_AGENT_ELIGIBILITY
     value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: ""
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
@@ -336,6 +344,8 @@ env:
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
+  - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+    value: ""
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
   - name: MEMORY_BELIEF_AUTOMATION_PAUSED

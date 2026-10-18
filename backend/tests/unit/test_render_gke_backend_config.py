@@ -105,3 +105,20 @@ def test_optional_cohort_config_map_uses_empty_default_and_validates(value, monk
             config_map_entries('dev', path)
     else:
         assert config_map_entries('dev', path) == ('dev-omi-backend-config', {key: value or ''})
+
+
+@pytest.fixture(scope='module')
+def checked_in_manifest() -> dict:
+    return yaml.safe_load((BACKEND_ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_checked_in_manifest_config_map_entries_have_supported_sources(env: str, checked_in_manifest: dict) -> None:
+    """A missing `source` fails the deploy-time ConfigMap render after Cloud Run promotion."""
+    entries = checked_in_manifest['environments'][env]['gke']['config_map']['entries']
+    unsupported = {
+        key: entry.get('source') if isinstance(entry, dict) else entry
+        for key, entry in entries.items()
+        if not isinstance(entry, dict) or entry.get('source') not in ('literal', 'environment')
+    }
+    assert unsupported == {}

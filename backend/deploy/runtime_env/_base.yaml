@@ -113,6 +113,8 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
           category: rollout
@@ -187,6 +189,9 @@ environment_shared:
           category: rollout
         TRANSLATION_ONDEMAND_COHORT_PERCENT:
           value: '100'
+          category: rollout
+        TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+          value: ''
           category: rollout
         TRANSLATION_ONDEMAND_MAX_SEGMENTS:
           value: '50'
@@ -275,6 +280,7 @@ environment_shared:
         DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         STT_RESILIENT_RECONNECT:
           value: 'false'
@@ -283,6 +289,8 @@ environment_shared:
           category: rollout
         STT_LIVE_DEMAND_PERCENT:
           value: '0'
+          category: rollout
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
           category: rollout
         STT_LIVE_DEMAND_MIN_DWELL_SECONDS:
           value: '15'
@@ -489,6 +497,8 @@ environment_shared:
         DREAM_AGENT_ELIGIBILITY:
           value: allowlist
           category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          category: rollout
         DREAM_ON_DEMAND_ENABLED:
           value: 'true'
           category: rollout
@@ -557,6 +567,9 @@ environment_shared:
           category: rollout
         BATCH_PIPELINE_RECOVERY_MODE:
           value: 'off'
+          category: rollout
+        BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
+          value: ''
           category: rollout
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
           value: 'off'
@@ -643,6 +656,8 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
           category: rollout
@@ -707,6 +722,7 @@ environment_shared:
         DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
@@ -729,6 +745,8 @@ environment_shared:
           category: service_discovery
         DREAM_AGENT_ELIGIBILITY:
           value: allowlist
+          category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
           category: rollout
         DREAM_ON_DEMAND_ENABLED:
           value: 'true'
@@ -790,7 +808,7 @@ environment_shared:
           source: environment
         REDIS_DB_HOST:
           source: environment
-        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
+        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {source: literal, value: 'false'}
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2

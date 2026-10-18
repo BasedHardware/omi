@@ -9,6 +9,8 @@ REST surface (``apps_results``) without inflating the hosted tool reads.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
+
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -51,6 +53,7 @@ def get_mcp_conversation_cards(
     categories: Optional[List[str]] = None,
     firestore_client: Any = None,
     extra_field_paths: Optional[Sequence[str]] = None,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """Return the transcript-free Firestore projection used by hosted MCP lists."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -74,14 +77,20 @@ def get_mcp_conversation_cards(
         .offset(offset)
     )
     conversations: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        conversation = document_data_with_revision(doc)
-        if conversation is None:
-            continue
-        if not is_visible_conversation(conversation):
-            continue
-        conversation.setdefault('id', doc.id)
-        conversations.append(conversation)
+    try:
+        if budget is not None and offset > 0:
+            # Refuse a too-expensive offset before issuing its billed skip.
+            budget.charge(offset)
+        for doc in budgeted_stream_iter(query, budget):
+            conversation = document_data_with_revision(doc)
+            if conversation is None:
+                continue
+            if not is_visible_conversation(conversation):
+                continue
+            conversation.setdefault('id', doc.id)
+            conversations.append(conversation)
+    except ListReadBudgetExhausted:
+        pass
     return conversations
 
 

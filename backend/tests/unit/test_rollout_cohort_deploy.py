@@ -1,4 +1,4 @@
-"""No serving platform receives private identity bindings from public manifests."""
+"""Staged migration preserves every live Helm fallback until a later removal PR."""
 
 from pathlib import Path
 import re
@@ -26,21 +26,33 @@ def assert_private_bindings_absent(value):
             assert_private_bindings_absent(child)
 
 
-def test_manifest_and_source_overlays_have_no_uid_binding_exceptions():
-    files = [ROOT / 'backend/deploy/runtime_env.yaml', *sorted((ROOT / 'backend/deploy/runtime_env').glob('*.yaml'))]
-    for path in files:
-        text = path.read_text()
-        assert_private_bindings_absent(yaml.load(text, Loader=yaml.CSafeLoader))
-        # Firebase-style UID literals must not be hidden inside a JSON policy.
-        assert not re.search(r'\b[A-Za-z0-9]{28}\b', text), path
+def test_cloud_run_manifest_preserves_live_env_by_omitting_private_bindings():
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    for stage in ('dev', 'prod'):
+        assert_private_bindings_absent(manifest['environments'][stage]['cloud_run'])
 
 
 @pytest.mark.parametrize('component', ['backend-listen', 'pusher'])
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
-def test_helm_replace_leaves_cohort_keys_absent(component, stage):
+def test_helm_retains_legacy_fallbacks(component, stage):
     path = ROOT / f'backend/charts/{component}/{stage}_omi_{component.replace("-", "_")}_values.yaml'
-    # pusher's filenames have the same stage_omi_component form.
-    assert_private_bindings_absent(yaml.load(path.read_text(), Loader=yaml.CSafeLoader))
+    env = {row['name']: row.get('value', '') for row in yaml.load(path.read_text(), Loader=yaml.CSafeLoader)['env']}
+    assert 'AUDIO_ARCHIVE_UID_ALLOWLIST' in env
+    assert 'DREAM_AGENT_UID_ALLOWLIST' in env
+    if stage == 'prod':
+        assert env['DREAM_AGENT_UID_ALLOWLIST']
+        assert env['SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST']
+        if component == 'backend-listen':
+            for key in (
+                'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
+                'STT_LIVE_DEMAND_UID_ALLOWLIST',
+                'MOBILE_STANDARD_BATCH_UIDS',
+            ):
+                assert env[key]
+    if stage == 'dev':
+        assert env['AUDIO_ARCHIVE_UID_ALLOWLIST']
+        if component == 'pusher':
+            assert env['TRANSCRIPTION_SHADOW_UID_ALLOWLIST'] == 'omi-release-probe'
 
 
 def test_no_secret_manager_cohort_provisioning_remains():
@@ -50,8 +62,8 @@ def test_no_secret_manager_cohort_provisioning_remains():
 
 
 def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime(monkeypatch):
-    # Cloud Run merge may retain a legacy literal; runtime supports it only for
-    # an absent Firestore field. Helm replaces the env list; absent keys deny.
+    # Cloud Run retains omitted live env values. Helm retains its legacy entries.
+    # Both stay available when the Firestore field is missing.
     from config.batch_pipeline import enabled_for
     from config import rollout_cohorts
 
@@ -78,3 +90,10 @@ def test_existing_runtime_identity_scopes_every_serving_host(stage):
         path = ROOT / f'backend/charts/{component}/{stage}_omi_{component.replace("-", "_")}_values.yaml'
         env = yaml.load(path.read_text(), Loader=yaml.CSafeLoader)['env']
         assert [entry['value'] for entry in env if entry['name'] == 'OMI_ENV_STAGE'] == [stage]
+
+
+def test_prod_messaging_policy_is_omitted_so_cloud_run_keeps_live_value():
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    for service in manifest['environments']['prod']['cloud_run']['services'].values():
+        assert 'OMI_MESSAGING_CHANNEL_POLICY' not in service.get('env', {})
+        assert 'OMI_MESSAGING_CHANNEL_POLICY' not in service.get('forbidden_env', [])

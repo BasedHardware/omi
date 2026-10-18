@@ -68,13 +68,25 @@ old env grant. Independent percentage rollouts, existing global policy (`*`),
 kill switches, eligibility checks and already-admitted durable work retain their
 contracts. Removing membership does not override a separate percentage rollout.
 
-Public manifests and listen/pusher chart env lists omit all UID allowlist keys.
-First-summary empty or absent keys deny nonmembers, preserving main #22113
-([fail-safe summary cohort](https://github.com/BasedHardware/omi/pull/22113)).
-Sync-lineage distinguishes **absent** (Firestore membership) from an explicitly
-configured legacy empty value (its prior enable-all contract). Thus Helm env
-replacement cannot widen either cohort. Production
-percentage/ramp/feature switches are unchanged, including live admission off.
+Cloud Run manifests omit private UID entries so a merge keeps the current live
+values. **Helm listen/pusher values retain every legacy allowlist in this PR**:
+Helm replaces its env list, so deleting them here would change live membership.
+Their removal requires a separate PR after seed and verification. First-summary
+empty or absent keys deny nonmembers, preserving main #22113. Sync-lineage
+empty **and absent** keys retain their previous allow-all fallback if the
+Firestore field is missing; explicit booleans still win. Dev therefore keeps
+lineage enabled for everyone without enumerating users. Prod listen retains its
+nonempty legacy lineage list. Percentages and parent gates stay unchanged.
+
+The retained keys include `STT_LIVE_DEMAND_UID_ALLOWLIST` (prod listen),
+`MOBILE_STANDARD_BATCH_UIDS` (prod listen), `DREAM_AGENT_UID_ALLOWLIST` (prod
+listen/pusher), `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (prod listen),
+`SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST` (prod speaker detail),
+`AUDIO_ARCHIVE_UID_ALLOWLIST` (dev listen/pusher coalesce), and
+`TRANSCRIPTION_SHADOW_UID_ALLOWLIST` (dev pusher release probe). Other legacy
+entries, including final-pass and recovery, are retained too. The prod
+`OMI_MESSAGING_CHANNEL_POLICY` is omitted entirely: Cloud Run must retain the
+live policy, including its iMessage cohort, instead of receiving an empty list.
 
 ## Operator commands
 
@@ -109,33 +121,93 @@ whose data plane is actually that project. No human tier is needed.
 Use `--help` for the complete reviewed name list. Membership alone does not enable
 the live-admission switch or any other feature's parent gate.
 
+## Live seed and verification (lead only, before deployment)
+
+Use the current **live** sources, never a UID copied from Git or a historical
+receipt. These commands read the four serving Cloud Run revisions in the
+selected compute project and the installed listen/pusher Helm values via an
+explicit Kubernetes context. Both environments use the `based-hardware`
+customer Firestore data plane and `prod-operator`. The tool captures CLI errors
+and prints cohort counts only; neither source payloads nor UIDs are printed or
+saved. A failed CLI read, secret-backed/duplicate binding, split Cloud Run traffic,
+source disagreement, over-limit cohort, or source change during seed blocks the
+operation. It does not silently skip a missing service/release.
+
+Set `COHORT_ENV` to `dev` or `prod` and `COHORT_KUBE_CONTEXT` to the verified
+context for that environment's live GKE cluster. Freeze membership configuration
+and operator mutations through seed, verify and deployment. Do not run a chart
+upgrade or edit allowlists concurrently.
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh prod-operator && \
+backend/.venv/bin/python backend/scripts/rollout_cohort.py \
+  --project based-hardware --environment "$COHORT_ENV" \
+  --kube-context "$COHORT_KUBE_CONTEXT" --seed-live --dry-run
+```
+
+The default seed dry run reads live env/Helm, prints counts for every cohort,
+and creates no Firestore client or writes. This differs from the single-member
+file dry run above, which performs no reads at all. If live hosts declare
+different lists, the command prints counts and `MISMATCH` and fails before any
+Firestore client is created. **Do not union those lists**: a shared environment
+cohort cannot represent host-specific membership without widening access.
+Resolve that as a separate, explicitly reviewed policy/scoping decision while
+keeping all legacy bindings; do not deploy this cutover until verification is
+clean. Empty cohorts and independent percentage ramps remain distinct.
+
+Only after the lead has reviewed the dry run:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh prod-operator && \
+backend/.venv/bin/python backend/scripts/rollout_cohort.py \
+  --project based-hardware --environment "$COHORT_ENV" \
+  --kube-context "$COHORT_KUBE_CONTEXT" --seed-live --apply
+```
+
+Seed checks for unexpected existing Firestore grants and refuses to revoke or
+union them. It atomically merge-writes the exact finite live memberships,
+preserving unrelated fields/environments. Existing false fields for intended
+members become true, matching live admission. It re-reads live sources before
+committing and is idempotent. Universal legacy cohorts (dev lineage, public
+Telegram) are not enumerated or converted into a finite UID list; they are
+reported as `legacy_all=1` and retain their existing runtime contract. A false
+lineage field blocks that universal migration. Do not remove this fallback in
+the later env-removal PR without an explicit representation of allow-all.
+
+Read-only verification compares exact sets, not just counts, including unexpected
+Firestore members, and exits nonzero on any mismatch:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh prod-operator && \
+backend/.venv/bin/python backend/scripts/rollout_cohort.py \
+  --project based-hardware --environment "$COHORT_ENV" \
+  --kube-context "$COHORT_KUBE_CONTEXT" --verify-live
+```
+
 ## Deployment order and rollback
 
-1. Before deploying, the lead seeds the intended memberships privately with the
-   script. Preserve each existing cohort independently; do not assume batch
-   admission also grants recovery, first-summary, Dream or messaging access.
-   For a no-gap migration, seed the current owners of every removed nonempty
-   list in its original environment; never union dev and prod memberships, including the dev audio-archive pilot if it is still wanted.
-   Ledger-drain's old dev pilot is intentionally closed by removal of its
-   private env binding; it is not one of the serving cohorts managed here.
-2. Deploy the cohort-aware image and manifest from the **same commit** through
-   the owning GitHub workflows. Do not apply this branch's chart/env removal to
-   an old image. Cloud Run's env merge can retain old literal values: those remain
-   a migration fallback, overridden by any explicit Firestore boolean. GKE Helm
-   replaces the env list, so the new image must resolve Firestore in that same
-   release. Neither platform requires new env entries to see membership edits.
-3. Verify the running `OMI_BACKEND_RELEASE_SHA`/image-source digest on all
-   affected services, then observe a new admission/outcome log or metric from
-   a lead-owned canary. Check an intended member and a nonmember, failure denial,
-   and revocation after 60 seconds. Check listen specifically: reconnect after
-   cache expiry and confirm batch-owned admission without `kubectl set env`.
-   Watch existing percentage cohorts separately. Unit tests/CI are not live
-   acceptance; no production user-data reads or canary are performed by this PR.
-4. To stop new batch admission, use its existing feature kill switch through a
-   reviewed config deploy. To remove one cohort member, use `--remove` and wait
-   up to 60 seconds (plus an in-flight bounded read). To roll back code, restore
-   the previous image **and matching previous manifest/chart** atomically per
-   service. Rolling back only the image while leaving allowlists absent can
-   trigger legacy enable-all semantics. Do not restore literal UIDs to Git;
-   retain a private rollback artifact/operator binding until migration is done.
-   Already-admitted recovery obligations keep their existing draining rules.
+1. **Seed first:** the lead runs live dry run, seed apply, then read-only verify
+   separately for dev and prod. Every cohort must match. The PR author does not
+   seed production. Keep the current live memberships, including the dev audio
+   pilot and pusher probe; do not infer one cohort from another.
+2. **Switch reads second:** after approval/merge and release qualification,
+   deploy the cohort-aware image and matching manifest through the owning GitHub
+   workflows. Cloud Run preserves omitted legacy env; Helm retains every legacy
+   value. Prod iMessage keeps the live policy. No config-only removal or kept-old-
+   image cutover is permitted. Running artifact identity and a new admission/
+   outcome metric or log are required; tests and CI do not prove live acceptance.
+3. Re-run verify against the live sources, and check intended members,
+   nonmembers, independent percentage cohorts and lineage allow-all. Confirm
+   `OMI_BACKEND_RELEASE_SHA` or image-source digest on every affected service.
+   Test read failure and explicit revocation after the 60-second TTL with a
+   separately authorized canary.
+4. **Remove env last, in a separate PR:** only after both environments are seeded
+   and verified, with universal and differing-host policies explicitly resolved.
+   This PR must not delete listen/pusher legacy values. Keep a private rollback
+   snapshot until cutover is accepted.
+5. Roll back the cohort-aware image and its matching config/chart to the prior
+   release. The retained legacy values preserve the old membership. To stop new
+   admission, use the existing feature kill switch. `--remove` writes a false
+   tombstone and takes effect after up to 60 seconds plus a bounded in-flight
+   read; it is an intentional membership change, never part of seeding. Already-
+   admitted obligations keep their existing draining rules.

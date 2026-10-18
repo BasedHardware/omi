@@ -75,11 +75,14 @@ def test_shared_chat_frontend_auth_is_listen_only(gate: SimpleNamespace, env: st
 
 def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_fixture: Path) -> None:
     values = chart_fixture / "backend/charts/pusher/dev_omi_pusher_values.yaml"
-    text = values.read_text()
-    values.write_text(
-        text.replace('env:\n', 'env:\n  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "synthetic-owner"\n', 1)
+    replace_once(
+        values,
+        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "omi-release-probe"\n',
+        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "other-user"\n',
     )
-    assert any('must be absent' in error for error in gate.validate_preflight(chart_fixture))
+    assert any(
+        'shadow scope TRANSCRIPTION_SHADOW_UID_ALLOWLIST' in error for error in gate.validate_preflight(chart_fixture)
+    )
 
 
 @pytest.mark.parametrize(
@@ -87,6 +90,7 @@ def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_f
     (
         ('ENABLED', 'true', 'false'),
         ('KILL_SWITCH', 'false', 'true'),
+        ('UID_ALLOWLIST', 'vi7SA9ckQCe4ccobWNxlbdcNdC23', 'other-user'),
         ('PERCENT', '0', '1'),
         ('DAILY_AUDIO_HOURS', '1', '2'),
     ),
@@ -262,6 +266,7 @@ def test_deploy_workflows_invoke_the_gate() -> None:
 @pytest.mark.parametrize(
     'name,value',
     [
+        ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'synthetic-outsider'),
         ('TRANSCRIPTION_FINAL_PASS_PERCENT', '1'),
         ('TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'TRUE'),
         ('TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'true'),
@@ -315,14 +320,16 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
 @pytest.mark.parametrize('env', ('dev', 'prod'))
 def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
     batch_listen_only = gate._BATCH_PIPELINE_LISTEN_ONLY
+    if env == 'prod':
+        batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
     assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
-    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in gate.LISTEN_ONLY_ALLOWED[env]
+    assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
-    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_RECOVERY_MODE' in gate._BATCH_PIPELINE_LISTEN_ONLY
-    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert gate.validate_preflight(REPO_ROOT) == []
 
 

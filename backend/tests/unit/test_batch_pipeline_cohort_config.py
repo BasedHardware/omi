@@ -144,6 +144,21 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
             assert values['BATCH_PIPELINE_WORKER_AUDIENCE']['value'] == ''
 
 
+def test_worker_head_priority_is_prod_only_and_values_driven():
+    chart = ROOT / 'charts/batch-pipeline-worker'
+    defaults = yaml.safe_load((chart / 'values.yaml').read_text())
+    prod = yaml.safe_load((chart / 'prod_omi_batch-pipeline-worker_values.yaml').read_text())
+    dev = yaml.safe_load((chart / 'dev_omi_batch-pipeline-worker_values.yaml').read_text())
+    deployment = (chart / 'templates/deployment.yaml').read_text()
+
+    assert (
+        '- {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, ' 'value: {{ .Values.worker.headPriorityEnabled | quote }}}'
+    ) in deployment
+    assert defaults['worker']['headPriorityEnabled'] is False
+    assert dev['worker']['headPriorityEnabled'] is False
+    assert prod['worker']['headPriorityEnabled'] is True
+
+
 @pytest.mark.parametrize(
     'name,reader',
     [

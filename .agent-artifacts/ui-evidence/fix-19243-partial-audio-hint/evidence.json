@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-player-before-main.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): a 5:49 call with 3 s of stored audio shows a full waveform and -0:03 with no explanation",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-player-partial-audio-saved.png",
+      "platform": "mobile-ios",
+      "description": "After: the same conversation reads \"0:03 of 5:49 audio saved\" until playback moves",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

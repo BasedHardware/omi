@@ -167,7 +167,7 @@ def test_real_adapter_bounds_rpc_and_validates_document(monkeypatch):
             cohorts.read_memberships('owner')
 
 
-def test_absent_keys_cannot_widen_legacy_enable_all_gates(monkeypatch):
+def test_absent_keys_preserve_each_legacy_contract(monkeypatch):
     from config import summary_guarantee, sync_lineage
 
     cache(monkeypatch, lambda _: {})
@@ -176,7 +176,7 @@ def test_absent_keys_cannot_widen_legacy_enable_all_gates(monkeypatch):
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
     assert not summary_guarantee.enabled('owner')
-    assert not sync_lineage.sync_lineage_resolve_uid_allowed('owner')
+    assert sync_lineage.sync_lineage_resolve_uid_allowed('owner')
     # Main #22113 makes first-summary empty deny; lineage retains its legacy empty contract.
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')

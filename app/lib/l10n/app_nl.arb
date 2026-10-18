@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "Limiet voor samenvattingen bereikt",
     "summaryLimitBody": "Je hebt het afgelopen uur meerdere samenvattingen opnieuw gegenereerd. Probeer het later opnieuw.",
     "summaryFailedTitle": "Samenvatten mislukt",
-    "summaryFailedBody": "Er ging iets mis bij het samenvatten van dit gesprek."
+    "summaryFailedBody": "Er ging iets mis bij het samenvatten van dit gesprek.",
+    "playbackPartialAudioSaved": "{saved} van {total} audio opgeslagen"
 }

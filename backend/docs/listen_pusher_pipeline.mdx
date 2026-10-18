@@ -5568,15 +5568,34 @@ or paid-call authorization. Rollback sets the worker flag to `false`.
 
 Private user rollout membership on Cloud Run, listen and pusher uses the shared
 [Firestore cohort cache](runbooks/rollout-cohorts.md). `OMI_ENV_STAGE` selects the
-separate dev/prod membership maps in the customer data plane. Public manifests
-omit UID allowlist keys; retained env lists serve only as migration fallbacks.
+separate dev/prod membership maps in the customer data plane. Cloud Run manifests
+omit private UID keys so live env survives a merge; Helm keeps every legacy
+allowlist until a separate removal PR after live seed and verification.
 OIDC sync tasks and delayed inline sync work await the first/expired cohort read
 before selecting lineage routing. Dream pass and model-turn admission, pusher
 shadow finalization, mobile batch renewals and
 live-demand handovers also warm membership before deciding; warm checks make
 zero reads. Membership changes do not require a Helm env override. Seed the intended members
 in their original environment before deploying the cohort-aware image and its
-matching manifest/chart together.
+matching manifest/chart together. Preserve dev absent-lineage allow-all and
+the live iMessage policy. Cutover order is seed, verify, switch reads, then
+remove env in a separate PR.
+
+### Deterministic batch worker validation disposition
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` defaults to `true` and
+ships on in the worker Helm chart. A Pyannote frame wholly beyond a tiny real
+buffer may complete as `silence` only after independent strict local VAD
+validates the real PCM, including a partial final window. Other closed worker
+validation failures stop GPU retries at attempt one, retain `worker_failure`
+stage/reason and enter the existing fenced recovery route. They preserve audio,
+privacy generations, accepted paid intents and ordered projection fencing;
+the held item does not block later results. Empty ASR on speech and positive
+context words outside ownership never establish silence by themselves.
+Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
+retries. Current debt counts only jobs still in `state=quarantined`; historical
+quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
 ### Legacy sync double-empty recovery (dark)
 

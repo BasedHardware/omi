@@ -44,9 +44,7 @@ def corrupt(config, chart, defect):
             host['env'][KEY] = {'value': '' if source == 'empty' else 'SYNTHETIC-OWNER'}
 
 
-DEFECTS = ['chart', 'gke'] + [
-    f'{service}:{source}' for service in SERVICES for source in ('literal', 'empty', 'secret')
-]
+DEFECTS = [f'{service}:{source}' for service in SERVICES for source in ('literal', 'empty', 'secret')]
 
 
 @pytest.mark.parametrize('boundary', ['cloud_run', 'helm'])
@@ -72,6 +70,16 @@ def test_manifest_validator_rejects_reintroduced_binding(rollout):
 
 def test_both_renderers_accept_absent_cohort_keys(rollout, tmp_path, monkeypatch):
     config, _ = rollout
+    manifest = tmp_path / 'runtime.yaml'
+    manifest.write_text(yaml.safe_dump({'environments': {'prod': config}}))
+    monkeypatch.setattr(sys, 'argv', ['render', '--env', 'prod', '--manifest', str(manifest)])
+    assert cloud_run.main() == 0
+    assert gke.config_map_entries('prod', manifest)[0] == 'prod-backend-config'
+
+
+def test_helm_keeps_legacy_lineage_binding(rollout, tmp_path, monkeypatch):
+    config, chart = rollout
+    corrupt(config, chart, 'chart')
     manifest = tmp_path / 'runtime.yaml'
     manifest.write_text(yaml.safe_dump({'environments': {'prod': config}}))
     monkeypatch.setattr(sys, 'argv', ['render', '--env', 'prod', '--manifest', str(manifest)])

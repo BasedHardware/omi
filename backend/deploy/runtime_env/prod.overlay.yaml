@@ -35,12 +35,20 @@ overlay:
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
+        BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+          value: 'true'
+          category: rollout
+        BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+          value: 'true'
+          category: rollout
         BATCH_PIPELINE_API_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
           value: based-hardware-batch-pipeline-staging
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: ''
         AUDIO_TIMELINE_SPANS:
           value: 'true'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -62,6 +70,8 @@ overlay:
           value: ''
         STT_LIVE_DEMAND_ENABLED:
           value: 'true'
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
         STT_ROUTING_MODE:
@@ -95,6 +105,8 @@ overlay:
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: telemetry
@@ -121,6 +133,9 @@ overlay:
         SPEAKER_GROUPING_SHADOW_PERCENT:
           value: '10'
           category: rollout
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
           category: rollout
@@ -141,6 +156,9 @@ overlay:
           category: rollout
         MOBILE_STANDARD_BATCH_PERCENT:
           value: '0'
+          category: rollout
+        MOBILE_STANDARD_BATCH_UIDS:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
         SONIOX_IDLE_CLOSE_SECONDS:
           value: '45'
@@ -213,10 +231,15 @@ overlay:
         NOTES_TIER_ESCALATION_ENABLED:
           value: 'true'
           category: rollout
+        SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
     pusher:
       env:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: ''
         AUDIO_TIMELINE_SPANS:
           value: 'true'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -249,6 +272,9 @@ overlay:
         TRANSCRIPTION_FINAL_PASS_BACKEND:
           value: pyannote
           category: rollout
+        TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
         TRANSCRIPTION_FINAL_PASS_PERCENT:
           value: '5'
           category: rollout
@@ -263,6 +289,9 @@ overlay:
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '5'
@@ -279,6 +308,8 @@ overlay:
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: telemetry
@@ -308,6 +339,9 @@ overlay:
           category: rollout
         SPEAKER_GROUPING_SHADOW_PERCENT:
           value: '10'
+          category: rollout
+        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
@@ -523,9 +557,6 @@ overlay:
           OMI_MESSAGING_CHANNELS:
             value: 'on'
             category: rollout
-          OMI_MESSAGING_CHANNEL_POLICY:
-            value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":[],"seat_cap":"off"}}'
-            category: rollout
           OMI_TELEGRAM_STREAMING:
             value: none
             category: rollout
@@ -680,6 +711,12 @@ overlay:
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
@@ -978,6 +1015,12 @@ overlay:
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
@@ -1304,6 +1347,12 @@ overlay:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1551,6 +1600,12 @@ overlay:
             value: '0'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:

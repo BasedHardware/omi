@@ -13,8 +13,8 @@ kill switch can never leave the feature running. Off restores the previous
 whole-batch ``recording_session_target`` resolution and writes no origin stamp.
 
 ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST`` stages the rollout: comma-separated uids,
-whitespace-trimmed; explicitly empty retains legacy enable-all. An absent key
-uses the shared Firestore rollout cohort and denies nonmembers. It gates every behavior
+whitespace-trimmed; empty or absent retains legacy enable-all when the
+Firestore field is missing. Explicit Firestore booleans override that fallback. It gates every behavior
 that changes a sync append into, or a live write onto, a user's rows (per-segment
 binding, the pinned live origin, the live revision fence, the open-live enrichment
 deferral), so a uid outside it behaves exactly as with the kill switch off. The
@@ -43,10 +43,10 @@ def sync_lineage_resolve_enabled() -> bool:
 
 
 def sync_lineage_resolve_uid_allowed(uid: object) -> bool:
-    """An absent key uses Firestore; explicit legacy empty still admits every user."""
+    """Missing Firestore fields preserve empty AND absent legacy enable-all."""
     allowlist = {item.strip() for item in os.getenv(SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '').split(',')}
     allowlist.discard('')
-    legacy_all = SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV in os.environ and not allowlist
+    legacy_all = not allowlist
     return isinstance(uid, str) and in_rollout_cohort(uid, 'sync-lineage-resolve', legacy_all=legacy_all)
 
 

@@ -7,6 +7,7 @@ from typing import Protocol, Sequence
 
 from config.batch_pipeline import Priority
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
+from utils.batch_pipeline.errors import validate_worker_failure
 
 MAX_PROJECTION_PARTS = 128
 
@@ -122,8 +123,11 @@ class RecoveryWork:
     segment_id: str
     padded_retry_empty: bool = False
     padded_retry: str | None = None
+    reason: str = 'empty_asr'
 
     def __post_init__(self):
+        if self.reason not in {'empty_asr', 'no_owned_words'}:
+            raise ValueError('closed empty worker reason required')
         if self.padded_retry is None and self.padded_retry_empty:
             object.__setattr__(self, 'padded_retry', 'empty')
         elif self.padded_retry == 'empty' and not self.padded_retry_empty:
@@ -134,8 +138,22 @@ class RecoveryWork:
             raise ValueError('conflicting padded retry evidence')
 
 
+@dataclass(frozen=True)
+class ValidationFailureWork:
+    """Terminal for this GPU chain, retained for independent fenced recovery."""
+
+    segment_id: str
+    stage: str
+    reason: str
+
+    def __post_init__(self):
+        validate_worker_failure({'stage': self.stage, 'reason': self.reason})
+
+
 class BatchWorker(Protocol):
-    def process_batch(self, items: Sequence[WorkItem], **kwargs) -> Sequence[WorkResult | HeldWork | RecoveryWork]: ...
+    def process_batch(
+        self, items: Sequence[WorkItem], **kwargs
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]: ...
 
 
 @dataclass(frozen=True)

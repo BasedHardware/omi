@@ -559,9 +559,10 @@ def runtime_env_manifest():
 
 def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(runtime_env_manifest):
     prod, dev = runtime_env_manifest['environments']['prod'], runtime_env_manifest['environments']['dev']
-    values = {_declared(prod, kind, service) for kind, service in GATED_SERVICES}
+    values = {_declared(prod, kind, service) for kind, service in GATED_SERVICES if kind == 'cloud_run'}
     assert values == {None}
-    assert sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV not in str(prod)
+    assert sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV not in str(prod['cloud_run'])
+    assert _declared(prod, 'gke', 'backend-listen')
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)
 
 

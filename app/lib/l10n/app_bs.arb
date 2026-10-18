@@ -11651,5 +11651,6 @@
     "summaryLimitTitle": "Dostignut je limit sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena ste više puta ponovo generisali sažetke. Pokušajte ponovo kasnije.",
     "summaryFailedTitle": "Sažimanje nije uspjelo",
-    "summaryFailedBody": "Nešto je pošlo po zlu prilikom sažimanja ovog razgovora."
+    "summaryFailedBody": "Nešto je pošlo po zlu prilikom sažimanja ovog razgovora.",
+    "playbackPartialAudioSaved": "Sačuvano {saved} od {total} audija"
 }

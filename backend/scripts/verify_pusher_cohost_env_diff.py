@@ -62,6 +62,7 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
         'TRANSLATION_ONOPEN_ENABLED',
         'TRANSLATION_ONDEMAND_COHORT_PERCENT',
+        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
         'TRANSLATION_ONDEMAND_MAX_CHARS',
         'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
@@ -84,6 +85,7 @@ _DEMAND_LISTEN_ONLY = frozenset(
     {
         'STT_LIVE_DEMAND_ENABLED',
         'STT_LIVE_DEMAND_PERCENT',
+        'STT_LIVE_DEMAND_UID_ALLOWLIST',
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
@@ -92,6 +94,7 @@ _DEMAND_LISTEN_ONLY = frozenset(
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
         'BATCH_PIPELINE_ENABLED',
+        'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_PERCENT',
         'BATCH_PIPELINE_SERVING_ENABLED',
         'BATCH_PIPELINE_API_URL',
@@ -113,6 +116,7 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',
         'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED',
         'BATCH_PIPELINE_RECOVERY_MODE',
+        'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
         'BUCKET_BATCH_PIPELINE',
     }
 )
@@ -222,6 +226,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
+            "MOBILE_STANDARD_BATCH_UIDS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -256,6 +261,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Staged sync-lineage rollout: the live revision fence runs in listen
             # transcript writes; pusher reaches no sync intake or live-write site.
+            "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
             "STT_ROUTING_MODE",
@@ -325,7 +331,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
-    | _BATCH_PIPELINE_LISTEN_ONLY,
+    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -335,6 +341,7 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
     "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
     "TRANSCRIPTION_FINAL_PASS_DIARIZER": ("pyannote_shadow", None),
     "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
+    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
     "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
     "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("true", None),
     "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("true", None),
@@ -355,6 +362,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Process-local final-pass shadow is admitted only on the prod pusher.
             "TRANSCRIPTION_SHADOW_ENABLED",
             "TRANSCRIPTION_SHADOW_KILL_SWITCH",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
@@ -378,6 +386,7 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
             "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
             "STT_SERVICE_MODELS",
             "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
             # Backend-listen publishes queue age; pusher stays explicitly disabled.
             "FSR_QUEUE_AGE_PUBLISHER",
@@ -392,6 +401,7 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
 DEV_SHADOW_VALUES = {
     "TRANSCRIPTION_SHADOW_ENABLED": ("true", "false"),
     "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", "false"),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("omi-release-probe", ""),
     "TRANSCRIPTION_SHADOW_PERCENT": ("0", "0"),
     "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", "0"),
 }
@@ -399,6 +409,7 @@ DEV_SHADOW_VALUES = {
 PROD_SHADOW_VALUES = {
     "TRANSCRIPTION_SHADOW_ENABLED": ("true", None),
     "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", None),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
     "TRANSCRIPTION_SHADOW_PERCENT": ("0", None),
     "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", None),
 }
@@ -544,10 +555,6 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                     f"[{env}] required identical flag {flag} disagrees: "
                     f"pusher={pusher_entry.value!r} listen={listen_entry.value!r}"
                 )
-
-        for name in set(listen_env) | set(pusher_env):
-            if name.endswith('_UID_ALLOWLIST') or name == 'MOBILE_STANDARD_BATCH_UIDS':
-                errors.append(f'[{env}] {name} must be absent; cohort membership lives in Firestore')
 
         listen_only = set(listen_env) - set(pusher_env)
         pusher_only = set(pusher_env) - set(listen_env)

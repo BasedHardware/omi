@@ -114,10 +114,14 @@ env:
     value: "false"
   - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
     value: "false"
+  - name: DEMAND_PROCESSING_UID_ALLOWLIST
+    value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_UID_ALLOWLIST
+    value: ""
   - name: FIRST_SUMMARY_DEADLINE_PERCENT
     value: "0"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
@@ -178,6 +182,8 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
+  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+    value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -194,6 +200,8 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -253,6 +261,8 @@ env:
     value: "false"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
     value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: ""
   - name: TRANSCRIPTION_SHADOW_PERCENT
     value: "0"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
@@ -339,6 +349,8 @@ env:
     value: "on"
   - name: DREAM_AGENT_ELIGIBILITY
     value: 'allowlist'
+  - name: DREAM_AGENT_UID_ALLOWLIST
+    value: ""
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
   - name: REVIEW_SURFACE_MODE
@@ -373,6 +385,8 @@ env:
     value: "60000"
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
+  - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
+    value: ""
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -443,6 +457,8 @@ env:
     value: "true"
   - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
     value: "100"
+  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
+    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS
@@ -490,6 +506,8 @@ env:
     value: "false"
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
+  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
+    value: ""
   - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
     value: "15"
   - name: STT_FAILOVER_RECOVERY_ENABLED

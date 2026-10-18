@@ -11651,5 +11651,6 @@
     "summaryLimitTitle": "ಸಾರಾಂಶ ಮಿತಿ ತಲುಪಿದೆ",
     "summaryLimitBody": "ಕಳೆದ ಒಂದು ಗಂಟೆಯಲ್ಲಿ ನೀವು ಹಲವು ಸಾರಾಂಶಗಳನ್ನು ಮರುರಚಿಸಿದ್ದೀರಿ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "summaryFailedTitle": "ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
-    "summaryFailedBody": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ."
+    "summaryFailedBody": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ.",
+    "playbackPartialAudioSaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು {total}"
 }

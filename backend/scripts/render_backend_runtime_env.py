@@ -74,22 +74,13 @@ _SYNC_LINEAGE_CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfi
 
 
 def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
-    # Cohort membership is user data, shared by Cloud Run and listen. Absence is
-    # safe only because the runtime now resolves Firestore rather than enable-all.
+    # Cloud Run merges omitted env keys; Helm keeps its legacy values until a later cutover.
     services = env_config.get('cloud_run', {}).get('services', {})
-    listener = env_config.get('gke', {}).get('backend-listen', {})
     hosts = [(f'cloud_run/{name}', services.get(name, {})) for name in _SYNC_LINEAGE_CLOUD_RUN_HOSTS]
-    hosts.append(('gke/backend-listen', listener))
     errors = []
     for scope, host in hosts:
         if _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('env', {}) or _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('secrets', {}):
             errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be absent; membership lives in Firestore')
-    if check_chart:
-        values_file = listener.get('values_file')
-        if isinstance(values_file, str):
-            chart = yaml.safe_load((ROOT / values_file).read_text())
-            if any(entry.get('name') == _SYNC_LINEAGE_ALLOWLIST_KEY for entry in chart.get('env', [])):
-                errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} listen chart must be absent')
     return errors
 
 

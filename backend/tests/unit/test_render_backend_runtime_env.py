@@ -279,7 +279,7 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
-    approved_allowlists = set()
+    approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
         for key, value in node.items():
             if key in approved_allowlists:

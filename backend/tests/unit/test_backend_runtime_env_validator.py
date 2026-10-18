@@ -3384,7 +3384,14 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
                 'cloud_run/backend-sync',
                 'cloud_run/backend-sync-backfill',
             ):
-                assert {key: env[key]['value'] for key in controls} == selected, scope
+                expected = {
+                    key: value
+                    for key, value in selected.items()
+                    if not (scope.startswith('cloud_run/') and key.endswith('_UID_ALLOWLIST'))
+                }
+                assert {key: env[key]['value'] for key in expected} == expected, scope
+                if scope.startswith('cloud_run/'):
+                    assert all(key not in env for key in controls if key.endswith('_UID_ALLOWLIST')), scope
             else:
                 assert all(key not in env for key in controls), scope
 

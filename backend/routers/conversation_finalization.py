@@ -118,7 +118,10 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         try:
             status = await run_blocking(sync_executor, run_enrichment, payload['key'], payload['task_token'])
-            return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
+            if status == 'busy':
+                logger.info('event=conversation_finalization_sync_reprocess outcome=busy')
+                return JSONResponse(status_code=409, content={'status': status})
+            return JSONResponse(status_code=200, content={'status': status})
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         except Exception:

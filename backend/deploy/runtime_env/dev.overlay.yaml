@@ -8,12 +8,16 @@ overlay:
   gke:
     backend-listen:
       env:
+        BATCH_PIPELINE_UID_ALLOWLIST:
+          value: ''
         BATCH_PIPELINE_API_URL:
           value: ''
         BUCKET_BATCH_PIPELINE:
           value: ''
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         AUDIO_TIMELINE_SPANS:
           value: 'false'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -37,6 +41,8 @@ overlay:
             key: FREE_TIER_LOCAL_PROCESSING_COHORT
         STT_LIVE_DEMAND_ENABLED:
           value: 'false'
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: ''
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'false'
         STT_ROUTING_MODE:
@@ -70,6 +76,8 @@ overlay:
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -77,6 +85,9 @@ overlay:
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: ''
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '0'
@@ -96,10 +107,15 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
     pusher:
       env:
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
+        AUDIO_ARCHIVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         AUDIO_TIMELINE_SPANS:
           value: 'false'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -128,6 +144,8 @@ overlay:
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
+        DREAM_AGENT_UID_ALLOWLIST:
+          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -135,6 +153,9 @@ overlay:
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: omi-release-probe
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '0'
@@ -172,6 +193,9 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
