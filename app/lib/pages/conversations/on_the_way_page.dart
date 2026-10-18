@@ -68,13 +68,14 @@ class _OnTheWayPageState extends State<OnTheWayPage> {
         final pending = [
           for (final w in [...SyncPendingWork.uploaded(p), ...SyncPendingWork.syncing(p)])
             if (w.conversationId == null || !processingIds.contains(w.conversationId)) w,
+          // Refused fragments of the same recording join the same grouping: a block
+          // selects its worst state, so a recording mid-upload with one refused
+          // fragment reads once — as refused — instead of twice, as both. The three
+          // lists partition by WAL status, so a fragment never repeats across them;
+          // a phone copy and its wearable source can share an id, and dropping one
+          // would hide the terminal state the block must show.
+          ...SyncPendingWork.attention(p),
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
-        // Refused fragments of the same recording join the same grouping: a block
-        // selects its worst state, so a recording mid-upload with one refused
-        // fragment reads once — as refused — instead of twice, as both.
-        final pendingIds = {for (final w in pending) w.id};
-        pending.addAll(SyncPendingWork.attention(p).where((w) => !pendingIds.contains(w.id)));
-        pending.sort((a, b) => b.timerStart.compareTo(a.timerStart));
         for (final block in groupRecordingBlocks(pending, joinDeviceCopies: true)) {
           if (SyncPendingWork.needsAttention(block.state)) {
             // Refused recordings stay on the day they were made, in the Offline Sync page's words.

@@ -187,6 +187,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ends a storage row engaged by disk-admission failure without touching the
+  /// retention fingerprint: the caller has a fresher observation whose telemetry
+  /// dedupe must hold, and whose reason differs, so a returning disk failure
+  /// re-engages the row on its own fingerprint.
+  void _endStorageAtRiskRow() {
+    if (_storageAtRisk == null) return;
+    _storageAtRisk = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
+  }
+
   void setNativeIngressOwner(String deviceId, bool active) {
     if (active) {
       _nativeIngressDevices.add(deviceId);
@@ -467,6 +478,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     };
     // Count-cap pressure is diagnostic only; storage prompts are reserved for disk admission failures.
     if (reason == 'count_cap') {
+      // A count-cap reading proves the disk admitted a write again, so any storage
+      // row a disk failure engaged has ended the way its own condition ends — the
+      // risk now reported is count pressure, which never owns the row. The
+      // fingerprint stays so this diagnostic observation keeps its telemetry
+      // dedupe; a disk failure that returns re-engages the row on its own
+      // (different reason, different fingerprint).
+      _endStorageAtRiskRow();
       final depth = _silenceAge(localWalDeviceId);
       _safeTrack('Capture Wedge Detected', {
         'source': localWalSource,

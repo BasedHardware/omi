@@ -529,9 +529,11 @@ final captureScenarios = <AuditScenario>[
         'no banner — slow-burn problems live in the Activity bell',
     run: (a) {
       _seedVisibleWedgeEpisode();
-      return _runHome(a, AuditLive.pendant, pendantConnected: true).then((_) async {
-        // The seeded episode is the retryable kind: the card must offer the in-place
-        // affordances this scenario exists to audit, not the manual-reconnect variant.
+      return _runLivePage(a, AuditLive.pendant).then((_) async {
+        // The seeded episode is the retryable kind (zero-byte streak): the banner
+        // must offer the in-place affordances this scenario exists to audit, not
+        // the manual-reconnect variant, and the assertions are keyed so the audit
+        // cannot pass vacuously.
         expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
         expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
         expect(find.byKey(const Key('capture_recovery_banner_dismiss')), findsOneWidget);

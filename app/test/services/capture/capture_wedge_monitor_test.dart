@@ -1042,6 +1042,29 @@ void main() {
       monitor.dispose();
     });
 
+    test('count-cap pressure ends a storage row a disk failure engaged, and disk failure re-engages it', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 3, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk, isNotNull, reason: 'the disk refused recordings');
+
+      // The disk admitted a write again but >= 720 unsynced WALs remain: the risk
+      // is count pressure now, which is diagnostic only. The row must not keep
+      // claiming storage is full and recordings are paused.
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 3, retainedCount: 720, reason: 'count_cap');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk, isNull, reason: 'count pressure never owns the storage row');
+      expect(monitor.hasCaptureAttention, isFalse);
+
+      // A disk failure that returns re-engages the row: its reason differs, so
+      // the fingerprint dedupe does not swallow it.
+      now = now.add(const Duration(minutes: 5));
+      monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 4, retainedCount: 720, reason: 'disk_reserve');
+      await pumpEventQueue();
+      expect(monitor.storageAtRisk?.blockedCount, 4, reason: 'a returning disk failure re-engages the row');
+      monitor.dispose();
+    });
+
     test('storage counts refresh while the episode slot is already held', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
