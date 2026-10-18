@@ -449,9 +449,10 @@ _ACTION_ITEMS_LIST_HARD_MAX = 2000
 # Slack so a handful of soft-deleted rows in a Firestore prefix still fill the page.
 _ACTION_ITEMS_LIST_DELETED_SLACK = 32
 # Lean projection for GET /v1/action-items. Omit `provenance` (evidence arrays dominate
-# payload on large accounts; ActionItemResponse defaults it to []). Do not add
-# `order_by due_at` here: missing `due_at` is excluded from that index and would
-# drop undated tasks. Existing `action_items_completed_due` stays for due-range reads.
+# payload on large accounts; ActionItemResponse defaults it to []). Note: Firestore
+# excludes missing fields from indexes, so unfiltered list pagination streams two ordered
+# prefixes (due_at ASC, then undated via created_at DESC) rather than a single order_by.
+# Existing `action_items_completed_due` stays for due-range reads.
 ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'description',
     'status',
@@ -767,10 +768,42 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(
-            q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+        has_date_filters = any(d is not None for d in (start_date, end_date, due_start_date, due_end_date))
+        if has_date_filters:
+            items, docs = _stream_action_items_bounded(
+                q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
+            )
+            total_docs += docs
+            items.sort(key=_action_item_list_sort_key)
+            return items[:row_budget]
+
+        # Product order without date filters:
+        # 1. Due rows ordered by due_at ascending (using composite index).
+        q_due = q.order_by('due_at', direction=firestore.Query.ASCENDING)
+        due_items, docs = _stream_action_items_bounded(
+            q_due, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
         )
         total_docs += docs
+        items = [it for it in due_items if it.get('due_at') is not None]
+        if len(items) >= row_budget or _out_of_budget():
+            items.sort(key=_action_item_list_sort_key)
+            return items[:row_budget]
+
+        # 2. Rows without due_at ordered by created_at descending (using composite index).
+        remaining = row_budget - len(items)
+        seen_ids = {it['id'] for it in items}
+        q_no_due = q.order_by('created_at', direction=firestore.Query.DESCENDING)
+        no_due_items, docs2 = _stream_action_items_bounded(
+            q_no_due, max_docs=_list_scan_budget(remaining + len(seen_ids)), budget=budget, extra_fields=extra_fields
+        )
+        total_docs += docs2
+        for it in no_due_items:
+            if it['id'] not in seen_ids and it.get('due_at') is None:
+                items.append(it)
+                seen_ids.add(it['id'])
+                if len(items) >= row_budget:
+                    break
+
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
 
