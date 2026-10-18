@@ -242,8 +242,9 @@ def test_fence_read_errors_remain_retryable(poll, monkeypatch, read):
 
 @pytest.mark.parametrize('reason', [(), ('unsafe-owner-or-content',), (None,), ({'unsafe': 'value'},)])
 def test_unknown_privacy_reason_is_bounded(poll, monkeypatch, caplog, reason):
-    client, _ = poll
-    monkeypatch.setattr(completed_status, 'get_firestore_client', Mock(side_effect=BatchPrivacyBlocked(*reason)))
+    client, database = poll
+    receipt(database)
+    monkeypatch.setattr(completed_status, 'assert_batch_write_allowed', Mock(side_effect=BatchPrivacyBlocked(*reason)))
     response = client.get('/v2/sync-local-files/original')
     assert response.status_code == 404
     assert 'fence_reason=unknown' in caplog.text
