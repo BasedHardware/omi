@@ -5879,3 +5879,17 @@ page deadlock. `quarantine_held` obligations still require their ordinary fenced
 recovery to succeed; pagination neither retries uncertain paid intents nor
 resolves genuine held quarantines. Monitor falling pending age/count and durable
 content/client completion on the deployed release before expanding admission.
+
+
+### Static-routing first-text comparison
+
+Prod listen stage 1 keeps `STT_ROUTING_MODE=on` with
+`STT_ROUTING_ON_PERCENT=95` (approximately 5% static managed accounts).
+`omi_stt_routing_cohort_window_first_text_seconds{routing_arm}` mirrors the
+existing Parakeet-window first-speech-to-first-emitted-text timing once per
+emitting leg. Socket construction pins the existing intent-to-treat arm through
+background work and provider recovery. Labels are only `off`, `shadow`, `on`;
+unmanaged sockets do not contribute. Other providers' first-text timing remains
+outside this window metric. Existing histograms are unchanged. Stage gates,
+sample floors, inverse percentage direction, and same-image rollback are in
+[Live STT routing](runbooks/live-stt-routing.md#static-routing-cohort-ramp-stage-1).

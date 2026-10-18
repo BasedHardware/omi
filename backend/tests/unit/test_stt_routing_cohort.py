@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from prometheus_client import REGISTRY
 
+from utils.observability import routing_cohort as cohort_metrics
 from routers.listen import runtime as runtime_module
 from tests.unit.test_live_session_transcript_outcome import _runtime
 from tests.unit.test_soniox_idle_close import build
@@ -181,8 +183,6 @@ async def test_idle_reopen_counts_when_paid_transport_accepts_not_when_buffered(
 
 
 def test_cohort_labels_have_only_closed_values_from_process_start():
-    from prometheus_client import REGISTRY
-
     for arm in ('off', 'shadow', 'on'):
         assert (
             REGISTRY.get_sample_value(
@@ -191,8 +191,30 @@ def test_cohort_labels_have_only_closed_values_from_process_start():
             )
             is not None
         )
+        assert (
+            REGISTRY.get_sample_value('omi_stt_routing_cohort_window_first_text_seconds_count', {'routing_arm': arm})
+            is not None
+        )
     with pytest.raises(ValueError):
         RoutingCohort('synthetic-user-id')
+
+
+@pytest.mark.parametrize('seconds', [-1, float('nan'), float('inf')])
+def test_invalid_window_timing_does_not_pollute_arm_histogram(seconds):
+    cohort = RoutingCohort('off')
+    name = 'omi_stt_routing_cohort_window_first_text_seconds_count'
+    labels = {'routing_arm': 'off'}
+    before = REGISTRY.get_sample_value(name, labels)
+    cohort.window_first_text(seconds)
+    assert REGISTRY.get_sample_value(name, labels) == before
+
+
+def test_window_timing_metric_failure_is_best_effort(monkeypatch):
+    def fail(**_labels):
+        raise RuntimeError('synthetic metric failure')
+
+    monkeypatch.setattr(cohort_metrics.COHORT_WINDOW_FIRST_TEXT, 'labels', fail)
+    RoutingCohort('on').window_first_text(1.0)
 
 
 @pytest.mark.asyncio
