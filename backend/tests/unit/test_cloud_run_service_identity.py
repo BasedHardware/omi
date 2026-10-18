@@ -93,7 +93,7 @@ def test_workflow_validation_requires_the_key_removal_flag():
 
 
 def test_repo_prod_manifest_pins_every_backend_service():
-    manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    manifest = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=yaml.CSafeLoader)
     services = manifest['environments']['prod']['cloud_run']['services']
 
     for service in PINNED_PROD_SERVICES:

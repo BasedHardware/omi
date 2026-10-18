@@ -185,9 +185,11 @@ Never call the signed-in production API or inspect account documents for this.
 
 For migration failure before promotion, leave Cloud Run traffic on the captured
 previous revisions. If already promoted, restore the captured per-service
-traffic map using the owning traffic rollback procedure. Roll GKE back to the
-captured prior Helm revisions if needed, or deploy the prior compatible image
-with these current secret bindings. Do not remove/disable Secret Manager
+traffic map using the owning traffic rollback procedure. For GKE, prefer the
+prior compatible image with these current secret bindings. Use a captured prior
+Helm revision only after checking its rendered env retains every required
+selector; do not roll back to a chart revision that drops the batch admission
+reference and relies on out-of-band kubectl env state. Do not remove/disable Secret Manager
 versions, revoke their IAM, or roll back backend-secrets while any pods or
 Cloud Run revisions reference them. Avoid redeploying historical source that
 would reintroduce public literals. Do not widen an allowlist or turn off recovery
