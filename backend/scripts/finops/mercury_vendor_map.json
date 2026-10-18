@@ -1,6 +1,7 @@
 {
   "schema_version": 2,
   "max_uncategorized_usd": "2500",
+  "uncategorized_kind_rules": {"outgoingPayment": "other_opex"},
   "excluded_kinds": ["internalTransfer", "treasuryTransfer", "creditCardCredit", "debitCardCredit", "expenseReimbursement", "currencyCloudReturn"],
   "excluded_categories": ["payroll", "salary", "salaries", "taxes", "hardware cogs", "hardware inventory", "refunds", "transfers"],
   "mercury_category_rules": {

@@ -145,7 +145,7 @@ def test_http_denial_and_redirect_are_sanitized(mercury, monkeypatch):
 def test_exclusion_map_and_alias_boundaries(mercury):
     costs = load('mercury_costs')
     config = costs.load_map()
-    tx = {'kind': 'outgoingPayment', 'counterpartyName': 'OpenAI LLC'}
+    tx = {'kind': 'debitCardTransaction', 'counterpartyName': 'OpenAI LLC'}
     assert costs.classify(tx, config) == ('openai', 'llm_vendor')
     tx['counterpartyName'] = 'OpenAInotreally'
     assert costs.classify(tx, config) == ('unmapped', 'unmapped')
@@ -197,7 +197,9 @@ def test_category_rules_precedence_and_safe_aliases(mercury):
     tx['counterpartyName'] = 'Twitter'
     tx['mercuryCategory'] = None
     tx['categoryData'] = None
+    tx['kind'] = 'debitCardTransaction'
     assert costs.classify(tx, config) == ('unmapped', 'unmapped')  # x ads does not claim another alias
+    tx['kind'] = 'outgoingPayment'
 
     tx['counterpartyName'] = 'Unlisted Manufacturer'
     tx['mercuryCategory'] = None
@@ -211,6 +213,24 @@ def test_category_rules_precedence_and_safe_aliases(mercury):
     assert costs.classify(tx, config) == ('excluded', 'excluded')
 
 
+def test_unlabelled_transfers_are_other_opex_but_unlabelled_cards_stay_uncategorized(mercury):
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    wire = {
+        'kind': 'outgoingPayment',
+        'counterpartyName': 'Unlisted Supplier',
+        'mercuryCategory': None,
+        'categoryData': None,
+    }
+    assert costs.classify(wire, config) == ('uncategorized_payment', 'other_opex')
+    card = dict(wire, kind='debitCardTransaction')
+    assert costs.classify(card, config) == ('unmapped', 'unmapped')
+    named = dict(wire, counterpartyName='Upstash')  # a SaaS paid by ACH is caught by its alias first
+    assert costs.classify(named, config) == ('upstash', 'saas')
+    labelled = dict(wire, categoryData={'name': 'Software & Subscriptions'})
+    assert costs.classify(labelled, config) == ('category_data', 'saas')
+
+
 def test_v1_map_compatibility_and_unknown_category_rejected(mercury, tmp_path):
     costs = load('mercury_costs')
     config = costs.load_map()
@@ -218,11 +238,13 @@ def test_v1_map_compatibility_and_unknown_category_rejected(mercury, tmp_path):
     config.pop('mercury_category_rules')
     config.pop('category_data_rules')
     config.pop('max_uncategorized_usd')
+    config.pop('uncategorized_kind_rules')
     path = tmp_path / 'legacy-map.json'
     path.write_text(json.dumps(config))
     legacy = costs.load_map(path)
     assert legacy['mercury_category_rules'] == {}
     assert legacy['category_data_rules'] == {}
+    assert legacy['uncategorized_kind_rules'] == {}
     assert costs.classify(
         {
             'kind': 'outgoingPayment',

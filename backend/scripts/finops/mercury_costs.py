@@ -42,17 +42,18 @@ def load_map(path: pathlib.Path = MAP_PATH) -> dict:
     schema_version = config.get('schema_version')
     if schema_version not in (1, 2):
         raise MercuryError('unsupported Mercury vendor map')
-    for key in ('mercury_category_rules', 'category_data_rules'):
-        if key not in config and schema_version == 1:
+    for key in ('mercury_category_rules', 'category_data_rules', 'uncategorized_kind_rules'):
+        if key not in config and (schema_version == 1 or key == 'uncategorized_kind_rules'):
             config[key] = {}
         if not isinstance(config.get(key), dict):
             raise MercuryError('invalid Mercury vendor map')
-    for rules in (config['mercury_category_rules'], config['category_data_rules']):
-        for name, category in rules.items():
+    for key in ('mercury_category_rules', 'category_data_rules', 'uncategorized_kind_rules'):
+        for name, category in config[key].items():
             if (
                 not isinstance(name, str)
                 or not name
-                or normalize(name) != name
+                # Mercury kinds are camelCase identifiers; category names are normalized text.
+                or (normalize(name) != name if key != 'uncategorized_kind_rules' else not name.isalnum())
                 or not isinstance(category, str)
                 or category not in CATEGORIES
             ):
@@ -107,6 +108,11 @@ def classify(transaction: dict, config: dict) -> tuple[str, str]:
     category = config.get('category_data_rules', {}).get(category_data_name)
     if category:
         return ('excluded', 'excluded') if category == 'excluded' else ('category_data', category)
+    # Last resort by transfer kind: unlabelled wires/ACH are suppliers and contractors;
+    # SaaS paid that way must be named in the vendor map.
+    category = config.get('uncategorized_kind_rules', {}).get(transaction['kind'])
+    if category:
+        return ('excluded', 'excluded') if category == 'excluded' else ('uncategorized_payment', category)
     return 'unmapped', 'unmapped'
 
 

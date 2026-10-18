@@ -406,7 +406,12 @@ examples containing privacy canaries; no bank API was called to record them.
 
 `mercury_vendor_map.json` schema v2 uses normalized token-boundary aliases, with
 the longest matching alias winning, followed by `mercuryCategory` rules and then
-`categoryData.name` rules. Excluded kinds/categories always win. The map keeps
+`categoryData.name` rules, and finally `uncategorized_kind_rules` by transaction
+kind: an unlabelled `outgoingPayment` (wire/ACH) is `other_opex` under the
+synthetic vendor `uncategorized_payment`, because those are suppliers and
+contractors (Sept–Oct 2026 had $4K–$67K wires every few weeks that would
+otherwise block the line). A SaaS paid by wire/ACH must therefore have a vendor
+alias or a Mercury category. Excluded kinds/categories always win. The map keeps
 schema v1 readable with no category rules and the default `$2,500` uncategorized
 threshold. It seeds explicit known vendor aliases and generic category rules;
 rule-classified aggregates use the synthetic vendor labels `mercury_category`
@@ -473,9 +478,10 @@ annual vendor is configured, and no more than `max_uncategorized_usd` of
 uncategorized spend in the rolling 30-day window. The map defaults that threshold
 to `$2,500`. The existing BigQuery fields `unmapped_usd` and `unmapped_count`
 retain their names for loader/admin compatibility; they now mean uncategorized
-USD and transaction count. An uncategorized one-off wire above the threshold
-blocks completeness while it remains in the 30-day window, then ages out; it is
-never added to SaaS. Add a category or vendor map rule when its nature is known.
+USD and transaction count. Unlabelled wires/ACH are `other_opex`, so the
+residual is mostly unlabelled card spend; anything above the threshold (for
+example a kind with no rule) blocks completeness while it remains in the 30-day
+window, then ages out; it is never added to SaaS. Add a category or vendor map rule when its nature is known.
 When annual vendors are configured, a full preceding year of coverage is still
 required, but annual uncategorized spend blocks only when its total exceeds the
 same threshold. This prevents an initial 90-day pull from claiming to know older
