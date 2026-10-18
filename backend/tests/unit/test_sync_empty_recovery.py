@@ -6,6 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.sync import empty_recovery as recovery
 from utils.stt.outcomes import TranscriptionFailure
 
