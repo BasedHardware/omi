@@ -1,11 +1,29 @@
 """Cache-aligned visibility window reader, shared by app and channel chat."""
 
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from google.cloud.firestore_v1 import FieldFilter
 from database.chat_history_window import cache_aligned_history_limit
 from database.chat_context_prefetch import no_retry
 
 ACTIVITY_READ_SECONDS = 1.0
+
+
+def _coerce_datetime_sort_key(dt_val: Any) -> datetime:
+    """Coerce string, naive datetime, or missing timestamp to a timezone-aware UTC datetime."""
+    if isinstance(dt_val, datetime):
+        if dt_val.tzinfo is None:
+            return dt_val.replace(tzinfo=timezone.utc)
+        return dt_val.astimezone(timezone.utc)
+    if isinstance(dt_val, str):
+        try:
+            parsed = datetime.fromisoformat(dt_val.replace('Z', '+00:00'))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def get_cache_aligned_messages(
@@ -48,13 +66,14 @@ def get_cache_aligned_messages(
     )
 
 
-def get_recent_activity(uid, since="", exclude_session=None):
+def get_recent_activity(uid, since="", exclude_session=None, *, firestore_client: Any = None):
     from database import chat as chat_db
 
+    client = firestore_client if firestore_client is not None else chat_db.db
     # A recent sample, never a paginated scan. Single-session users read at most
     # twenty metadata candidates and decrypt zero active-session messages.
     query = (
-        chat_db.db.collection('users')
+        client.collection('users')
         .document(uid)
         .collection('messages')
         .order_by('created_at', direction='DESCENDING')
@@ -65,11 +84,18 @@ def get_recent_activity(uid, since="", exclude_session=None):
     # observed Firestore latency, independently of the outer coroutine deadline.
     for document in query.stream(timeout=ACTIVITY_READ_SECONDS, retry=no_retry()):
         row = document.to_dict() or {}
+        row.setdefault('id', document.id)
         if exclude_session is not None and row.get('chat_session_id') == exclude_session:
             continue
         if row.get('reported') is True or chat_db.is_automatic_chat_message(row):
             continue
-        if since and row['created_at'].isoformat() <= since:
-            continue
+        if since:
+            row_dt = _coerce_datetime_sort_key(row.get('created_at'))
+            since_dt = _coerce_datetime_sort_key(since)
+            if row_dt <= since_dt:
+                continue
         rows.append(chat_db.decrypt_message_payload(row, uid))
-    return sorted(rows, key=lambda r: (r['created_at'], r['id']))
+    return sorted(
+        rows,
+        key=lambda r: (_coerce_datetime_sort_key(r.get('created_at')), str(r.get('id', ''))),
+    )

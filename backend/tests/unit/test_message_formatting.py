@@ -123,3 +123,33 @@ def test_sender_name_lookup_is_cached_per_app_id():
 
     assert result.count('Shared:') == 2
     lookup.assert_called_once_with('shared-app')
+
+
+def test_get_messages_as_string_and_xml_with_mixed_naive_and_aware_timestamps():
+    naive_dt = datetime(2026, 10, 18, 10, 0, 0)
+    aware_dt = datetime(2026, 10, 18, 11, 0, 0, tzinfo=timezone.utc)
+
+    m_naive = Message(
+        id='m_naive',
+        text='naive message',
+        created_at=naive_dt,
+        sender=MessageSender.human,
+        type=MessageType.text,
+    )
+    m_aware = Message(
+        id='m_aware',
+        text='aware message',
+        created_at=aware_dt,
+        sender=MessageSender.ai,
+        type=MessageType.text,
+    )
+
+    res_str = Message.get_messages_as_string([m_aware, m_naive])
+    assert 'naive message' in res_str
+    assert 'aware message' in res_str
+    assert res_str.index('naive message') < res_str.index('aware message')
+
+    res_xml = Message.get_messages_as_xml([m_aware, m_naive])
+    assert '<content>naive message</content>' in res_xml
+    assert '<content>aware message</content>' in res_xml
+    assert res_xml.index('naive message') < res_xml.index('aware message')
