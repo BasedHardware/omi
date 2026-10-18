@@ -3343,25 +3343,6 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> _reconnectDeviceCaptureBody({bool testingProbe = false}) async {
-    final token = _sessionOwner?.token;
-    final device = _recordingDevice;
-    if (device == null || recordingState != RecordingState.deviceRecord || isPaused) return;
-    final stagedPhase = _capture.stagedReadModel.phase;
-    final attestedIdle = testingProbe &&
-        stagedPhase == CapturePhase.idle &&
-        !_capture.stagedReadModel.callActive &&
-        _pendantSuspension == null;
-    if (stagedPhase != CapturePhase.pendantLive && !attestedIdle) return;
-    final deviceRevision = _deviceIdentityRevision;
-    final codec = await _getReconnectAudioCodec(device.id);
-    if (codec == null) return;
-    if (!_captureSessionIsCurrent(token) || _deviceIdentityStale(deviceRevision)) return;
-    if (_capture.stagedReadModel.phase != stagedPhase || _recordingDevice?.id != device.id) return;
-    if (!_shouldReconnectTranscriptionSocket) return;
-    await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
-  }
-
   Future<void> _reconnectPhoneCaptureBody() async {
     final token = _sessionOwner?.token;
     if (!_captureSessionIsCurrent(token)) return;
