@@ -1,6 +1,7 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+import logging
 from unittest.mock import Mock
 
 from google.api_core.exceptions import Aborted, InvalidArgument
@@ -8,6 +9,8 @@ import pytest
 
 from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
+from utils.batch_pipeline import projection
+from utils.sync import bridge
 
 
 @pytest.fixture
@@ -319,3 +322,34 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     assert ProjectionStore(Mock(client=client)).run(operation) == 'persisted'
     assert operation.call_count == client.transaction.call_count == 2
     assert operation.call_args_list[0] != operation.call_args_list[1]
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(binding, monkeypatch, caplog, enabled):
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: 'synthetic-conversation')
+    playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
+    projector = projection.Projector(Mock(), Mock(), playback=playback)
+    receipt = {
+        'state': 'persisted',
+        'conversation_id': 'synthetic-conversation',
+        'audio_required': True,
+        'enrichment_required': True,
+    }
+    mark = Mock()
+    monkeypatch.setattr(projector.store, 'mark_enrichment', mark)
+    with caplog.at_level(logging.INFO, logger=projection.__name__):
+        with pytest.raises(ValueError, match='private-error'):
+            projector.finish_part(Mock(), binding, receipt, None)
+    mark.assert_not_called()  # Playback failure retains its durable retry obligation.
+    text = caplog.text
+    assert 'private-error-must-never-be-logged' not in text
+    assert 'synthetic-conversation' not in text
+    if enabled:
+        assert 'phase=bridge outcome=completed elapsed_ms=' in text
+        assert 'phase=playback outcome=started' in text
+        assert 'phase=playback outcome=error elapsed_ms=' in text
+        assert 'exception_type=ValueError' in text
+    else:
+        assert 'event=batch_projection_phase' not in text
