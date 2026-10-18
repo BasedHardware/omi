@@ -36,6 +36,7 @@ from .helpers import prepare_for_read, prepare_for_write, set_data_protection_le
 from database.read_boundary import parse_snapshot_or_none
 from database.chat_context_mutations import invalidate_sessions, invalidation_fields
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from utils.conversations.datetime_utils import coerce_utc_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -1105,7 +1106,10 @@ def get_chat_sessions(
             items.append(normalized)
     if extra:
         items.extend(row for row in extra if starred is None or row.get('starred', False) == starred)
-        items.sort(key=lambda row: row['updated_at'], reverse=True)
+        items.sort(
+            key=lambda row: coerce_utc_datetime(row.get('updated_at')) or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
         return items[offset : offset + limit]
     return items
 

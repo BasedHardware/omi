@@ -33,6 +33,8 @@ from google.cloud import firestore
 from config.desktop_pendant_call_link import CALL_GROUP_KIND, call_pair, desktop_meeting
 from ._client import get_firestore_client
 
+from utils.conversations.datetime_utils import coerce_utc_datetime
+
 logger = logging.getLogger(__name__)
 
 CAPTURE_GROUP_FIELD = 'capture_group'
@@ -43,9 +45,7 @@ _CONVERSATIONS = 'conversations'
 
 
 def _aware(value: Any) -> Optional[datetime]:
-    if not isinstance(value, datetime):
-        return None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return coerce_utc_datetime(value)
 
 
 def _source(row: Mapping[str, Any]) -> Optional[str]:
@@ -68,14 +68,18 @@ def _member(conversation_id: str, row: Mapping[str, Any], evidence: Optional[dic
 def _primary_rank(member: Mapping[str, Any]) -> tuple[float, str]:
     start, finish = member.get('started_at'), member.get('finished_at')
     duration = (finish - start).total_seconds() if start and finish else 0.0
-    return (-duration, member['id'])
+    return (-duration, str(member.get('id', '')))
 
 
 def _record(group_id: str, members: list[dict], revision: int) -> dict:
-    ordered = sorted(members, key=lambda m: (m.get('started_at') or datetime.min.replace(tzinfo=timezone.utc), m['id']))
+    ordered = sorted(
+        members,
+        key=lambda m: (m.get('started_at') or datetime.min.replace(tzinfo=timezone.utc), str(m.get('id', ''))),
+    )
+    primary_id = min(ordered, key=_primary_rank)['id'] if ordered else ''
     return {
         'id': group_id,
-        'primary_id': min(ordered, key=_primary_rank)['id'],
+        'primary_id': primary_id,
         'revision': revision,
         'members': ordered,
         'updated_at': datetime.now(timezone.utc),

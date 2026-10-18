@@ -3,12 +3,17 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from utils.conversations.datetime_utils import coerce_utc_datetime
 
-def ensure_timezone_aware(value: datetime) -> datetime:
-    """Return an aware datetime, treating legacy naive values as UTC."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+
+def ensure_timezone_aware(value: Any) -> datetime:
+    """Return an aware datetime, treating legacy naive values, ISO strings, and invalid inputs gracefully."""
+    coerced = coerce_utc_datetime(value)
+    if coerced is not None:
+        return coerced
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def firestore_revision_datetime(value: Any) -> Optional[datetime]:
