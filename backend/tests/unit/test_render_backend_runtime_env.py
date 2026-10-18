@@ -956,12 +956,22 @@ def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatc
         _REPO_ROOT / '.github/workflows' / ('gcp_backend_auto_dev.yml' if env_name == 'dev' else 'gcp_backend.yml')
     )
     workflow_text = backend_workflow.read_text()
+    # Environment-scoped price refs must be read after the deployment job selects its environment.
+    workflow = yaml.safe_load(workflow_text)
+    deploy_job = workflow['jobs']['deploy']
+    assert deploy_job.get('environment')
+    deploy_steps = [
+        step for step in deploy_job['steps'] if step.get('uses') == './.github/actions/deploy-backend-stack'
+    ]
+    assert len(deploy_steps) == 1
     for index, row in enumerate(bindings):
         key = row['env_var']
         expected = f'price_render_fixture_{index}' if bound else ''
         assert deployed[key] == expected_state[key] == expected
         assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == f'{key}={expected}'
         assert f'{key}: ${{{{ vars.{key} }}}}' in workflow_text
+        assert key not in workflow.get('env', {})
+        assert deploy_steps[0]['env'][key] == '${{ vars.' + key + ' }}'
         if bound:
             subscription = {
                 'plan': row['plan_id'],

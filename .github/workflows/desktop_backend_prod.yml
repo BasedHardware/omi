@@ -325,10 +325,8 @@ jobs:
       # restating it here, so the guard cannot drift from its source.
       - name: Render desktop backend expected env state
         id: desktop-expected-env
-        # No cohort variable is passed here, on purpose. GitHub's `vars` context
-        # falls back from environment to repository scope, so the only way to make
-        # a development cohort structurally unable to reach production is for the
-        # production workflow never to read one. Prod renders literal empties.
+        # Price references resolve in the selected production environment; unset
+        # bindings stay empty until the separate commercial cutover configures them.
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
           LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
