@@ -120,6 +120,73 @@ def test_env_config_is_revision_local_and_removes_only_unused_collector_secrets(
     assert len(service['spec']['template']['spec']['volumes']) == 2
 
 
+@pytest.mark.parametrize('config_name', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_env_attachment_succeeds_when_all_secret_writes_are_denied(monkeypatch, tmp_path, config_name):
+    module = _load_module()
+    monkeypatch.delenv('GITHUB_OUTPUT', raising=False)
+    config = SCRIPT.parents[1] / 'deploy' / config_name
+    expected = tmp_path / 'expected.json'
+    expected.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'desktop-backend': {
+                        'env': [
+                            {'name': 'SAFE', 'value': 'kept'},
+                            {'name': 'BOOLEAN_LOOKING', 'value': 'false'},
+                        ]
+                    }
+                }
+            }
+        )
+    )
+    calls = []
+    replacements = []
+
+    def fake_run(arguments, *, capture_output=False):
+        calls.append(arguments)
+        if arguments[1:3] == ['secrets', 'create']:
+            return module.subprocess.CompletedProcess(arguments, 1, '', 'secretmanager.secrets.create denied')
+        if arguments[1] == 'secrets':
+            return module.subprocess.CompletedProcess(arguments, 1, '', 'Secret Manager denied')
+        if '--format=export' in arguments:
+            output = yaml.safe_dump(_service())
+        elif '--format=value(status.latestCreatedRevisionName)' in arguments:
+            output = 'base'
+        elif '--format=value(status.url)' in arguments:
+            output = 'https://example.invalid'
+        elif arguments[1:4] == ['run', 'services', 'replace']:
+            replacements.append(yaml.safe_load(Path(arguments[4]).read_text()))
+            output = '{}'
+        else:
+            raise AssertionError(arguments)
+        return module.subprocess.CompletedProcess(arguments, 0, output, '')
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    module.attach_sidecar(
+        SimpleNamespace(
+            project='123',
+            region='us-central1',
+            service='desktop-backend',
+            base_revision='base',
+            final_revision='final',
+            ingress_container='desktop-backend-1',
+            config=config,
+            config_env=True,
+            config_secret='cloud-run-gmp-config',
+            config_secret_version=None,
+            expected_env_state=expected,
+            tag='',
+            desktop_backend_liveness_probe=False,
+        )
+    )
+    assert not any(arguments[1] == 'secrets' for arguments in calls)
+    assert len(replacements) == 1
+    collector = replacements[0]['spec']['template']['spec']['containers'][-1]
+    assert collector['env'] == [{'name': module.CONFIG_ENV_NAME, 'value': config.read_text()}]
+    assert replacements[0]['spec']['traffic'] == _service()['spec']['traffic']
+
+
 def test_env_config_wrapper_preserves_literal_bytes_and_executes_entrypoint(tmp_path):
     module = _load_module()
     config = 'kind: RunMonitoring\nvalue: "$(touch injected) ${NOT_EXPANDED} \\ %s"\n'
