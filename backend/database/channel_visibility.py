@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Optional
 
+from google.api_core.exceptions import GoogleAPICallError
+
 from config.messaging import cohort_enabled
 from database._client import get_firestore_client
 
@@ -21,10 +23,10 @@ def visible_sessions(uid: str, *, firestore_client: Optional[Any] = None) -> lis
         return []
     if not cohort_enabled(uid):
         return []
-    db = firestore_client if firestore_client is not None else get_firestore_client()
-    if db is None:
-        return []
     try:
+        db = firestore_client if firestore_client is not None else get_firestore_client()
+        if db is None:
+            return []
         user = db.collection('users').document(uid)
         visible = set()
         for d in user.collection('channel_links').stream():
@@ -39,6 +41,6 @@ def visible_sessions(uid: str, *, firestore_client: Optional[Any] = None) -> lis
             if isinstance(data, dict) and data.get('channel_link_id') in visible:
                 sessions.append(dict(data, id=d.id))
         return sessions
-    except Exception:
+    except (GoogleAPICallError, OSError, TimeoutError):
         logger.warning('channel_visibility read failed', exc_info=True)
         return []
