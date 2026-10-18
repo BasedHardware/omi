@@ -132,6 +132,7 @@ import {
 } from "./runtime/agent-spawn-journal.js";
 import {
   finalizeRelayToolResult,
+  finalizedToolInvocationLedgerOutcome,
   finalizedToolResultOutcome,
   type RelayToolResultIdentity,
 } from "./runtime/relay-tool-result.js";
@@ -529,7 +530,7 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   if (pending) {
     try {
       const result = finalizeRelayResult(pending.callId, msg.result, pending.invocation, msg.outcome);
-      const finalizedOutcome = controlToolInvocationOutcome(result);
+      const finalizedOutcome = finalizedToolInvocationLedgerOutcome(result, pending.invocation.canonicalToolName);
       runtimeKernel?.completeRunToolInvocation({
         invocationId: msg.invocationId,
         ownerId: msg.ownerId,
@@ -574,7 +575,7 @@ function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   if (external) {
     try {
       const result = finalizeRelayResult(external.request.requestId, msg.result, external.invocation, msg.outcome);
-      const finalizedOutcome = controlToolInvocationOutcome(result);
+      const finalizedOutcome = finalizedToolInvocationLedgerOutcome(result, external.invocation.canonicalToolName);
       runtimeKernel?.completeRunToolInvocation({
         invocationId: msg.invocationId,
         ownerId: msg.ownerId,

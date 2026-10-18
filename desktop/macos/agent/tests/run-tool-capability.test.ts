@@ -460,6 +460,40 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("records an executor-reported unknown outcome as outcome_unknown under live authority", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "executor-unknown-completion",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "get_memories",
+      toolInput: {},
+    });
+    broker.markInvocationDispatched(authorized);
+
+    broker.completeInvocation({
+      ...invocationIdentity(authorized),
+      capabilityRef: authorized.capabilityRef,
+      activeOwnerId: session.ownerId,
+      outcome: "outcome_unknown",
+      result: JSON.stringify({ ok: true, outcome_unknown: true }),
+    });
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      status: "outcome_unknown",
+      errorCode: "executor_reported_outcome_unknown",
+    });
+    store.close();
+  });
+
   it("fails closed for wrong owner, run, attempt, role, and unmanifested tools", () => {
     const { store, session, run, attempt } = fixture("leaf");
     const broker = createBroker(store);

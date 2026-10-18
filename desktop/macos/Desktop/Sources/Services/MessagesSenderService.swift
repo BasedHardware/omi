@@ -29,7 +29,7 @@ enum MessageSendService: String, Sendable {
   }
 }
 
-struct MessageSendOutcome: Sendable {
+struct MessageSendOutcome: Sendable, Equatable {
   let handle: String
   let service: String
   let attachedFile: String?
@@ -41,6 +41,8 @@ enum MessagesSenderError: LocalizedError {
   case attachmentNotFound(path: String)
   case allServicesFailed(detail: String)
   case partiallySent(service: String, detail: String)
+  /// Messages did not answer in time. It may still have sent the message.
+  case sendTimedOut(seconds: Int)
 
   var errorDescription: String? {
     switch self {
@@ -52,6 +54,9 @@ enum MessagesSenderError: LocalizedError {
     case .partiallySent(let service, let detail):
       return
         "The message text was sent over \(service) but the attachment was not: \(detail). The recipient has already received the text — do not resend it. Ask whether they still want the file."
+    case .sendTimedOut(let seconds):
+      return
+        "Messages.app did not respond within \(seconds)s; the message may or may not have been sent. Do not retry without checking the thread."
     }
   }
 
@@ -62,6 +67,7 @@ enum MessagesSenderError: LocalizedError {
     case .attachmentNotFound: return "attachment_not_found"
     case .allServicesFailed: return "send_failed"
     case .partiallySent: return "partially_sent"
+    case .sendTimedOut: return "send_timed_out"
     }
   }
 }
@@ -154,10 +160,7 @@ enum MessagesSenderService {
         // A timeout is not a clean failure: Messages may still deliver, so stop
         // rather than retrying on another service and double-sending.
         if result.timedOut {
-          throw MessagesSenderError.allServicesFailed(
-            detail:
-              "Messages.app did not respond within \(Int(timeoutSeconds))s; the message may or may not have been sent. Do not retry without checking the thread."
-          )
+          throw MessagesSenderError.sendTimedOut(seconds: Int(timeoutSeconds))
         }
         failures.append("\(serviceType): \(result.errorOutput)")
       } catch let error as AppleScriptRunnerError {
