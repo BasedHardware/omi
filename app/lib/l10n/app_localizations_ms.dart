@@ -11106,6 +11106,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi kemudian';
 
   @override
+  String get captureBannerWhatsWrong => 'Apa yang berlaku?';
+
+  @override
+  String get captureBannerDismiss => 'Tutup';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Pautan Bluetooth ke Omi anda tersekat, jadi audio tidak sampai ke aplikasi. Omi terus merakam pada peranti dan akan disegerakkan apabila pautan pulih. Mencuba semula menyambung semula pautan; jika ia terus gagal, semak peranti anda di Tetapan > Peranti.';
+
+  @override
   String get captureStillRecording => 'Masih merakam';
 
   @override

@@ -11119,6 +11119,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Dźwięk zapisany, transkrypcja później';
 
   @override
+  String get captureBannerWhatsWrong => 'Co się dzieje?';
+
+  @override
+  String get captureBannerDismiss => 'Ukryj';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.';
+
+  @override
   String get captureStillRecording => 'Nagrywanie trwa';
 
   @override

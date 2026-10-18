@@ -11085,6 +11085,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Lyd lagret, transkriberes senere';
 
   @override
+  String get captureBannerWhatsWrong => 'Hva skjer?';
+
+  @override
+  String get captureBannerDismiss => 'Avvis';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.';
+
+  @override
   String get captureStillRecording => 'Tar fortsatt opp';
 
   @override

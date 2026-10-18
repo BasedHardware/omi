@@ -11022,6 +11022,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'บันทึกเสียงแล้ว จะถอดความภายหลัง';
 
   @override
+  String get captureBannerWhatsWrong => 'เกิดอะไรขึ้น';
+
+  @override
+  String get captureBannerDismiss => 'ปิด';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์';
+
+  @override
   String get captureStillRecording => 'ยังบันทึกอยู่';
 
   @override

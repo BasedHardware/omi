@@ -21,6 +21,8 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -35,7 +37,7 @@ import 'package:omi/widgets/header_circle_button.dart';
 import '../fakes.dart';
 import '../harness.dart';
 
-enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant }
+enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant, pendantOutage }
 
 /// A capture provider reporting one fixed live state, with a short transcript.
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
@@ -47,7 +49,10 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   bool get pendantCaptureVerified => true;
 
-  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
+  /// The outage variant: the pendant streams but the server said transcription cannot run.
+  bool get _outage => live == AuditLive.pendantOutage;
+
+  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantOutage;
   bool get _phone => !_pendant && live != AuditLive.idle;
 
   @override
@@ -55,7 +60,7 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   RecordingState get recordingState => switch (live) {
         AuditLive.idle => RecordingState.stop,
-        AuditLive.pendant => RecordingState.deviceRecord,
+        AuditLive.pendant || AuditLive.pendantOutage => RecordingState.deviceRecord,
         AuditLive.pendantPaused || AuditLive.phonePaused => RecordingState.pause,
         _ => RecordingState.record,
       };
@@ -81,7 +86,7 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   String? get activeCaptureSessionId => live == AuditLive.idle ? null : 'live-audit';
   @override
-  List<TranscriptSegment> get segments => live == AuditLive.idle
+  List<TranscriptSegment> get segments => (live == AuditLive.idle || live == AuditLive.pendantOutage)
       ? []
       : [
           TranscriptSegment(
@@ -110,7 +115,15 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   Duration? get customSttBufferingDuration => null;
   @override
-  MessageServiceStatusEvent? get terminalTranscriptionFailure => null;
+  MessageServiceStatusEvent? get terminalTranscriptionFailure => _outage
+      ? MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'upstream_error',
+          provider: 'deepgram',
+          retryable: true,
+          reason: 'send_failed',
+        )
+      : null;
   @override
   bool get recordingDeviceServiceReady => true;
   @override
@@ -347,11 +360,41 @@ Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
   await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
     ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
-    if (live == AuditLive.pendant || live == AuditLive.pendantPaused)
+    if (live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantOutage)
       ChangeNotifierProvider<DeviceProvider>.value(
           value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
   ]);
   await a.shot('The live page');
+}
+
+/// Swaps in a quiet monitor owning one visible BLE episode, so the recovery banner renders on
+/// whatever page the scenario pumps. `ingress_recovery_failed` is the one trigger declared
+/// synchronously (no feature-gate await), which keeps the frame deterministic.
+void _seedVisibleWedgeEpisode() {
+  final previous = CaptureWedgeMonitor.instance;
+  final monitor = CaptureWedgeMonitor(
+    featureGate: () async => true,
+    track: (_, __) {},
+    bleRetry: (_) async {},
+    appBuild: () => 'audit',
+    platform: () => 'audit',
+  );
+  CaptureWedgeMonitor.instance = monitor;
+  monitor.observeIngressHealth(
+    auditPendant.id,
+    const CaptureIngressHealth(
+      phase: 'actionRequired',
+      generation: 'audit',
+      reason: 'subscription_timeout',
+      validUntilMs: 0,
+      subscriptionConfirmed: false,
+      unverifiedSinceMs: 60000,
+    ),
+  );
+  addTearDown(() {
+    CaptureWedgeMonitor.instance = previous;
+    monitor.dispose();
+  });
 }
 
 const _home = 'lib/pages/home/page.dart (Home: live card, record button, device chip)';
@@ -452,5 +495,27 @@ final captureScenarios = <AuditScenario>[
     page: _live,
     state: 'The phone recording is paused; two transcript lines',
     run: (a) => _runLivePage(a, AuditLive.phonePaused),
+  ),
+  AuditScenario(
+    id: 'home-capture-recovery-banner',
+    title: 'Home, pendant live, recovery banner',
+    page: _home,
+    state: 'The pendant streams, but the BLE link stalled: the banner retries in place '
+        '(never opens settings), explains itself on demand, and can be dismissed',
+    run: (a) {
+      _seedVisibleWedgeEpisode();
+      return _runHome(a, AuditLive.pendant, pendantConnected: true);
+    },
+  ),
+  AuditScenario(
+    id: 'conversation-live-outage',
+    title: 'Live page, transcription unavailable',
+    page: _live,
+    state: 'The pendant streams but transcription is down: a short Not-transcribing app bar, '
+        'the one outage banner, and the neutral listening placeholder',
+    run: (a) {
+      _seedVisibleWedgeEpisode();
+      return _runLivePage(a, AuditLive.pendantOutage);
+    },
   ),
 ];

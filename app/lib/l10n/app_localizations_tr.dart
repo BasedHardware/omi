@@ -11094,6 +11094,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ses kaydedildi, sonra metne dökülecek';
 
   @override
+  String get captureBannerWhatsWrong => 'Ne oluyor?';
+
+  @override
+  String get captureBannerDismiss => 'Gizle';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi cihazınızdaki Bluetooth bağlantısı kesildi, bu nedenle ses uygulamaya ulaşmıyor. Omi cihazda kaydetmeye devam ediyor ve bağlantı geri geldiğinde senkronize olacak. Yeniden denemek bağlantıyı yeniden kurar; başarısız olmaya devam ederse Ayarlar > Cihaz bölümünden cihazınızı kontrol edin.';
+
+  @override
   String get captureStillRecording => 'Kayıt sürüyor';
 
   @override

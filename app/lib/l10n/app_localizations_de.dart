@@ -11173,6 +11173,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio gespeichert, wird später transkribiert';
 
   @override
+  String get captureBannerWhatsWrong => 'Was ist los?';
+
+  @override
+  String get captureBannerDismiss => 'Ausblenden';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Die Bluetooth-Verbindung zu deinem Omi ist ins Stocken geraten, deshalb erreicht das Audio die App nicht. Omi nimmt auf dem Gerät weiter auf und synchronisiert, sobald die Verbindung wiederhergestellt ist. Erneut versuchen stellt die Verbindung wieder her; wenn es weiter fehlschlägt, prüfe dein Gerät unter Einstellungen > Gerät.';
+
+  @override
   String get captureStillRecording => 'Nimmt weiter auf';
 
   @override

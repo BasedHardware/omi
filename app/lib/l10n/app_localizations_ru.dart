@@ -11124,6 +11124,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аудио сохранено, расшифруется позже';
 
   @override
+  String get captureBannerWhatsWrong => 'Что происходит?';
+
+  @override
+  String get captureBannerDismiss => 'Скрыть';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Связь Bluetooth с вашим Omi прервалась, поэтому звук не попадает в приложение. Omi продолжает записывать на устройстве и синхронизируется, когда связь восстановится. Повторная попытка переподключает связь; если она продолжает сбиваться, проверьте устройство в разделе Настройки > Устройство.';
+
+  @override
   String get captureStillRecording => 'Запись продолжается';
 
   @override

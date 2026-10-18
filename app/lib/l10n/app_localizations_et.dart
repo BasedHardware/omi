@@ -11076,6 +11076,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Heli salvestatud, transkribeeritakse hiljem';
 
   @override
+  String get captureBannerWhatsWrong => 'Mis toimub?';
+
+  @override
+  String get captureBannerDismiss => 'Peida';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth-ühendus sinu Omiga on seiskunud, seega ei jõua heli rakendusse. Omi jätkab salvestamist seadmes ja sünkroonib, kui ühendus taastub. Uuesti proovimine ühendab lingi uuesti; kui see ikka ebaõnnestub, kontrolli seadet jaotises Seaded > Seade.';
+
+  @override
   String get captureStillRecording => 'Salvestamine jätkub';
 
   @override

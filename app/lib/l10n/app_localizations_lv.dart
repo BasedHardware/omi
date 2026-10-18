@@ -11111,6 +11111,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio saglabāts, tiks transkribēts vēlāk';
 
   @override
+  String get captureBannerWhatsWrong => 'Kas notiek?';
+
+  @override
+  String get captureBannerDismiss => 'Paslēpt';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.';
+
+  @override
   String get captureStillRecording => 'Ierakstīšana turpinās';
 
   @override

@@ -10916,6 +10916,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
 
   @override
+  String get captureBannerWhatsWrong => '何が起きていますか？';
+
+  @override
+  String get captureBannerDismiss => '非表示';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。';
+
+  @override
   String get captureStillRecording => '録音は継続中';
 
   @override

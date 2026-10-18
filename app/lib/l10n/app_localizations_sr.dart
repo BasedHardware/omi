@@ -11093,6 +11093,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Звук је сачуван, транскрипција касније';
 
   @override
+  String get captureBannerWhatsWrong => 'Шта се дешава?';
+
+  @override
+  String get captureBannerDismiss => 'Сакриј';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth веза са вашим Omi је стала, па звук не стиже до апликације. Omi наставља да снима на уређају и синхронизоваће се када се веза опорави. Поновни покушај поново успоставља везу; ако и даље не успева, проверите уређај у Подешавања > Уређај.';
+
+  @override
   String get captureStillRecording => 'Снимање се наставља';
 
   @override

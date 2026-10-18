@@ -10900,6 +10900,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
 
   @override
+  String get captureBannerWhatsWrong => '怎么了？';
+
+  @override
+  String get captureBannerDismiss => '忽略';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
+
+  @override
   String get captureStillRecording => '仍在录音';
 
   @override

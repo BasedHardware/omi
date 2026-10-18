@@ -71,7 +71,6 @@ void main() {
       events.where((e) => e.event == name).map((e) => e.properties).toList();
 
   setUp(() => events = []);
-
   group('CaptureRecoveryBanner', () {
     testWidgets('renders reconnect action after a failed automatic BLE retry', (tester) async {
       final monitor = makeMonitor(bleRetry: (_) async => throw StateError('BLE unavailable'));
@@ -107,8 +106,9 @@ void main() {
       expect(forEvent('Capture Recovery Prompt Shown'), hasLength(1));
     });
 
-    testWidgets('tap opens /settings/device inside Home and sends actioned telemetry', (tester) async {
-      final monitor = makeMonitor();
+    testWidgets('tap retries in place and never opens a settings route', (tester) async {
+      var bleRetries = 0;
+      final monitor = makeMonitor(bleRetry: (_) async => bleRetries++);
       wedge(monitor);
       final opened = <String>[];
       Future<bool> opener(String route, {bool Function()? canOpen}) async {
@@ -120,11 +120,69 @@ void main() {
       addTearDown(() => HomeNavigation.unregister(opener));
 
       await pumpBanner(tester, monitor);
+      final retriesBeforeTap = bleRetries;
+      expect(retriesBeforeTap, 1, reason: 'declaration already attempted one automatic retry');
+
       await tester.tap(find.byKey(const Key('capture_recovery_banner')));
       await tester.pump();
 
-      expect(opened, ['/settings/device']);
+      expect(bleRetries, retriesBeforeTap + 1, reason: 'the banner tap retries the same episode in place');
+      expect(opened, isEmpty, reason: 'a stalled BLE link is fixed where the reader stands, not in settings');
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+    });
+
+    testWidgets('What\'s going on? opens the details sheet with the BLE explanation', (tester) async {
+      final monitor = makeMonitor();
+      wedge(monitor);
+
+      await pumpBanner(tester, monitor);
+
+      final context = tester.element(find.byType(CaptureRecoveryBanner));
+      final l10n = AppLocalizations.of(context);
+
+      await tester.tap(find.byKey(const Key('capture_recovery_banner_info')));
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.captureRecoveryBanner), findsNWidgets(2),
+          reason: 'the banner and the sheet title both name the episode');
+      expect(find.text(l10n.captureWedgeBleExplanation), findsOneWidget);
+
+      await tester.tap(find.text(l10n.gotIt));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.captureWedgeBleExplanation), findsNothing);
+    });
+
+    testWidgets('the dismiss control hides the episode through the monitor', (tester) async {
+      final monitor = _DismissRecordingMonitor();
+      wedge(monitor);
+
+      await pumpBanner(tester, monitor);
+      expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('capture_recovery_banner_dismiss')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+      expect(monitor.dismissedDeviceIds, ['dev-a']);
+    });
+
+    testWidgets('the storage episode taps through to a transfer retry, with no audio-safe detail line', (tester) async {
+      var retries = 0;
+      final monitor = makeMonitor(transferRetry: () async => retries++);
+      monitor.observeStorageAtRisk(
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
+
+      await pumpBanner(tester, monitor);
+      final retriesBeforeTap = retries;
+
+      await tester.tap(find.byKey(const Key('capture_recovery_banner')));
+      await tester.pump();
+
+      expect(retries, retriesBeforeTap + 1, reason: 'storage keeps its transfer-recovery tap');
+      final context = tester.element(find.byType(CaptureRecoveryBanner));
+      expect(find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'the storage title already says what is unsynced');
     });
 
     testWidgets('stale upload backlog retries transfer without a duplicate banner', (tester) async {
@@ -215,4 +273,25 @@ void main() {
       expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
     });
   });
+}
+
+/// Records the dismiss calls the banner makes, so a test can assert the monitor
+/// received them without trusting the banner's disappearance alone.
+class _DismissRecordingMonitor extends CaptureWedgeMonitor {
+  _DismissRecordingMonitor()
+      : super(
+          featureGate: () async => true,
+          track: (event, properties) {},
+          bleRetry: (_) async {},
+          appBuild: () => '1',
+          platform: () => 'ios',
+        );
+
+  final List<String> dismissedDeviceIds = [];
+
+  @override
+  void dismissDeviceEpisode(String deviceId) {
+    dismissedDeviceIds.add(deviceId);
+    super.dismissDeviceEpisode(deviceId);
+  }
 }

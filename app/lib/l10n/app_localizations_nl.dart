@@ -11113,6 +11113,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio opgeslagen, later getranscribeerd';
 
   @override
+  String get captureBannerWhatsWrong => 'Wat is er aan de hand?';
+
+  @override
+  String get captureBannerDismiss => 'Verbergen';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'De Bluetooth-verbinding met je Omi is vastgelopen, dus audio komt de app niet meer binnen. Omi blijft opnemen op het apparaat en synchroniseert zodra de verbinding herstelt. Opnieuw proberen herstelt de verbinding; als het blijft mislukken, controleer je apparaat onder Instellingen > Apparaat.';
+
+  @override
   String get captureStillRecording => 'Neemt nog op';
 
   @override

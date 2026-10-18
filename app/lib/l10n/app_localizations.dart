@@ -20151,6 +20151,24 @@ abstract class AppLocalizations {
   /// **'Audio saved, transcribes later'**
   String get captureAudioSavedTranscribesLater;
 
+  /// Text button on the capture recovery banner that opens the details sheet explaining the outage.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s going on?'**
+  String get captureBannerWhatsWrong;
+
+  /// Semantic label for the capture recovery banner's close button.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get captureBannerDismiss;
+
+  /// Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does.
+  ///
+  /// In en, this message translates to:
+  /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
+  String get captureWedgeBleExplanation;
+
   /// Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped.
   ///
   /// In en, this message translates to:

@@ -11129,6 +11129,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Hang mentve, később lesz átírva';
 
   @override
+  String get captureBannerWhatsWrong => 'Mi történik?';
+
+  @override
+  String get captureBannerDismiss => 'Elrejtés';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.';
+
+  @override
   String get captureStillRecording => 'A felvétel folytatódik';
 
   @override

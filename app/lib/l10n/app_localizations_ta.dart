@@ -11164,6 +11164,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ஆடியோ சேமிக்கப்பட்டது, பின்னர் எழுத்தாக்கம்';
 
   @override
+  String get captureBannerWhatsWrong => 'என்ன நடக்கிறது?';
+
+  @override
+  String get captureBannerDismiss => 'மறை';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'உங்கள் Omi-உடனான புளூடூத் இணைப்பு தடைபட்டுள்ளது, எனவே ஆடியோ ஆப்பை அடையவில்லை. Omi சாதனத்தில் பதிவு செய்வதைத் தொடர்கிறது, இணைப்பு மீட்டமைக்கப்பட்டவுடன் ஒத்திசைக்கப்படும். மீண்டும் முயற்சிப்பது இணைப்பை மீண்டும் ஏற்படுத்தும்; தொடர்ந்து தோல்வியுற்றால், அமைப்புகள் > சாதனம் பகுதியில் உங்கள் சாதனத்தைச் சரிபார்க்கவும்.';
+
+  @override
   String get captureStillRecording => 'இன்னும் பதிவாகிறது';
 
   @override

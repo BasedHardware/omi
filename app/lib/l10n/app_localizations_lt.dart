@@ -11104,6 +11104,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Garsas išsaugotas, bus perrašytas vėliau';
 
   @override
+  String get captureBannerWhatsWrong => 'Kas vyksta?';
+
+  @override
+  String get captureBannerDismiss => 'Slėpti';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetooth ryšys su jūsų Omi nutrūko, todėl garsas nepasieka programos. Omi toliau įrašinėja įrenginyje ir sinchronizuos, kai ryšys atsistatys. Bandymas iš naujo vėl užmezga ryšį; jei tai ir toliau nepavyksta, patikrinkite įrenginį skiltyje Nustatymai > Įrenginys.';
+
+  @override
   String get captureStillRecording => 'Įrašymas tęsiamas';
 
   @override

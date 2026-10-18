@@ -11072,6 +11072,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio saved, transcribes later';
 
   @override
+  String get captureBannerWhatsWrong => 'What\'s going on?';
+
+  @override
+  String get captureBannerDismiss => 'Dismiss';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.';
+
+  @override
   String get captureStillRecording => 'Still recording';
 
   @override

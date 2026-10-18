@@ -10998,6 +10998,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'השמע נשמר, יתומלל מאוחר יותר';
 
   @override
+  String get captureBannerWhatsWrong => 'מה קורה?';
+
+  @override
+  String get captureBannerDismiss => 'סגירה';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.';
+
+  @override
   String get captureStillRecording => 'עדיין מקליט';
 
   @override

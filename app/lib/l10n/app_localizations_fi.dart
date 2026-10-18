@@ -11086,6 +11086,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
 
   @override
+  String get captureBannerWhatsWrong => 'Mitä on meneillään?';
+
+  @override
+  String get captureBannerDismiss => 'Hylkää';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.';
+
+  @override
   String get captureStillRecording => 'Tallennus jatkuu';
 
   @override

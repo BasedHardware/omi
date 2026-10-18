@@ -11113,6 +11113,16 @@ class AppLocalizationsBe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аўдыя захавана, транскрыпцыя пазней';
 
   @override
+  String get captureBannerWhatsWrong => 'Што адбываецца?';
+
+  @override
+  String get captureBannerDismiss => 'Схаваць';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Спынілася Bluetooth-злучэнне з вашым Omi, таму гук не трапляе ў праграму. Omi працягвае запіс на прыладзе і сінхранізуецца, калі злучэнне адновіцца. Паўтор спрабыў зноў падлучыць злучэнне; калі гэта працягвае не працаваць, праверце прыладу ў Налады > Прылада.';
+
+  @override
   String get captureStillRecording => 'Запіс працягваецца';
 
   @override

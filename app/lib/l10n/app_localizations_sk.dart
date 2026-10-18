@@ -11075,6 +11075,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Zvuk uložený, prepíše sa neskôr';
 
   @override
+  String get captureBannerWhatsWrong => 'Čo sa deje?';
+
+  @override
+  String get captureBannerDismiss => 'Skryť';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Bluetoothové prepojenie s vaším zariadením Omi sa zastavilo, takže zvuk sa do aplikácie nedostáva. Omi naďalej nahráva na zariadení a po obnovení prepojenia sa synchronizuje. Opätovný pokus prepojenie znovu naviaže; ak to naďalej zlyháva, skontrolujte zariadenie v Nastavenia > Zariadenie.';
+
+  @override
   String get captureStillRecording => 'Stále sa nahráva';
 
   @override

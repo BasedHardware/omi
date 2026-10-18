@@ -11144,6 +11144,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Àudio desat, es transcriurà més tard';
 
   @override
+  String get captureBannerWhatsWrong => 'Què està passant?';
+
+  @override
+  String get captureBannerDismiss => 'Descarta';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'L\'enllaç Bluetooth amb el vostre Omi s\'ha aturat, per tant l\'àudio no arriba a l\'aplicació. L\'Omi segueix enregistrant al dispositiu i se sincronitzarà quan l\'enllaç es recuperi. Reintentar torna a connectar l\'enllaç; si continua fallant, comproveu el dispositiu a Configuració > Dispositiu.';
+
+  @override
   String get captureStillRecording => 'Encara s\'està gravant';
 
   @override

@@ -11157,6 +11157,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ο ήχος αποθηκεύτηκε, μεταγραφή αργότερα';
 
   @override
+  String get captureBannerWhatsWrong => 'Τι συμβαίνει;';
+
+  @override
+  String get captureBannerDismiss => 'Απόρριψη';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'Η σύνδεση Bluetooth με το Omi σου διακόπηκε, οπότε ο ήχος δεν φτάνει στην εφαρμογή. Το Omi συνεχίζει να καταγράφει στη συσκευή και θα συγχρονιστεί μόλις επανέλθει η σύνδεση. Η επανάληψη επανασυνδέει τη σύνδεση· αν εξακολουθεί να αποτυγχάνει, έλεγξε τη συσκευή σου στις Ρυθμίσεις > Συσκευή.';
+
+  @override
   String get captureStillRecording => 'Η εγγραφή συνεχίζεται';
 
   @override

@@ -11077,6 +11077,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'صدا ذخیره شد، بعداً رونویسی می‌شود';
 
   @override
+  String get captureBannerWhatsWrong => 'چه اتفاقی افتاده است؟';
+
+  @override
+  String get captureBannerDismiss => 'رد کردن';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.';
+
+  @override
   String get captureStillRecording => 'ضبط ادامه دارد';
 
   @override

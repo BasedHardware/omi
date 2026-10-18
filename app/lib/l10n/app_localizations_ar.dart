@@ -11017,6 +11017,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'تم حفظ الصوت، وسيُنسخ لاحقًا';
 
   @override
+  String get captureBannerWhatsWrong => 'ما الذي يحدث؟';
+
+  @override
+  String get captureBannerDismiss => 'تجاهل';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'تعطّل اتصال البلوتوث بجهاز Omi، لذا لا يصل الصوت إلى التطبيق. يواصل Omi التسجيل على الجهاز وسيتمت المزامنة بمجرد استعادة الاتصال. إعادة المحاولة تعيد إنشاء الاتصال؛ إذا استمر الفشل، تحقق من جهازك من الإعدادات > الجهاز.';
+
+  @override
   String get captureStillRecording => 'لا يزال التسجيل جاريًا';
 
   @override

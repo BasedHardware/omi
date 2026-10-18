@@ -278,7 +278,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a terminal outage replaces the Listening placeholder, online or not', (tester) async {
+  testWidgets('a terminal outage states itself once: short app bar, neutral placeholder', (tester) async {
     final capture = _hermeticCapture();
     addTearDown(capture.dispose);
     capture.updateRecordingState(RecordingState.record);
@@ -294,13 +294,14 @@ void main() {
     expect(capture.terminalTranscriptionFailure, isNotNull);
 
     // Online: without the terminal failure the empty state promises a
-    // transcript; with it, the same page must say why none will appear yet.
+    // transcript; with it, the page must not repeat the outage sentence — the
+    // recovery banner owns that statement, and no wedge is declared here.
     await _pumpCapturingPage(tester, capture: capture, connectivity: _StubConnectivityProvider(true));
 
-    // Twice by design: the app bar names the outage, and the empty state
-    // repeats the same sentence instead of the stale Listening placeholder.
-    expect(find.textContaining('recording continues on device and will process later'), findsNWidgets(2));
-    expect(find.textContaining('a transcript will appear here'), findsNothing);
+    expect(find.textContaining('recording continues on device and will process later'), findsNothing);
+    expect(find.textContaining('Not transcribing'), findsOneWidget, reason: 'the app bar keeps the short state name');
+    expect(find.textContaining('a transcript will appear here'), findsOneWidget,
+        reason: 'the empty state stays the neutral listening line');
   });
 
   testWidgets('quiet unverified pendant retains live page transcript and Pause with a neutral header', (tester) async {
