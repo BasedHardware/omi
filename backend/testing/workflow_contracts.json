@@ -911,6 +911,28 @@
         "same-LB-stream storm and nonstorm partitions preserve unrelated errors without a blanket mute",
         "collector or datastore retirement never happens through these preparation sources"
       ]
+    },
+    {
+      "id": "cross_service_deploy_wiring",
+      "risk": "high",
+      "sources": [
+        "backend/deploy/runtime_env.yaml",
+        "backend/deploy/cross_service_known_gaps.json",
+        "backend/scripts/cross_service_contract.py",
+        "backend/scripts/render_backend_runtime_env.py",
+        "backend/scripts/render_gke_backend_config.py",
+        "backend/charts/batch-pipeline-worker/**"
+      ],
+      "tests": [
+        "tests/unit/test_cross_service_deploy_contract.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "every gke.config_map entry has a supported source and the deploy-time ConfigMap renders",
+        "every Cloud Tasks dispatcher targets a same-env service whose handler mode is on, whose audience matches, and whose timeout covers the dispatch deadline",
+        "a flag read by a process is set on that process's deployment when its coupled flag is on elsewhere",
+        "the public manifest gains no UID-shaped literal and no cross-environment service URL"
+      ]
     }
   ]
 }

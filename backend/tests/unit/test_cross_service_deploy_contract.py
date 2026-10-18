@@ -1,0 +1,277 @@
+"""Cross-service deploy contract (scripts/cross_service_contract.py).
+
+The checked-in dev and prod manifests and charts must introduce no violation beyond the accepted known gaps.
+Each mutation re-creates one 2026-10-18 rollout bug on a copy of the current manifest or chart, and the
+suite must catch it:
+
+- #22098: Cloud Run-shaped gke.config_map entry without ``source`` (deploy ConfigMap render failed)
+- #22149: recovery task dispatched to an empty audience / to a host with recovery off / below the deadline
+- #22121: head-priority flag on for the listener but never set on the GPU worker that also reads it
+
+Rendering and code scanning run once in the module fixture; tests only assert on the results.
+Replaying the real pre-fix commits needs git history, so it is opt-in: ``CROSS_SERVICE_CONTRACT_REPLAY=1``.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+import pytest
+import yaml
+
+from scripts import cross_service_contract as contract
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+WORKER_VALUES = 'backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml'
+HAS_HELM = shutil.which('helm') is not None
+SYNTHETIC_UID = 'SyntheticCohortMember0000000'
+assert len(SYNTHETIC_UID) == 28
+
+
+class OverlaySource(contract.Source):
+    """The working tree with selected files replaced, so a mutation reuses the real code readers."""
+
+    def __init__(self, tmp_path: Path, overrides: dict[str, str]):
+        super().__init__()
+        self.overrides = overrides
+        self.tmp_path = tmp_path
+
+    def read(self, rel: str) -> str:
+        return self.overrides[rel] if rel in self.overrides else super().read(rel)
+
+    def exists(self, rel: str) -> bool:
+        return rel in self.overrides or super().exists(rel)
+
+    def directory(self, rel: str) -> Path:
+        if not any(path.startswith(rel + '/') for path in self.overrides):
+            return super().directory(rel)
+        target = self.tmp_path / rel
+        if not target.exists():
+            shutil.copytree(super().directory(rel), target)
+            for path, text in self.overrides.items():
+                if path.startswith(rel + '/'):
+                    (self.tmp_path / path).write_text(text, encoding='utf-8')
+        return target
+
+
+def _manifest() -> dict:
+    return yaml.safe_load((REPO_ROOT / contract.MANIFEST).read_text(encoding='utf-8'))
+
+
+def _prod(manifest: dict) -> dict:
+    return manifest['environments']['prod']
+
+
+def _integration_env(manifest: dict) -> dict:
+    return _prod(manifest)['cloud_run']['services']['backend-integration']['env']
+
+
+def _manifest_mutation(mutate: Callable[[dict], None]) -> Callable[[], dict[str, str]]:
+    def overrides() -> dict[str, str]:
+        manifest = _manifest()
+        mutate(manifest)
+        return {contract.MANIFEST: yaml.safe_dump(manifest, sort_keys=False)}
+
+    return overrides
+
+
+def _config_map_without_source(manifest: dict) -> None:
+    entries = _prod(manifest)['gke']['config_map']['entries']
+    entries['SYNTHETIC_FLAG_ENABLED'] = {'value': 'false', 'category': 'rollout'}
+
+
+def _recovery_without_audience(manifest: dict) -> None:
+    del _integration_env(manifest)['BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE']
+
+
+def _recovery_to_sync(manifest: dict) -> None:
+    sync_env = _prod(manifest)['cloud_run']['services']['backend-sync']['env']
+    _integration_env(manifest)['BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE']['value'] = sync_env[
+        'BATCH_PIPELINE_WORKER_AUDIENCE'
+    ]['value']
+
+
+def _integration_timeout_300(manifest: dict) -> None:
+    _prod(manifest)['cloud_run']['services']['backend-integration']['flags']['--timeout'] = '300s'
+
+
+def _unparseable_boolean(manifest: dict) -> None:
+    _integration_env(manifest)['BATCH_PIPELINE_SERVING_ENABLED']['value'] = 'enabled'
+
+
+def _uid_literal(manifest: dict) -> None:
+    _integration_env(manifest)['SYNTHETIC_UID_ALLOWLIST'] = {'value': SYNTHETIC_UID, 'category': 'rollout'}
+
+
+def _prod_url_in_dev(manifest: dict) -> None:
+    prod_url = _integration_env(manifest)['BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE']['value']
+    dev = manifest['environments']['dev']['cloud_run']['services']['backend-integration']['env']
+    dev['BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE']['value'] = prod_url
+
+
+def _worker_without_head_priority() -> dict[str, str]:
+    values = yaml.safe_load((REPO_ROOT / WORKER_VALUES).read_text(encoding='utf-8'))
+    assert values['worker'].pop('headPriorityEnabled') is True
+    return {WORKER_VALUES: yaml.safe_dump(values, sort_keys=False)}
+
+
+MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
+    'config_map_without_source': _manifest_mutation(_config_map_without_source),
+    'recovery_without_audience': _manifest_mutation(_recovery_without_audience),
+    'recovery_to_sync': _manifest_mutation(_recovery_to_sync),
+    'integration_timeout_300': _manifest_mutation(_integration_timeout_300),
+    'unparseable_boolean': _manifest_mutation(_unparseable_boolean),
+    'uid_literal': _manifest_mutation(_uid_literal),
+    'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
+    'worker_without_head_priority': _worker_without_head_priority,
+}
+HELM_MUTATIONS = {'worker_without_head_priority'}
+
+
+@dataclass
+class Results:
+    baseline: contract.Context
+    baseline_new: list[contract.Violation]
+    mutations: dict[str, list[contract.Violation]]
+
+
+@pytest.fixture(scope='module')
+def results(tmp_path_factory: pytest.TempPathFactory) -> Results:
+    gaps = contract.load_known_gaps()
+    baseline = contract.build_context(contract.Source())
+    baseline_new, _, _ = contract.partition(contract.evaluate(baseline), gaps)
+    mutations: dict[str, list[contract.Violation]] = {}
+    for name, overrides in MUTATIONS.items():
+        if name in HELM_MUTATIONS and not HAS_HELM:
+            continue
+        source = OverlaySource(tmp_path_factory.mktemp(name), overrides())
+        context = contract.build_context(source, readers=baseline.readers)
+        mutations[name], _, _ = contract.partition(contract.evaluate(context), gaps)
+    return Results(baseline=baseline, baseline_new=baseline_new, mutations=mutations)
+
+
+def test_current_manifests_add_no_violation_beyond_known_gaps(results: Results) -> None:
+    assert not results.baseline_new, (
+        'new cross-service violations:\n'
+        + '\n'.join(map(str, results.baseline_new))
+        + (
+            '\n\nFix the wiring, or (only for an intentional, reviewed exception) add the key with a `why` to '
+            'backend/deploy/cross_service_known_gaps.json.'
+        )
+    )
+
+
+def test_known_gaps_carry_reasons_and_no_values() -> None:
+    gaps = contract.load_known_gaps()
+    assert gaps, 'baseline is unexpectedly empty'
+    for key, why in gaps.items():
+        assert why.strip(), key
+        assert not contract.FIREBASE_UID_PATTERN.search(key), 'known gaps must name keys, never identifiers'
+
+
+def test_renders_every_backend_process(results: Results) -> None:
+    for env in contract.ENVS:
+        model = results.baseline.models[env]
+        assert not model.render_errors, model.render_errors
+        expected = {
+            'cloud_run/backend',
+            'cloud_run/backend-sync',
+            'cloud_run/backend-integration',
+            'gke/backend-listen',
+        }
+        assert expected <= set(model.deployments)
+        assert model.deployments['cloud_run/backend-integration'].url_hosts, 'recovery tasks must trace to integration'
+    if HAS_HELM:
+        assert 'helm/batch-pipeline-worker' in results.baseline.models['prod'].deployments
+
+
+def test_config_map_entry_without_source_fails_like_22098(results: Results) -> None:
+    invariants = {(v.invariant, v.env) for v in results.mutations['config_map_without_source']}
+    assert ('config-map-source', 'prod') in invariants
+    assert ('renders', 'prod') in invariants
+
+
+def test_recovery_task_without_audience_fails_like_22149(results: Results) -> None:
+    found = results.mutations['recovery_without_audience']
+    assert any(
+        v.invariant == 'task-edge' and v.scope == 'cloud_run/backend-integration->batch-quarantine-recovery'
+        for v in found
+    ), found
+
+
+def test_recovery_task_to_host_with_recovery_off_fails_like_22149(results: Results) -> None:
+    messages = [v.message for v in results.mutations['recovery_to_sync'] if v.invariant == 'task-edge']
+    assert any('BATCH_PIPELINE_RECOVERY_MODE' in m and 'cloud_run/backend-sync' in m for m in messages), messages
+    assert any('verifies BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE' in m for m in messages), messages
+
+
+def test_recovery_handler_timeout_below_deadline_fails(results: Results) -> None:
+    found = results.mutations['integration_timeout_300']
+    assert any(v.invariant == 'handler-timeout' and 'backend-integration' in v.scope for v in found), found
+
+
+@pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
+def test_worker_missing_head_priority_fails_like_22121(results: Results) -> None:
+    # The chart default renders the key as 'false'; the real pre-fix commit had no env line at all, which
+    # reader-split also catches (see the opt-in commit replay).
+    found = {(v.invariant, v.scope) for v in results.mutations['worker_without_head_priority']}
+    assert ('coupled-flag', 'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED') in found
+
+
+def test_unparseable_boolean_value_fails(results: Results) -> None:
+    assert any(
+        v.invariant == 'boolean-token'
+        and v.scope.endswith('backend-integration/BATCH_PIPELINE_SERVING_ENABLED')  # pragma: allowlist secret
+        for v in results.mutations['unparseable_boolean']
+    )
+
+
+def test_new_uid_literal_fails_without_echoing_it(results: Results) -> None:
+    hits = [v for v in results.mutations['uid_literal'] if v.invariant == 'no-uid-literals']
+    assert hits
+    assert all(SYNTHETIC_UID not in str(v) for v in hits)
+
+
+def test_prod_service_url_in_dev_fails(results: Results) -> None:
+    assert any(v.invariant == 'cross-env-url' for v in results.mutations['prod_url_in_dev'])
+
+
+def test_constant_named_env_reads_are_resolved(results: Results) -> None:
+    # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
+    assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+
+
+# Real pre-fix commits from the 2026-10-18 rollout, each with the invariant that must catch it and its fix:
+# #22098 → #22138, #22121's first commit → its fix, #22149's FIX-FIRST head → its fix. Commit SHAs, not secrets.
+REPLAYS = (
+    ('2f1416c413e2c463867840b5ea905a068d3f9904', 'e11a6850177', 'config-map-source'),  # pragma: allowlist secret
+    ('2db920a724e7f6199ea917ef6f8d6bb32b9754a8', 'bd6d1625ee4', 'coupled-flag'),  # pragma: allowlist secret
+    ('9a5231de4837ca6391fd42e87ef2cabcd4ef47b4', '11aa6faf410', 'task-edge'),  # pragma: allowlist secret
+)
+
+
+def _has_commit(ref: str) -> bool:
+    result = subprocess.run(['git', '-C', str(REPO_ROOT), 'cat-file', '-e', f'{ref}^{{commit}}'], capture_output=True)
+    return result.returncode == 0
+
+
+@pytest.mark.skipif(os.environ.get('CROSS_SERVICE_CONTRACT_REPLAY') != '1', reason='opt-in: needs git history')
+@pytest.mark.parametrize('broken,fixed,invariant', REPLAYS)
+def test_pre_fix_commit_fails_and_fix_clears_it(broken: str, fixed: str, invariant: str) -> None:
+    if not (_has_commit(broken) and _has_commit(fixed)):
+        pytest.skip('commit not in this clone')
+
+    def invariants_at(ref: str) -> set[str]:
+        source = contract.Source(ref=ref)
+        try:
+            return {v.invariant for v in contract.evaluate(contract.build_context(source))}
+        finally:
+            source.close()
+
+    assert invariant in invariants_at(broken)
+    assert invariant not in invariants_at(fixed)
