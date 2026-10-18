@@ -19,15 +19,30 @@ _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
 
 
 @pytest.fixture(autouse=True)
-def _reuse_parsed_repo_manifest(monkeypatch):
+def _reuse_parsed_repo_manifest(monkeypatch, tmp_path):
     # runpy's returned mapping is distinct from the function's globals.
     monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: _MANIFEST)
+    output_path = tmp_path / 'github-output'
+    output_path.touch()
+    monkeypatch.setenv('GITHUB_OUTPUT', str(output_path))
     # Full-state renderer tests need deploy-time values for every declared job.
     for env_config in _MANIFEST['environments'].values():
         for job in (env_config.get('cloud_run', {}).get('jobs') or {}).values():
             for raw_entry in (job.get('env') or {}).values():
                 if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
                     monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
+
+
+def _read_workflow_outputs() -> str:
+    return Path(os.environ['GITHUB_OUTPUT']).read_text(encoding='utf-8')
+
+
+def test_workflow_outputs_are_not_written_to_stdout(capsys):
+    _MODULE['_emit_output']('private_value', 'not-for-logs')
+
+    assert capsys.readouterr().out == ''
+    assert 'private_value<<' in _read_workflow_outputs()
+    assert 'not-for-logs' in _read_workflow_outputs()
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
@@ -86,7 +101,7 @@ def test_render_env_vars_escapes_deploy_cloudrun_separators(value, expected):
     assert rendered == f'VALUE={expected}'
 
 
-def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, capsys, monkeypatch):
+def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, monkeypatch):
     env_config = {
         'cloud_run': {
             'network': {'flags': {'--vpc-egress': 'private-ranges-only'}},
@@ -122,7 +137,7 @@ def test_state_output_preserves_yaml_boolean_like_strings(tmp_path, capsys, monk
         'FEATURE_NO': 'no',
     }
     assert all(isinstance(value, str) for value in rendered_env.values())
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'FEATURE_OFF=off' in output
     assert 'FEATURE_ON=on' in output
 
@@ -133,7 +148,7 @@ def test_network_flags_still_required(monkeypatch):
         _MODULE['_render_flags']({'--network': {'env_var': 'CLOUD_RUN_VPC_NETWORK'}})
 
 
-def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, monkeypatch):
+def test_selected_job_renders_only_shared_network_and_named_job_outputs(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
     monkeypatch.setattr(
@@ -143,7 +158,7 @@ def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, 
 
     assert _MODULE['main']() == 0
 
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'cloud_run_flags<<' in output
     assert 'memory_maintenance_job_flags<<' in output
     assert 'memory_maintenance_job_env_vars<<' in output
@@ -151,13 +166,13 @@ def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, 
     assert 'notifications_job_env_vars<<' not in output
 
 
-def test_selected_job_rejects_unknown_name_without_emitting_partial_output(capsys, monkeypatch):
+def test_selected_job_rejects_unknown_name_without_emitting_partial_output(monkeypatch):
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'unknown-job'])
 
     with pytest.raises(ValueError, match='unknown Cloud Run job'):
         _MODULE['main']()
 
-    assert capsys.readouterr().out == ''
+    assert _read_workflow_outputs() == ''
 
 
 def test_render_dev_emits_memory_maintenance_job_outputs():
@@ -191,7 +206,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
-def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
+def test_render_dev_emits_x_connector_sync_job_outputs(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
     monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
@@ -200,7 +215,7 @@ def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'])
 
     assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'X_OAUTH_CLIENT_ID=x-client-id' in output
     assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in output
     assert 'RAPID_API_HOST=twitter-api.example' in output
@@ -359,7 +374,7 @@ def test_x_connector_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
     assert '--lane omi:auto:x-memory-extraction-flex' in workflow
 
 
-def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
+def test_render_prod_emits_memory_maintenance_job_cron_on(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
@@ -383,7 +398,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
-    out = capsys.readouterr().out
+    out = _read_workflow_outputs()
     job_env = _job_env_block(out, 'memory_maintenance_job')
     # Prod GO 2026-08-15: the maintenance job follows the request-path product
     # flag. ST→LT cron is job-hosted on both env overlays with Flex.
@@ -403,7 +418,7 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env
 
 
-def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
+def test_render_prod_gateway_callers_inject_verified_endpoint(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
@@ -428,7 +443,7 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
 
     assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
 
     for service in ('backend', 'backend_sync', 'backend_sync_backfill', 'backend_integration'):
         service_env = _job_env_block(output, service)
@@ -744,23 +759,23 @@ def test_free_tier_cohort_renders_empty_or_escaped_on_every_cloud_run_host(monke
             assert _MODULE['_render_env_vars'](binding) == f'{key}=' + expected.replace(',', r'\,')
 
 
-def test_free_tier_malformed_cohort_fails_before_desktop_output(monkeypatch, tmp_path, capsys):
+def test_free_tier_malformed_cohort_fails_before_desktop_output(monkeypatch, tmp_path):
     monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', 'uid:')
     state = tmp_path / 'state.json'
     monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
     with pytest.raises(ValueError, match='uid:<non-empty>'):
         _MODULE['main']()
     assert not state.exists()
-    assert capsys.readouterr().out == ''
+    assert _read_workflow_outputs() == ''
 
 
-def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path, capsys):
+def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path):
     cohort = 'uid:fixture-a,uid:fixture-b'
     monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', cohort)
     state = tmp_path / 'state.json'
     monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
     assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert output.startswith(
         'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
     )
@@ -772,7 +787,7 @@ def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path,
     assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
 
 
-def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path, capsys):
+def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path):
     env_config = deepcopy(_MANIFEST['environments']['dev'])
     env_config['desktop_backend']['env']['FIRESTORE_READ_LEVERS']['value'] = '{"queue_age":true,"subscription":true}'
     monkeypatch.setitem(_MODULE['main'].__globals__, '_load_yaml', lambda _path: {'environments': {'dev': env_config}})
@@ -781,7 +796,7 @@ def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiter
 
     assert _MODULE['main']() == 0
 
-    output = capsys.readouterr().out
+    output = _read_workflow_outputs()
     assert 'FIRESTORE_READ_LEVERS={"queue_age":true\\,"subscription":true}\n' in output
     assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n')
 
@@ -811,6 +826,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     subprocess.run(['bash', '-c', staging['run']], cwd=tmp_path, env=environment, check=True)
     controls = runner_temp / 'desktop-backend-deploy-controls'
     state = tmp_path / 'state.json'
+    renderer_output = tmp_path / 'renderer-github-output'
     result = subprocess.run(
         [
             sys.executable,
@@ -822,14 +838,17 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
             str(state),
         ],
         cwd=tmp_path,
+        env={**os.environ, 'GITHUB_OUTPUT': str(renderer_output)},
         check=True,
         capture_output=True,
         text=True,
     )
-    assert result.stdout.startswith(
+    assert result.stdout == ''
+    workflow_outputs = renderer_output.read_text(encoding='utf-8')
+    assert workflow_outputs.startswith(
         'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
     )
-    assert result.stdout.endswith(
+    assert workflow_outputs.endswith(
         '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'
     )
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']

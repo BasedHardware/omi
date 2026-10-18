@@ -62,13 +62,13 @@ def get_memories_text(
     if start_date:
         try:
             start_dt = parse_iso_date(start_date, 'start_date')
-        except ValueError as e:
-            return f"Error: Invalid start_date format: {e}"
+        except ValueError:
+            return "Error: Invalid start_date format."
     if end_date:
         try:
             end_dt = parse_iso_date(end_date, 'end_date')
-        except ValueError as e:
-            return f"Error: Invalid end_date format: {e}"
+        except ValueError:
+            return "Error: Invalid end_date format."
 
     try:
         service = MemoryService(db_client=firestore_db)
@@ -97,8 +97,8 @@ def get_memories_text(
                 break
         memories = visible[offset:target_end]
     except Exception as e:
-        logger.error(f"get_memories_text error: {e}")
-        return f"Error retrieving memories: {e}"
+        logger.error("get_memories_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
+        return "Error retrieving memories. Please try again."
     if not memories:
         date_info = ""
         if start_dt and end_dt:
@@ -222,5 +222,5 @@ def search_memories_text(
         return result
 
     except Exception as e:
-        logger.error(f"search_memories_text error: {e}")
-        return f"Error searching memories: {e}"
+        logger.error("search_memories_text failed uid=%s (error_type=%s)", uid, type(e).__name__)
+        return "Error searching memories. Please try again."

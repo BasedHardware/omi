@@ -189,7 +189,7 @@ def main() -> int:
                 for entry in desktop_state['services']['desktop-backend']['env']
                 if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT'
             )
-            print(f'free_tier_local_processing_cohort={_escape_deploy_cloud_run_env_value(cohort)}')
+            _emit_output_line('free_tier_local_processing_cohort', _escape_deploy_cloud_run_env_value(cohort))
             return 0
 
     if not args.job:
@@ -452,9 +452,19 @@ def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False)
 
 def _emit_output(name: str, value: str) -> None:
     delimiter = f'__BACKEND_RUNTIME_ENV_{name}__'
-    print(f'{name}<<{delimiter}')
-    print(value)
-    print(delimiter)
+    _append_github_output(f'{name}<<{delimiter}\n{value}\n{delimiter}\n')
+
+
+def _emit_output_line(name: str, value: str) -> None:
+    _append_github_output(f'{name}={value}\n')
+
+
+def _append_github_output(value: str) -> None:
+    output_path = os.environ.get('GITHUB_OUTPUT')
+    if not output_path:
+        raise RuntimeError('GITHUB_OUTPUT must be set to render workflow outputs')
+    with Path(output_path).open('a', encoding='utf-8') as output_file:
+        output_file.write(value)
 
 
 def _output_prefix(service: str) -> str:
