@@ -2,10 +2,10 @@
 # retain provider implicit caching; no persistent explicit owner cache by default.
 default: implicit
 prefixes:
-  omi:auto:desktop-vertex-: explicit
+  omi:auto:desktop-vertex-: implicit
 lanes:
-  omi:auto:dream-reasoning: explicit
-  omi:auto:dream-verify: explicit
+  omi:auto:dream-reasoning: implicit
+  omi:auto:dream-verify: implicit
   omi:auto:chat-agent: explicit
   omi:auto:chat-graph: explicit
   omi:auto:chat-responses: explicit

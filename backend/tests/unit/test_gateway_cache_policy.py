@@ -11,9 +11,10 @@ from llm_gateway.gateway.cache_policy import (
 
 
 def test_lane_defaults():
-    assert lane_cache_policy('omi:auto:dream-reasoning') == 'explicit'
+    assert lane_cache_policy('omi:auto:dream-reasoning') == 'implicit'
+    assert lane_cache_policy('omi:auto:dream-verify') == 'implicit'
     assert lane_cache_policy('omi:auto:chat-agent') == 'explicit'
-    assert lane_cache_policy('omi:auto:desktop-vertex-gemini-3-8-flash') == 'explicit'
+    assert lane_cache_policy('omi:auto:desktop-vertex-gemini-3-8-flash') == 'implicit'
     assert lane_cache_policy('omi:auto:conv-structure') == 'explicit'
     assert lane_cache_policy('omi:auto:session-titles') == 'off'
     assert lane_cache_policy('omi:auto:unknown') == 'implicit'
