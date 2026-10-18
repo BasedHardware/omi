@@ -74,6 +74,18 @@ def _prefer_merge_head(tx: Transaction, queue: dict, job: dict) -> dict:
         if not candidate:
             break
         if sid == head['segment_id']:
+            # Both link writes pass the same privacy boundary as leasing.
+            # A fenced predecessor must not poison an otherwise unrelated
+            # owner's pull transaction when buffered writes flush later.
+            try:
+                for linked in (previous, candidate):
+                    tx.check_privacy(
+                        linked['owner_id'],
+                        (linked['conversation_id'],) if linked.get('conversation_id') else (),
+                        linked.get('privacy_generation'),
+                    )
+            except BatchPrivacyBlocked:
+                return job
             previous['next'] = candidate['next']
             tx.put('jobs', previous['segment_id'], previous)
             if queue['tail'] == sid:

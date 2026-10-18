@@ -339,3 +339,18 @@ def test_head_priority_splice_uses_real_queries_and_survives_flag_rollback(store
         assert queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 4)
     merge = OrderedMerge(store)
     assert [merge.commit_next('synthetic-owner', 5)['segment_id'] for _ in range(3)] == ['head', 'newer', 'tail']
+
+
+def test_head_priority_does_not_flush_privacy_fenced_link_mutations(store, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    queue = Scheduler(store)
+    queue.enqueue(work('newer', 20), 0)
+    queue.enqueue(replace(work('head', 10), conversation_id='removed'), 0)
+    store.client.collection('users').document('synthetic-owner').collection('deleted_conversations').document(
+        'removed'
+    ).set({'deleted': True})
+    assert queue.pull(1)[0].item.segment_id == 'newer'
+    assert queue.pull(2) == []
+    assert store.run(lambda tx: tx.get('jobs', 'head'))['state'] == 'ready'

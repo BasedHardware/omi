@@ -540,3 +540,26 @@ def test_head_search_is_bounded_and_default_off_adds_no_pending_query(monkeypatc
     monkeypatch.delenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED')
     monkeypatch.setattr(MemoryTransaction, 'first_pending', lambda *_: pytest.fail('dark priority queried head'))
     assert queue.pull(2)[0].item.segment_id == 'middle'
+
+
+def test_head_promotion_never_buffers_link_writes_for_privacy_fenced_job(monkeypatch):
+    from dataclasses import replace
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('newer', capture=20), 0)
+    queue.enqueue(replace(item('head', capture=10), conversation_id='deleted'), 0)
+    check = MemoryTransaction.check_privacy
+
+    def privacy(tx, uid, conversation_ids=(), expected_generation=None):
+        if 'deleted' in conversation_ids:
+            raise BatchPrivacyBlocked('synthetic deletion')
+        return check(tx, uid, conversation_ids, expected_generation)
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', privacy)
+    assert queue.pull(1)[0].item.segment_id == 'newer'
+    assert store.rows['jobs', 'head']['state'] == 'ready'
+    assert store.rows['jobs', 'head']['next'] == ''
+    assert queue.pull(2) == []
