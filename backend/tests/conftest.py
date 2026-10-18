@@ -36,7 +36,7 @@ if 'tiktoken' not in sys.modules:
     _tiktoken_stub.encoding_for_model = lambda model: _Encoding()
     sys.modules['tiktoken'] = _tiktoken_stub
 
-from testing.hermetic_network import block_outbound_network
+from testing.hermetic_network import block_local_redis, block_outbound_network
 
 
 @pytest.fixture
@@ -48,6 +48,7 @@ def luna_model() -> str:
 
 
 _network_guard = None
+_redis_guard = None
 _test_file_durations = defaultdict(float)
 _test_item_durations = defaultdict(float)
 _test_item_cpu = defaultdict(float)
@@ -102,6 +103,16 @@ def pytest_collection_finish(session):
             test_file = _backend_relative(item.path)
             if test_file is not None:
                 _collected_unit_files.add(test_file)
+    # Unit roots are hermetic by contract (CI runs them with no Redis at all),
+    # so a session that collects only unit-root files must not reach a Redis
+    # that happens to listen on the developer machine: rate-limited routes
+    # would consume real ``rl:*`` quota for fixed test uids, and that state
+    # persists across runs for the policy window. Sessions that also collect
+    # integration/e2e files keep real service access.
+    global _redis_guard
+    if session.items and all(_is_unit_test_path(item.path) for item in session.items):
+        _redis_guard = block_local_redis()
+        _redis_guard.__enter__()
 
 
 def pytest_runtest_logreport(report):
@@ -151,7 +162,7 @@ def _report_failed_files(terminalreporter, offenders):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    global _network_guard
+    global _network_guard, _redis_guard
     failures = _enforce_fast_unit_duration_guard(session)
     # Under xdist the guard runs inside a worker, and a worker's ``session.exitstatus``
     # is discarded by the controller -- the run's status comes from test outcomes alone.
@@ -171,6 +182,9 @@ def pytest_sessionfinish(session, exitstatus):
             terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
             _report_failed_files(terminalreporter, _xdist_duration_failures)
         session.exitstatus = 1
+    if _redis_guard is not None:
+        _redis_guard.__exit__(None, None, None)
+        _redis_guard = None
     if _network_guard is not None:
         _network_guard.__exit__(None, None, None)
         _network_guard = None

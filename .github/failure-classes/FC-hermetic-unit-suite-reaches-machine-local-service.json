@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-hermetic-unit-suite-reaches-machine-local-service",
+  "violated_contract": "The backend unit roots (tests/unit, tests/services, tests/routers) are hermetic by contract — CI proves them with no Redis at all. database.redis_db defaults its host to redis-py's localhost when REDIS_DB_HOST is unset, and the hermetic network guard deliberately allows loopback, so on any machine that runs Redis locally the unit suite silently consumed real rl:* rate-limit quota for fixed test uids. That quota persists for the policy window across runs, processes, and sibling lanes, so reruns fail with shifting 429s that can never reproduce on CI and look like product bugs.",
+  "canonical_prevention": "Refuse the configured Redis endpoint (REDIS_DB_HOST/REDIS_DB_PORT, localhost:6379 by default) on loopback for pytest sessions that collect only unit-root files, raising ConnectionRefusedError — an OSError with ECONNREFUSED — so redis-py maps it to redis.ConnectionError and every fail-open path behaves exactly as it already does on CI. A test that deliberately hosts its own fake Redis listener opts out per-test via OMI_HERMETIC_ALLOW_FAKE_REDIS; the default stays blocked. Sessions that also collect integration/e2e files keep real service access. Pin the block with unit tests that fail when the guard is absent, including on machines where local Redis is actually running.",
+  "canonical_prevention_artifact": [
+    "backend/testing/hermetic_network.py",
+    "backend/tests/conftest.py",
+    "backend/tests/unit/test_hermetic_network.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/testing/hermetic_network.py",
+    "backend/tests/conftest.py",
+    "backend/database/redis_db.py",
+    "backend/tests/unit/**"
+  ],
+  "status": "open"
+}
