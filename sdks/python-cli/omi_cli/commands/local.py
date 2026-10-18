@@ -35,6 +35,16 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
     return obj  # type: ignore[no-any-return]
 
 
+def _require_non_empty(value: str, *, label: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise UsageError(
+            message=f"Invalid {label}",
+            detail=f"{label.capitalize()} cannot be empty or whitespace.",
+        )
+    return cleaned
+
+
 def _local_settings(ctx: "AppContext") -> tuple[str, str, str]:
     profile = ctx.get_profile()
     env_url = os.environ.get(cfg.ENV_LOCAL_API_URL)
@@ -100,6 +110,7 @@ def call(
     args_json: str = typer.Option("{}", "--args-json", help="JSON object with tool arguments."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    tool_name = _require_non_empty(tool_name, label="tool name")
     try:
         parsed = load_json_input(args_json)
     except ValueError as exc:
@@ -118,6 +129,7 @@ def search_screen(
     limit: int = typer.Option(15, "--limit", min=1, max=50, help="Maximum results to return."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    query = _require_non_empty(query, label="query")
     args: dict[str, Any] = {"query": query, "days": days, "limit": limit}
     if app_filter:
         args["app_filter"] = app_filter
@@ -139,6 +151,7 @@ def screenshot(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Write screenshot data to this path."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    screenshot_id = _require_non_empty(screenshot_id, label="screenshot ID")
     with ctx.make_local_client() as client:
         result = client.call_tool("get_screenshot", {"screenshot_id": screenshot_id})
     if output is None:
@@ -177,6 +190,7 @@ def sql(
     query: str = typer.Argument(..., help="SQL query to execute."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    query = _require_non_empty(query, label="query")
     _emit_tool(ctx, "execute_sql", {"query": query}, transform=_normalize_sql_result)
 
 
@@ -187,6 +201,7 @@ def search_tasks(
     include_completed: bool = typer.Option(False, "--include-completed", help="Include completed tasks."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    query = _require_non_empty(query, label="query")
     _emit_tool(ctx, "search_tasks", {"query": query, "include_completed": include_completed})
 
 
@@ -196,6 +211,7 @@ def complete_task(
     task_id: str = typer.Argument(..., help="Task backend ID."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    task_id = _require_non_empty(task_id, label="task ID")
     _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task [bold]{escape(task_id)}[/bold].")
 
 
@@ -206,6 +222,7 @@ def delete_task(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    task_id = _require_non_empty(task_id, label="task ID")
     if not confirm:
         typer.confirm(f"Delete task {task_id}?", abort=True)
     _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{escape(task_id)}[/bold].")
