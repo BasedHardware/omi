@@ -1385,6 +1385,50 @@ class AcceptanceRouteFixture(unittest.TestCase):
         self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
         self.assertEqual(STATIC.serving_revision({}), "")
 
+    def test_stale_candidate_tags_keep_newest_serving_and_current(self) -> None:
+        traffic = [{"revisionName": "admin-live", "percent": 100}]
+        traffic += [
+            {"revisionName": f"admin-r{run}", "tag": f"public-admin-{run}-1", "percent": 0}
+            for run in (900, 1000, 99, 1001, 1002)
+        ]
+        traffic += [
+            {"revisionName": "admin-live", "tag": "public-admin-5-1"},
+            {"revisionName": "admin-old", "tag": "public-admin-f0bebc2-manual"},
+            {"revisionName": "admin-old2", "tag": "admin-2596a67-d1"},
+            {"revisionName": "admin-r1000", "tag": "public-admin-1000-2"},
+            {"revisionName": "other", "tag": "public-adminx-1-1"},
+            {"revisionName": "other", "tag": "canary"},
+        ]
+        document = {"spec": {"traffic": traffic}}
+        stale = STATIC.stale_candidate_tags(document, target="admin", keep_latest=2, keep_tags=["public-admin-99-1"])
+        # Newest two by (run, attempt): 1002-1, 1001-1. Serving revision and the explicit tag are kept.
+        self.assertEqual(
+            stale,
+            ["public-admin-900-1", "public-admin-1000-1", "public-admin-f0bebc2-manual",
+             "admin-2596a67-d1", "public-admin-1000-2"],
+        )
+        self.assertNotIn("public-adminx-1-1", stale)
+        self.assertNotIn("canary", stale)
+        self.assertEqual(STATIC.stale_candidate_tags({}, target="admin", keep_latest=3), [])
+        self.assertEqual(
+            STATIC.stale_candidate_tags({"status": {"traffic": traffic}}, target="admin", keep_latest=2,
+                                        keep_tags=["public-admin-99-1"]),
+            stale,
+        )
+
+    def test_stale_tags_cli_prints_comma_separated(self) -> None:
+        document = {"spec": {"traffic": [
+            {"revisionName": "a", "percent": 100},
+            {"revisionName": "b", "tag": "public-fake-1-1"},
+            {"revisionName": "c", "tag": "public-fake-2-1"},
+        ]}}
+        result = subprocess.run(
+            [sys.executable, str(ROOT / ".github" / "scripts" / "public_build_acceptance_route.py"),
+             "stale-tags", "--target", "fake", "--keep-latest", "1"],
+            input=json.dumps(document), capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(result.stdout.strip(), "public-fake-1-1")
+
     def test_admin_background_refresh_has_production_cpu_after_the_response(self) -> None:
         target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["admin"]
         self.assertIn("--no-cpu-throttling", target.deployment.flags_for("prod"))
