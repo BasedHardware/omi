@@ -29,6 +29,7 @@ from database.action_items_cache import (
     read_cached_list,
     write_cached_list,
 )
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 from config.firestore_read_levers import lever_enabled
 from utils.action_items_list_guard import enforce_hot_client_list_ceiling, enforce_stale_client_list_refusal
 from utils.metrics import record_action_items_list_cache
@@ -294,14 +295,15 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
-    # This route completes tasks and moves due dates too, so it owes the same reminder
+    # This route completes, renames and moves due dates of tasks too, so it owes the same reminder
     # reconciliation as the single-item paths (#5085): otherwise the phone still fires a
-    # reminder for a task the user ticked off during an Apple Reminders sync.
+    # reminder for a task the user ticked off (or with the title it had before a rename) during
+    # an Apple Reminders sync.
     for update in updates:
         if update['id'] not in updated_ids:
             continue
         data = update['data']
-        if 'completed' not in data and 'due_at' not in data:
+        if not action_item_write_affects_reminder(data):
             continue
         try:
             stored = action_items_db.get_action_item(uid, update['id'])
@@ -801,10 +803,11 @@ def update_action_item(
                 },
             )
 
-    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
-    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
-    # (#5085). Previously this re-armed the reminder whenever due_at was present, even on completion.
-    if 'completed' in update_data or 'status' in update_data or 'due_at' in update_data:
+    # Reconcile the client-scheduled reminder when the write touched anything it is armed from
+    # (lifecycle, due date or title), using the final state: cancel if completed or no due date,
+    # (re)schedule only for an open task with a due date (#5085). Previously this re-armed the
+    # reminder whenever due_at was present, even on completion.
+    if action_item_write_affects_reminder(update_data):
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,

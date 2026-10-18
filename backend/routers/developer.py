@@ -28,6 +28,7 @@ from utils.product_metrics import extract_app_build, extract_client_kind, record
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
@@ -1045,10 +1046,9 @@ def update_action_item(
     if not updated_item:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
-    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
-    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
-    # (#5085).
-    if 'completed' in update_data or 'due_at' in update_data:
+    # Reconcile the client-scheduled reminder from the final state whenever the write touched a field
+    # it is armed from, title included (#5085): cancel if completed or undated, else (re)schedule it.
+    if action_item_write_affects_reminder(update_data):
         sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 import database.action_items as action_items_db
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 from database.vector_db import (
     upsert_action_item_vector,
     delete_action_item_vector,
@@ -223,7 +224,9 @@ def update_action_item(
                 "MCP update_action_item: vector upsert failed uid=%s id=%s (task updated)", uid, action_item_id
             )
     item = _reload(uid, action_item_id)
-    if "due_at" in update_data:
+    # The phone's scheduled reminder carries both the due time and the title, so either change
+    # re-arms it from the saved row.
+    if action_item_write_affects_reminder(update_data):
         _sync_reminder(uid, item)
     return clean_action_item(item)
 
