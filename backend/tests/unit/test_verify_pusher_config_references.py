@@ -187,6 +187,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
 
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
+    assert not any(name.endswith('_UID_ALLOWLIST') for name in literals)
     assert literals == {
         "BATCH_LIVE_STT_RETIRE_PERCENT": "0",
         "FIRST_SUMMARY_DEADLINE_PERCENT": "0",
@@ -198,7 +199,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "DEMAND_PROCESSING_LAZY_ENABLED": "false",
         "DEMAND_PROCESSING_TOOL_ENABLED": "false",
         "DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED": "false",
-        "DEMAND_PROCESSING_UID_ALLOWLIST": "",
         "DEMAND_PROCESSING_PERCENT": "0",
         "PLAYBACK_ON_DEMAND_ENABLED": "false",
         "REPEAT_WORK_REVISION_ENABLED": "false",
@@ -212,7 +212,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_ARCHIVE_COALESCE_ENABLED": "true",
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
-        "AUDIO_ARCHIVE_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
@@ -225,10 +224,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
         "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT": "100",
         "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP": "60000",
-        "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST": "",
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "DREAM_AGENT_ELIGIBILITY": "allowlist",
-        "DREAM_AGENT_UID_ALLOWLIST": "",
         "DREAM_ON_DEMAND_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE": "shadow",
@@ -287,7 +284,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "TRANSCRIPTION_SHADOW_ENABLED": "true",
         "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
         "TRANSCRIPTION_SHADOW_PERCENT": "0",
-        "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": "omi-release-probe",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
