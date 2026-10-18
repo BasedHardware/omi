@@ -467,3 +467,7 @@ tests/unit/test_compute_admission_import_purity.py::test_enabled_non_byok_call_u
 # 0.32-0.36s CPU on the saturated pre-push host (local fail limit 0.30s).
 # Assertions still run.
 tests/unit/test_ladder_v1_cutover.py::test_live_batch_and_on_device_are_disjoint
+# 2026-10-18: authenticated backlog process pays the conversation import in the
+# call phase. 0.27s in a quiet 40-file run, 0.33s twice inside loaded pre-push
+# (local fail limit 0.30s). Assertions still run.
+tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate
