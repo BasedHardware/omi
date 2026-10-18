@@ -587,7 +587,10 @@ env:
   - name: MOBILE_STANDARD_BATCH_PERCENT
     value: "0"
   - name: MOBILE_STANDARD_BATCH_UIDS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MOBILE_STANDARD_BATCH_UIDS
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: SONIOX_IDLE_CLOSE_SECONDS

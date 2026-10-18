@@ -160,7 +160,9 @@ overlay:
           value: '0'
           category: rollout
         MOBILE_STANDARD_BATCH_UIDS:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: MOBILE_STANDARD_BATCH_UIDS
           category: rollout
         SONIOX_IDLE_CLOSE_SECONDS:
           value: '45'
@@ -518,6 +520,12 @@ overlay:
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
             secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
             version: latest
+          OMI_MESSAGING_CHANNELS_UIDS:
+            secret: OMI_MESSAGING_CHANNELS_UIDS
+            version: latest
+          OMI_MESSAGING_CHANNEL_POLICY:
+            secret: OMI_MESSAGING_CHANNEL_POLICY
+            version: latest
         env:
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -599,12 +607,6 @@ overlay:
             category: rollout
           OMI_MESSAGING_CHANNELS:
             value: 'on'
-            category: rollout
-          OMI_MESSAGING_CHANNELS_UIDS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          OMI_MESSAGING_CHANNEL_POLICY:
-            value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["vi7SA9ckQCe4ccobWNxlbdcNdC23"],"seat_cap":"off"}}'
             category: rollout
           OMI_TELEGRAM_STREAMING:
             value: none

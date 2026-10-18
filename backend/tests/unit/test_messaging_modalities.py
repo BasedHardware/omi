@@ -309,21 +309,16 @@ def test_album_has_one_durable_job_and_no_early_claim(adapter):
     assert store.enqueue(second) is None
 
 
-def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(monkeypatch):
+def test_private_prod_policy_paid_telegram_legacy_imessage_without_seat_io(monkeypatch):
     manifest = yaml.safe_load((Path(__file__).parents[2] / 'deploy/runtime_env/prod.overlay.yaml').read_text())
-
-    def find(value):
-        if isinstance(value, dict):
-            if 'OMI_MESSAGING_CHANNEL_POLICY' in value:
-                return value['OMI_MESSAGING_CHANNEL_POLICY']['value']
-            for nested in value.values():
-                found = find(nested)
-                if found:
-                    return found
-        return None
-
-    policy = find(manifest)
-    assert policy
+    backend = manifest['overlay']['cloud_run']['services']['backend']
+    assert 'OMI_MESSAGING_CHANNEL_POLICY' not in backend['env']
+    assert backend['secrets']['OMI_MESSAGING_CHANNEL_POLICY'] == {
+        'secret': 'OMI_MESSAGING_CHANNEL_POLICY',
+        'version': 'latest',
+    }
+    # Payload membership is private; exercise the reviewed policy with a synthetic owner.
+    policy = '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["synthetic-owner"],"seat_cap":"off"}}'
     monkeypatch.setenv('OMI_MESSAGING_CHANNEL_POLICY', policy)
     monkeypatch.delenv('OMI_MESSAGING_KILL_SWITCH_DOC', raising=False)
     monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
@@ -334,18 +329,18 @@ def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(mon
         raise AssertionError('No capacity IO allowed')
 
     monkeypatch.setattr(store, 'capacity', capacity)
-    david = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+    owner = 'synthetic-owner'
     access.require_access('paid-outsider', 'telegram')
     with pytest.raises(access.AccessDenied):
         access.require_access('paid-outsider', 'imessage')
     for channel in ('telegram', 'imessage'):
-        access.require_access(david, channel)
-        store.check_capacity(david, channel)
-        store.assert_link_capacity(SimpleNamespace(channel=channel), {'uid': david})
+        access.require_access(owner, channel)
+        store.check_capacity(owner, channel)
+        store.assert_link_capacity(SimpleNamespace(channel=channel), {'uid': owner})
     assert channel_policy('imessage')['seat_cap'] is None and channel_policy('imessage')['plans'] is None
     monkeypatch.setattr(access, 'get_user_valid_subscription', lambda uid, **kw: SimpleNamespace(plan='basic'))
     with pytest.raises(access.AccessDenied):
-        access.require_access(david, 'telegram')
+        access.require_access(owner, 'telegram')
 
 
 @pytest.mark.parametrize('cap', ['none', 'OFF', True, -1, {}, None])

@@ -17,6 +17,9 @@ from scripts.render_cloud_run_clone_env import clone_environment
 
 ROOT = Path(__file__).resolve().parents[3]
 KEYS = {
+    'MOBILE_STANDARD_BATCH_UIDS',
+    'OMI_MESSAGING_CHANNELS_UIDS',
+    'OMI_MESSAGING_CHANNEL_POLICY',
     'BATCH_PIPELINE_UID_ALLOWLIST',
     'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
     'FIRST_SUMMARY_UID_ALLOWLIST',
@@ -111,7 +114,7 @@ def test_external_secret_sync_precedes_listen_upgrade_and_checks_all_keys():
 def test_no_nonempty_literal_uid_allowlists_remain_in_prod(prod):
     for host in [*prod['cloud_run']['services'].values(), prod['gke']['backend-listen'], prod['gke']['pusher']]:
         for key, entry in host['env'].items():
-            if key.endswith('UID_ALLOWLIST'):
+            if key.endswith('UID_ALLOWLIST') or key in KEYS:
                 assert not entry.get('value'), key
     for name, host in prod['cloud_run']['services'].items():
         assert host['env']['BATCH_PIPELINE_LIVE_ADMISSION_ENABLED']['value'] == 'false'

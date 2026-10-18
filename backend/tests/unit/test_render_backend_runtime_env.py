@@ -932,6 +932,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         if service != 'backend':
             baseline[service].add('FIRST_SUMMARY_UID_ALLOWLIST')
     baseline['backend-integration'].add('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST')
+    baseline['backend'] |= {'OMI_MESSAGING_CHANNELS_UIDS', 'OMI_MESSAGING_CHANNEL_POLICY'}
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
         refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])

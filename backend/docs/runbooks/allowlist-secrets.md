@@ -5,7 +5,11 @@ env variable. Cloud Run declares these under `cloud_run.services.*.secrets` in
 `deploy/runtime_env/prod.overlay.yaml`; the renderer emits `secretKeyRef` state
 and deploy-cloudrun secret inputs. GKE uses the existing backend-secrets
 ExternalSecret/SecretStore and required `valueFrom.secretKeyRef` entries in the
-listen/pusher prod values. No application parsing or feature defaults change.
+listen/pusher prod values. No application parsing or feature defaults change. The mobile batch selector and
+messaging cohorts also contain owner identities: `MOBILE_STANDARD_BATCH_UIDS` and
+`OMI_MESSAGING_CHANNELS_UIDS` use their own secrets; `OMI_MESSAGING_CHANNEL_POLICY`
+keeps its complete JSON policy in a same-name secret. Preserve the complete JSON
+bytes and all existing channel/seat/plan settings when seeding this policy.
 
 This is a dark configuration migration. Leave live admission false, batch
 percent zero, shared-live false, and all other switches at their reviewed
@@ -24,7 +28,7 @@ logs, shell history, arguments, or a CI artifact. Disable shell tracing.
    Preserve exact CSV bytes, including cohort order and lack of a newline.
    For admission, recovery and first-summary, verify the intended singleton and
    equality across admission/recovery/summary hosts before provisioning. Do not
-   assume all ten allowlists have the same membership.
+   assume all thirteen allowlists have the same membership.
 2. Set `ALLOWLIST_PAYLOAD_DIR` to a private scratch directory (mode 0700) with
    one mode-0600 file per env name below. Populate it from the verified serving
    config through an in-memory/private-file extractor, never `echo <UID>`.
@@ -38,6 +42,7 @@ logs, shell history, arguments, or a CI artifact. Disable shell tracing.
    or add another version blindly.
 
 ```bash
+set -euo pipefail
 set +x
 : "${ALLOWLIST_PAYLOAD_DIR:?set to the private verified payload directory}"
 gcloud secrets create BATCH_PIPELINE_UID_ALLOWLIST --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/BATCH_PIPELINE_UID_ALLOWLIST"
@@ -50,6 +55,9 @@ gcloud secrets create SYNC_LEGACY_FRESH_UID_ALLOWLIST --project=based-hardware -
 gcloud secrets create SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST"
 gcloud secrets create TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST"
 gcloud secrets create TRANSCRIPTION_SHADOW_UID_ALLOWLIST --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/TRANSCRIPTION_SHADOW_UID_ALLOWLIST"
+gcloud secrets create MOBILE_STANDARD_BATCH_UIDS --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/MOBILE_STANDARD_BATCH_UIDS"
+gcloud secrets create OMI_MESSAGING_CHANNELS_UIDS --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/OMI_MESSAGING_CHANNELS_UIDS"
+gcloud secrets create OMI_MESSAGING_CHANNEL_POLICY --project=based-hardware --replication-policy=automatic --data-file="$ALLOWLIST_PAYLOAD_DIR/OMI_MESSAGING_CHANNEL_POLICY"
 ```
 
 Grant `roles/secretmanager.secretAccessor` on each secret to the existing ESO
@@ -70,7 +78,8 @@ project = 'based-hardware'
 manifest = yaml.safe_load(open('backend/deploy/runtime_env.yaml'))['environments']['prod']
 chart = yaml.safe_load(open('backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml'))
 keys = {row['secretKey'] for row in chart['externalSecret']['secretKeys']
-        if row['secretKey'].endswith('UID_ALLOWLIST')}
+        if row['secretKey'].endswith('UID_ALLOWLIST') or row['secretKey'] in {
+            'MOBILE_STANDARD_BATCH_UIDS', 'OMI_MESSAGING_CHANNELS_UIDS', 'OMI_MESSAGING_CHANNEL_POLICY'}}
 consumers = {key: {'prod-omi-backend-eso-gsa@based-hardware.iam.gserviceaccount.com'} for key in keys}
 for name, config in manifest['cloud_run']['services'].items():
     doc = json.loads(subprocess.check_output([
@@ -102,7 +111,7 @@ bindings. Never deploy an intermediate overlay-only deletion or issue a
 removal-only `gcloud run services update`. Normal production images ship through
 the owning GitHub Actions workflow; this document does not authorize dispatch.
 
-1. Provision and verify all ten secrets and IAM first. The normal prebuild
+1. Provision and verify all thirteen secrets and IAM first. The normal prebuild
    Secret Manager existence check must pass; existence alone is not proof of
    payload correctness or runtime IAM access.
 2. Deploy the complete backend stack (`deploy_targets=all`) at the reviewed SHA.
@@ -120,7 +129,7 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
    an ExternalSecret refresh, waits, and checks target Secret keys. A refresh
    timeout may fall back to checking current keys; missing new keys fails closed
    before listen upgrade. For this migration require an observed fresh Ready
-   sync and all ten nonempty payloads, even if keys already existed.
+   sync and all thirteen nonempty payloads, even if keys already existed.
 4. Helm replaces the env list: the prod listen/pusher values therefore contain
    explicit required `secretKeyRef` entries. An omitted key is not repaired by
    `envFrom`; this PR retains the binding in the rendered list. Missing Secret

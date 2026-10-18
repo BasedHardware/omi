@@ -65,7 +65,15 @@ def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
     # gcloud must remove a literal before installing a secret of the same name.
     # Both flags belong to ONE deploy call/revision; never issue a removal-only update.
     removals = set(service_config.get('forbidden_env', [])) | {
-        name for name in service_config.get('secrets', {}) if name.endswith('UID_ALLOWLIST')
+        name
+        for name in service_config.get('secrets', {})
+        if name.endswith('UID_ALLOWLIST')
+        or name
+        in {
+            'MOBILE_STANDARD_BATCH_UIDS',
+            'OMI_MESSAGING_CHANNELS_UIDS',
+            'OMI_MESSAGING_CHANNEL_POLICY',
+        }
     }
     return ''.join(f',{name}' for name in sorted(removals - listed))
 
