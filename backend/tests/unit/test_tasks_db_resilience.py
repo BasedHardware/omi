@@ -62,7 +62,5 @@ def test_create_task_validation():
     with pytest.raises(ValueError, match="task_data must contain an 'id' field"):
         tasks_db.create({})
 
-    with pytest.raises(
-        ValueError, match="task_data 'id' field must not be empty or whitespace"
-    ):
+    with pytest.raises(ValueError, match="task_data 'id' field must not be empty or whitespace"):
         tasks_db.create({"id": "   "})

@@ -30,9 +30,7 @@ def update(task_id: str, task_data: dict[str, Any]) -> bool:
         task_ref.update(task_data)
         return True
     except NotFound as e:
-        logger.warning(
-            "Task %s not found during update (concurrent deletion): %s", clean_id, e
-        )
+        logger.warning("Task %s not found during update (concurrent deletion): %s", clean_id, e)
         return False
 
 
