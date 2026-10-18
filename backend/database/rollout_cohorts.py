@@ -1,6 +1,6 @@
 """Server-owned user rollout membership, shared across flags and serving platforms.
 
-Only boolean fields in rollout_cohorts/{uid}.cohorts grant membership. Explicit
+Only boolean fields in rollout_cohorts/{uid}.cohorts.<environment> grant membership. Explicit
 false overrides a legacy env member. Missing fields use the migration fallback;
 read errors, malformed documents and cold asynchronous misses deny membership.
 No network I/O runs on an event loop. Listen awaits its initial bounded read.
@@ -39,13 +39,28 @@ COHORT_ENVS = {
     'messaging-imessage': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
 }
 logger = logging.getLogger(__name__)
+_background_submitter: Callable[..., Any] | None = None
+
+
+def set_rollout_background_submitter(submitter: Callable[..., Any]) -> None:
+    """Serving infrastructure injects scheduling; persistence never imports utils."""
+    global _background_submitter
+    _background_submitter = submitter
+
+
+def rollout_environment() -> str:
+    """Existing runtime identity, independent of the shared customer project."""
+    stage = os.getenv('OMI_ENV_STAGE', 'local').strip().lower()
+    if stage not in {'prod', 'dev', 'local', 'offline'}:
+        raise ValueError('invalid rollout environment')
+    return stage
 
 
 def valid_uid(uid: object) -> bool:
     return isinstance(uid, str) and bool(uid) and uid.strip() == uid and '/' not in uid and len(uid.encode()) <= 256
 
 
-def _read_memberships(uid: str) -> dict[str, bool]:
+def _read_memberships(uid: str) -> dict[str, dict[str, bool]]:
     # Reuse the lazy customer data plane; SERVICE_ACCOUNT_JSON pins listen/Cloud Run.
     from database._client import data_plane_db as db
 
@@ -54,7 +69,10 @@ def _read_memberships(uid: str) -> dict[str, bool]:
         return {}
     data = doc.to_dict()
     members = data.get('cohorts') if isinstance(data, dict) else None
-    if not isinstance(members, dict) or any(type(value) is not bool for value in members.values()):
+    if not isinstance(members, dict) or any(
+        not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())
+        for flags in members.values()
+    ):
         raise ValueError('invalid cohort document')
     return members
 
@@ -103,10 +121,10 @@ class _TTLReads:
             entry = _Entry(Future())
             self.entries[key] = entry
         if background:
-            from utils.executors import get_rollout_executor
-
             try:
-                get_rollout_executor().submit(self._refresh, key, entry)
+                if _background_submitter is None:
+                    raise RuntimeError('cohort scheduler not configured')
+                _background_submitter(self._refresh, key, entry)
             except Exception:
                 with self.lock:
                     entry.expires = time.monotonic() + TTL_SECONDS
@@ -140,6 +158,10 @@ def in_rollout_cohort(
     members = _cache.get(uid)
     if members is None:
         return False
+    try:
+        members = members.get(rollout_environment(), {})
+    except ValueError:
+        return False
     if name in members:
         return members[name] is True
     if legacy_members is None:
@@ -169,9 +191,12 @@ def _read_cohort_members(name: str) -> tuple[str, ...]:
     from google.cloud.firestore_v1.base_query import FieldFilter
     from google.cloud.firestore_v1.field_path import FieldPath
 
+    environment, name = name.split(':', 1)
+    if environment not in {'prod', 'dev', 'local', 'offline'} or name not in COHORT_ENVS:
+        raise ValueError('invalid cohort discovery scope')
     rows = list(
         db.collection(COLLECTION)
-        .where(filter=FieldFilter(FieldPath('cohorts', name).to_api_repr(), '==', True))
+        .where(filter=FieldFilter(FieldPath('cohorts', environment, name).to_api_repr(), '==', True))
         .limit(500)
         .stream(timeout=1.0, retry=None)
     )
@@ -180,14 +205,17 @@ def _read_cohort_members(name: str) -> tuple[str, ...]:
     return tuple(row.id for row in rows if valid_uid(row.id))
 
 
-_member_cache = _TTLReads(_read_cohort_members, capacity=len(COHORT_ENVS))
+_member_cache = _TTLReads(_read_cohort_members, capacity=4 * len(COHORT_ENVS))
 
 
 def rollout_cohort_members(name: str) -> tuple[str, ...]:
     """Bounded background-job discovery; never query the collection per request."""
     if name not in COHORT_ENVS:
         return ()
-    members = _member_cache.get(name)
+    try:
+        members = _member_cache.get(rollout_environment() + ':' + name)
+    except ValueError:
+        return ()
     if members is None:
         return ()
     legacy = {item.strip() for item in COHORT_ENVS[name]().split(',') if valid_uid(item.strip())}

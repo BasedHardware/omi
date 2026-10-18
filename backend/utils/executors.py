@@ -40,6 +40,8 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
 
+from database.rollout_cohorts import set_rollout_background_submitter
+
 logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
@@ -319,4 +321,10 @@ def shutdown_executors():
             logger.warning(f"Error shutting down {executor.name} executor: {e}")
 
 
+def _submit_rollout_read(fn: Callable[..., Any], *args: Any) -> Future:
+    return get_rollout_executor().submit(fn, *args)
+
+
+# Register only a callback at import time; the bounded pool remains lazy.
+set_rollout_background_submitter(_submit_rollout_read)
 atexit.register(shutdown_executors)

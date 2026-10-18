@@ -3,7 +3,7 @@
 Membership is server-owned user data in `rollout_cohorts/{uid}`:
 
 ```json
-{"cohorts":{"batch-pipeline":true,"first-summary":true}}
+{"cohorts":{"prod":{"batch-pipeline":true,"first-summary":true},"dev":{}}}
 ```
 
 This follows `testers/{uid}` / `is_tester_db`, using the existing customer-data
@@ -12,6 +12,12 @@ Secret Manager resource, new credential, Helm env override, or collection setup
 is required. Client Firestore access stays denied by the existing default-deny
 rules; no client API accepts cohort mutations. Account deletion also erases this
 top-level document and retries if that erase fails.
+
+Dev and prod share the `based-hardware` customer data plane. Membership maps
+are therefore namespaced by the existing `OMI_ENV_STAGE`, never by the compute
+project. Dev-only members cannot enter production cohorts. Local/offline runs
+use separate namespaces. Background discovery queries and their cache keys are
+scoped to the same environment. No new env binding is needed.
 
 One document per user gives one point read for **all** their cohorts, never a
 collection scan on a serving request. A shared document per cohort would reduce
@@ -27,9 +33,11 @@ members by an indexed boolean field; those background scans cache results for
 `in_rollout_cohort(uid, name)` shares a bounded 4,096-user per-process LRU cache
 across flags. Positive, missing-document, negative, malformed-document and error
 results have a 60-second TTL. Concurrent misses for one UID share one read.
-Firestore reads have a one-second RPC timeout and SDK retries disabled. Async
-misses enqueue a bounded, isolated read and deny until it completes; listen and pusher
-await their initial read for up to 1.25 seconds before admission. The HTTP auth
+Firestore reads have a one-second RPC timeout and SDK retries disabled. The
+serving executor injects the background submitter into the cache; the database
+module never imports serving utilities. Async misses enqueue a bounded, isolated
+read and deny until it completes; listen and pusher await their initial read for
+up to 1.25 seconds before admission. The HTTP auth
 worker preloads the same cache. No Firestore I/O runs on the event loop.
 Expired grants are never served while refreshing. Saturation and read errors
 deny membership; neither an SDK error nor the UID/document path is logged.
@@ -43,8 +51,8 @@ zero cost for every request. Multiply by active processes; there is no shared
 cross-process cache. Background member discovery has separate query charges.
 [Firestore bills document reads and query results](https://firebase.google.com/docs/firestore/pricing).
 
-A Firestore boolean is authoritative for its named cohort. `false` revokes even
-a retained legacy env member. An absent field falls back to the existing
+A Firestore boolean in the selected environment is authoritative for its named
+cohort. `false` revokes even a retained legacy env member. An absent field falls back to the existing
 nonempty `*_UID_ALLOWLIST` / `MOBILE_STANDARD_BATCH_UIDS` env list, or to the
 legacy messaging policy cohort. An unreadable/malformed document never falls
 back. Keep removal tombstones during migration; deleting one could restore an
@@ -67,7 +75,7 @@ Dry run is the default and makes no client, read or write:
 
 ```bash
 backend/.venv/bin/python backend/scripts/rollout_cohort.py \
-  --project based-hardware --uid-file "$DAVID_UID_FILE" \
+  --project based-hardware --environment prod --uid-file "$DAVID_UID_FILE" \
   --cohort batch-pipeline --add --dry-run
 ```
 
@@ -76,14 +84,18 @@ To put David in the batch-pipeline cohort (one document merge write):
 ```bash
 source ~/.local/bin/gcp-agent-env.sh prod-operator && \
 backend/.venv/bin/python backend/scripts/rollout_cohort.py \
-  --project based-hardware --uid-file "$DAVID_UID_FILE" \
+  --project based-hardware --environment prod --uid-file "$DAVID_UID_FILE" \
   --cohort batch-pipeline --add --apply
 ```
 
 To revoke that membership, run the same command with `--remove` instead of
 `--add`. It writes `false`, preserving unrelated cohort fields. Repeatable
 `--cohort` arguments let an operator seed several cohorts in the **same write**.
-`--project based-hardware-dev` requires `dev-operator`. No human tier is needed.
+Both existing dev and prod runtimes use `--project based-hardware` and require
+`prod-operator`; select `--environment dev` for dev-only membership. The project
+option names the **data plane**, not the compute environment. Use
+`--project based-hardware-dev` with `dev-operator` only for an isolated runtime
+whose data plane is actually that project. No human tier is needed.
 Use `--help` for the complete reviewed name list. Membership alone does not enable
 the live-admission switch or any other feature's parent gate.
 
@@ -93,7 +105,7 @@ the live-admission switch or any other feature's parent gate.
    script. Preserve each existing cohort independently; do not assume batch
    admission also grants recovery, first-summary, Dream or messaging access.
    For a no-gap migration, seed the current owners of every removed nonempty
-   list, including the dev audio-archive pilot if it is still wanted.
+   list in its original environment; never union dev and prod memberships, including the dev audio-archive pilot if it is still wanted.
    Ledger-drain's old dev pilot is intentionally closed by removal of its
    private env binding; it is not one of the serving cohorts managed here.
 2. Deploy the cohort-aware image and manifest from the **same commit** through

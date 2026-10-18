@@ -3024,6 +3024,13 @@ _add(
 _add(
     DriverEntry(
         'database.rollout_cohorts._read_cohort_members',
-        domains={'name': ['batch-pipeline-recovery', 'dream-agent']},
+        domains={
+            'name': [
+                'prod:batch-pipeline-recovery',
+                'prod:dream-agent',
+                'dev:batch-pipeline-recovery',
+                'dev:dream-agent',
+            ]
+        },
     )
 )

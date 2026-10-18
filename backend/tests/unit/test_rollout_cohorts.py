@@ -20,7 +20,7 @@ def loaded_adapters():
 
 
 def cache(monkeypatch, reader, capacity=4096):
-    value = cohorts._TTLReads(reader, capacity)
+    value = cohorts._TTLReads(lambda uid: {cohorts.rollout_environment(): reader(uid)}, capacity)
     monkeypatch.setattr(cohorts, '_cache', value)
     return value
 
@@ -156,8 +156,8 @@ def test_real_adapter_bounds_rpc_and_validates_document(monkeypatch):
     doc.exists = False
     assert cohorts._read_memberships('owner') == {}
     doc.exists = True
-    doc.to_dict.return_value = {'cohorts': {'batch-pipeline': True}}
-    assert cohorts._read_memberships('owner') == {'batch-pipeline': True}
+    doc.to_dict.return_value = {'cohorts': {'prod': {'batch-pipeline': True}}}
+    assert cohorts._read_memberships('owner') == {'prod': {'batch-pipeline': True}}
     client.collection.assert_called_with('rollout_cohorts')
     client.collection.return_value.document.return_value.get.assert_called_with(timeout=1.0, retry=None)
     for malformed in [None, {}, {'cohorts': []}, {'cohorts': {'batch-pipeline': 'true'}}]:
@@ -201,22 +201,35 @@ def operator():
     return module
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 @pytest.mark.parametrize('apply', [False, True])
 @pytest.mark.parametrize('operation', ['--add', '--remove'])
-def test_operator_dry_run_or_single_merge_write_without_uid(monkeypatch, tmp_path, capsys, apply, operation):
+def test_operator_dry_run_or_single_merge_write_without_uid(
+    monkeypatch, tmp_path, capsys, apply, operation, environment
+):
     uid_file = tmp_path / 'private.uid'
     uid_file.write_text('synthetic-private-owner\n')
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/private/operator.json')
     factory = MagicMock()
-    args = ['--uid-file', str(uid_file), '--cohort', 'batch-pipeline', '--project', 'based-hardware', operation]
+    args = [
+        '--uid-file',
+        str(uid_file),
+        '--cohort',
+        'batch-pipeline',
+        '--project',
+        'based-hardware',
+        '--environment',
+        environment,
+        operation,
+    ]
     args.append('--apply' if apply else '--dry-run')
     assert operator().main(args, client_factory=factory) == 0
     assert 'synthetic-private-owner' not in capsys.readouterr().out
     if apply:
         factory.assert_called_once_with(project='based-hardware')
         factory.return_value.collection.return_value.document.return_value.set.assert_called_once_with(
-            {'cohorts': {'batch-pipeline': operation == '--add'}}, merge=True, timeout=3.0, retry=None
+            {'cohorts': {environment: {'batch-pipeline': operation == '--add'}}}, merge=True, timeout=3.0, retry=None
         )
     else:
         factory.assert_not_called()
@@ -232,6 +245,8 @@ def test_operator_suppresses_sdk_document_paths_and_requires_operator_tier(monke
         'batch-pipeline',
         '--project',
         'based-hardware',
+        '--environment',
+        'prod',
         '--add',
         '--apply',
     ]
@@ -268,10 +283,10 @@ def test_operator_merge_mask_preserves_other_cohort_fields():
 
     writes = pbs_for_set_with_merge(
         'projects/synthetic/databases/(default)/documents/rollout_cohorts/owner',
-        {'cohorts': {'batch-pipeline': False}},
+        {'cohorts': {'prod': {'batch-pipeline': False}}},
         merge=True,
     )
-    assert list(writes[0].update_mask.field_paths) == ['cohorts.`batch-pipeline`']
+    assert list(writes[0].update_mask.field_paths) == ['cohorts.prod.`batch-pipeline`']
 
 
 @pytest.mark.asyncio
@@ -293,3 +308,49 @@ async def test_cache_and_executor_saturation_deny_without_unbounded_work(monkeyp
     cache(monkeypatch, lambda _: {'batch-pipeline': True})
     assert not cohorts.in_rollout_cohort('owner', 'batch-pipeline')
     assert not cohorts.in_rollout_cohort('owner', 'batch-pipeline')
+
+
+def test_shared_customer_project_never_unions_dev_and_prod_members(monkeypatch):
+    reads = []
+    value = cohorts._TTLReads(
+        lambda uid: reads.append(uid)
+        or {
+            'dev': {'batch-pipeline': True, 'first-summary': False},
+            'prod': {'batch-pipeline': False, 'first-summary': True},
+        }
+    )
+    monkeypatch.setattr(cohorts, '_cache', value)
+    for _ in range(100):
+        monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+        assert cohorts.in_rollout_cohort('owner', 'batch-pipeline')
+        assert not cohorts.in_rollout_cohort('owner', 'first-summary')
+        monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+        assert not cohorts.in_rollout_cohort('owner', 'batch-pipeline')
+        assert cohorts.in_rollout_cohort('owner', 'first-summary')
+    assert reads == ['owner']
+    monkeypatch.setenv('OMI_ENV_STAGE', 'typo')
+    assert not cohorts.in_rollout_cohort('owner', 'first-summary')
+
+
+def test_background_discovery_is_environment_scoped(monkeypatch):
+    keys = []
+    monkeypatch.setattr(cohorts, '_member_cache', cohorts._TTLReads(lambda key: keys.append(key) or ('owner',)))
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    assert cohorts.rollout_cohort_members('dream-agent') == ('owner',)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert cohorts.rollout_cohort_members('dream-agent') == ('owner',)
+    assert keys == ['dev:dream-agent', 'prod:dream-agent']
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_scheduler_denies_without_database_importing_utils(monkeypatch):
+    monkeypatch.setattr(cohorts, '_background_submitter', None)
+    cache(monkeypatch, MagicMock(side_effect=AssertionError('must not read on loop')))
+    await cohorts.warm_rollout_cohorts('owner')
+    assert not cohorts.in_rollout_cohort('owner', 'batch-pipeline')
+    import ast
+
+    tree = ast.parse(Path(cohorts.__file__).read_text())
+    assert not any(
+        isinstance(node, ast.ImportFrom) and (node.module or '').startswith('utils') for node in ast.walk(tree)
+    )

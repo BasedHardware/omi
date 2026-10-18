@@ -60,3 +60,15 @@ def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime()
     assert "'FIRST_SUMMARY_UID_ALLOWLIST' in os.environ" in source
     listen = (ROOT / 'backend/routers/transcribe.py').read_text()
     assert listen.index('await warm_rollout_cohorts(request.uid)') < listen.index('run_listen_session(request)')
+
+
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+def test_existing_runtime_identity_scopes_every_serving_host(stage):
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    services = manifest['environments'][stage]['cloud_run']['services']
+    for name in ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration']:
+        assert services[name]['env']['OMI_ENV_STAGE']['value'] == stage
+    for component in ['backend-listen', 'pusher']:
+        path = ROOT / f'backend/charts/{component}/{stage}_omi_{component.replace("-", "_")}_values.yaml'
+        env = yaml.load(path.read_text(), Loader=yaml.CSafeLoader)['env']
+        assert [entry['value'] for entry in env if entry['name'] == 'OMI_ENV_STAGE'] == [stage]

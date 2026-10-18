@@ -17,6 +17,7 @@ def main(argv=None, *, client_factory=None) -> int:
     parser.add_argument('--uid-file', required=True, type=Path, help='Private file containing one UID; never printed')
     parser.add_argument('--cohort', required=True, action='append', choices=sorted(COHORT_ENVS))
     parser.add_argument('--project', choices=('based-hardware', 'based-hardware-dev'), required=True)
+    parser.add_argument('--environment', choices=('dev', 'prod'), required=True)
     operation = parser.add_mutually_exclusive_group(required=True)
     operation.add_argument('--add', action='store_true')
     operation.add_argument('--remove', action='store_true')
@@ -50,7 +51,10 @@ def main(argv=None, *, client_factory=None) -> int:
         client = client_factory(project=args.project)
         # Explicit false is a tombstone: removing a member also revokes legacy-env fallback.
         client.collection(COLLECTION).document(uid).set(
-            {'cohorts': {name: args.add for name in set(args.cohort)}}, merge=True, timeout=3.0, retry=None
+            {'cohorts': {args.environment: {name: args.add for name in set(args.cohort)}}},
+            merge=True,
+            timeout=3.0,
+            retry=None,
         )
     except Exception:
         # SDK errors may include the full document path. Never print or re-raise them.
