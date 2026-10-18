@@ -24,7 +24,6 @@ import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -371,8 +370,10 @@ Future<void> _runLivePage(AuditRun a, AuditLive live) async {
 }
 
 /// Swaps in a quiet monitor owning one visible BLE episode, so the recovery banner renders on
-/// whatever page the scenario pumps. `ingress_recovery_failed` is the one trigger declared
-/// synchronously (no feature-gate await), which keeps the frame deterministic.
+/// whatever page the scenario pumps. The episode is the zero-byte streak a real stalled link
+/// declares (three empty capture sessions — the same seeding the banner widget test uses), so
+/// the banner offers the retry-in-place affordances this PR is about. The declaration awaits
+/// the feature gate; the audit harness's settle() flushes it long before the first shot.
 void _seedVisibleWedgeEpisode() {
   final previous = CaptureWedgeMonitor.instance;
   final monitor = CaptureWedgeMonitor(
@@ -383,17 +384,10 @@ void _seedVisibleWedgeEpisode() {
     platform: () => 'audit',
   );
   CaptureWedgeMonitor.instance = monitor;
-  monitor.observeIngressHealth(
-    auditPendant.id,
-    const CaptureIngressHealth(
-      phase: 'actionRequired',
-      generation: 'audit',
-      reason: 'subscription_timeout',
-      validUntilMs: 0,
-      subscriptionConfirmed: false,
-      unverifiedSinceMs: 60000,
-    ),
-  );
+  for (var i = 0; i < CaptureWedgeMonitor.zeroByteThreshold; i++) {
+    final handle = monitor.onCaptureSessionConnected(deviceId: auditPendant.id, source: 'omi');
+    monitor.onCaptureSessionEnded(handle, binaryBytesSent: 0);
+  }
   addTearDown(() {
     CaptureWedgeMonitor.instance = previous;
     monitor.dispose();
@@ -535,7 +529,13 @@ final captureScenarios = <AuditScenario>[
         'no banner — slow-burn problems live in the Activity bell',
     run: (a) {
       _seedVisibleWedgeEpisode();
-      return _runLivePage(a, AuditLive.pendant);
+      return _runHome(a, AuditLive.pendant, pendantConnected: true).then((_) async {
+        // The seeded episode is the retryable kind: the card must offer the in-place
+        // affordances this scenario exists to audit, not the manual-reconnect variant.
+        expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+        expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
+        expect(find.byKey(const Key('capture_recovery_banner_dismiss')), findsOneWidget);
+      });
     },
   ),
   AuditScenario(
@@ -569,10 +569,11 @@ final captureScenarios = <AuditScenario>[
     title: 'Live page, transcription unavailable',
     page: _live,
     state: 'The pendant streams but transcription is down: a short Not-transcribing app bar, '
-        'the one outage banner, and the neutral listening placeholder',
-    run: (a) {
-      _seedVisibleWedgeEpisode();
-      return _runLivePage(a, AuditLive.pendantOutage);
-    },
+        'no wedge banner (the STT outage owns none), and the truthful unavailable placeholder',
+    run: (a) => _runLivePage(a, AuditLive.pendantOutage).then((_) async {
+      // A terminal transcription failure is not a BLE wedge: it must not grow a
+      // recovery banner for an unrelated failure the page never declared.
+      expect(find.byKey(const Key('capture_recovery_banner')), findsNothing);
+    }),
   ),
 ];
