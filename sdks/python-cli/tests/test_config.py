@@ -825,3 +825,65 @@ def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, c
     assert "Invalid value for 'local_token'" in result.output
     config = cfg.load()
     assert config.get_profile("default").local_token is None
+
+
+def test_config_get_api_base_default(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "get", "api_base"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"key": "api_base", "value": cfg.DEFAULT_API_BASE}
+
+
+def test_config_get_roundtrips_set_value(config_path: Path, cli_runner) -> None:
+    set_result = cli_runner.invoke(app, ["--json", "config", "set", "local_api_url", "http://127.0.0.1:47778/"])
+    assert set_result.exit_code == 0, set_result.output
+    result = cli_runner.invoke(app, ["--json", "config", "get", "local_api_url"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"key": "local_api_url", "value": "http://127.0.0.1:47778"}
+
+
+def test_config_get_masks_local_token_by_default(config_path: Path, cli_runner) -> None:
+    cli_runner.invoke(app, ["--json", "config", "set", "local_token", "super-secret-token"])
+    result = cli_runner.invoke(app, ["--json", "config", "get", "local_token"])
+    assert result.exit_code == 0, result.output
+    assert "super-secret-token" not in result.stdout
+    assert json.loads(result.stdout)["value"] != "super-secret-token"
+
+
+def test_config_get_unmasked_returns_raw_token(config_path: Path, cli_runner) -> None:
+    cli_runner.invoke(app, ["--json", "config", "set", "local_token", "super-secret-token"])
+    result = cli_runner.invoke(app, ["--json", "config", "get", "local_token", "--unmasked"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"key": "local_token", "value": "super-secret-token"}
+
+
+def test_config_get_unset_token_text_mode(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["config", "get", "local_token"])
+    assert result.exit_code == 0, result.output
+    assert result.stdout.strip() == "(none)"
+
+
+@pytest.mark.parametrize("alias", ["API_BASE", "api-base", "Api_Base"])
+def test_config_get_normalizes_key_aliases(config_path: Path, cli_runner, alias: str) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "get", alias])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["key"] == "api_base"
+    assert payload["value"] == cfg.DEFAULT_API_BASE
+
+
+@pytest.mark.parametrize(
+    ("alias", "value", "stored_key"),
+    [("API-BASE", "https://alias.example", "api_base"), ("Local-Token", "tok-alias", "local_token")],
+)
+def test_config_set_normalizes_key_aliases(
+    config_path: Path, cli_runner, alias: str, value: str, stored_key: str
+) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "set", alias, value])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["key"] == stored_key
+    assert getattr(cfg.load().get_profile("default"), stored_key) == value
+
+
+def test_config_get_unknown_key_rejected(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "get", "nope"])
+    assert result.exit_code == 1
