@@ -1,13 +1,19 @@
 """Count nested Firestore results through real memory compatibility readers."""
 
+import copy
 import time
+
+import pytest
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from database import mcp_conversation_pages, conversations
+from models.memories import MemoryDB
+from models.product_memory import MemoryItem
 from utils.memory.memory_service import MemoryService
 from utils.memory import read_resilience
+from utils.mcp_server.cursors import encode_cursor
 from utils.mcp_server.handlers import memories as handlers
 from utils.other.list_budget import ListReadBudget
 
@@ -30,6 +36,7 @@ class Store:
         self.physical = 0
         self.streams = 0
         self.batch_gets = 0
+        self.windows = []
 
     def collection(self, path):
         return Query(self, path)
@@ -60,37 +67,74 @@ class Query:
         self.store, self.path = store, path
         self.n = 100000
         self.skip = 0
-        self.field = None
+        self.orders = []
+        self.filters = []
+        self.after = None
 
     def document(self, doc_id):
         return Ref(self.store, self.path + '/' + doc_id)
 
     def where(self, *args, **kwargs):
-        return self
+        query = copy.copy(self)
+        field_filter = kwargs.get('filter')
+        constraint = (field_filter.field_path, field_filter.op_string, field_filter.value) if field_filter else args
+        query.filters = self.filters + [constraint]
+        return query
 
     def select(self, fields):
         return self
 
-    def order_by(self, field, **kwargs):
-        if self.field is None:
-            self.field = field
-        return self
+    def order_by(self, field, direction=None):
+        query = copy.copy(self)
+        query.orders = self.orders + [(field, direction)]
+        return query
 
     def limit(self, n):
-        self.n = n
-        return self
+        query = copy.copy(self)
+        query.n = n
+        return query
 
     def offset(self, n):
-        self.skip = n
-        return self
+        query = copy.copy(self)
+        query.skip = n
+        return query
+
+    def start_after(self, position):
+        query = copy.copy(self)
+        query.after = position
+        return query
 
     def stream(self, **kwargs):
         self.store.streams += 1
         rows = [(path, data) for path, data in self.store.rows.items() if path.rsplit('/', 1)[0] == self.path]
-        if self.field:
-            rows.sort(key=lambda row: row[1][self.field], reverse=True)
+        for field, op, value in self.filters:
+            assert op in {'==', 'in', '>=', '<='}, op
+            rows = [
+                row
+                for row in rows
+                if field in row[1]
+                and (
+                    (op == '==' and row[1][field] == value)
+                    or (op == 'in' and row[1][field] in value)
+                    or (op == '>=' and row[1][field] >= value)
+                    or (op == '<=' and row[1][field] <= value)
+                )
+            ]
+        # Firestore order_by excludes documents lacking the ordered field.
+        for field, direction in reversed(self.orders):
+            if field != '__name__':
+                rows = [row for row in rows if field in row[1]]
+            rows.sort(
+                key=lambda row: row[0] if field == '__name__' else row[1][field],
+                reverse=direction == 'DESCENDING',
+            )
+        if self.after:
+            boundary = self.after['__name__'].path
+            index = next(i for i, row in enumerate(rows) if row[0] == boundary)
+            rows = rows[index + 1 :]
         selected = rows[self.skip : self.skip + self.n]
         self.store.physical += min(self.skip, len(rows)) + len(selected)
+        self.store.windows.append((self.path, self.orders, self.n, len(selected)))
         return iter(Snapshot(path, data) for path, data in selected)
 
 
@@ -109,46 +153,127 @@ def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkey
             'updated_at': now - timedelta(seconds=i),
             'data_protection_level': 'standard',
             'reviewed': False,
+            **({'user_review': False} if i < 12 else {}),
         }
-        for i in range(600)
+        for i in range(24)
     }
-    # Advance admission time between synthetic requests; offline queries run
-    # faster than the process-wide eight-operation burst would allow in a loop.
+    # This row can only enter through the created_at index, as in Firestore.
+    del rows['users/owner/memories/h-12']['updated_at']
+    canonical = MemoryItem(
+        memory_id='canonical',
+        ledger_commit_id='test-commit',
+        ledger_sequence=1,
+        uid='owner',
+        version=1,
+        tier='long_term',
+        status='active',
+        processing_state='processed',
+        source_state='active',
+        content='Canonical durable fact',
+        sensitivity_labels=[],
+        visibility='private',
+        user_asserted=True,
+        captured_at=now + timedelta(seconds=1),
+        updated_at=now + timedelta(seconds=1),
+    )
+    rows['users/owner/memory_items/canonical'] = canonical.model_dump(mode='python')
+    # Advance admission time between synthetic requests, rather than exhausting
+    # the process-wide burst allowance by running the old prefix loop instantly.
     ticks = iter(range(1000))
     monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance(clock=lambda: next(ticks)))
     store = Store(rows)
     service = MemoryService(db_client=store)
-    # Empty canonical stream, with real mixed merge, dual history-index reads,
-    # canonical/override status batches and hydration. No network or cloud clients.
-    monkeypatch.setattr(service._canonical, 'read', lambda *a, **k: [])
-    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: service)
-    bounded = budget(1500)
-    result = handlers.memories_page_core(
-        'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=bounded
-    )
-    assert bounded.truncated and result['scan_truncated'] and result['has_more']
-    assert store.batch_gets > 0 and store.streams == 2
-    assert store.physical == bounded.docs_scanned
-    # Existing materialized RPC accounting may overshoot by one bounded window.
-    assert store.physical <= 1500 + 600
-    assert result['scanned_count'] < 600
-    # The full, old path traverses all rows and preserves legacy ordering.
-    store.physical = store.streams = store.batch_gets = 0
-    unbounded = handlers.memories_page_core('owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test')
-    assert not unbounded['scan_truncated']
-    assert [row['id'] for row in unbounded['memories']] == [f'h-{i}' for i in range(25)]
-    assert store.physical > 10000
-    prior_reads = store.physical
-    store.physical = store.streams = store.batch_gets = 0
-    clean = budget(25000)
-    same = handlers.memories_page_core(
-        'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=clean
-    )
+    calls = []
+
+    def read(*args, **kwargs):
+        calls.append(kwargs)
+        return service.read(*args, **kwargs)
+
+    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
+
+    def run(allowance):
+        store.physical = store.streams = store.batch_gets = 0
+        store.windows.clear()
+        calls.clear()
+        result = handlers.memories_page_core(
+            'owner', limit=20, sort='created_desc', max_scan=20, cursor_kind='test', budget=allowance
+        )
+        return result, store.physical
+
+    unbounded, prior_reads = run(None)
+    clean = budget(1000)
+    same, clean_reads = run(clean)
     assert same['memories'] == unbounded['memories']
-    assert not same['scan_truncated'] and not clean.truncated
-    assert store.physical == clean.docs_scanned == 3000
-    assert store.physical < prior_reads
-    print(f'nested MCP exhausted={bounded.docs_scanned}; clean={clean.docs_scanned}; prior-path={prior_reads}')
+    assert [row['id'] for row in same['memories']] == ['canonical', *[f'h-{i}' for i in range(12, 24)]]
+    assert not same['scan_truncated'] and not same['has_more'] and not clean.truncated
+    assert clean_reads == clean.docs_scanned == 124
+    assert len(calls) == 1
+    assert store.batch_gets > 0
+    historical = [window for window in store.windows if window[0].endswith('/memories')]
+    assert {window[1][0][0] for window in historical} == {'updated_at', 'created_at'}
+    assert any(window[2] > 20 for window in historical)  # Hidden rows expanded the RPC window.
+    # updated_at excludes h-12; created_at supplies it. Neither index invents a field.
+    assert any(window[1][0][0] == 'updated_at' and window[3] == 23 for window in historical)
+    assert any(window[1][0][0] == 'created_at' and window[3] == 24 for window in historical)
+    bounded = budget(25)
+    truncated, bounded_reads = run(bounded)
+    assert bounded.truncated and truncated['scan_truncated'] and truncated['has_more']
+    assert bounded_reads == bounded.docs_scanned
+    assert bounded_reads <= 25 + max(window[2] for window in store.windows)
+    assert len(calls) == 1
+    print(f'mixed nested MCP exhausted={bounded_reads}; clean={clean_reads}; prior-path={prior_reads}')
+
+
+@pytest.mark.parametrize('use_cursor', [False, True])
+def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_cursor):
+    now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    rows = [
+        MemoryDB(
+            id=f'm-{i}',
+            uid='owner',
+            content='Focused on email' if i < 100 else f'Durable fact {i}',
+            category='work',
+            created_at=now - timedelta(seconds=i),
+            updated_at=now - timedelta(seconds=i),
+        )
+        for i in range(140)
+    ]
+    calls = []
+
+    def read(uid, *, limit, offset, budget=None):
+        calls.append((limit, offset, budget))
+        return rows[offset : offset + limit]
+
+    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
+    position = {'offset': 1}
+    filters = {
+        'categories': [],
+        'sort': 'scoring_desc',
+        'reviewed': None,
+        'manually_added': None,
+        'updated_after': None,
+        'include_activity': False,
+        'include_sensitive': True,
+    }
+    pagination = (
+        {'cursor_token': encode_cursor(kind='test', uid='owner', position=position, filters=filters)}
+        if use_cursor
+        else {'offset': 1}
+    )
+    kwargs = dict(limit=25, sort='scoring_desc', max_scan=200, cursor_kind='test', **pagination)
+    old = handlers.memories_page_core('owner', **kwargs)
+    assert len(calls) == 2
+    calls.clear()
+    allowance = budget(1000)
+    new = handlers.memories_page_core('owner', budget=allowance, **kwargs)
+    assert (
+        [row['id'] for row in new['memories']]
+        == [row['id'] for row in old['memories']]
+        == [f'm-{i}' for i in range(101, 126)]
+    )
+    assert new['has_more'] == old['has_more'] is True
+    assert not new['scan_truncated'] and not old['scan_truncated']
+    assert calls == [(200, 0, allowance)]
 
 
 def test_card_offsets_stop_before_rpc_and_small_pages_charge_skips():

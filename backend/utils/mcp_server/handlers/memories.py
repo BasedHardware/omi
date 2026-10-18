@@ -274,6 +274,7 @@ def memories_page_core(
                 or manually_added is not None
                 or updated_after is not None
                 or not include_sensitive
+                or not include_activity
                 or bool(valid_categories)
             )
             read_limit = max_scan if needs_full_scan else min(max_scan, offset + limit + 1)

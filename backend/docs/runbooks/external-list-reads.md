@@ -81,7 +81,9 @@ are not part of the offset reader's document accounting.
 
 The shared defaults are 24 seconds (request-start anchored, derived from HTTP timeout with headroom)
 and 25,000 charged documents. Materialized memory RPCs charge the entire bounded result and can
-overshoot by one bounded window (at most 5000 rows), rather than claiming an exact billed-read cap.
+overshoot by up to one current bounded RPC window, which can contain 7000 historical rows
+(the 5000 candidate maximum plus 2000 hidden-row scan slack). This list budget is not an exact
+billing ceiling.
 Auth/grants, fixed policy reads, and auxiliary render reads are outside this list-document allowance.
 
 ## Measurement and export
@@ -133,7 +135,8 @@ A stable identical query polled every 2 seconds can model 80% cached list polls;
 every 10+ seconds no reuse. Auth/grant reads, cache eligibility, writes, concurrency and changing queries
 reduce that saving. Request counts and duplicate-poll share were unavailable in the supplied evidence.
 
-The nested-reader test counts actual fake-store dual-window/status/hydration reads for 600 legacy
-rows, comparing the enabled single-window path and unchanged prior path with equal ordered results.
+The nested-reader test counts actual fake-store canonical, adaptive dual-window, status and hydration
+reads for mixed canonical/historical rows, including hidden rows and a legacy row missing `updated_at`.
+It compares the enabled single-window path and unchanged prior path with equal ordered results.
 It also exhausts a small shared allowance and verifies honest truncation and bounded physical work.
 These offline fixtures demonstrate mechanisms, not production distribution or deployed savings.

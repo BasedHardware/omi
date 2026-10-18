@@ -854,12 +854,12 @@ This action is permanent. Deleted conversations and their associated photos cann
     #!/bin/bash
     API_KEY="omi_dev_your_api_key"
 
-    # Export all conversations with transcripts
-    curl -H "Authorization: Bearer $API_KEY" \
+    # Fetch only the first page, not a complete backup. Inspect the saved
+    # X-Omi-Has-More and X-Omi-List-Truncated headers before paging further.
+    curl --fail-with-body --dump-header conversations_first_page.headers -H "Authorization: Bearer $API_KEY" \
       "https://api.omi.me/v1/dev/user/conversations?limit=1000&include_transcript=true" \
-      > conversations_backup.json
-
-    echo "Exported conversations to conversations_backup.json"
+      > conversations_first_page.json &&
+      echo "Saved first page; inspect conversations_first_page.headers"
     ```
   </Tab>
   <Tab title="Python">
@@ -885,6 +885,12 @@ This action is permanent. Deleted conversations and their associated photos cann
             }
         )
 
+        response.raise_for_status()
+        if response.headers.get("X-Omi-List-Truncated", "").lower() == "true":
+            raise RuntimeError(
+                "Export incomplete; no backup saved. Use narrower date windows "
+                "for transcript/folder/starred exports."
+            )
         conversations = response.json()
         if not conversations:
             break
@@ -916,6 +922,13 @@ This action is permanent. Deleted conversations and their associated photos cann
           { headers: { Authorization: `Bearer ${API_KEY}` } }
         );
 
+        if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
+        if (response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true') {
+          throw new Error(
+            'Export incomplete; no backup saved. Use narrower date windows ' +
+            'for transcript/folder/starred exports.'
+          );
+        }
         const conversations = await response.json();
         if (conversations.length === 0) break;
 
