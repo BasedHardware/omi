@@ -34,8 +34,8 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
-import '../../fakes.dart';
-import '../../harness.dart';
+import '../../../fakes.dart';
+import '../../../harness.dart';
 
 enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant, pendantOutage }
 
