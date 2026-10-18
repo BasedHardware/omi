@@ -13036,7 +13036,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallYourPlan => 'התוכנית שלך';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'לא עכשיו';
 
   @override
   String get paywallTryAgain => 'Try again';

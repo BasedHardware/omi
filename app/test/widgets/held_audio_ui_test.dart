@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -391,7 +393,7 @@ void main() {
             state == 'waiting_choice' ? findsOneWidget : findsNothing);
         expect(find.textContaining('resets'), findsNothing);
         if (state == 'waiting_choice') {
-          expect(find.text('2h waiting · Process now uses about 12.5% of this month'), findsOneWidget);
+          expect(find.text('2h waiting · Process now uses about 13% of this month'), findsOneWidget);
         }
         if (state != 'none') expect(find.byKey(Key('processing_backlog_upgrade_$surface')), findsOneWidget);
       });
@@ -411,12 +413,12 @@ void main() {
             surface: 'a',
             onUpgrade: () {},
             onProcess: () async => true));
-    expect(find.text('1h 30m waiting · Process now uses about 12.5% of this month'), findsOneWidget);
+    expect(find.text('1h 30m waiting · Process now uses about 13% of this month'), findsOneWidget);
     await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining("About 8 hours of processing"), findsOneWidget);
-    await tester.tap(find.text('Not Now').last);
+    await tester.tap(find.text('Not now').last);
     await tester.pumpAndSettle();
   });
 
@@ -428,7 +430,7 @@ void main() {
                 state: 'waiting_choice', deferredSeconds: 900, estimatedHours: 8, estimatedPercent: 12.5),
             surface: 'a',
             onUpgrade: () {}));
-    expect(find.text('15m waiting · Process now uses about 12.5% of this month'), findsOneWidget);
+    expect(find.text('15m waiting · Process now uses about 13% of this month'), findsOneWidget);
   });
 
   for (final cancelFromDialog in [false, true]) {
@@ -459,7 +461,7 @@ void main() {
         await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        await tester.tap(find.text('Not Now').last);
+        await tester.tap(find.text('Not now').last);
       } else {
         await tester.tap(find.byKey(const Key('processing_backlog_not_now_a')));
       }
@@ -521,7 +523,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(calls, 0);
-    expect(find.textContaining("About 2.5 hours of processing · 12.5% of this month's allowance."), findsOneWidget);
+    expect(find.textContaining("About 2.5 hours of processing · 13% of this month's allowance."), findsOneWidget);
     expect(find.textContaining("We'll process the newest recordings first"), findsOneWidget);
     await tester.tap(find.text('Process waiting recordings').last);
     await tester.pumpAndSettle();
@@ -544,10 +546,41 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining("We'll process the newest recordings first"), findsNothing);
-    await tester.tap(find.text('Not Now').last);
+    await tester.tap(find.text('Not now').last);
     await tester.pumpAndSettle();
     expect(calls, 0);
     expect(find.byKey(const Key('processing_backlog_process_a')), findsOneWidget);
+  });
+
+  test('percent rounds half up to a whole number', () {
+    expect(processingWholePercent(12.5), 13);
+    expect(processingWholePercent(12.4), 12);
+    expect(processingWholePercent(13), 13);
+    expect(processingWholePercent(0), 0);
+    expect(processingWholePercent(double.nan), 0);
+  });
+
+  testWidgets('primary button does not spin behind the confirm dialog', (tester) async {
+    final gate = Completer<bool>();
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete(true);
+    });
+    await pump(
+        tester,
+        ProcessingBacklogView(
+            backlog: backlog('waiting_choice'), surface: 'a', onUpgrade: () {}, onProcess: () => gate.future));
+    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Process waiting recordings'), findsWidgets);
+    await tester.tap(find.text('Process waiting recordings').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    gate.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('unknown allowance pauses without claiming the monthly budget is exhausted', (tester) async {

@@ -1,6 +1,7 @@
 """Backend-owned estimates and explicit backlog intent, additive behind admission flags."""
 
 from typing import Any
+import math
 import time
 
 from config.rate_card import recording_units_per_hour, standard_chat_units, budget_units
@@ -8,6 +9,13 @@ from config.plan_catalog import resolve_subscription_entitlements, allocation_li
 from datetime import datetime, timezone
 from models.users import ProcessingBacklog
 from utils import funded_processing
+
+
+def whole_percent(value: float) -> int:
+    """Half-up whole percent. 12.5 displays as 13; a non-positive ratio is 0."""
+    if not value or value <= 0:
+        return 0
+    return int(math.floor(value + 0.5))
 
 
 def defer_estimate(conversation: Any) -> dict:
@@ -54,7 +62,7 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
         deferred_seconds=max(0, int(round(summary.get('seconds', 0)))),
         estimated_units=round(estimate, 6),
         estimated_hours=estimate / rate,
-        estimated_percent=100 * estimate / budget if budget else 0,
+        estimated_percent=whole_percent(100 * estimate / budget) if budget else 0,
         remaining_units=remaining,
         exceeds_remaining=remaining is not None and estimate > remaining,
     )

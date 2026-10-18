@@ -13197,7 +13197,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paywallYourPlan => 'El teu pla';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ara no';
 
   @override
   String get paywallTryAgain => 'Try again';

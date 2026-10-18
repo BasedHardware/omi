@@ -13175,7 +13175,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paywallYourPlan => 'Ваш тариф';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Не сейчас';
 
   @override
   String get paywallTryAgain => 'Try again';

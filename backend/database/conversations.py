@@ -1,4 +1,5 @@
 from database import conversation_visibility_counts, processing_backlog
+from database.fsr_read_cache import forget_request_reads
 from utils.conversations import summary_delivery
 import copy
 import hashlib
@@ -951,11 +952,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = None
+    summary_changed = False
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt
+        nonlocal summary_receipt, summary_changed
         summary_receipt = None
+        summary_changed = False
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
@@ -1007,7 +1010,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
-            processing_backlog.stage_transition(
+            summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
             transaction.set(conversation_ref, write_data, merge=True)
@@ -1016,12 +1019,14 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
-        processing_backlog.stage_transition(
+        summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, write_data)
 
     run_transactional(db, _write_processing_result)
+    if summary_changed:
+        forget_request_reads(uid)
 
     summary_delivery.emit(summary_receipt)
     invalidate_people_stats_cache(uid)
@@ -1064,10 +1069,12 @@ def persist_processing_result_with_lifecycle(
     stale_sync_revision = False
     first_completed = False
     summary_receipt = None
+    summary_changed = False
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed
+        summary_changed = False
         summary_receipt = None
         stale_sync_revision = False
         first_completed = False
@@ -1198,7 +1205,7 @@ def persist_processing_result_with_lifecycle(
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
-        processing_backlog.stage_transition(
+        summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, write_data, merge=True)
@@ -1211,6 +1218,8 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
+    if summary_changed:
+        forget_request_reads(uid)
     if persisted:
 
         summary_delivery.emit(summary_receipt)
@@ -1250,19 +1259,24 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
 
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
+    summary_changed = False
     try:
         if conversation_data.get('processing_deferred'):
 
             @firestore.transactional
             def create_waiting(transaction):
+                nonlocal summary_changed
+                summary_changed = False
                 if conversation_ref.get(transaction=transaction).exists:
                     raise AlreadyExists('conversation exists')
-                processing_backlog.stage_transition(
+                summary_changed = processing_backlog.stage_transition(
                     transaction, uid, conversation_data['id'], {}, conversation_data, firestore_client=db
                 )
                 transaction.create(conversation_ref, conversation_data)
 
             run_transactional(db, create_waiting)
+            if summary_changed:
+                forget_request_reads(uid)
         else:
             conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):

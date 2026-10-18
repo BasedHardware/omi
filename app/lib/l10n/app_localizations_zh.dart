@@ -12924,7 +12924,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallYourPlan => '你的套餐';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => '以后再说';
 
   @override
   String get paywallTryAgain => 'Try again';

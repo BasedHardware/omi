@@ -13181,7 +13181,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallYourPlan => 'Az Ön csomagja';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Most nem';
 
   @override
   String get paywallTryAgain => 'Try again';

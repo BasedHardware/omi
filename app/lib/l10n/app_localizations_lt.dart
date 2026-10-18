@@ -13153,7 +13153,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallYourPlan => 'Jūsų planas';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ne dabar';
 
   @override
   String get paywallTryAgain => 'Try again';

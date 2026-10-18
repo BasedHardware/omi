@@ -13159,7 +13159,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get paywallYourPlan => 'Ваш план';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Не зараз';
 
   @override
   String get paywallTryAgain => 'Try again';

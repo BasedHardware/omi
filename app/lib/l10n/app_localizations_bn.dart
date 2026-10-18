@@ -13126,7 +13126,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paywallYourPlan => 'আপনার প্ল্যান';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'এখন নয়';
 
   @override
   String get paywallTryAgain => 'Try again';

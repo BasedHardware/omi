@@ -13190,7 +13190,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paywallYourPlan => 'Вашиот план';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Не сега';
 
   @override
   String get paywallTryAgain => 'Try again';

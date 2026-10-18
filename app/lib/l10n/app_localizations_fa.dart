@@ -13124,7 +13124,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get paywallYourPlan => 'طرح شما';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'اکنون نه';
 
   @override
   String get paywallTryAgain => 'Try again';

@@ -13135,7 +13135,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get paywallYourPlan => 'तुमची योजना';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'आता नाही';
 
   @override
   String get paywallTryAgain => 'Try again';

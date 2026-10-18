@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +13,19 @@ String processingEstimateNumber(BuildContext context, double value) => (NumberFo
       Localizations.localeOf(context).toLanguageTag(),
     )..maximumFractionDigits = 1)
         .format(value);
+
+/// Half-up whole percent. 12.5 is 13, matching the backend wire value.
+int processingWholePercent(double value) {
+  if (!value.isFinite || value <= 0) return 0;
+  return (value + 0.5).floor();
+}
+
+String processingPercentNumber(BuildContext context, double value) => (NumberFormat.decimalPattern(
+      Localizations.localeOf(context).toLanguageTag(),
+    )
+          ..minimumFractionDigits = 0
+          ..maximumFractionDigits = 0)
+        .format(processingWholePercent(value));
 
 /// Shared by the held-recordings card, live banner and Settings. Only the
 /// server's waiting_choice state offers a funded-processing action.
@@ -63,12 +78,12 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
       message: [
         l10n.processingEstimate(
           processingEstimateNumber(context, backlog.estimatedHours),
-          processingEstimateNumber(context, backlog.estimatedPercent),
+          processingPercentNumber(context, backlog.estimatedPercent),
         ),
         if (backlog.exceedsRemaining) l10n.processingNewestFirst,
       ].join('\n\n'),
       confirmLabel: l10n.processingAction,
-      cancelLabel: l10n.notNow,
+      cancelLabel: l10n.paywallNotNow,
     );
     if (!mounted) return;
     if (!confirmed) {
@@ -102,7 +117,7 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
         ? (backlog.budgetExhausted ? l10n.processingPaused : l10n.processingDeferred)
         : backlog.isProcessing
             ? l10n.processingProgress
-            : l10n.processingWaiting(duration, processingEstimateNumber(context, backlog.estimatedPercent));
+            : l10n.processingWaiting(duration, processingPercentNumber(context, backlog.estimatedPercent));
     return Padding(
       padding: widget.surface == 'c'
           ? EdgeInsets.zero
@@ -137,11 +152,17 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
                 label: l10n.processingAction,
                 expand: true,
                 isLoading: _busy,
-                onPressed: _busy ? null : _process,
+                // The button spins from [_busy] only after confirm. Returning
+                // this Future would spin the label for the whole dialog.
+                onPressed: _busy
+                    ? null
+                    : () {
+                        unawaited(_process());
+                      },
               ),
               OmiButton.tertiary(
                 key: Key('processing_backlog_not_now_${widget.surface}'),
-                label: l10n.notNow,
+                label: l10n.paywallNotNow,
                 onPressed: _busy ? null : _postpone,
               ),
             ],

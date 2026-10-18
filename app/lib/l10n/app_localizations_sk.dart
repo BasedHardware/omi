@@ -13125,7 +13125,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get paywallYourPlan => 'Váš plán';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Teraz nie';
 
   @override
   String get paywallTryAgain => 'Try again';

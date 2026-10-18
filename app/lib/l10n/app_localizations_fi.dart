@@ -13134,7 +13134,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallYourPlan => 'Pakettisi';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ei nyt';
 
   @override
   String get paywallTryAgain => 'Try again';

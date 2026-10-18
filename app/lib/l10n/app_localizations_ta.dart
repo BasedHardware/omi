@@ -13219,7 +13219,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paywallYourPlan => 'உங்கள் திட்டம்';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'இப்போது வேண்டாம்';
 
   @override
   String get paywallTryAgain => 'Try again';

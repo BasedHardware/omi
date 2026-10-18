@@ -13181,7 +13181,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallYourPlan => 'మీ ప్లాన్';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'ఇప్పుడు కాదు';
 
   @override
   String get paywallTryAgain => 'Try again';

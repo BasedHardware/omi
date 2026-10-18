@@ -13110,7 +13110,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paywallYourPlan => 'आपकी योजना';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'अभी नहीं';
 
   @override
   String get paywallTryAgain => 'Try again';

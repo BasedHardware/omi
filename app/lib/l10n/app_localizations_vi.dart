@@ -13127,7 +13127,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallYourPlan => 'Gói của bạn';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Để sau';
 
   @override
   String get paywallTryAgain => 'Try again';

@@ -13184,7 +13184,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallYourPlan => 'Planul tău';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Nu acum';
 
   @override
   String get paywallTryAgain => 'Try again';

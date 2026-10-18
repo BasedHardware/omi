@@ -21,6 +21,7 @@ from utils.stt_cap_dispatch import funded_allowance
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, PreconditionFailed
 from database import redis_db
+from database.fsr_read_cache import forget_request_reads, memo
 from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from utils.sync.files import get_timestamp_from_path
 from utils.executors import db_executor, storage_executor, run_blocking
@@ -184,20 +185,41 @@ def remaining_seconds(row: dict) -> float:
     return 0.0
 
 
+def read_held_audio_summary(uid: str) -> dict:
+    """Held-audio summary document.
+
+    Module-level so the Firestore read probe attributes the get to this
+    function rather than a lambda or the request-memo wrapper.
+    """
+    snap = summary_ref(uid).get()
+    if not snap.exists:
+        return {}
+    return snap.to_dict() or {}
+
+
 def ensure_summary(uid: str) -> dict:
     """Resume a fenced, bounded migration before any hold mutation proceeds.
 
+    Repeated reads in one request share the per-request memo. A version-2
+    document is the fast path; an older document still migrates before the
+    memo stores the finished total.
+    """
+    return memo(uid, 'stt_cap_hold_summary', lambda: _ensure_held_audio_summary(uid))
+
+
+def _ensure_held_audio_summary(uid: str) -> dict:
+    """Fenced migration. Creators and checkpoints wait for version 2.
+
     A short summary lease keeps concurrent initializers out of the 400-row
     transactions. Every page fences its owner and cursor together with listing
-    backfill. Creators/checkpoints wait for version 2 before mutating holds;
-    an expired initializer can be replaced without rescanning completed pages.
+    backfill. An expired initializer can be replaced without rescanning
+    completed pages.
     """
-    client = get_firestore_client()
-    ref = summary_ref(uid)
-    snap = ref.get()
-    current = snap.to_dict() if snap.exists else {}
+    current = read_held_audio_summary(uid)
     if current and current.get('version') == 2:
         return current
+    client = get_firestore_client()
+    ref = summary_ref(uid)
     owner = uuid4().hex
     wait_until = time.monotonic() + 30
 
@@ -309,6 +331,7 @@ def _publish(uid: str, identity: str, seconds: float, fields: dict, started_at: 
             batch.commit()
         except AlreadyExists:
             return False  # Preserve the winner's immutable progress checkpoint.
+    forget_request_reads(uid)
     return True
 
 
@@ -541,7 +564,9 @@ def checkpoint(uid: str, ref: Any, token: str, updates: dict) -> bool:
         return True
 
     with external_write_fence(uid):
-        return commit(client.transaction())
+        changed = commit(client.transaction())
+    forget_request_reads(uid)
+    return changed
 
 
 def recovery_cooldown(uid: str) -> bool:

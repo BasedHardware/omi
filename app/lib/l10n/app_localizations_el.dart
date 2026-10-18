@@ -13212,7 +13212,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paywallYourPlan => 'Το πρόγραμμά σας';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Όχι τώρα';
 
   @override
   String get paywallTryAgain => 'Try again';

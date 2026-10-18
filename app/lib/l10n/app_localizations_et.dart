@@ -13123,7 +13123,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallYourPlan => 'Teie plaan';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Mitte praegu';
 
   @override
   String get paywallTryAgain => 'Try again';

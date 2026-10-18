@@ -12948,7 +12948,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallYourPlan => '내 플랜';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => '나중에';
 
   @override
   String get paywallTryAgain => 'Try again';

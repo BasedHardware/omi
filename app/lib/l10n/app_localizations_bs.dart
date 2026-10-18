@@ -13159,7 +13159,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get paywallYourPlan => 'Vaš plan';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ne sada';
 
   @override
   String get paywallTryAgain => 'Try again';

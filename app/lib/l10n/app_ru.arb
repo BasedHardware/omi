@@ -4060,7 +4060,7 @@
     "paywallOtherPlans": "Все тарифы",
     "paywallComparePlans": "Посмотреть тарифы",
     "paywallYourPlan": "Ваш тариф",
-    "paywallNotNow": "Not now",
+    "paywallNotNow": "Не сейчас",
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
     "paywallLoadError": "Couldn't load plans. Check your connection and try again.",

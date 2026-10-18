@@ -4025,7 +4025,7 @@
     "paywallOtherPlans": "すべてのプランを見る",
     "paywallComparePlans": "プランを見る",
     "paywallYourPlan": "現在のプラン",
-    "paywallNotNow": "Not now",
+    "paywallNotNow": "後で",
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
     "paywallLoadError": "Couldn't load plans. Check your connection and try again.",

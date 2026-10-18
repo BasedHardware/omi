@@ -12943,7 +12943,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallYourPlan => '現在のプラン';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => '後で';
 
   @override
   String get paywallTryAgain => 'Try again';

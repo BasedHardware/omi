@@ -13158,7 +13158,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paywallYourPlan => 'Jūsu plāns';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ne tagad';
 
   @override
   String get paywallTryAgain => 'Try again';

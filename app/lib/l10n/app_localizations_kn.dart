@@ -13168,7 +13168,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallYourPlan => 'ನಿಮ್ಮ ಯೋಜನೆ';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'ಈಗ ಬೇಡ';
 
   @override
   String get paywallTryAgain => 'Try again';

@@ -13143,7 +13143,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallYourPlan => 'آپ کا پلان';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'ابھی نہیں';
 
   @override
   String get paywallTryAgain => 'Try again';

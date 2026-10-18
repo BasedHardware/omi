@@ -13130,7 +13130,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get paywallYourPlan => 'Ditt abonnement';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ikke nå';
 
   @override
   String get paywallTryAgain => 'Try again';

@@ -4025,7 +4025,7 @@
     "paywallOtherPlans": "모든 플랜 보기",
     "paywallComparePlans": "요금제 보기",
     "paywallYourPlan": "내 플랜",
-    "paywallNotNow": "Not now",
+    "paywallNotNow": "나중에",
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
     "paywallLoadError": "Couldn't load plans. Check your connection and try again.",

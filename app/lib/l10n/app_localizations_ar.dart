@@ -13056,7 +13056,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paywallYourPlan => 'خطتك';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'ليس الآن';
 
   @override
   String get paywallTryAgain => 'Try again';

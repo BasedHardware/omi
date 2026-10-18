@@ -13131,7 +13131,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get paywallYourPlan => 'Váš plán';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Teď ne';
 
   @override
   String get paywallTryAgain => 'Try again';

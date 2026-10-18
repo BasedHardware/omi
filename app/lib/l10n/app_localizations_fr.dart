@@ -13232,7 +13232,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get paywallYourPlan => 'Votre forfait';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Pas maintenant';
 
   @override
   String get paywallTryAgain => 'Try again';

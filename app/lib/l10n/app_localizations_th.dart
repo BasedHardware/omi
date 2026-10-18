@@ -13063,7 +13063,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get paywallYourPlan => 'แผนของคุณ';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'ไว้ทีหลัง';
 
   @override
   String get paywallTryAgain => 'Try again';

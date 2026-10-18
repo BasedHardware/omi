@@ -8,6 +8,8 @@ import hashlib
 
 from google.cloud import firestore
 
+from database.fsr_read_cache import forget_request_reads, memo
+
 COLLECTION = 'processing_backlog_items'
 SUMMARY = 'processing_backlog'
 
@@ -39,16 +41,30 @@ def items(uid: str, *, firestore_client=None):
     return (firestore_client or get_firestore_client()).collection('users').document(uid).collection(COLLECTION)
 
 
-def read(uid: str) -> dict:
+def read_processing_backlog_summary(uid: str) -> dict:
+    """Deferred-processing summary document.
+
+    Module-level so the Firestore read probe attributes the get to this
+    function rather than a lambda or the request-memo wrapper.
+    """
     return summary_ref(uid).get().to_dict() or {}
+
+
+def read(uid: str) -> dict:
+    return memo(uid, 'processing_backlog_summary', lambda: read_processing_backlog_summary(uid))
 
 
 def stage_transition(
     tx: Any, uid: str, conversation_id: str, existing: dict, incoming: dict, *, firestore_client=None
-) -> None:
-    """Called before the conversation write, in its transaction (encryption unchanged)."""
+) -> bool:
+    """Stage a summary mutation in the caller's transaction.
+
+    Returns whether this attempt changed the summary. The caller drops the
+    request memo only after that transaction commits. Clearing it here would
+    let a concurrent reader refill the memo with the pre-commit document.
+    """
     if 'processing_deferred' not in incoming:
-        return
+        return False
     ref = items(uid, firestore_client=firestore_client).document(conversation_id)
     prior = ref.get(transaction=tx).to_dict() or {}
     row = None
@@ -63,7 +79,7 @@ def stage_transition(
             'queued_at': prior.get('queued_at', time.time()),
         }
     if row == prior or not row and not prior:
-        return
+        return False
     tx.set(
         summary_ref(uid, firestore_client=firestore_client),
         {
@@ -77,6 +93,7 @@ def stage_transition(
         tx.set(ref, row)
     else:
         tx.delete(ref)
+    return True
 
 
 def start(
@@ -131,7 +148,9 @@ def start(
         return {**current, **updates}
 
     with external_write_fence(uid, firestore_client=client):
-        return commit(client.transaction())
+        result = commit(client.transaction())
+    forget_request_reads(uid)
+    return result
 
 
 def claim(uid: str, token: str, period: str) -> str | None:
@@ -150,7 +169,9 @@ def claim(uid: str, token: str, period: str) -> str | None:
         return lease
 
     with external_write_fence(uid, firestore_client=client):
-        return commit(client.transaction())
+        result = commit(client.transaction())
+    forget_request_reads(uid)
+    return result
 
 
 def checkpoint(uid: str, token: str, lease: str, updates: dict) -> bool:
@@ -166,7 +187,9 @@ def checkpoint(uid: str, token: str, lease: str, updates: dict) -> bool:
         return True
 
     with external_write_fence(uid, firestore_client=client):
-        return commit(client.transaction())
+        result = commit(client.transaction())
+    forget_request_reads(uid)
+    return result
 
 
 def finish(uid: str, token: str, lease: str, period: str) -> bool:
@@ -210,18 +233,24 @@ def finish(uid: str, token: str, lease: str, period: str) -> bool:
         return False
 
     with external_write_fence(uid, firestore_client=client):
-        return commit(client.transaction())
+        result = commit(client.transaction())
+    forget_request_reads(uid)
+    return result
 
 
 def remove(uid: str, identity: str) -> None:
     client = get_firestore_client()
+    staged = False
 
     @firestore.transactional
     def commit(tx):
-        stage_transition(tx, uid, identity, {}, {'processing_deferred': False})
+        nonlocal staged
+        staged = stage_transition(tx, uid, identity, {}, {'processing_deferred': False})
 
     with external_write_fence(uid, firestore_client=client):
         commit(client.transaction())
+    if staged:
+        forget_request_reads(uid)
 
 
 def claim_item(uid: str, identity: str) -> str | None:

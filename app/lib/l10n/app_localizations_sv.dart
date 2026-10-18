@@ -13134,7 +13134,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paywallYourPlan => 'Din plan';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Inte nu';
 
   @override
   String get paywallTryAgain => 'Try again';

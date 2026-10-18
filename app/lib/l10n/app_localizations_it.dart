@@ -13199,7 +13199,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get paywallYourPlan => 'Il tuo piano';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Non ora';
 
   @override
   String get paywallTryAgain => 'Try again';

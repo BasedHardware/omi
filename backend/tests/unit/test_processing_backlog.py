@@ -64,6 +64,19 @@ def test_reset_keeps_backlog_waiting_and_estimates_from_totals(monkeypatch, mana
     assert result.estimated_percent == 20 and result.exceeds_remaining
 
 
+def test_estimated_percent_rounds_half_up_to_a_whole_number(monkeypatch):
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-10')
+    allowance = SimpleNamespace(managed=True, remaining_units=1000, budget_units=1000)
+    summary = {'count': 1, 'units': 125, 'seconds': 0, 'state': 'waiting_choice', 'period': '2026-09'}
+    result = backlog.snapshot('synthetic', allowance=allowance, audio={'count': 0, 'seconds': 0}, summary=summary)
+    assert result.estimated_percent == 13
+    summary['units'] = 124
+    result = backlog.snapshot('synthetic', allowance=allowance, audio={'count': 0, 'seconds': 0}, summary=summary)
+    assert result.estimated_percent == 12
+    assert backlog.whole_percent(0) == 0
+
+
 def test_upgrade_over_estimate_asks_but_explicit_choice_accepts_partial(monkeypatch):
     monkeypatch.setattr(funded, 'enabled', lambda: True)
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
