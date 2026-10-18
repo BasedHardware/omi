@@ -2122,6 +2122,31 @@ def _sync_order_patch(client):
     )
 
 
+def _seed_sync_preparation(client, combo, trial):
+    _sync_order_trial(client, combo, trial)
+    client.documents[f'sync_backfill_sequencer/{UID}'] = {
+        'active_job_id': 'shape-job',
+        'active_epoch': 1,
+        'active_state': 'running',
+    }
+
+
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.preparation_candidates',
+        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1},
+        trials=2,
+        setup=_seed_sync_preparation,
+        patchers=(
+            *_SYNC_PROD,
+            _sync_order_patch,
+            _stub('database.sync_backfill_sequencer.preparation_width', 4),
+            _stub('database.sync_backfill_sequencer.backlog_threshold', 8),
+        ),
+    )
+)
+
+
 _add(
     DriverEntry(
         'database.sync_backfill_sequencer.claim_next',

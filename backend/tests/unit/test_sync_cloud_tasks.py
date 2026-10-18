@@ -1868,6 +1868,51 @@ def test_polling_active_terminal_retries_claim_cleanup_before_exposing_result():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('switch', ['on', 'off'])
+async def test_sequenced_task_prepares_only_after_run_lock_and_kill_switch_skips(monkeypatch, switch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(module, pipeline_error=None, latest_job={'status': 'completed'})
+    request.json.return_value.update(lane='backfill', sequencer_epoch=7)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', switch)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    calls = []
+    tasks = []
+
+    def acquire(_job):
+        calls.append('locked')
+        return '1:lock-token'
+
+    def warm(*args):
+        assert calls[0] == 'locked'
+        calls.append(args)
+
+    def start(coro, *, name):
+        task = asyncio.create_task(coro)
+        tasks.append(task)
+        return task
+
+    module.try_acquire_sync_job_run_lock = MagicMock(side_effect=acquire)
+    module.warm_owner = warm
+    module.start_background_task = start
+    try:
+        # Enter the production body with a previously validated sequencer
+        # identity; the public wrapper's lease behavior has separate coverage.
+        response = await module._run_sync_job_body(request, task_retry_count=0)
+        await asyncio.gather(*tasks)
+        assert response.status_code == 200
+        assert calls == (['locked', ('test-uid', 'job-1', 7)] if switch == 'on' else ['locked'])
+        module._run_full_pipeline_background_async.assert_awaited_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+
+@pytest.mark.asyncio
 async def test_sync_task_retry_retains_staged_audio_and_safe_failure_code():
     """A non-final provider failure must remain queued without a terminal outcome."""
 
