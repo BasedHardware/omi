@@ -114,9 +114,9 @@ def main() -> int:
                 )
             exit_code = 1
         invalid = check_private_cohort_payloads(env=args.env, manifest_path=args.manifest, project=args.project)
-        for name in invalid:
-            print(f'ERROR [secret/{name}]: private cohort payload is empty, invalid or inaccessible', file=sys.stderr)
         if invalid:
+            # A fixed diagnostic keeps even manifest-derived identifiers out of the payload error path.
+            print('ERROR: private cohort payload validation failed (empty, invalid or inaccessible)', file=sys.stderr)
             exit_code = 1
         if not missing and not invalid:
             print(f'secret preflight passed for {args.env}')

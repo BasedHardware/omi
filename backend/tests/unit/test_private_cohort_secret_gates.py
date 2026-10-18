@@ -68,7 +68,8 @@ def test_cloud_run_preflight_blocks_empty_or_inaccessible_payload_without_loggin
     assert calls == [['gcloud', 'secrets', 'versions', 'access', 'latest', f'--secret={KEY}', '--project=synthetic']]
     output = capsys.readouterr()
     if expected:
-        assert KEY in output.err
+        assert 'private cohort payload validation failed' in output.err
+        assert KEY not in output.err
     assert 'synthetic-owner' not in output.err + output.out
     assert 'private-value-do-not-log' not in output.err + output.out
     assert 'private-error-do-not-log' not in output.err + output.out

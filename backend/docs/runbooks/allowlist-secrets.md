@@ -122,7 +122,7 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
 1. Provision and verify all thirteen secrets and IAM first. The normal prebuild
    Secret Manager existence and private payload checks must pass. The Cloud Run
    preflight reads each distinct private version in memory, rejects empty parsed
-   CSV cohorts or invalid/empty policy JSON, and emits only failing env names.
+   CSV cohorts or invalid/empty policy JSON, and emits a fixed error message without data-derived identifiers.
    This includes the lineage empty-value case that would otherwise widen admission.
 2. Deploy the complete backend stack (`deploy_targets=all`) at the reviewed SHA.
    Cloud Run deploy inputs use the existing merge strategy: unrelated retained
