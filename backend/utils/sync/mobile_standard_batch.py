@@ -6,8 +6,12 @@ import os
 from database.rollout_cohorts import in_rollout_cohort
 
 
+def mobile_standard_batch_rollout_enabled() -> bool:
+    return os.getenv('MOBILE_STANDARD_BATCH_ENABLED', '').lower() == 'true'
+
+
 def mobile_standard_batch_enabled(uid: str) -> bool:
-    if os.getenv('MOBILE_STANDARD_BATCH_ENABLED', '').lower() != 'true' or not uid:
+    if not mobile_standard_batch_rollout_enabled() or not uid:
         return False
     if in_rollout_cohort(uid, 'mobile-standard-batch'):
         return True

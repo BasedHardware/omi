@@ -137,6 +137,7 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from config.capture_evidence import capture_evidence_dark_write_enabled
+from database.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,
@@ -1987,6 +1988,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
+    if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
+        await warm_rollout_cohorts(payload['uid'])
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None

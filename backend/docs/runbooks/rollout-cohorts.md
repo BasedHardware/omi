@@ -38,7 +38,11 @@ serving executor injects the background submitter into the cache; the database
 module never imports serving utilities. Async misses enqueue a bounded, isolated
 read and deny until it completes; listen and pusher await their initial read for
 up to 1.25 seconds before admission. The HTTP auth
-worker preloads the same cache. No Firestore I/O runs on the event loop.
+worker preloads the same cache. OIDC sync tasks, the shared sync coordinator,
+Dream admission, mobile batch renewal and live-demand handovers await it before
+making rollout decisions. Warm awaits return immediately without a read; cold
+and expired async decisions wait for the bounded read instead of silently
+choosing the legacy path. No Firestore I/O runs on the event loop.
 Expired grants are never served while refreshing. Saturation and read errors
 deny membership; neither an SDK error nor the UID/document path is logged.
 

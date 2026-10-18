@@ -5554,6 +5554,9 @@ Private user rollout membership on Cloud Run, listen and pusher uses the shared
 [Firestore cohort cache](runbooks/rollout-cohorts.md). `OMI_ENV_STAGE` selects the
 separate dev/prod membership maps in the customer data plane. Public manifests
 omit UID allowlist keys; retained env lists serve only as migration fallbacks.
-Membership changes do not require a Helm env override. Seed the intended members
+OIDC sync tasks and delayed inline sync work await the first/expired cohort read
+before selecting lineage routing. Dream admission, mobile batch renewals and
+live-demand handovers also warm membership before deciding; warm checks make
+zero reads. Membership changes do not require a Helm env override. Seed the intended members
 in their original environment before deploying the cohort-aware image and its
 matching manifest/chart together.

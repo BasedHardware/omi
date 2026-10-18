@@ -180,6 +180,8 @@ async def warm_rollout_cohorts(uid: str) -> None:
     if not valid_uid(uid):
         return
     future = _cache.request(uid, background=True)
+    if future.done():
+        return
     try:
         await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=1.25)
     except asyncio.TimeoutError:

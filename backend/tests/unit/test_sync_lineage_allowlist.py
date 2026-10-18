@@ -9,8 +9,11 @@ outcome itself, not merely against "not the new behavior". All ids are
 synthetic; ``u`` and ``uid`` are the owners the shared harnesses write under.
 """
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
+import threading
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -20,6 +23,7 @@ import yaml
 
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
+from database import rollout_cohorts
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_recording_lineage import (  # noqa: F401 - fixtures
@@ -559,3 +563,45 @@ def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(
     assert values == {None}
     assert sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV not in str(prod)
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('membership', [True, False, 'error'])
+async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting_lineage(
+    coordinator, monkeypatch, membership
+):
+    module, stubs = coordinator
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    release = threading.Event()
+    reads = []
+
+    def read(uid):
+        reads.append(uid)
+        assert release.wait(1)
+        if membership == 'error':
+            raise RuntimeError('synthetic unavailable store')
+        return {'prod': {'sync-lineage-resolve': membership}}
+
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for attempt in range(2):
+            # The read can only finish after the coordinator yields to warmup.
+            release.clear()
+
+            async def unblock():
+                await asyncio.sleep(0)
+                release.set()
+
+            pulse = asyncio.create_task(unblock())
+            try:
+                targets, _ = await _coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
+            finally:
+                release.set()
+                await pulse
+            expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if membership is True else [None] * 4
+            assert targets == expected
+            assert reads == ['uid'] * (attempt + 1)
+            # An expired instance must make the same decision as a cold one.
+            cache.entries['uid'].expires = 0

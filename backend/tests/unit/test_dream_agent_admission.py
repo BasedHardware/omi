@@ -1,6 +1,9 @@
 """Eligibility gates real pass/drain admission before reserved-capacity waits."""
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+import threading
 from unittest.mock import AsyncMock, Mock
 
 import fakeredis.aioredis
@@ -8,6 +11,7 @@ import pytest
 
 from config.vertex_reservations import State
 from database import dream_scheduler, dream_store
+from database import rollout_cohorts
 from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from tests.unit.test_dream_harness_runtime import runtime, store, scripted, UID
 from utils import dream_agent, dream_capacity, dream_seed
@@ -106,3 +110,46 @@ async def test_authoritative_store_still_rejects_deleted_allowlisted_owner(admis
     dream_capacity.claim.assert_awaited_once()
     dream_capacity.release.assert_awaited_once()
     model.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('membership', [True, False, 'error'])
+async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission, monkeypatch, membership):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(dream_capacity, 'claim', AsyncMock(return_value=None))
+    release = threading.Event()
+    reads = []
+
+    def read(uid):
+        reads.append(uid)
+        assert release.wait(1)
+        if membership == 'error':
+            raise RuntimeError('synthetic unavailable store')
+        return {'prod': {'dream-agent': membership}}
+
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for attempt in range(2):
+            release.clear()
+
+            async def unblock():
+                await asyncio.sleep(0)
+                release.set()
+
+            pulse = asyncio.create_task(unblock())
+            try:
+                report = await dream_agent.run_pass(UID)
+            finally:
+                release.set()
+                await pulse
+            expected = (
+                {'status': 'waiting', 'reason': 'reserved_capacity'}
+                if membership is True
+                else {'status': 'not_admitted', 'reason': 'ineligible'}
+            )
+            assert report == expected
+            assert reads == [UID] * (attempt + 1)
+            cache.entries[UID].expires = 0
+    assert dream_capacity.claim.await_count == (2 if membership is True else 0)
