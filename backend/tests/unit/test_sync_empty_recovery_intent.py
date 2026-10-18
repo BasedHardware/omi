@@ -96,3 +96,11 @@ def test_owner_deletion_fence_refuses_claim_before_dispatch(document, monkeypatc
         intent.dispatch_once('synthetic-owner', 'stable-segment', dispatch)
     dispatch.assert_not_called()
     assert document.row is None
+
+
+@pytest.mark.parametrize('response', [None, {'invalid': True}, [[], 'multi']])
+def test_cached_malformed_response_keeps_its_shape_without_redispatch(document, response):
+    dispatch = Mock(return_value=response)
+    assert intent.dispatch_once('synthetic-owner', 'stable-segment', dispatch) == response
+    assert intent.dispatch_once('synthetic-owner', 'stable-segment', dispatch) == response
+    dispatch.assert_called_once()

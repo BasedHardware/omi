@@ -1266,12 +1266,23 @@ def _recover_empty_segment(
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
 
     def multilingual_once(audio, **kwargs):
+        def dispatch():
+            response = modulate_prerecorded_from_bytes(audio, **kwargs)
+            if stt_cap_dispatch_enabled():
+                allowance = funded_allowance(uid)
+                record_cap_audio(
+                    'sync',
+                    'accepted',
+                    'modulate',
+                    (len(audio) - 44) / 32000,
+                    allowance.reason == 'plan_allowance_exhausted',
+                )
+            return response
+
         try:
-            return dispatch_empty_recovery_once(
-                uid,
-                compute_sync_segment_id(uid, path),
-                lambda: modulate_prerecorded_from_bytes(audio, **kwargs),
-            )
+            return dispatch_empty_recovery_once(uid, compute_sync_segment_id(uid, path), dispatch)
+        except (ValueError, TypeError):
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate') from None
         except Exception as error:
             raise failure_from_exception(error, provider='modulate') from None
 
@@ -1291,9 +1302,6 @@ def _recover_empty_segment(
     )
     if not spans:
         return None
-    if stt_cap_dispatch_enabled():
-        allowance = funded_allowance(uid)
-        record_cap_audio('sync', 'accepted', 'modulate', duration, allowance.reason == 'plan_allowance_exhausted')
     transcript_segments = postprocess_words(words, 0)
     if not transcript_segments:
         raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate')

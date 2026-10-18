@@ -582,3 +582,26 @@ def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monke
     else:
         assert not errors
         assert outcome['outcome'].value == ('success' if result == 'speech' else 'expected_silence')
+
+
+def test_cached_multilingual_response_does_not_increment_submitted_audio(pipeline, monkeypatch):
+    module, _ = pipeline
+    module.stt_cap_dispatch_enabled = lambda: True
+    module.sync_allowed = lambda uid: True
+    module.compute_sync_segment_id = lambda *args: 'stable-synthetic-segment'
+    module.dispatch_empty_recovery_once = lambda uid, sid, dispatch: (
+        [{'text': 'Synthetic', 'timestamp': [0, 3]}],
+        'vi',
+    )
+    module.modulate_prerecorded_from_bytes = MagicMock()
+    module.record_cap_audio = MagicMock()
+
+    def inspect_and_recover(path, *, transcribe, authorize):
+        authorize()
+        words, language = transcribe(b'synthetic-canonical-wav')
+        return words, language, 3, [{'start': 0, 'end': 3}]
+
+    monkeypatch.setattr(module.empty_recovery, 'recover', inspect_and_recover)
+    assert module._recover_empty_segment('synthetic.wav', 'synthetic-owner', 'parakeet', 'fresh', None, None)
+    module.modulate_prerecorded_from_bytes.assert_not_called()
+    module.record_cap_audio.assert_not_called()
