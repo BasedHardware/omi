@@ -246,6 +246,24 @@ def test_reconcile_entry_point_requires_existing_worker_oidc(monkeypatch):
     assert response.status_code == 403
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+def test_reconcile_and_metrics_routes_share_flagged_async_coordinator(api, monkeypatch, enabled):
+    from unittest.mock import Mock, AsyncMock
+
+    client, _ = api
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
+    service = module.serving_for_stage('dev')
+    service.projector = Mock()
+    service.projector.start_followups = AsyncMock()
+    service.recovery = Mock()
+    response = client.post('/v2/batch-pipeline/reconcile', json={'stage': 'dev'})
+    assert response.status_code == 200 and response.json() == {'status': 'reconciled'}
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    assert service.projector.sweep.call_count == 2
+    assert service.projector.start_followups.await_count == (2 if enabled else 0)
+    service.recovery.sweep.assert_called_once()
+
+
 def test_read_only_metrics_serves_fresh_gauges_while_drain_is_blocked(api, monkeypatch):
     client, store = api
     monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'true')
