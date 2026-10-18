@@ -134,7 +134,8 @@ async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pas
     f.projector.store.store.projection_pending.assert_called()
     f.projector.start_followups.assert_awaited_once()
     release.set()
-    await asyncio.gather(*list(f.runner.tasks.values()))
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
     await asyncio.sleep(0)
     assert not f.runner.tasks
     assert f.receipts['head']['state'] == 'ready'
@@ -180,7 +181,8 @@ async def test_followups_are_bounded_and_duplicate_sweeps_coalesce(followup, mon
     await f.runner.schedule()
     assert list(f.runner.tasks) == ['head']
     release.set()
-    await asyncio.gather(*list(f.runner.tasks.values()))
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
 
 
 @pytest.mark.asyncio
@@ -229,7 +231,28 @@ async def test_partial_assignments_do_not_take_slots_and_failed_front_rotates(fo
     )
     f.runner.run = AsyncMock()
     await f.runner.schedule()
-    await asyncio.gather(*list(f.runner.tasks.values()))
-    await f.runner.schedule()
-    await asyncio.gather(*list(f.runner.tasks.values()))
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
     assert [call.args[0] for call in f.runner.run.await_args_list] == ['head', 'later']
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancellation_does_not_launch_remaining_outbox_wakeups(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    started = asyncio.Event()
+
+    async def wait(_):
+        started.set()
+        await asyncio.Event().wait()
+
+    f.runner.run = AsyncMock(side_effect=wait)
+    await f.runner.schedule()
+    await started.wait()
+    tasks = list(f.runner.tasks.values())
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.sleep(0)
+    assert not f.runner.tasks and not f.runner.pending
+    assert f.runner.run.await_count == 1

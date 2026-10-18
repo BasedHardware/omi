@@ -8,6 +8,7 @@ existing ready/enrichment transaction and content ledger own idempotency.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import logging
 from typing import TYPE_CHECKING
 
@@ -30,6 +31,8 @@ class ProjectionFollowups:
         self.projector = projector
         self.tasks: dict[str, asyncio.Task] = {}
         self.after: str | None = None
+        self.pending: deque[str] = deque()
+        self.closed = False
 
     def candidates(self):
         store = self.projector.store
@@ -48,15 +51,25 @@ class ProjectionFollowups:
         if self.after in segments:
             offset = segments.index(self.after) + 1
             segments = segments[offset:] + segments[:offset]
-        for segment in segments:
-            if len(self.tasks) >= MAX_FOLLOWUPS:
-                break
-            if segment in self.tasks:
-                continue
+        self.pending = deque(segment for segment in segments if segment not in self.tasks)
+        self.launch()
+
+    def launch(self):
+        while self.pending and len(self.tasks) < MAX_FOLLOWUPS and not self.closed:
+            segment = self.pending.popleft()
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             self.after = segment
-            task.add_done_callback(lambda done, sid=segment: self.tasks.pop(sid, None))
+            task.add_done_callback(lambda done, sid=segment: self.finished(sid, done))
+
+    def finished(self, segment, task):
+        self.tasks.pop(segment, None)
+        if task.cancelled():
+            # Global background-task shutdown must not replenish a cancelled
+            # worker with another task after the shutdown snapshot was taken.
+            self.closed = True
+            self.pending.clear()
+        self.launch()  # Refill immediately, without another 20s serving sleep.
 
     def read_persisted(self, segment):
         store = self.projector.store

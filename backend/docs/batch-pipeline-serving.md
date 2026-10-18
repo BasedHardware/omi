@@ -475,7 +475,8 @@ segment independence or change to transcript visibility order is assumed.
 The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
 use the same async coordinator. Their pass persists the bounded pending page,
 then schedules at most four tracked follow-ups per process without awaiting
-slow effects. Persisted result receipts are the durable outbox. Partial
+slow effects. A finished task immediately refills its slot from the bounded
+page, without an additional 20-second serving sleep. Cancellation stops refill. Persisted result receipts are the durable outbox. Partial
 assignment rows do not consume follow-up slots; a rotating cursor prevents
 repeated failures at the front of the page from monopolizing those slots.
 A separate advisory segment claim coalesces replicas; it never owns the
