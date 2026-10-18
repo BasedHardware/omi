@@ -13956,4 +13956,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Нешто тргна наопаку при сумирањето на овој разговор.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Зачувано $saved од $total аудио';
+  }
 }

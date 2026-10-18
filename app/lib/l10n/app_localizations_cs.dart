@@ -13894,4 +13894,9 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Při shrnování této konverzace se něco pokazilo.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Uloženo $saved z $total zvuku';
+  }
 }

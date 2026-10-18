@@ -13873,4 +13873,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ऑडियो सहेजा गया, कुल $total';
+  }
 }

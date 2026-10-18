@@ -13888,4 +13888,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Pri zhrnutí tohto rozhovoru sa niečo pokazilo.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Uložené $saved z $total zvuku';
+  }
 }

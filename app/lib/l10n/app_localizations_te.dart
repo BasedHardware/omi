@@ -13947,4 +13947,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ఆడియో సేవ్ చేయబడింది, మొత్తం $total';
+  }
 }

@@ -4280,5 +4280,6 @@
     "summaryLimitTitle": "Достигнут лимит сводок",
     "summaryLimitBody": "За последний час вы несколько раз пересоздали сводки. Повторите попытку позже.",
     "summaryFailedTitle": "Не удалось обобщить",
-    "summaryFailedBody": "При обобщении этого разговора что-то пошло не так."
+    "summaryFailedBody": "При обобщении этого разговора что-то пошло не так.",
+    "playbackPartialAudioSaved": "Сохранено {saved} из {total} аудио"
 }

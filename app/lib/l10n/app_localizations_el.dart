@@ -13983,4 +13983,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Αποθηκεύτηκαν $saved από $total ήχου';
+  }
 }

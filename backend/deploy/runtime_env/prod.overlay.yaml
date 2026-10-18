@@ -35,6 +35,12 @@ overlay:
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
+        BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+          value: 'true'
+          category: rollout
+        BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+          value: 'true'
+          category: rollout
         BATCH_PIPELINE_API_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
@@ -728,6 +734,12 @@ overlay:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1044,6 +1056,12 @@ overlay:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1136,11 +1154,17 @@ overlay:
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
             category: rollout
+          SYNC_DURABLE_REDRIVE_GUARD:
+            value: 'true'
+            category: rollout
           SYNC_JOB_COMPLETED_TTL_SECONDS:
             value: '21600'
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
+            category: rollout
+          SYNC_LEGACY_COMPLETION_CONVERGENCE:
+            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
@@ -1381,6 +1405,12 @@ overlay:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'true'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
             value: 'false'
             category: rollout
@@ -1473,11 +1503,17 @@ overlay:
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
             category: rollout
+          SYNC_DURABLE_REDRIVE_GUARD:
+            value: 'true'
+            category: rollout
           SYNC_JOB_COMPLETED_TTL_SECONDS:
             value: '21600'
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
+            category: rollout
+          SYNC_LEGACY_COMPLETION_CONVERGENCE:
+            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
@@ -1634,6 +1670,12 @@ overlay:
             value: '0'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:

@@ -119,7 +119,11 @@ function sources(): SeriesSources & WallSources {
     finops: vi.fn(async () => ({
       mrr: finopsMrr,
     })),
-    planCost: vi.fn(async () => ({ plans: {}, sttMeasured: {} })),
+    planCost: vi.fn(async () => ({
+      plans: {},
+      sttMeasured: {},
+      saasMeasured: {},
+    })),
   };
 }
 const value = (wall: WallPayload, id: string) =>
@@ -473,12 +477,16 @@ describe("margin by plan (allocated estimate)", () => {
     plus: 300,
     architect: 200,
   };
-  const legs = async (sttMeasured: Record<string, number> = {}) => ({
+  const legs = async (
+    sttMeasured: Record<string, number> = {},
+    saasMeasured: Record<string, number> = {}
+  ) => ({
     billing: await billing(),
     // FinOps cost settles ~D−3: days 6..3, with day 5 missing.
     planCost: {
       plans: { [day(6)]: plans(1), [day(4)]: plans(1.1), [day(3)]: plans(1) },
       sttMeasured,
+      saasMeasured,
     },
     // The book is missing day 4 (like 2026-09-29) and has today's snapshot.
     finops: {
@@ -532,7 +540,7 @@ describe("margin by plan (allocated estimate)", () => {
       `Margin through ${new Date(`${day(3)}T00:00:00Z`).toLocaleDateString(
         "en-US",
         { month: "short", day: "numeric", timeZone: "UTC" }
-      )} · STT & SaaS est. as of Oct 16`
+      )} · STT estimate · SaaS estimate as of Oct 16`
     );
   });
 
@@ -551,7 +559,35 @@ describe("margin by plan (allocated estimate)", () => {
       1
     );
     expect(f.marginStatus[0].text).toMatch(
-      /· STT measured · SaaS est\. as of Oct 16$/
+      /· STT measured · SaaS estimate as of Oct 16$/
+    );
+  });
+
+  it("uses measured Mercury SaaS, labels its source, and yields the total", async () => {
+    const estimate = assembleSeries("health", await legs(), null, now);
+    const f = assembleSeries(
+      "health",
+      await legs({}, { [day(3)]: 0 }),
+      null,
+      now
+    );
+    const at = (rows: Row[]) =>
+      rows.find((r) => String(r.date).startsWith(day(3)))!;
+    expect(at(f.cost)).toMatchObject({
+      saas: 0,
+      saasSource: "measured",
+      saasMeasuredUsd: 0,
+      saasEstimateUsd: null,
+    });
+    expect(at(estimate.cost)).toMatchObject({
+      saasSource: "estimate",
+      saasMeasuredUsd: null,
+    });
+    expect(
+      (at(f.cost).total as number) - (at(estimate.cost).total as number)
+    ).toBeCloseTo(-(at(estimate.cost).saas as number), 6);
+    expect(f.marginStatus[0].text).toMatch(
+      /· STT estimate · measured SaaS \(Mercury\) as of Oct 16$/
     );
   });
 
@@ -565,7 +601,7 @@ describe("margin by plan (allocated estimate)", () => {
       expect.objectContaining({ line: "SaaS", asOf: "2026-10-16", stale: 1 }),
     ]);
     expect(f.marginStatus[0].text).toBe(
-      "Margin through — · STT & SaaS est. as of Oct 16 (stale)"
+      "Margin through — · STT estimate · SaaS estimate as of Oct 16 (stale)"
     );
   });
 

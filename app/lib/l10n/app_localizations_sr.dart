@@ -13902,4 +13902,9 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Дошло је до грешке приликом сажимања овог разговора.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Сачувано $saved од $total аудија';
+  }
 }

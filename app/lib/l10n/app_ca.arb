@@ -4245,5 +4245,6 @@
     "summaryLimitTitle": "S'ha arribat al límit de resums",
     "summaryLimitBody": "Has tornat a generar diversos resums durant l'última hora. Torna-ho a provar més tard.",
     "summaryFailedTitle": "No s'ha pogut resumir",
-    "summaryFailedBody": "Alguna cosa ha anat malament en resumir aquesta conversa."
+    "summaryFailedBody": "Alguna cosa ha anat malament en resumir aquesta conversa.",
+    "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio"
 }

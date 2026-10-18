@@ -13885,4 +13885,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Selle vestluse kokkuvõtte tegemisel läks midagi valesti.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Salvestatud $saved / $total helist';
+  }
 }

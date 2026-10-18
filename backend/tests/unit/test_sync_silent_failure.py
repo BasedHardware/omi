@@ -767,6 +767,7 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.sync.content_id',
+    'utils.sync.empty_recovery_intent',
     'utils.sync.assignment',
     'utils.sync.merge_audio',
     'utils.sync.merge_dedupe',
@@ -901,6 +902,12 @@ class TestProcessSegmentReal:
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
+            side_effect=AssertionError('flag-off processing must not dispatch multilingual recovery')
+        )
+        sys.modules['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
+            side_effect=AssertionError('flag-off processing must not claim recovery')
+        )
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
             return_value=('deepgram', 'multi', 'nova-3')

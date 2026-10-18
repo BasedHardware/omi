@@ -4245,5 +4245,6 @@
     "summaryLimitTitle": "Tiivistelmien raja saavutettu",
     "summaryLimitBody": "Olet luonut useita tiivistelmiä uudelleen viimeisen tunnin aikana. Yritä myöhemmin uudelleen.",
     "summaryFailedTitle": "Tiivistäminen epäonnistui",
-    "summaryFailedBody": "Jokin meni vikaan tätä keskustelua tiivistettäessä."
+    "summaryFailedBody": "Jokin meni vikaan tätä keskustelua tiivistettäessä.",
+    "playbackPartialAudioSaved": "Ääntä tallennettu {saved} / {total}"
 }

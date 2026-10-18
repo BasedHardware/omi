@@ -13925,4 +13925,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Sesuatu tidak kena semasa meringkaskan perbualan ini.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved daripada $total audio disimpan';
+  }
 }

@@ -13906,4 +13906,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Terjadi kesalahan saat meringkas percakapan ini.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved dari $total audio tersimpan';
+  }
 }

@@ -13952,4 +13952,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'A apărut o problemă la rezumarea acestei conversații.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved din $total audio salvat';
+  }
 }

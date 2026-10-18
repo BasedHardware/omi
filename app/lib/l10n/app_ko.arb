@@ -4245,5 +4245,6 @@
     "summaryLimitTitle": "요약 한도 도달",
     "summaryLimitBody": "지난 1시간 동안 요약을 여러 번 다시 생성했습니다. 나중에 다시 시도해 주세요.",
     "summaryFailedTitle": "요약하지 못함",
-    "summaryFailedBody": "이 대화를 요약하는 중 문제가 발생했습니다."
+    "summaryFailedBody": "이 대화를 요약하는 중 문제가 발생했습니다.",
+    "playbackPartialAudioSaved": "오디오 {saved} 저장됨 (전체 {total})"
 }

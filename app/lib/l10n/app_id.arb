@@ -4280,5 +4280,6 @@
     "summaryLimitTitle": "Batas ringkasan tercapai",
     "summaryLimitBody": "Anda telah membuat ulang beberapa ringkasan dalam satu jam terakhir. Coba lagi nanti.",
     "summaryFailedTitle": "Tidak dapat meringkas",
-    "summaryFailedBody": "Terjadi kesalahan saat meringkas percakapan ini."
+    "summaryFailedBody": "Terjadi kesalahan saat meringkas percakapan ini.",
+    "playbackPartialAudioSaved": "{saved} dari {total} audio tersimpan"
 }

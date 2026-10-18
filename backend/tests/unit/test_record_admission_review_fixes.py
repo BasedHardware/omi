@@ -1,5 +1,7 @@
 """Review regressions: zero dark-path IO, refreshed ownership, field-only writes."""
 
+import asyncio
+
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -74,8 +76,10 @@ async def test_serving_dark_tick_adds_no_pending_record_query(monkeypatch, enabl
     drain = AsyncMock()
     monkeypatch.setattr(serving, 'drain_recordings', drain)
     stop, coro = serving.start_serving_from_env()
-    service.reconcile = lambda **kwargs: stop.set()
-    await coro
+    reconcile = AsyncMock(side_effect=lambda **kwargs: stop.set())
+    service.reconcile_async = reconcile
+    await asyncio.wait_for(coro, timeout=1)
+    reconcile.assert_awaited_once_with(recover_quarantine=True)
     assert drain.await_count == int(enabled)
 
 

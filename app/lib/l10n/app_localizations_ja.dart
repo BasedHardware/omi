@@ -13700,4 +13700,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'この会話の要約中に問題が発生しました。';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '音声を $saved 保存済み（全体 $total）';
+  }
 }

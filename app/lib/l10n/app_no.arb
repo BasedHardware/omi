@@ -4245,5 +4245,6 @@
     "summaryLimitTitle": "Grensen for oppsummeringer er nådd",
     "summaryLimitBody": "Du har generert flere oppsummeringer på nytt den siste timen. Prøv igjen senere.",
     "summaryFailedTitle": "Kunne ikke oppsummere",
-    "summaryFailedBody": "Noe gikk galt under oppsummeringen av denne samtalen."
+    "summaryFailedBody": "Noe gikk galt under oppsummeringen av denne samtalen.",
+    "playbackPartialAudioSaved": "{saved} av {total} lyd lagret"
 }

@@ -13878,4 +13878,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Something went wrong while summarizing this conversation.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved of $total audio saved';
+  }
 }

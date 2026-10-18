@@ -24662,6 +24662,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Something went wrong while summarizing this conversation.'**
   String get summaryFailedBody;
+
+  /// Conversation player label replacing remaining time when the stored audio covers much less than the conversation, e.g. "0:03 of 5:49 audio saved"
+  ///
+  /// In en, this message translates to:
+  /// **'{saved} of {total} audio saved'**
+  String playbackPartialAudioSaved(String saved, String total);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

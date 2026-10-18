@@ -11668,5 +11668,6 @@
     "summaryLimitTitle": "সারসংক্ষেপের সীমা পূর্ণ হয়েছে",
     "summaryLimitBody": "আপনি গত এক ঘণ্টায় একাধিক সারসংক্ষেপ পুনরায় তৈরি করেছেন। পরে আবার চেষ্টা করুন।",
     "summaryFailedTitle": "সারসংক্ষেপ করা যায়নি",
-    "summaryFailedBody": "এই কথোপকথনের সারসংক্ষেপ করার সময় কিছু ভুল হয়েছে।"
+    "summaryFailedBody": "এই কথোপকথনের সারসংক্ষেপ করার সময় কিছু ভুল হয়েছে।",
+    "playbackPartialAudioSaved": "{saved} অডিও সংরক্ষিত, মোট {total}"
 }

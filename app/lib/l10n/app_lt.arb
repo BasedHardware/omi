@@ -4245,5 +4245,6 @@
     "summaryLimitTitle": "Pasiektas santraukų limitas",
     "summaryLimitBody": "Per pastarąją valandą kelis kartus iš naujo sugeneravote santraukas. Bandykite vėliau.",
     "summaryFailedTitle": "Nepavyko apibendrinti",
-    "summaryFailedBody": "Apibendrinant šį pokalbį kažkas nutiko."
+    "summaryFailedBody": "Apibendrinant šį pokalbį kažkas nutiko.",
+    "playbackPartialAudioSaved": "Išsaugota {saved} iš {total} garso"
 }

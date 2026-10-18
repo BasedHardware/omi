@@ -13706,4 +13706,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get summaryFailedBody => '이 대화를 요약하는 중 문제가 발생했습니다.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '오디오 $saved 저장됨 (전체 $total)';
+  }
 }

@@ -4245,5 +4245,6 @@
     "summaryLimitTitle": "Sasniegts kopsavilkumu limits",
     "summaryLimitBody": "Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.",
     "summaryFailedTitle": "Neizdevās apkopot",
-    "summaryFailedBody": "Apkopojot šo sarunu, radās kļūda."
+    "summaryFailedBody": "Apkopojot šo sarunu, radās kļūda.",
+    "playbackPartialAudioSaved": "Saglabāts {saved} no {total} audio"
 }

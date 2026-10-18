@@ -13906,4 +13906,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved آڈیو محفوظ ہوا، کل $total';
+  }
 }

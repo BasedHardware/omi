@@ -4341,5 +4341,6 @@
     "summaryLimitTitle": "Elérted az összefoglalók korlátját",
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",
     "summaryFailedTitle": "Nem sikerült összefoglalni",
-    "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben."
+    "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben.",
+    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve"
 }

@@ -13964,4 +13964,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Alguna cosa ha anat malament en resumir aquesta conversa.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'S\'han desat $saved de $total d\'àudio';
+  }
 }

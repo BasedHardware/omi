@@ -13898,4 +13898,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Jokin meni vikaan tätä keskustelua tiivistettäessä.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Ääntä tallennettu $saved / $total';
+  }
 }

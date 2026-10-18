@@ -11668,5 +11668,6 @@
     "summaryLimitTitle": "خلاصے کی حد پوری ہو گئی",
     "summaryLimitBody": "آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔",
     "summaryFailedTitle": "خلاصہ نہیں ہو سکا",
-    "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔"
+    "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔",
+    "playbackPartialAudioSaved": "{saved} آڈیو محفوظ ہوا، کل {total}"
 }

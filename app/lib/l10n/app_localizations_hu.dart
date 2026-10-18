@@ -13951,4 +13951,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Hiba történt a beszélgetés összefoglalása közben.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved / $total hang elmentve';
+  }
 }
