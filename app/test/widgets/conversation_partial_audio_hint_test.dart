@@ -91,21 +91,12 @@ void main() {
 
     test('audio that covers the conversation, give or take a few seconds, is not', () {
       expect(savedAudioIsPartial(savedSeconds: 349, conversationSeconds: 349), isFalse);
-      expect(
-        savedAudioIsPartial(savedSeconds: 341, conversationSeconds: 349),
-        isFalse,
-        reason: 'under the 10 s shortfall floor',
-      );
-      expect(
-        savedAudioIsPartial(savedSeconds: 95, conversationSeconds: 100),
-        isFalse,
-        reason: 'within the 90% coverage band',
-      );
-      expect(
-        savedAudioIsPartial(savedSeconds: 360, conversationSeconds: 349),
-        isFalse,
-        reason: 'audio longer than the transcript is never partial',
-      );
+      expect(savedAudioIsPartial(savedSeconds: 341, conversationSeconds: 349), isFalse,
+          reason: 'under the 10 s shortfall floor');
+      expect(savedAudioIsPartial(savedSeconds: 95, conversationSeconds: 100), isFalse,
+          reason: 'within the 90% coverage band');
+      expect(savedAudioIsPartial(savedSeconds: 360, conversationSeconds: 349), isFalse,
+          reason: 'audio longer than the transcript is never partial');
     });
 
     test('nothing saved or nothing spoken is not a partial recording', () {
