@@ -673,6 +673,45 @@ def finish_expired_job(
     return released
 
 
+def owner_release_due(
+    uid: str,
+    job_id: str,
+    epoch: int,
+    *,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Read-only form of :func:`finish_expired_job`'s release fence.
+
+    Returns whether the owner still names this job/epoch and its deadline
+    (dispatch retry while dispatching, else the lease) has passed — the
+    exact preconditions under which ``finish_expired_job`` would release.
+    The budget-chain finalizer uses it after acquiring the finalization run
+    lock to prove no delivery renewed the lease after the sweeper's
+    expired-owner read, without mutating the owner.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def check(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
+            return False
+        dispatching = owner.get('active_state') == 'dispatching'
+        deadline = owner.get('dispatch_retry_at' if dispatching else 'lease_expires_at')
+        if not isinstance(deadline, datetime) or deadline > current:
+            return False
+        return True
+
+    try:
+        return check(client.transaction())
+    except NotFound:
+        return False
+
+
 def redrive_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:

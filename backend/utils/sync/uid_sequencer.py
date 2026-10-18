@@ -27,9 +27,12 @@ from database.sync_jobs import (
     try_acquire_job_run_lock,
     try_acquire_sync_job_run_lock,
     release_job_run_lock,
+    delete_sync_job_run_lock_epoch,
 )
+from database.sync_ledger import release_sync_content_claim_after_job_retired
 from utils.cloud_tasks import enqueue_sync_job, get_sync_tasks_max_attempts
 from utils.sync import backfill_cutover, stage as sync_stage
+from utils.sync.backfill import release_backfill_slot
 from utils.sync.backfill_order import newest_first
 
 logger = logging.getLogger(__name__)
@@ -228,7 +231,7 @@ def _converge_capped_ledger_completion(*, job_id: str, uid: Any, content_id: Any
     )
 
 
-def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
+def _finalize_abandoned_budget_chain_job(uid: str, job_id: str, epoch: int, *, now: datetime | None = None) -> bool:
     """Terminalize a capped budget-deferral chain's Redis job, conservatively.
 
     The sweep is about to release the sequencer owner because the chain spent
@@ -256,11 +259,12 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     failed, converged to a durably completed result, was already terminal, or
     vanished (its own expiry owns recovery); ``False`` when the owner must be
     retained — a still-live deferred marker (the final scheduled replacement
-    has not run yet), a lock another writer holds, or a transient Redis
-    read/write failure — which the caller must retry before releasing the
-    owner, because after the release no sweep retains an identity for this
-    job and a skipped handoff would strand the accepted job and its durable
-    claim until the TTL.
+    has not run yet), a lock another writer holds, an owner whose lease a
+    final replacement renewed after the sweeper's expired read, or a
+    transient Redis read/write failure — which the caller must retry before
+    releasing the owner, because after the release no sweep retains an
+    identity for this job and a skipped handoff would strand the accepted
+    job and its durable claim until the TTL.
     """
     try:
         job = get_sync_job(job_id)
@@ -271,8 +275,17 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
             type(error).__name__,
         )
         return False
-    if not isinstance(job, dict) or job.get('status') in TERMINAL_STATUSES:
+    if not isinstance(job, dict):
         return True
+    if job.get('status') in TERMINAL_STATUSES:
+        # Already terminal — the final replacement's own handler path (which
+        # performs this exact cleanup), or a prior sweep's converged handoff
+        # whose cleanup failed and retained the owner. Run the cleanup again:
+        # every step compares against this exact job, so a completed cleanup
+        # is inert while a failed one gets its retry here.
+        return _cleanup_capped_chain_job_side_effects(
+            job, release_claim=job.get('status') in ('failed', 'partial_failure')
+        )
     if job.get('status') not in ('processing', 'queued'):
         return True
     # A still-future deferred_until marker means the chain's final scheduled
@@ -315,6 +328,29 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
         # Retain the owner; the next sweep re-checks after the lock's TTL.
         logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=lock_held job_id=%s', job_id)
         return False
+    # The final replacement can begin after its marker horizon while still
+    # queued behind the lane's concurrency cap: it renews the Firestore lease
+    # in begin_job after the sweep's expired-owner read but before its Redis
+    # acquire, so this finalization lock can be acquired in that gap. Its
+    # later finish_expired_job correctly refuses to release the renewed
+    # owner, but it cannot undo a failure already published against the
+    # live attempt. Re-check the release fence the sweeper acted on — the
+    # owner must still name this job/epoch with its lease (or dispatch
+    # retry) deadline past — before writing any terminal state; a renewal
+    # retains the owner so the replacement's own terminal write decides.
+    try:
+        release_due = registry.owner_release_due(uid, job_id, epoch, now=now)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=fence_recheck_failed '
+            'job_id=%s exception_type=%s',
+            job_id,
+            type(error).__name__,
+        )
+        return False
+    if not release_due:
+        logger.info('event=sync_uid_sequencer action=budget_chain_finalize outcome=owner_renewed job_id=%s', job_id)
+        return False
     try:
         # A fence job may have durably completed its content ledger after
         # budget cancellation cancelled the await but before the terminal
@@ -341,6 +377,15 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
                 logger.info(
                     'event=sync_uid_sequencer action=budget_chain_finalize outcome=ledger_converged job_id=%s', job_id
                 )
+                # The converged completion is the terminal state the redelivery
+                # branches would own: finish their exact-job cleanup before the
+                # caller can release the owner. A completed content's claim
+                # persists as the re-upload dedupe, mirroring those branches.
+                converged_status = converged.get('status') if isinstance(converged, dict) else None
+                if not _cleanup_capped_chain_job_side_effects(
+                    job, release_claim=converged_status in ('failed', 'partial_failure')
+                ):
+                    return False
                 return True
         try:
             mutation = fenced_mark_job_failed(
@@ -359,6 +404,12 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
             return False
         if mutation.applied:
             logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
+            # The sweep is now this failure's only cleanup owner: run the
+            # terminal branch's exact-job cleanup (slot, claim, run-lock epoch)
+            # before the caller releases the sequencer owner, so the lane and
+            # the content's re-upload path do not stay blocked past this sweep.
+            if not _cleanup_capped_chain_job_side_effects(job, release_claim=True):
+                return False
             return True
         if mutation.outcome in (
             FencedSyncJobMutationOutcome.MISSING_JOB,
@@ -387,6 +438,17 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
             )
             return False
         logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
+        # Another writer terminalized the job between the lost CAS and this
+        # re-read: its own path performs the exact-job cleanup, but it has no
+        # obligation to run before this sweep releases the owner — run the
+        # cleanup here too; idempotence makes the overlap inert.
+        if not _cleanup_capped_chain_job_side_effects(
+            settled if isinstance(settled, dict) else job,
+            release_claim=(
+                settled.get('status') in ('failed', 'partial_failure') if isinstance(settled, dict) else True
+            ),
+        ):
+            return False
         return True
     finally:
         # The finalization lock protects nothing past this helper: the job is
@@ -397,6 +459,50 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
             release_job_run_lock(job_id, lock_token)
         except Exception:
             pass
+
+
+def _cleanup_capped_chain_job_side_effects(job: dict, *, release_claim: bool) -> bool:
+    """Release a capped chain's per-UID slot and durable content claim.
+
+    The terminal branch of a redelivery performs this exact-job cleanup for
+    every terminal transition, but the capped chain's handoff releases the
+    sequencer owner with no later terminal poll — sequenced jobs are exempt
+    from stale polling and the task's attempt contract is spent — so nothing
+    else runs it: the backfill slot would hold the UID's lane for its ~2-day
+    TTL and re-uploading the same content would deflect off the ledger claim
+    until its 45-day TTL. Every step is idempotent (compare-and-delete
+    semantics against the exact job), so a partially completed cleanup
+    retries safely on the next sweep; ``False`` keeps the owner on the books
+    for exactly that retry. ``release_claim`` carries the settled status
+    decision — a completed content's claim deliberately persists as the
+    re-upload dedupe, mirroring the redelivery branches. A job dict without
+    a uid has no exact identity to clean (corrupt read): nothing to do.
+    """
+    uid = job.get('uid')
+    if not isinstance(uid, str) or not uid:
+        logger.info('event=sync_uid_sequencer action=budget_chain_finalize outcome=cleanup_skipped_no_identity')
+        return True
+    job_id = job.get('job_id')
+    if not isinstance(job_id, str) or not job_id:
+        logger.info('event=sync_uid_sequencer action=budget_chain_finalize outcome=cleanup_skipped_no_identity')
+        return True
+    try:
+        if job.get('lane') == 'backfill':
+            release_backfill_slot(uid, job_id)
+        content_id = job.get('content_id')
+        if content_id and release_claim:
+            release_sync_content_claim_after_job_retired(uid, content_id, job_id)
+        if sync_job_uses_ledger_fence(job):
+            delete_sync_job_run_lock_epoch(job_id)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=side_effect_cleanup_failed '
+            'job_id=%s exception_type=%s',
+            job_id,
+            type(error).__name__,
+        )
+        return False
+    return True
 
 
 def reconcile_uid(
@@ -502,7 +608,7 @@ def reconcile_uid(
         # so the next sweep retries the finalize-and-release sequence; only a
         # settled job releases the owner and lets the lane advance to the
         # next waiting capture.
-        if not _finalize_abandoned_budget_chain_job(job_id):
+        if not _finalize_abandoned_budget_chain_job(uid, job_id, epoch, now=current):
             registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
             return 'finalize_deferred'
         if registry.finish_expired_job(uid, job_id, epoch, 'budget_chain_exhausted', now=current):

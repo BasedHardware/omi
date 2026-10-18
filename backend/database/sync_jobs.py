@@ -1196,6 +1196,19 @@ def release_job_run_lock(job_id: str, token: str) -> None:
         logger.warning('release_job_run_lock failed for %s: %s', job_id, e)
 
 
+def release_job_run_lock_strict(job_id: str, token: str) -> bool:
+    """Confirmed compare-and-delete for callers that must prove the release.
+
+    Unlike :func:`release_job_run_lock` the EVAL's result is returned and
+    Redis errors propagate: ``True`` only when this token's lock key was
+    actually deleted. A caller that hands a redelivery a retry-only
+    obligation must not report success while the lock silently survives to
+    its TTL — every queue retry would then deflect off a 409 the caller
+    believed impossible.
+    """
+    return bool(r.eval(_RELEASE_LOCK_SCRIPT, 1, _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token))
+
+
 def add_processed_segment(job_id: str, segment_path: str) -> None:
     """Record a segment as fully processed (conversation written) for this job.
 

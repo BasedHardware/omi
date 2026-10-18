@@ -27,6 +27,7 @@ import threading
 import time
 import types
 import unittest
+import unittest.mock
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -4533,7 +4534,12 @@ async def test_sync_task_budget_deferral_requires_marker_before_ack():
     try:
         module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_that_never_finishes
-        module.update_sync_job = MagicMock(side_effect=RuntimeError('redis unavailable'))
+        # First call (the marker write) raises; the compensating clear that
+        # the fallback must now run succeeds, removing any marker the EVAL
+        # applied server-side before the response was lost.
+        module.update_sync_job = MagicMock(
+            side_effect=[RuntimeError('redis unavailable'), {'job_id': 'job-1', 'status': 'processing'}]
+        )
 
         response = await module.run_sync_job(request, task_retry_count=0)
 
@@ -4543,6 +4549,8 @@ async def test_sync_task_budget_deferral_requires_marker_before_ack():
         # window: losing the marker aborts the deferral before the enqueue.
         module.enqueue_sync_job_budget_replacement.assert_not_called()
         module.release_job_run_lock.assert_not_called()
+        assert module.update_sync_job.call_count == 2
+        assert module.update_sync_job.call_args_list[-1] == unittest.mock.call('job-1', {'deferred_until': None})
         assert fallback_calls == [
             {
                 'component': 'sync_dispatch',
@@ -4588,7 +4596,9 @@ async def test_sync_task_budget_deferral_treats_missing_marker_update_as_failed(
     try:
         module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_that_never_finishes
-        module.update_sync_job = MagicMock(return_value=None)
+        # The sentinel-marker write returns None; the compensating clear
+        # succeeds so no marker the EVAL applied survives the fallback.
+        module.update_sync_job = MagicMock(side_effect=[None, {'job_id': 'job-1', 'status': 'processing'}])
 
         response = await module.run_sync_job(request, task_retry_count=0)
 
@@ -4596,6 +4606,8 @@ async def test_sync_task_budget_deferral_treats_missing_marker_update_as_failed(
         assert json.loads(response.body) == {'status': 'locked'}
         module.enqueue_sync_job_budget_replacement.assert_not_called()
         module.release_job_run_lock.assert_not_called()
+        assert module.update_sync_job.call_count == 2
+        assert module.update_sync_job.call_args_list[-1] == unittest.mock.call('job-1', {'deferred_until': None})
         assert [call['reason'] for call in fallback_calls] == ['marker_failed']
     finally:
         sys.modules.pop('routers.sync', None)
@@ -5537,8 +5549,10 @@ async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_
         assert body['job_status'] == 'completed'
         module.enqueue_sync_job_budget_replacement.assert_not_called()
         # The preserved lock of a terminal job protects nothing: released so
-        # the redelivery's cleanup-only path is not deflected into a 409.
-        module.release_job_run_lock.assert_called_once()
+        # the redelivery's cleanup-only path is not deflected into a 409. The
+        # release is confirmed through the strict compare-and-delete — the
+        # 500's retry-only obligation stands behind it.
+        module.release_job_run_lock_strict.assert_called_once_with('job-1', '1:lock-token')
         assert fallback_calls == []
     finally:
         sys.modules.pop('routers.sync', None)
@@ -5654,6 +5668,235 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
         assert elapsed < 0.05 + 0.3 + 0.3 + 0.1
         assert created and created[0].cancelled()
         assert [call['reason'] for call in fallback_calls] == ['enqueue_failed']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_begin_job_ends_request_at_the_route_deadline():
+    """Thread: the route-entry budget anchor must be enforced, not just
+    recorded. The sequenced wrapper performs fence read, parse, begin_job and
+    the prior-job read before the attempt body's budget arms; without a
+    timeout around those awaits a stalled begin_job hangs the request open
+    past the Cloud Tasks dispatch deadline and the middleware cap — the exact
+    lingering-request path this PR exists to end. A stall there owns nothing
+    (no run lock), so the request ends through the queue-owned 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    passthrough_run_blocking = module.run_blocking
+
+    async def _begin_job_stalls(_executor, fn, *args, **kwargs):
+        if fn is module.sync_backfill_sequencer.begin_job:
+            await asyncio.sleep(30)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.run_blocking = _begin_job_stalls
+        started = time.monotonic()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert elapsed < 5
+        # The stall owned nothing: no attempt body ever ran, no lock was
+        # acquired, no replacement or marker exists.
+        module.try_acquire_sync_job_run_lock.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        module.update_sync_job.assert_not_called()
+        module.release_job_run_lock.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_fence_read_ends_request_at_the_route_deadline():
+    """Thread: the very first await — the production-fence read — must be
+    inside the route deadline too. A stalled fence read hangs the request
+    before anything (even payload parsing) runs; the queue-owned 409 ends it
+    inside the budget instead."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.uid_sequencer.production_fence_mode = AsyncMock()  # never reached
+    passthrough_run_blocking = module.run_blocking
+
+    async def _fence_read_stalls(_executor, fn, *args, **kwargs):
+        if fn is module.uid_sequencer.production_fence_mode:
+            await asyncio.sleep(30)
+        return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module.run_blocking = _fence_read_stalls
+        started = time.monotonic()
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+        elapsed = time.monotonic() - started
+
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert elapsed < 5
+        request.json.assert_not_awaited()
+        module.try_acquire_sync_job_run_lock.assert_not_called()
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
+    """Thread: the terminal_cleanup_retry 500 hands the queue a retry-only
+    obligation, so the run-lock release behind it must be confirmed. An
+    unconfirmed release leaves the lock held to its TTL while every
+    short-backoff retry deflects off it as a 409 — the task exhausts without
+    one cleanup retry landing. Here the strict release settles 0 (token
+    mismatch: a racing leaf already replaced it), so the handler must keep
+    the preserved-lock contract instead: ack and schedule one replacement
+    past the lock's TTL, never return the 500."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    strict_calls = []
+
+    def _strict_release(job_id, token):
+        strict_calls.append((job_id, token))
+        return 0  # EVAL: token no longer owns the key
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        assert strict_calls == [('job-1', '1:lock-token')]
+        # The preserved-lock deferral replaced the unconfirmed 500: marker and
+        # delayed replacement exist, and no cleanup-retry obligation was
+        # handed to the queue behind an unreleased lock.
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release():
+    """Thread (companion): with the strict release confirming (EVAL 1), the
+    established behavior stands — the 500 redelivers into the terminal
+    branch's retry-only cleanup against a lock this attempt no longer
+    holds."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(return_value=1)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        body = json.loads(response.body)
+        assert body['status'] == 'terminal_cleanup_retry'
+        assert body['job_status'] == 'completed'
+        module.release_job_run_lock_strict.assert_called_once_with('job-1', '1:lock-token')
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert fallback_calls == []
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
