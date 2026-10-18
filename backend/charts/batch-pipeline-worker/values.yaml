@@ -34,6 +34,7 @@ worker:
   paddedSeconds: 272
   emptyAsrRecoveryEnabled: false
   emptyAsrDispositionEnabled: false
+  workerSilenceDispositionEnabled: false
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.

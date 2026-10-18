@@ -42,7 +42,7 @@ from utils.executors import start_background_task
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
-from utils.stt.vad import offline_pcm_speech_segments
+from utils.stt.local_vad import offline_pcm_speech_segments
 from utils.stt.vad_compaction import transcribe_with_speech_compaction
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured

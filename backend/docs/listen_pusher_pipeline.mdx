@@ -5480,3 +5480,20 @@ adds `SYNC_DURABLE_REDRIVE_GUARD` and `SYNC_LEGACY_COMPLETION_CONVERGENCE`
 missing-job worker ACKs retain staged bytes. Scheduler gauges expose unresolved
 custody and its nearest source/attention deadline. Legacy retries can converge
 completed ledger results under their existing Redis run lock before provider work.
+
+### Dark worker empty-ASR silence disposition
+
+`BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED` defaults to `false` on
+worker processes (`worker.workerSilenceDispositionEnabled: false` in the
+batch-pipeline-worker Helm chart). After empty ASR and its existing padded
+retry, the worker reuses integration's `recovery_disposition.inspect_audio`
+strict local Silero VAD and `silence_payload`. Only validated zero-speech
+results persist as silence through the normal leased worker commit, with
+`words_provider=strict_local_vad`, empty speech spans and zero speech seconds.
+No quarantine or external provider dispatch is introduced for those results.
+Speech-positive, malformed or unavailable VAD retains the existing empty-ASR
+quarantine/multilingual recovery route. Positive ASR with no owned words does
+not qualify. The flag does not change admission, integration recovery gates,
+or paid-call authorization. Rollback sets the worker flag to `false`.
+`batch_worker_silence_disposition` records persisted local silence results;
+`omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.

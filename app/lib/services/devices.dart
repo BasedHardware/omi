@@ -1,6 +1,10 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/saved_pendant_reconnect.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -44,8 +48,57 @@ abstract class IDeviceServiceSubsciption {
 typedef DeviceConnectionBuilder = DeviceConnection? Function(BtDevice device);
 
 class DeviceService {
-  DeviceService({DeviceConnectionBuilder? connectionBuilder})
-      : _connectionBuilder = connectionBuilder ?? DeviceConnectionFactory.create;
+  DeviceService(
+      {DeviceConnectionBuilder? connectionBuilder,
+      bool Function()? reconnectKilled,
+      Future<bool> Function()? refreshReconnectKilled})
+      : _connectionBuilder = connectionBuilder ?? DeviceConnectionFactory.create {
+    savedReconnect = SavedPendantReconnect(
+      target: () {
+        final device = SharedPreferencesUtil().btDevice;
+        return device.id.isNotEmpty && device.locator?.kind == TransportKind.bluetooth ? device.id : null;
+      },
+      blocked: (id) =>
+          _staleBondRecoveryRequired || (!savedReconnect.killed && reconnectPaused) || _manuallyDisconnected(id),
+      connected: (id) => _connections[id]?.status == DeviceConnectionState.connected,
+      configure: (id, enabled) async {
+        enabled ? _savedReconnectDevices.add(id) : _savedReconnectDevices.remove(id);
+        final transport = _connections[id]?.transport;
+        if (transport is NativeBleTransport) transport.savedReconnectEnabled = enabled;
+        await BleHostApi().configureSavedReconnect(id, enabled);
+      },
+      connect: (id, legacy) async {
+        await ensureConnection(id, force: true, automatic: !legacy);
+      },
+      retire: (id) => disconnectDevice(id),
+      observeTarget: (changed) {
+        final sub = SharedPreferencesUtil().deviceChanges.listen((_) => changed());
+        return () => unawaited(sub.cancel());
+      },
+      killed: reconnectKilled,
+      refreshKilled: refreshReconnectKilled,
+    );
+  }
+
+  late final SavedPendantReconnect savedReconnect;
+  final Set<String> _savedReconnectDevices = {};
+  bool reconnectPaused = false;
+  bool _manuallyDisconnected(String id) =>
+      !savedReconnect.killed && SharedPreferencesUtil().getStringList('manualBleDisconnects').contains(id);
+
+  bool canAutoReconnectDevice(String id) => !_staleBondRecoveryRequired && !_manuallyDisconnected(id);
+
+  void _setManualDisconnect(String id, bool disconnected) {
+    if (savedReconnect.killed) return;
+    final ids = SharedPreferencesUtil().getStringList('manualBleDisconnects').toSet();
+    disconnected ? ids.add(id) : ids.remove(id);
+    SharedPreferencesUtil().saveStringList('manualBleDisconnects', ids.toList());
+  }
+
+  Future<void> reconnectSavedDevice(String trigger) async {
+    savedReconnect.start();
+    await savedReconnect.ensure(trigger);
+  }
 
   final DeviceConnectionBuilder _connectionBuilder;
 
@@ -183,6 +236,10 @@ class DeviceService {
 
     final connection = _connectionBuilder(device);
     if (connection != null) {
+      if (connection.transport case final NativeBleTransport transport) {
+        transport.savedReconnectEnabled =
+            _savedReconnectDevices.contains(id) && SharedPreferencesUtil().btDevice.id == id;
+      }
       _connections[id] = connection;
       try {
         await connection.connect(
@@ -190,7 +247,11 @@ class DeviceService {
         );
       } catch (e) {
         final isTimeout = e is TimeoutException || (e is DeviceConnectionException && e.isTimeout);
-        if (isTimeout) {
+        final transport = connection.transport;
+        if (isTimeout ||
+            (transport is NativeBleTransport &&
+                transport.savedReconnectEnabled &&
+                transport.hasRetryableConnectFailure)) {
           // A launch connection attempt timed out waiting for an offline or
           // out-of-range device. Native BLE maintains auto-reconnect in the
           // background; preserve the transport and registration so when the
@@ -245,6 +306,7 @@ class DeviceService {
   }
 
   Future<void> stop() async {
+    savedReconnect.stop();
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
@@ -279,6 +341,9 @@ class DeviceService {
     String deviceId,
     DeviceConnectionState state,
   ) {
+    if (state != DeviceConnectionState.connecting) {
+      savedReconnect.stateChanged(deviceId, state == DeviceConnectionState.connected);
+    }
     Logger.debug("device connection state changed...$deviceId...$state");
     DebugLogManager.logEvent('device_connection_state', {
       'device_id': deviceId,
@@ -300,9 +365,14 @@ class DeviceService {
   Future<DeviceConnection?> ensureConnection(
     String deviceId, {
     bool force = false,
+    bool automatic = false,
   }) async {
     await _mutex.acquire();
     try {
+      if (automatic && (_manuallyDisconnected(deviceId) || SharedPreferencesUtil().btDevice.id != deviceId)) {
+        return null;
+      }
+      if (!automatic && force) _setManualDisconnect(deviceId, false);
       final existing = _connections[deviceId];
       Logger.debug(
         "ensureConnection $deviceId ${existing?.status} $force",
@@ -329,7 +399,10 @@ class DeviceService {
       if (!force) return null;
 
       try {
-        if (existing != null && BleBridge.instance.preservesCaptureIntent(deviceId)) {
+        if (existing != null &&
+            (BleBridge.instance.preservesCaptureIntent(deviceId) ||
+                (existing.transport is NativeBleTransport &&
+                    (existing.transport as NativeBleTransport).savedReconnectEnabled))) {
           // Preserve the source and its listeners; native manageDevice will
           // establish/discover a real link if the cached transport is down.
           // Go through the connection (not the bare transport) so device setup
@@ -343,6 +416,7 @@ class DeviceService {
         }
       } on DeviceConnectionException catch (e) {
         Logger.debug(e.cause);
+        if (automatic) rethrow;
         return null;
       }
 
@@ -360,6 +434,8 @@ class DeviceService {
   // Helper method to get stored device from SharedPreferences
   BtDevice? _getStoredDevice(String id) {
     try {
+      final paired = SharedPreferencesUtil().btDevice;
+      if (paired.id == id && id.isNotEmpty) return paired;
       return SharedPreferencesUtil().btDevices.firstWhereOrNull(
             (d) => d.id == id && d.id.isNotEmpty,
           );
@@ -372,9 +448,19 @@ class DeviceService {
   /// A connection leaving [_connections] is always disposed: an orphaned
   /// transport stays registered for native events and would swallow the next
   /// device-ready, leaving the UI disconnected over a live link.
-  Future<void> disconnectDevice(String deviceId) async {
+  Future<void> recoverConnection(String deviceId, {required bool Function() shouldRetry}) async {
+    await disconnectDevice(deviceId);
+    if (!shouldRetry() || SharedPreferencesUtil().btDevice.id != deviceId) return;
+    await ensureConnection(deviceId, force: true);
+  }
+
+  Future<void> disconnectDevice(String deviceId, {bool userInitiated = false}) async {
+    if (userInitiated) _setManualDisconnect(deviceId, true);
     final connection = _connections.remove(deviceId);
-    if (connection == null) return;
+    if (connection == null) {
+      await BleHostApi().unmanageDevice(deviceId);
+      return;
+    }
     Logger.debug("DeviceService: Disconnecting device $deviceId...");
     try {
       await connection.disconnect();
@@ -386,7 +472,8 @@ class DeviceService {
   Future<void> _teardownConnection(String deviceId) async {
     final connection = _connections.remove(deviceId);
     if (connection == null) return;
-    if (connection.status == DeviceConnectionState.connected) {
+    if (connection.status == DeviceConnectionState.connected ||
+        (!savedReconnect.killed && connection.transport is NativeBleTransport)) {
       try {
         await connection.disconnect();
       } catch (e) {
@@ -402,8 +489,13 @@ class DeviceService {
 
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
+    _setManualDisconnect(deviceId, true);
     clearStaleBondRecoveryRequirement();
-    await _teardownConnection(deviceId);
+    if (_connections.containsKey(deviceId)) {
+      await _teardownConnection(deviceId);
+    } else {
+      await BleHostApi().unmanageDevice(deviceId);
+    }
 
     _devices.removeWhere((d) => d.id == deviceId);
   }

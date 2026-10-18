@@ -55,6 +55,7 @@ def test_default_chart_has_no_resources_or_admission():
     assert values['autoscaling']['enabled'] is False
     assert values['podMonitoring']['enabled'] is True
     assert values['worker']['batchSize'] == 8
+    assert values['worker']['workerSilenceDispositionEnabled'] is False
     assert values['resources']['requests']['memory'] == '12Gi'
     assert values['resources']['limits']['memory'] == '14Gi'
     result = render()
@@ -260,3 +261,12 @@ def test_empty_asr_disposition_is_explicitly_dark_and_operator_enabled(enabled):
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED'] == str(enabled).lower()
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_worker_silence_disposition_flag_renders_explicitly(enabled):
+    result = render(*enabled_arguments(), '--set', f'worker.workerSilenceDispositionEnabled={str(enabled).lower()}')
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED'] == str(enabled).lower()
