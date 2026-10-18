@@ -7,7 +7,7 @@ Send one scrape from every Cloud Run instance to Google Managed Service for Prom
 ```text
 backend / desktop-backend process registry
   -> 127.0.0.1:9090/metrics
-  -> Cloud Run GMP sidecar (one per instance, 30s + startup/shutdown scrape)
+  -> Cloud Run GMP sidecar (one per instance, 30s default / 60s sync + startup/shutdown scrape)
   -> Cloud Monitoring: prometheus.googleapis.com/omi_*
   -> isolated prometheus-stackdriver-exporter on GKE (Cloud Monitoring read every 30s)
   -> kube-prometheus-stack Prometheus (job=cloud-run-application-metrics)
@@ -34,7 +34,7 @@ Live evidence collected on 2026-08-21:
 - Live Helm ownership is asymmetric: dev Prometheus is release `dev-kube-prometheus-stack`, while prod is `prod-omi-kube-prometheus-stack`; the existing exporters are `dev/prod-omi-prometheus-stackdriver-exporter`. The deployment workflow encodes these observed names instead of deriving a nonexistent dev release.
 - Grafana's GSA has `roles/monitoring.viewer`, but the live provisioned datasource list contains only Prometheus and Alertmanager. A direct Cloud Monitoring datasource is possible but is not the requested Prometheus ingestion path.
 - Both projects have the Run, Monitoring, Logging, and Secret Manager APIs enabled. Both Cloud Run services use the Compute Engine default service account; each runtime account has project-level `roles/secretmanager.secretAccessor`, and its current `roles/editor` includes `monitoring.timeSeries.create`. A future least-privilege service account must receive `roles/monitoring.metricWriter`, `roles/logging.logWriter`, and access to `cloud-run-gmp-config` explicitly.
-- `cloud-run-gmp-config` does not exist in either project before this rollout. The deployment identity must be able to create the secret, add versions, and update its non-sensitive content-hash label; the helper creates it without printing its content.
+- Before the initial rollout, `cloud-run-gmp-config` did not exist in either project; the original helper created it and cached a content-hash label. The 2026-10-18 re-land below replaces that provisioning/cache path with an existing-secret requirement and exact version IDs.
 - `gcloud run services replace --dry-run` accepted the patched live dev exports for both `backend` and `desktop-backend`, including gen2, 1-vCPU collector resources, probes, secret volume, explicit traffic, and multi-container dependency annotations. No revision or traffic mutation occurred.
 
 Google documents the Cloud Run GMP sidecar as its recommended Prometheus path. It performs a scrape after startup and at shutdown, which matters for short-lived instances, and writes metrics as `prometheus.googleapis.com/<name>/<type>`. The sidecar's `RunMonitoring` schema does not support authorization headers. Sources:
@@ -51,7 +51,64 @@ The public port 8080 `/metrics` route stays fail-closed with bearer authenticati
 
 The application therefore starts a second Prometheus HTTP listener bound specifically to `127.0.0.1:9090` when `PROMETHEUS_SIDECAR_PORT=9090`. Cloud Run containers in one instance share a network namespace, so the collector can reach it. Cloud Run ingress cannot. This avoids weakening the public route or trusting proxy-derived client IPs.
 
-`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest and the numeric Secret Manager config version by revision, uses 1 vCPU and 512 MiB, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
+`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest and the numeric Secret Manager config version by revision, uses 1 vCPU and 512 MiB by default, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
+
+## Sync fleet cost profile
+
+Only `backend-sync`, `backend-sync-backfill`, and `backend-integration` use
+`backend/deploy/cloud_run_gmp_sync.yaml` and a separate numeric version of the existing
+`cloud-run-gmp-config` secret. Their collectors use **0.08 vCPU / 128Mi**,
+scrape every **60s**, and keep the existing sync exporter families plus direct
+sentinel consumers: `omi_batch_pipeline_*`, `omi_accept_to_summary_seconds*`,
+`omi_summary_terminal_total`, `omi_summary_debt_*`, and
+`omi_live_session_transcript_outcome_total`. Sync/summary/storage fallback series
+remain; eagerly initialized live-STT fallback components are dropped. Backend,
+desktop, listen, and jobs retain their existing allocation/configuration.
+
+The fleet and David gates currently read projection logs and durable job state;
+the fleet gate also reads native `run.googleapis.com/request_count`. These paths
+are unaffected by metric relabeling. Consumer changes must update the allowlist
+and the coverage in `test_attach_cloud_run_gmp_sidecar.py` together.
+
+[CPU guidance](https://docs.cloud.google.com/run/docs/configuring/services/cpu)
+lists 0.08 vCPU as the minimum and additional restrictions for instances below
+1 vCPU. [Multi-container allocation](https://docs.cloud.google.com/run/docs/about-instance-autoscaling#autoscaling_and_multiple_containers_sidecars)
+is the sum of container limits. On 2026-10-18, dev `backend-sync` passed
+`gcloud run services replace --dry-run` with the existing app **2 vCPU / 8Gi**,
+collector **0.08 vCPU / 128Mi**, total **2.08 vCPU**, gen2, concurrency 20,
+and `cpu-throttling=false`. 0.1 and 0.25 vCPU also passed; 64Mi was rejected
+(minimum 128Mi). The exported service was identical before/after validation.
+This is control-plane validation, not runtime scrape/load acceptance.
+
+The backend-stack action prepares the broad backend and filtered sync versions
+before any revision or binding mutation. The existing secret must already exist;
+this deploy path never creates secrets or changes IAM. The prod CI identity's
+existing `roles/secretmanager.admin` binding on `cloud-run-gmp-config` permits
+version additions; it does not permit creating a sibling secret at project scope
+(the #22089 deployment failure). Runtime accounts already read this secret.
+Missing-secret or denied-add errors stop preparation before deployment.
+
+Each preparation uses the exact numeric resource returned by `versions add`.
+Backend receives its broad version; all three sync services share their filtered
+version. Attachments do not resolve `latest`, update hash labels, or write another
+version. Other callers of the helper also return their own AddSecretVersion result,
+so concurrent backend/desktop/sync writers cannot substitute each other's config.
+Existing serving revisions retain their numeric versions. Two new config versions
+are prepared per backend-stack deployment; no version is destroyed by this flow.
+
+Instance billing (`cpu-throttling=false`) and application resources are unchanged.
+Smaller total CPU changes the autoscaling utilization denominator; actual instance
+counts and savings can therefore differ. Before production promotion, verify
+collector readiness, memory/OOM/restarts and fresh retained metric samples under
+load, including sentinel histograms and summary-debt timestamps. A 60s interval
+adds up to 30s steady scrape delay; startup/shutdown scrapes still apply.
+
+Rollback: restore the prior traffic-selected revisions (which pin their numeric
+config versions), then restore the prior resource/scrape profile before the next deployment. That restores
+1 vCPU / 512Mi and the shared broad 30s config while keeping exact-version preparation.
+Do not restore the legacy hash-label/latest helper: filtered versions now share this
+secret, so an older helper can select a different config through `latest`. Do not modify shared secret versions
+or CPU billing as a rollback shortcut.
 
 ## Options considered
 
@@ -179,7 +236,7 @@ After merge, platform deployment is still required; repository changes alone do 
 gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=development
 ```
 
-2. Run the normal backend and desktop-backend deployment workflows in dev. They create or version `cloud-run-gmp-config` from the checked-in non-sensitive config, pin that numeric secret version into a two-container no-traffic candidate, and run the existing acceptance gates before promotion.
+2. Run the normal backend and desktop-backend deployment workflows in dev. They require the existing `cloud-run-gmp-config` and add immutable versions from the checked-in non-sensitive config, pin that numeric secret version into a two-container no-traffic candidate, and run the existing acceptance gates before promotion.
 3. Confirm each Cloud Run revision has two containers without displaying environment values:
 
 ```bash

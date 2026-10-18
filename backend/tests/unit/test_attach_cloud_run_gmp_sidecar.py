@@ -53,34 +53,85 @@ def _service(*, latest_traffic: bool = False):
     }
 
 
-def test_ensure_config_secret_accepts_a_concurrent_first_create(monkeypatch, tmp_path):
+@pytest.mark.parametrize('exists', [True, False])
+def test_config_uses_existing_secret_when_secrets_create_is_denied(monkeypatch, tmp_path, exists):
     module = _load_module()
     config = tmp_path / 'config.yaml'
     config.write_text('kind: RunMonitoring\n', encoding='utf-8')
-    config_hash = module.hashlib.sha256(config.read_bytes()).hexdigest()[:63]
-    responses = iter(
-        (
-            module.subprocess.CompletedProcess([], 1, '', 'not found'),
-            module.subprocess.CompletedProcess([], 1, '', 'already exists'),
-            module.subprocess.CompletedProcess([], 0, f'{{"labels": {{"config-sha": "{config_hash}"}}}}', ''),
-            module.subprocess.CompletedProcess([], 0, 'projects/1/secrets/cloud-run-gmp-config/versions/7\n', ''),
-        )
-    )
     calls = []
 
     def fake_run(args, *, capture_output=False):
         calls.append(list(args))
-        return next(responses)
+        if args[1:3] == ['secrets', 'create']:
+            return module.subprocess.CompletedProcess(args, 1, '', 'secretmanager.secrets.create denied')
+        if args[1:3] == ['secrets', 'describe']:
+            return module.subprocess.CompletedProcess(args, 0 if exists else 1, '{}', '' if exists else 'NOT_FOUND')
+        if args[1:4] == ['secrets', 'versions', 'add']:
+            return module.subprocess.CompletedProcess(
+                args, 0, 'projects/1/secrets/cloud-run-gmp-config/versions/7\n', ''
+            )
+        raise AssertionError(args)
 
     monkeypatch.setattr(module, '_run', fake_run)
+    if exists:
+        assert module.ensure_config_secret(project='example', secret='cloud-run-gmp-config', config_path=config) == '7'
+    else:
+        with pytest.raises(RuntimeError, match='required existing GMP config secret'):
+            module.ensure_config_secret(project='example', secret='cloud-run-gmp-config', config_path=config)
+        assert len(calls) == 1
+    assert not any(c[1:3] == ['secrets', 'create'] for c in calls)
 
-    version = module.ensure_config_secret(project='example-project', secret='cloud-run-gmp-config', config_path=config)
 
-    assert version == '7'
-    assert len(calls) == 4
-    assert calls[1][1:3] == ['secrets', 'create']
-    assert calls[2][1:3] == ['secrets', 'describe']
-    assert calls[3][1:4] == ['secrets', 'versions', 'describe']
+def test_config_versions_pin_own_add_response_despite_concurrent_writer(monkeypatch, tmp_path):
+    module = _load_module()
+    backend = tmp_path / 'backend.yaml'
+    sync = tmp_path / 'sync.yaml'
+    backend.write_text('interval: 30s\n')
+    sync.write_text('interval: 60s\n')
+    payloads = {}
+    versions = {}
+
+    def fake_run(args, *, capture_output=False):
+        if args[1:3] == ['secrets', 'describe']:
+            # A legacy hash label is deliberately present: it cannot route to latest.
+            return module.subprocess.CompletedProcess(args, 0, '{"labels":{"config-sha":"stale"}}', '')
+        assert args[1:4] == ['secrets', 'versions', 'add'], args
+        config = Path(next(a.split('=', 1)[1] for a in args if a.startswith('--data-file=')))
+        number = str(len(payloads) + 7)
+        payloads[number] = config.read_text()
+        if config == backend:
+            # The sync write finishes before backend's response returns. latest is
+            # now sync, but backend must still pin its own version 7.
+            versions['sync'] = module.ensure_config_secret(
+                project='example', secret='cloud-run-gmp-config', config_path=sync
+            )
+        return module.subprocess.CompletedProcess(
+            args, 0, f'projects/1/secrets/cloud-run-gmp-config/versions/{number}\n', ''
+        )
+
+    monkeypatch.setattr(module, '_run', fake_run)
+    versions['backend'] = module.ensure_config_secret(
+        project='example', secret='cloud-run-gmp-config', config_path=backend
+    )
+    assert versions == {'backend': '7', 'sync': '8'}
+    assert payloads[versions['backend']] == backend.read_text()
+    assert payloads[versions['sync']] == sync.read_text()
+
+
+@pytest.mark.parametrize('resource', ['', 'latest', 'projects/1/secrets/other/versions/7'])
+def test_config_add_requires_own_numeric_response(monkeypatch, tmp_path, resource):
+    module = _load_module()
+    config = tmp_path / 'config.yaml'
+    config.write_text('kind: RunMonitoring\n')
+    responses = iter(
+        [
+            module.subprocess.CompletedProcess([], 0, '{}', ''),
+            module.subprocess.CompletedProcess([], 0, resource, ''),
+        ]
+    )
+    monkeypatch.setattr(module, '_run', lambda *args, **kwargs: next(responses))
+    with pytest.raises(RuntimeError, match='numeric version resource'):
+        module.ensure_config_secret(project='example', secret='cloud-run-gmp-config', config_path=config)
 
 
 def test_patch_service_adds_pinned_sidecar_without_losing_ingress_contract():
@@ -483,6 +534,7 @@ spec:
                 ingress_container='backend-1',
                 config=config,
                 config_secret='cloud-run-gmp-config',
+                config_secret_version=None,
                 expected_env_state=expected_state,
                 tag='',
                 desktop_backend_liveness_probe=False,
@@ -700,7 +752,8 @@ def test_validate_expected_literal_env_still_fails_closed_for_a_genuinely_absent
         )
 
 
-def test_attach_accepts_a_literal_cloud_run_omits_for_being_empty(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize('prepared_version', [None, '11'])
+def test_attach_accepts_a_literal_cloud_run_omits_for_being_empty(monkeypatch, tmp_path, prepared_version) -> None:
     """End-to-end regression for the production failure blocking dev deploys.
 
     ``ValueError: exported base revision env OMI_PARITY_PACK_ALLOWED_PRINCIPALS
@@ -760,12 +813,20 @@ spec:
         if '--format=value(status.latestCreatedRevisionName)' in args:
             return module.subprocess.CompletedProcess(args, 0, 'backend-base\n', '')
         if args[1:4] == ['run', 'services', 'replace']:
+            rendered = yaml.load(Path(args[4]).read_text(), Loader=module.GcloudExportLoader)
+            volumes = rendered['spec']['template']['spec']['volumes']
+            config_volume = next(v for v in volumes if v['name'] == module.CONFIG_VOLUME_NAME)
+            assert config_volume['secret']['items'][0]['key'] == (prepared_version or '7')
             return module.subprocess.CompletedProcess(args, 0, '{}', '')
         if '--format=value(status.url)' in args:
             return module.subprocess.CompletedProcess(args, 0, 'https://backend.example\n', '')
         raise AssertionError(args)
 
-    monkeypatch.setattr(module, 'ensure_config_secret', lambda **kwargs: '7')
+    def ensure_version(**kwargs):
+        assert prepared_version is None, 'prepared attachment must not write or resolve latest'
+        return '7'
+
+    monkeypatch.setattr(module, 'ensure_config_secret', ensure_version)
     monkeypatch.setattr(module, '_project_number', lambda _project: '1031333818730')
     monkeypatch.setattr(module, '_run', fake_run)
 
@@ -779,6 +840,7 @@ spec:
             ingress_container='backend-1',
             config=config,
             config_secret='cloud-run-gmp-config',
+            config_secret_version=prepared_version,
             expected_env_state=expected_state,
             tag='',
             desktop_backend_liveness_probe=False,
@@ -1083,3 +1145,117 @@ def test_detach_cli_propagates_gcloud_failures(monkeypatch, phase):
     monkeypatch.setattr(module, '_run', fake_run)
     with pytest.raises(RuntimeError, match='PERMISSION_DENIED'):
         module.detach_job_sidecar(SimpleNamespace(service='notifications-job', project='test', region='us-central1'))
+
+
+@pytest.mark.parametrize(
+    'service_name', ['backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend', 'desktop-backend']
+)
+def test_sync_resource_profile_survives_render_without_changing_app(service_name):
+    module = _load_module()
+    source = _service()
+    source['metadata']['name'] = service_name
+    app = source['spec']['template']['spec']['containers'][0]
+    app['resources'] = {'limits': {'cpu': '2', 'memory': '8Gi'}}
+    app['env'] = [{'name': 'SAFE', 'value': 'on'}]
+    app['startupProbe'] = {'tcpSocket': {'port': 8080}, 'periodSeconds': 10}
+    patched = module.patch_service(
+        source,
+        project_number='123',
+        base_revision='base',
+        latest_created_revision='base',
+        final_revision='final',
+        ingress_container_name=app['name'],
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+    )
+    rendered = yaml.load(yaml.safe_dump(patched), Loader=module.GcloudExportLoader)
+    template = rendered['spec']['template']
+    assert template['spec']['containers'][0] == app
+    collector = next(c for c in template['spec']['containers'] if c['name'] == 'collector')
+    assert collector['resources']['limits'] == (
+        {'cpu': '0.08', 'memory': '128Mi'}
+        if service_name in {'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+        else {'cpu': '1', 'memory': '512Mi'}
+    )
+    assert template['metadata']['annotations']['run.googleapis.com/cpu-throttling'] == 'false'
+    assert rendered['spec']['traffic'] == source['spec']['traffic']
+    volume = next(v for v in template['spec']['volumes'] if v['name'] == module.CONFIG_VOLUME_NAME)
+    assert volume['secret'] == {
+        'secretName': 'cloud-run-gmp-config',
+        'items': [{'key': '7', 'path': 'config.yaml'}],
+    }
+
+
+def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
+    root = SCRIPT.parents[2]
+    config = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    endpoint = config['spec']['endpoints'][0]
+    assert endpoint['interval'] == '60s'
+    rules = endpoint['metricRelabeling']
+
+    def kept(name, component=''):
+        labels = {'__name__': name, 'component': component}
+        for rule in rules:
+            matched = re.fullmatch(rule['regex'], ';'.join(labels.get(k, '') for k in rule['sourceLabels']))
+            if rule['action'] == 'keep' and not matched or rule['action'] == 'drop' and matched:
+                return False
+        return True
+
+    # The existing dev/prod sync exporter is the authoritative bridge consumer.
+    for env in ('dev', 'prod'):
+        exporter = yaml.safe_load(
+            (
+                root
+                / f'backend/charts/monitoring/prometheus-stackdriver-exporter/{env}_sync_omi_cloud_run_metrics_exporter.yaml'
+            ).read_text()
+        )
+        for prefix in exporter['stackdriver']['metrics']['prefixes']:
+            family = prefix.removeprefix('prometheus.googleapis.com/').rstrip('/')
+            assert kept(family + ('events_total' if family.endswith('_') else ''))
+            if family.endswith('_'):
+                assert kept(family + 'duration_seconds_bucket')
+    # Direct GMP consumers: sentinel batch_metrics.py/completion_telemetry.py.
+    # fleet_gate/david_gate use logs, durable state and native request_count.
+    for name in (
+        'omi_batch_pipeline_events_total',
+        'omi_batch_pipeline_oldest_age_seconds',
+        'omi_accept_to_summary_seconds_bucket',
+        'omi_accept_to_summary_seconds_count',
+        'omi_accept_to_summary_seconds_sum',
+        'omi_summary_terminal_total',
+        'omi_summary_debt_overdue',
+        'omi_summary_debt_oldest_age_seconds',
+        'omi_summary_debt_sample_timestamp_seconds',
+        'omi_live_session_transcript_outcome_total',
+        'omi_firestore_documents_per_operation_bucket',
+    ):
+        assert kept(name), name
+    for component in ('sync', 'summary_delivery', 'storage'):
+        assert kept('omi_fallback_total', component)
+    for name, component in (
+        ('omi_stt_cost_routing_settlements_total', ''),
+        ('omi_subscription_events_total', ''),
+        ('omi_product_event_total', ''),
+        ('omi_vertex_non_dream_flash_after_cutover_attempts_total', ''),
+        ('omi_fallback_total', 'stt_live_session'),
+        ('omi_fallback_total', 'stt_selection'),
+    ):
+        assert not kept(name, component)
+    shared = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
+    # RunMonitoring name becomes native GMP job; direct shadow mappings pin it.
+    assert config['metadata']['name'] == shared['metadata']['name']
+    assert shared['spec']['endpoints'][0]['interval'] == '30s'
+    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*'
+
+
+@pytest.mark.parametrize('version', ['', 'latest', '0', '-1'])
+def test_prepared_config_rejects_aliases_before_cloud_calls(monkeypatch, version):
+    module = _load_module()
+    monkeypatch.setattr(module, '_run', lambda *a, **kw: pytest.fail('invalid version reached gcloud'))
+    monkeypatch.setattr(
+        module.os.sys,
+        'argv',
+        [str(SCRIPT), '--project=test', '--service=backend', f'--config-secret-version={version}'],
+    )
+    with pytest.raises(SystemExit, match='positive numeric version'):
+        module.main()

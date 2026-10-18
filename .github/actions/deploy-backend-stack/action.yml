@@ -256,6 +256,31 @@ runs:
       shell: bash
       run: python3 -m pip install -q pyyaml
 
+    # #22089 failed after creating candidate revisions because CI could not create
+    # its new secret. Require the existing secret and prepare both exact versions
+    # before any revision/binding mutation. A denied version write also fails here.
+    - name: Preflight and pin backend GMP config
+      id: prepare-backend-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --project="${{ inputs.project_id }}" \
+          --config-secret=cloud-run-gmp-config \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml" >> "$GITHUB_OUTPUT"
+
+    - name: Preflight and pin sync GMP config
+      id: prepare-sync-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --project="${{ inputs.project_id }}" \
+          --config-secret=cloud-run-gmp-config \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml" >> "$GITHUB_OUTPUT"
+
     - name: Resolve production account-deletion task target
       if: ${{ inputs.runtime_env == 'prod' }}
       id: account-deletion-target
@@ -644,6 +669,7 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --config-secret-version="${{ steps.prepare-backend-gmp-config.outputs.version }}"
           --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
@@ -858,7 +884,9 @@ runs:
             --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
             --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
             --ingress-container="$ingress"
-            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"
+            --config-secret=cloud-run-gmp-config
+            --config-secret-version="${{ steps.prepare-sync-gmp-config.outputs.version }}"
             --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
           )
           if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi

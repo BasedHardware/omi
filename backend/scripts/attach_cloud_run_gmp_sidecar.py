@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -54,6 +53,10 @@ SIDECAR_IMAGE = (
 )
 SIDECAR_NAME = 'collector'
 CONFIG_VOLUME_NAME = 'cloud-run-gmp-config'
+SYNC_SERVICES = frozenset({'backend-sync', 'backend-sync-backfill', 'backend-integration'})
+# Dev services.replace --dry-run accepts app=2 + collector=0.08 (total=2.08),
+# gen2 and cpu-throttling=false. 128Mi is the minimum accepted memory limit.
+SYNC_COLLECTOR_LIMITS = {'cpu': '0.08', 'memory': '128Mi'}
 
 ConfigDict = dict[str, Any]
 
@@ -100,93 +103,46 @@ def _project_number(project: str) -> str:
     return number
 
 
-def _latest_secret_version(*, project: str, secret: str) -> str:
-    result = _run(
-        [
-            'gcloud',
-            'secrets',
-            'versions',
-            'describe',
-            'latest',
-            f'--secret={secret}',
-            '--project',
-            project,
-            '--format=value(name)',
-        ],
-        capture_output=True,
+def require_config_secret(*, project: str, secret: str) -> None:
+    """Fail before deployment mutations; provisioning is outside this helper."""
+    _check(
+        _run(
+            ['gcloud', 'secrets', 'describe', secret, '--project', project, '--format=value(name)'],
+            capture_output=True,
+        ),
+        action=f'required existing GMP config secret {secret} (deployment never creates secrets)',
     )
-    resource = _check(result, action=f'reading the latest {secret} version').strip()
-    version = resource.rsplit('/', 1)[-1]
-    if not version.isdigit():
-        raise RuntimeError(f'latest {secret} version was not numeric')
-    return version
 
 
 def ensure_config_secret(*, project: str, secret: str, config_path: Path) -> str:
-    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()[:63]
-    describe = _run(
-        ['gcloud', 'secrets', 'describe', secret, '--project', project, '--format=json'],
-        capture_output=True,
-    )
-    if describe.returncode != 0:
-        create = _run(
+    """Write and return this request's immutable version, never a shared latest.
+
+    Backend, sync and desktop deployments may add different configs concurrently.
+    A hash label followed by a latest lookup can pin another writer's payload.
+    Use the AddSecretVersion response itself; no mutable labels or aliases.
+    """
+    require_config_secret(project=project, secret=secret)
+    resource = _check(
+        _run(
             [
                 'gcloud',
                 'secrets',
-                'create',
+                'versions',
+                'add',
                 secret,
                 '--project',
                 project,
-                '--replication-policy=automatic',
                 f'--data-file={config_path}',
-                f'--labels=config-sha={config_hash}',
+                '--format=value(name)',
             ],
             capture_output=True,
-        )
-        if create.returncode == 0:
-            return _latest_secret_version(project=project, secret=secret)
-        # Backend and desktop deploy in separate concurrency groups and can
-        # both create this shared secret on the first rollout. Treat a
-        # concurrent successful create as success, but preserve the original
-        # create failure when the secret still cannot be read.
-        describe = _run(
-            ['gcloud', 'secrets', 'describe', secret, '--project', project, '--format=json'],
-            capture_output=True,
-        )
-        if describe.returncode != 0:
-            _check(create, action=f'creating {secret}')
-
-    metadata = json.loads(describe.stdout)
-    if metadata.get('labels', {}).get('config-sha') == config_hash:
-        return _latest_secret_version(project=project, secret=secret)
-    add_version = _run(
-        [
-            'gcloud',
-            'secrets',
-            'versions',
-            'add',
-            secret,
-            '--project',
-            project,
-            f'--data-file={config_path}',
-        ],
-        capture_output=True,
-    )
-    _check(add_version, action=f'adding a version to {secret}')
-    update = _run(
-        [
-            'gcloud',
-            'secrets',
-            'update',
-            secret,
-            '--project',
-            project,
-            f'--update-labels=config-sha={config_hash}',
-        ],
-        capture_output=True,
-    )
-    _check(update, action=f'labelling {secret}')
-    return _latest_secret_version(project=project, secret=secret)
+        ),
+        action=f'adding an immutable config version to {secret}',
+    ).strip()
+    match = re.fullmatch(r'projects/[^/]+/secrets/' + re.escape(secret) + r'/versions/([1-9][0-9]*)', resource)
+    if match is None:
+        raise RuntimeError(f'AddSecretVersion for {secret} did not return its numeric version resource')
+    return match.group(1)
 
 
 def _cloud_run_string(value: object) -> str:
@@ -473,7 +429,13 @@ def patch_service(
     collector: ConfigDict = {
         'image': SIDECAR_IMAGE,
         'name': SIDECAR_NAME,
-        'resources': {'limits': {'cpu': '1', 'memory': '512Mi'}},
+        'resources': {
+            'limits': (
+                dict(SYNC_COLLECTOR_LIMITS)
+                if metadata.get('name') in SYNC_SERVICES
+                else {'cpu': '1', 'memory': '512Mi'}
+            )
+        },
         'livenessProbe': {
             'httpGet': {'path': '/liveness', 'port': 13133},
             'timeoutSeconds': 30,
@@ -794,7 +756,7 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         latest_created,
         action=f'reading the latest {args.service} revision',
     ).strip()
-    config_secret_version = ensure_config_secret(
+    config_secret_version = args.config_secret_version or ensure_config_secret(
         project=args.project, secret=args.config_secret, config_path=args.config
     )
     patched = patch_service(
@@ -1053,7 +1015,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', default='us-central1')
-    parser.add_argument('--service', required=True)
+    parser.add_argument('--service')
     parser.add_argument('--job', action='store_true', help='Attach to a Cloud Run Job, not a service revision.')
     parser.add_argument('--detach', action='store_true', help='With --job, restore a singleton before deploying.')
     # Attach-only. Not argparse-required so --repair-secret-annotations can run
@@ -1063,6 +1025,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--ingress-container')
     parser.add_argument('--config', type=Path)
     parser.add_argument('--config-secret', default='cloud-run-gmp-config')
+    parser.add_argument('--config-secret-version', help='Numeric version prepared before revision mutation.')
+    parser.add_argument(
+        '--prepare-config',
+        action='store_true',
+        help='Require an existing config secret, add a version and print version=N; never mutate Cloud Run.',
+    )
     parser.add_argument('--expected-env-state', type=Path)
     parser.add_argument('--tag', default='')
     parser.add_argument(
@@ -1085,6 +1053,25 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.prepare_config:
+        if (
+            args.service
+            or args.job
+            or args.detach
+            or args.repair_secret_annotations
+            or args.dry_run
+            or args.config_secret_version
+            or args.config is None
+            or not args.config.is_file()
+        ):
+            raise SystemExit('--prepare-config requires an existing --config and no service/job mutation options')
+        version = ensure_config_secret(project=args.project, secret=args.config_secret, config_path=args.config)
+        print(f'version={version}')
+        return 0
+    if not args.service:
+        raise SystemExit('--service is required for service/job operations')
+    if args.config_secret_version is not None and not re.fullmatch(r'[1-9][0-9]*', args.config_secret_version):
+        raise SystemExit('--config-secret-version must be a positive numeric version, never an alias')
     if args.desktop_backend_liveness_probe and (
         args.job or args.repair_secret_annotations or args.service != 'desktop-backend'
     ):
