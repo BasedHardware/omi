@@ -357,6 +357,7 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | — | unowned |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | — | unowned |
+| `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` | Request-backed paid quarantine recovery survives ordinary revision draining | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BATCH_PIPELINE_WORKER_ENABLED` | Default-off dedicated GPU process switch; drains admitted work without enabling upload admission | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | dazheng |
 | `BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` | Default on; strict silence for out-of-buffer VAD frames and first-attempt terminal GPU validation handoff with retained recovery custody | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `CONVERSATION_KNOWN_SPELLINGS` | Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters | backend | env | open | — | — | — | — | keep | — | dazheng |
@@ -514,6 +515,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_MODEL_BATCH_SIZE` — GPU chain maximum model window batch size; default 8; hard ceiling 32 (fail: closed)
 - `BATCH_PIPELINE_PADDED_SECONDS` — GPU chain padded waveform seconds per model batch; default 272 (8 windows with context); shared-live hard cap 120 (fail: closed)
 - `BATCH_PIPELINE_POOL_KIND` — Dedicated batch GPU by default; shared_live requires bounded units and the existing live GPU arbiter (fail: closed)
+- `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` — Request-backed paid quarantine recovery survives ordinary revision draining (fail: closed)
 - `BATCH_PIPELINE_REUSE_LIVE_ENABLED` — Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof (fail: closed)
 - `BATCH_PIPELINE_WINDOW_SECONDS` — GPU chain internal ASR core window seconds; default 30; queue units remain conversations (fail: closed)
 - `BATCH_PIPELINE_WORDS_PROVIDER` — GPU chain words registry selection; default parakeet; unavailable providers fail closed (fail: closed)

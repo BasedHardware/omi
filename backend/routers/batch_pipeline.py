@@ -27,10 +27,13 @@ def verify_worker(request: Request) -> int:
     # Keep worker-only authentication out of legacy sync import paths.
     from utils.cloud_tasks import verify_configured_cloud_tasks_oidc
 
+    invoker = os.getenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', '').strip()
+    if request.url.path == '/v2/batch-pipeline/recover-quarantine':
+        invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
     return verify_configured_cloud_tasks_oidc(
         request,
         audience=os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip(),
-        invoker_sa=os.getenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', '').strip(),
+        invoker_sa=invoker,
         log_failure=False,
     )
 
@@ -124,6 +127,23 @@ async def fail(body: FailRequest):
     except BatchPrivacyBlocked:
         accepted = False
     return {'accepted': accepted}
+
+
+@router.post('/recover-quarantine', include_in_schema=False)
+async def recover_quarantine(body: RedriveRequest):
+    """Keep paid STT inside an active request across ordinary revision draining.
+
+    Retried/duplicate tasks can reconcile the original intent; start() never
+    authorizes a second provider invocation. The payload carries no owner ID.
+    """
+    service = body.service()
+    job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
+    if not job or not service.recovery:
+        return {'status': 'held'}
+    outcome = await run_blocking(sync_executor, service.recovery.recover, body.segment_id, job['owner_id'])
+    if outcome in {'recovered', 'reconciled'}:
+        await service.reconcile_async()
+    return {'status': outcome}
 
 
 @router.post('/redrive-dead', include_in_schema=False)

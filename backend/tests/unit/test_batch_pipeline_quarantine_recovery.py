@@ -524,3 +524,88 @@ def test_recovered_duration_counts_only_one_settlement(setup, monkeypatch):
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     assert recovery.recover('bad', binding.owner_id) == 'held'
     metric.assert_called_once_with('recovered', seconds=5)
+
+
+@pytest.mark.parametrize('enabled', [None, 'true', 'false'])
+def test_recovery_tasks_ship_on_with_inline_kill_switch(monkeypatch, enabled):
+    from config.batch_pipeline import recovery_tasks_enabled
+
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', raising=False)
+    if enabled is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', enabled)
+    assert recovery_tasks_enabled() is (enabled != 'false')
+
+
+def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic-invoker')
+    enqueue = Mock(side_effect=[TimeoutError('lost ack'), None, None])
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    with pytest.raises(TimeoutError):
+        recovery.dispatch('bad', binding.owner_id)
+    intent = deepcopy(row(client)['recovery'])
+    assert row(client)['recovery_state'] == 'prepared'
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_args_list[0] == enqueue.call_args_list[1]
+    assert enqueue.call_args.args[1] == 'https://synthetic.run.app/v2/batch-pipeline/recover-quarantine'
+    assert enqueue.call_args.args[3] == {'stage': 'prod', 'segment_id': 'bad'}
+    recovery.clock = lambda: 240
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_args_list[2].args[2] != enqueue.call_args_list[1].args[2]
+    assert row(client)['recovery'] == intent  # New wake is never a new paid epoch.
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == 1
+
+
+def test_running_dispatch_only_reconciles_and_never_reissues_provider(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, artifacts, stt, recovery = setup
+    job = recovery.protocol.prepare('bad', binding.owner_id, 100)
+    assert recovery.protocol.start('bad', job['recovery']['token'], 100)
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    artifacts.find_recovery_result.assert_called_once()
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+    enqueue.assert_not_called()
+
+
+def test_default_sweep_queues_one_wake_and_inline_rollback_calls_recover(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    _, _, binding, _, _, recovery = setup
+    monkeypatch.setattr(module, 'recovery_candidates', Mock(return_value=[('bad', binding.owner_id)] * 2))
+    recovery.dispatch = Mock(return_value='queued')
+    recovery.recover = Mock(return_value='recovered')
+    assert recovery.sweep() == {'queued': 1}
+    recovery.recover.assert_not_called()
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
+    assert recovery.sweep() == {'recovered': 1}
+    recovery.recover.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'audience', ['', 'http://synthetic.invalid', 'https://synthetic.invalid/foreign', 'https://synthetic.invalid?x=1']
+)
+def test_invalid_request_target_leaves_prepared_intent_unspent(setup, monkeypatch, audience):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', audience)
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    with pytest.raises(ValueError):
+        recovery.dispatch('bad', binding.owner_id)
+    assert row(client)['recovery_state'] == 'prepared'
+    enqueue.assert_not_called()
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()

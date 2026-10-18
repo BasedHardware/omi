@@ -5611,3 +5611,26 @@ are independent of new admission; rollback reuses the same queues and receipts.
 See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
 for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
+
+
+### Paid quarantine recovery request lifetime
+
+`BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
+serving reconciliation loop prepares the existing fenced recovery intent and
+queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+The target is `BATCH_PIPELINE_WORKER_AUDIENCE` plus
+`/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
+The handler awaits the sole provider call and result persistence before replying,
+so ordinary Cloud Run revision draining sees an active request. Background sweeps
+only enqueue prepared work or reconcile running artifacts; they do not spend a
+paid intent. Queue creation failures leave the same prepared intent for repair.
+A two-minute wake-name generation repairs exhausted tasks without authorizing a
+second provider call. Existing privacy, lease, content ownership and intent-token
+fences apply to every delivery, including duplicates and admission rollback.
+
+Kill switch: set `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false` to restore inline
+sweeping. Already enqueued tasks still use the same intent fence. No historical
+`failed_held` intent is reset. An exceptional instance kill can still leave an
+uncertain paid call held; this requires provider result reconciliation or an
+explicit new epoch, never blind retry. Do not weaken the quarantine-to-completion
+gate or exclude censored held work to hide this residual obligation.
