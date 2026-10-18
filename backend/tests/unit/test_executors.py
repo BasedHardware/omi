@@ -181,6 +181,7 @@ def test_get_executor_metrics_returns_all_pools():
         'db',
         'llm',
         'stripe',
+        'posthog_flags',
         'sync',
         'postprocess',
         'cleanup',

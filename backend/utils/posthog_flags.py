@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
 
+from utils.executors import posthog_flag_executor, run_blocking
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,7 +83,9 @@ class PostHogPairedFlagProvider:
 
     async def __call__(self, uid: str) -> PairedFlagEvaluation:
         try:
-            return await asyncio.wait_for(asyncio.to_thread(self._read, uid), timeout=self.timeout_seconds)
+            return await asyncio.wait_for(
+                run_blocking(posthog_flag_executor, self._read, uid), timeout=self.timeout_seconds
+            )
         except Exception as exc:
             logger.warning('paired PostHog flag lookup failed error_type=%s', type(exc).__name__)
             return PairedFlagEvaluation(TriState.UNKNOWN, TriState.UNKNOWN)
