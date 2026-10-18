@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import unittest.mock
 from types import SimpleNamespace
 
@@ -707,3 +708,15 @@ for key, reason in {
     'utils.multipart.parse_multipart_form': 'AST false positive: Request.stream reads the incoming multipart HTTP body',
 }.items():
     SKIPS[key] = SkipEntry(key, reason, BODY_DIGEST[key])
+
+
+def _completed_status_enabled(client):
+    return unittest.mock.patch.dict(os.environ, {'SYNC_DURABLE_STATUS_RECONCILIATION': 'true', 'OMI_ENV_STAGE': 'prod'})
+
+
+_driver(
+    'utils.sync.completed_status.get_completed_legacy_status',
+    base={'job_id': 'legacy-job', 'uid': UID, 'job': None},
+    patchers=(_completed_status_enabled,),
+    profile='expired-legacy-handle',
+)
