@@ -1551,6 +1551,9 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
+            value: https://backend-integration-hhibjajaja-uc.a.run.app
+            category: service_auth
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'

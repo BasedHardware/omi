@@ -179,12 +179,11 @@ def load(path: Optional[Path] = None) -> Config:
     silently destroy config the user could still repair by hand.
     """
     p = path or default_config_path()
-    if not p.exists():
-        return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
-
     try:
         with p.open("rb") as fh:
             data = tomllib.load(fh)
+    except FileNotFoundError:
+        return Config(path=p, active_profile=DEFAULT_PROFILE_NAME, profiles={})
     except tomllib.TOMLDecodeError as exc:
         return Config(
             path=p,
