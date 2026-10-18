@@ -13609,4 +13609,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get summaryFailedBody => '总结此对话时出了点问题。';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '已保存 $saved / $total 的音频';
+  }
 }

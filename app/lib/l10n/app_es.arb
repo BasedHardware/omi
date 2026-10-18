@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "Límite de resúmenes alcanzado",
     "summaryLimitBody": "Has regenerado varios resúmenes en la última hora. Inténtalo de nuevo más tarde.",
     "summaryFailedTitle": "No se pudo resumir",
-    "summaryFailedBody": "Algo salió mal al resumir esta conversación."
+    "summaryFailedBody": "Algo salió mal al resumir esta conversación.",
+    "playbackPartialAudioSaved": "Se guardaron {saved} de {total} de audio"
 }

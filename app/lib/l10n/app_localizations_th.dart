@@ -13754,4 +13754,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'บันทึกเสียงแล้ว $saved จาก $total';
+  }
 }

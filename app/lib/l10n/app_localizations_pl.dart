@@ -13862,4 +13862,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Coś poszło nie tak podczas podsumowywania tej rozmowy.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Zapisano $saved z $total dźwięku';
+  }
 }

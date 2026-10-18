@@ -13746,4 +13746,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'حدث خطأ ما أثناء تلخيص هذه المحادثة.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'تم حفظ $saved من $total من الصوت';
+  }
 }

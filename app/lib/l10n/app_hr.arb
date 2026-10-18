@@ -11651,5 +11651,6 @@
     "summaryLimitTitle": "Dosegnuto je ograničenje sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena više ste puta ponovno generirali sažetke. Pokušajte ponovno kasnije.",
     "summaryFailedTitle": "Sažimanje nije uspjelo",
-    "summaryFailedBody": "Došlo je do pogreške pri sažimanju ovog razgovora."
+    "summaryFailedBody": "Došlo je do pogreške pri sažimanju ovog razgovora.",
+    "playbackPartialAudioSaved": "Spremljeno {saved} od {total} zvuka"
 }

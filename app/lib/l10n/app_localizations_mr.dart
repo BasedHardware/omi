@@ -13830,4 +13830,9 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'हे संभाषण सारांशित करताना काहीतरी चूक झाली.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ऑडिओ जतन केला, एकूण $total';
+  }
 }
