@@ -450,7 +450,14 @@ class _SlideCard extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(16, 18, 16, 0), child: spec.art)),
+              // The art is designed at a fixed 280pt width and scaled down to whatever room the card
+              // has, so a narrow phone or a three-line caption never overflows it.
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                  child: FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: 280, child: spec.art)),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
                 child: Text(
@@ -478,7 +485,7 @@ class _SummaryArt extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(OmiRadius.lg),
           child: Container(
-            width: 240,
+            constraints: const BoxConstraints(maxWidth: 240),
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             decoration: const BoxDecoration(color: _Paper.card),
             child: Column(
@@ -527,12 +534,15 @@ class _SpeakersArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget bar(double width) => Container(
-          height: 7,
-          width: width,
-          decoration: BoxDecoration(
-            color: _Paper.card.withValues(alpha: 0.55),
-            borderRadius: BorderRadius.circular(OmiRadius.pill),
+    Widget bar(double fraction) => FractionallySizedBox(
+          alignment: Alignment.centerLeft,
+          widthFactor: fraction,
+          child: Container(
+            height: 7,
+            decoration: BoxDecoration(
+              color: _Paper.card.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(OmiRadius.pill),
+            ),
           ),
         );
     Widget row(String initial, String name, String time, Alignment pill) => Stack(
@@ -547,7 +557,7 @@ class _SpeakersArt extends StatelessWidget {
               ),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [bar(170), const SizedBox(height: 6), bar(110)]),
+                  children: [bar(0.85), const SizedBox(height: 6), bar(0.55)]),
             ),
             Positioned(
               right: 12,
@@ -592,21 +602,26 @@ class _BubbleArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget bubble(String text, {double size = 12, double width = 190}) => Container(
-          width: width,
+    Widget bubble(String text, {double size = 12}) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(color: _Paper.card, borderRadius: BorderRadius.circular(OmiRadius.lg)),
           child: Text(text, style: _Paper.label(size: size, weight: FontWeight.w500)),
         );
+    // Two small bubbles share the row; the big one takes the width it has. Nothing here is a fixed
+    // pixel width, so a 320pt phone lays out the same as a 430pt one.
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [bubble(lines[0], width: 135, size: 11), bubble(lines[1], width: 140, size: 11)],
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(child: bubble(lines[0], size: 11)),
+            const SizedBox(width: 10),
+            Flexible(child: bubble(lines[1], size: 11)),
+          ],
         ),
         const SizedBox(height: 10),
-        bubble(lines[2], size: 14, width: 230),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: bubble(lines[2], size: 14)),
       ],
     );
   }
