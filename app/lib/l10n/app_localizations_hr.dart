@@ -13856,4 +13856,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Došlo je do pogreške pri sažimanju ovog razgovora.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Spremljeno $saved od $total zvuka';
+  }
 }

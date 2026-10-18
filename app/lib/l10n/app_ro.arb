@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "Limita de rezumate a fost atinsă",
     "summaryLimitBody": "Ai regenerat mai multe rezumate în ultima oră. Încearcă din nou mai târziu.",
     "summaryFailedTitle": "Nu s-a putut rezuma",
-    "summaryFailedBody": "A apărut o problemă la rezumarea acestei conversații."
+    "summaryFailedBody": "A apărut o problemă la rezumarea acestei conversații.",
+    "playbackPartialAudioSaved": "{saved} din {total} audio salvat"
 }

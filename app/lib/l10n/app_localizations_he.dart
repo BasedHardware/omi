@@ -13726,4 +13726,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'משהו השתבש בעת סיכום השיחה הזו.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'נשמרו $saved מתוך $total של אודיו';
+  }
 }

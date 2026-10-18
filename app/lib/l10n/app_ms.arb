@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "Had ringkasan dicapai",
     "summaryLimitBody": "Anda telah menjana semula beberapa ringkasan dalam sejam yang lalu. Cuba lagi nanti.",
     "summaryFailedTitle": "Tidak dapat meringkaskan",
-    "summaryFailedBody": "Sesuatu tidak kena semasa meringkaskan perbualan ini."
+    "summaryFailedBody": "Sesuatu tidak kena semasa meringkaskan perbualan ini.",
+    "playbackPartialAudioSaved": "{saved} daripada {total} audio disimpan"
 }

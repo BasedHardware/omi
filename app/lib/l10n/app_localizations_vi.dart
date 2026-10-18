@@ -13822,4 +13822,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Đã lưu $saved trên $total âm thanh';
+  }
 }
