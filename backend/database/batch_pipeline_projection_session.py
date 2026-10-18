@@ -156,22 +156,24 @@ class ProjectionSession:
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
 
-    def persist(self, transaction, planned=None):
+    def persist(self, transaction, planned=None, *, superseded=False):
         assigned, created, survivors = planned if planned is not None else ({}, False, [])
         repeat_only = assigned.get('_sync_lineage_repeat_only', False)
         receipt = {
-            'state': 'persisted',
+            'state': 'ready' if superseded else 'persisted',
             'conversation_id': assigned.get('id'),
             'created': created,
             'language': assigned.get('language') or self.binding.language or 'en',
             'persisted_at': self.now,
             'audio_required': bool(survivors and self.binding.private_cloud_sync_enabled),
             'incoming_segment_count': self.incoming_segment_count,
-            'speech_seconds': self.speech_seconds,
+            'speech_seconds': 0.0 if superseded else self.speech_seconds,
             'enrichment_required': bool(
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
         }
+        if superseded:
+            receipt.update(disposition='superseded', superseded_speech_seconds=self.speech_seconds)
         if self.part_index is not None:
             receipt.update(
                 part_index=self.part_index,
@@ -190,11 +192,25 @@ class ProjectionSession:
             if self.part_index != self.part_count - 1:
                 transaction.update(self.result_ref, changes)
                 return receipt
-            summary = {**receipt, 'speech_seconds': self.total_speech_seconds, 'part_count': self.part_count}
-            changes.update(projection=summary, projection_state='persisted')
+            summary = {
+                **receipt,
+                'state': 'ready' if all(part['state'] == 'ready' for part in parts.values()) else 'persisted',
+                'speech_seconds': max(
+                    0.0,
+                    self.total_speech_seconds
+                    - sum(part.get('superseded_speech_seconds', 0.0) for part in parts.values()),
+                ),
+                'part_count': self.part_count,
+            }
+            # The summary describes the whole result, not merely its last part.
+            summary.pop('disposition', None)
+            summary.pop('superseded_speech_seconds', None)
+            if all(part.get('disposition') == 'superseded' for part in parts.values()):
+                summary.update(disposition='superseded', speech_seconds=0.0)
+            changes.update(projection=summary, projection_state=summary['state'])
             transaction.update(self.result_ref, changes)
         else:
-            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': 'persisted'})
+            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
         transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
         for reference in self.erased_predecessors:
             transaction.update(
@@ -214,10 +230,10 @@ class ProjectionSession:
         )
         return receipt
 
-    def persist_empty(self):
+    def persist_empty(self, *, superseded=False):
         @firestore.transactional
         def commit(transaction):
             self.prepare(transaction)
-            return self.persist(transaction)
+            return self.persist(transaction, superseded=superseded)
 
         return self.store.run(commit)

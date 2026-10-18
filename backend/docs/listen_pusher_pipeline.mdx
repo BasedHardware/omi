@@ -5824,3 +5824,15 @@ unmanaged sockets do not contribute. Other providers' first-text timing remains
 outside this window metric. Existing histograms are unchanged. Stage gates,
 sample floors, inverse percentage direction, and same-image rollback are in
 [Live STT routing](runbooks/live-stt-routing.md#static-routing-cohort-ramp-stage-1).
+
+### Terminal batch assignment supersession
+
+When sync assignment raises `SyncAssignmentSuperseded`, the batch projector
+persists a ready part receipt with `disposition=superseded` and zero speech usage.
+It writes no conversation content and schedules no playback or enrichment for
+that part. Multipart and sibling completion still use the ordered cursor and
+content ledger; successful parts retain their usage. Completed client results
+include `superseded_segments` with zero failures, rather than reporting silence.
+A fresh transaction rechecks privacy/deletion fences, immutable binding and
+ledger ownership before settlement; a concurrently committed assignment receipt
+wins. Account/protection revocation still follows the existing erasure path.
