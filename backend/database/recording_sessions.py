@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Mapping, TypedDict
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
 from database import conversations as conversations_db
@@ -62,6 +63,13 @@ def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
+def _require_identifier(value: Any, field: str) -> str:
+    """Reject empty/whitespace/non-string identifiers before path building."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f'{field} must be a non-empty string')
+    return value.strip()
+
+
 def _session_ref(client: Any, uid: str, recording_session_id: str) -> Any:
     return (
         client.collection('users')
@@ -74,7 +82,7 @@ def _session_ref(client: Any, uid: str, recording_session_id: str) -> Any:
 def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflict: bool) -> RecordingSessionBinding:
     return {
         'recording_session_id': recording_session_id,
-        'conversation_id': str(data['conversation_id']),
+        'conversation_id': str(data.get('conversation_id') or ''),
         'lifecycle_version': int(data.get('lifecycle_version') or LIFECYCLE_ENVELOPE_VERSION),
         'lifecycle_phase': str(data.get('lifecycle_phase') or 'in_progress'),
         'lifecycle_sequence': int(data.get('lifecycle_sequence') or 0),
@@ -161,8 +169,9 @@ def create_or_get_recording_session(
     include_conversation_snapshot: bool = False,
 ) -> dict[str, Any]:
     """Atomically bind a session to exactly one canonical conversation ID."""
-    if not uid or not recording_session_id or not proposed_conversation_id:
-        raise ValueError('uid, recording_session_id, and proposed_conversation_id are required')
+    uid = _require_identifier(uid, 'uid')
+    recording_session_id = _require_identifier(recording_session_id, 'recording_session_id')
+    proposed_conversation_id = _require_identifier(proposed_conversation_id, 'proposed_conversation_id')
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_create_or_get_recording_session_txn)
@@ -234,8 +243,8 @@ def get_recording_session(
     firestore_client: Any = None,
 ) -> RecordingSessionBinding | None:
     """Read the canonical binding without proposing or mutating an identity."""
-    if not uid or not recording_session_id:
-        raise ValueError('uid and recording_session_id are required')
+    uid = _require_identifier(uid, 'uid')
+    recording_session_id = _require_identifier(recording_session_id, 'recording_session_id')
     snapshot = _session_ref(_client(firestore_client), uid, recording_session_id).get()
     if not getattr(snapshot, 'exists', False):
         return None
@@ -266,12 +275,13 @@ def tombstone_and_delete_empty_conversation(
     itself: by the time this returns the row is gone, and a fetch beforehand
     would decide against a snapshot a concurrent write can still invalidate.
     """
+    uid = _require_identifier(uid, 'uid')
+    conversation_id = _require_identifier(conversation_id, 'conversation_id')
+    # A whitespace-only optional session id is not a real binding — normalize
+    # to None rather than building an invalid document path.
+    if isinstance(recording_session_id, str):
+        recording_session_id = recording_session_id.strip() or None
     client = _client(firestore_client)
-    conversation_ref = (
-        client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
-    )
-    session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
-    transaction = client.transaction()
 
     @firestore.transactional
     def _delete_empty(transaction: Any) -> bool:
@@ -316,7 +326,16 @@ def tombstone_and_delete_empty_conversation(
         transaction.delete(conversation_ref)
         return True
 
-    deleted = _delete_empty(transaction)
+    try:
+        conversation_ref = (
+            client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
+        )
+        session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
+        deleted = _delete_empty(client.transaction())
+    except NotFound:
+        # A concurrent purge can remove the row mid-transaction — that's a
+        # "not deleted by us", not a crash.
+        return False
     if deleted:
         invalidate_people_stats_cache(uid)
     return deleted
@@ -412,6 +431,9 @@ def record_lifecycle_event(
     firestore_client: Any = None,
 ) -> RecordingSessionEvent:
     """Append a monotonic lifecycle envelope, rejecting stale or misbound events."""
+    uid = _require_identifier(uid, 'uid')
+    recording_session_id = _require_identifier(recording_session_id, 'recording_session_id')
+    conversation_id = _require_identifier(conversation_id, 'conversation_id')
     if phase not in _PHASE_ORDER:
         raise ValueError(f'unsupported recording lifecycle phase: {phase}')
     client = _client(firestore_client)
