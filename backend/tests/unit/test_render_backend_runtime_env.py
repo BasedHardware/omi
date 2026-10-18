@@ -282,7 +282,7 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
     approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
         for key, value in node.items():
-            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+            if key in approved_allowlists:
                 continue
             if _contains_uid_outside_approved_allowlists(value, uid):
                 return True

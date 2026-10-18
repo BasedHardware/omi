@@ -19,6 +19,7 @@ from config.dream_agent import (
     DRAIN_TIMEOUT_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
+from config.rollout_cohorts import warm_rollout_cohorts
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
@@ -609,6 +610,7 @@ async def run_pass(
     caps = caps or Caps.from_env()
     if bootstrap_tools is not None and not canary:
         raise ValueError('dream_bootstrap_requires_synthetic_canary')
+    await warm_rollout_cohorts(uid)
     # Reject stale queue entries before capacity waits or owner-data loading.
     # Synthetic canaries have separate, authoritative admission in acquire().
     if not canary and not may_be_eligible(uid):

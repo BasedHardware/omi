@@ -610,13 +610,11 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'DREAM_AGENT_ELIGIBILITY',
-                'DREAM_AGENT_UID_ALLOWLIST',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
                 'DEMAND_PROCESSING_LAZY_ENABLED',
                 'DEMAND_PROCESSING_TOOL_ENABLED',
                 'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
-                'DEMAND_PROCESSING_UID_ALLOWLIST',
                 'DEMAND_PROCESSING_PERCENT',
             )
         )
@@ -3356,14 +3354,12 @@ def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
     controls = {
         'TRANSCRIPTION_SHADOW_ENABLED': 'true',
         'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
-        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'omi-release-probe',
         'TRANSCRIPTION_SHADOW_PERCENT': '0',
         'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
     }
     dark = {
         **controls,
         'TRANSCRIPTION_SHADOW_ENABLED': 'false',
-        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': '',
         'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '0',
     }
     validator = load_validator()
@@ -3406,7 +3402,14 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
                 'cloud_run/backend-sync',
                 'cloud_run/backend-sync-backfill',
             ):
-                assert {key: env[key]['value'] for key in controls} == selected, scope
+                expected = {
+                    key: value
+                    for key, value in selected.items()
+                    if not (scope.startswith('cloud_run/') and key.endswith('_UID_ALLOWLIST'))
+                }
+                assert {key: env[key]['value'] for key in expected} == expected, scope
+                if scope.startswith('cloud_run/'):
+                    assert all(key not in env for key in controls if key.endswith('_UID_ALLOWLIST')), scope
             else:
                 assert all(key not in env for key in controls), scope
 

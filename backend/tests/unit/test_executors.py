@@ -282,16 +282,23 @@ async def test_start_background_task_tracks_and_removes():
     assert task not in _background_tasks
 
 
-def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog):
-    """A live account gate refuses the write. That is not a background crash."""
+@pytest.fixture
+def destructive_operation_error():
+    # Dependency initialization is setup, outside the fast-unit call budget.
     from database.legal_holds import DestructiveOperationInProgress
 
+    return DestructiveOperationInProgress
+
+
+def test_submit_with_context_defers_destructive_operation_fence_without_traceback(caplog, destructive_operation_error):
+    """A live account gate refuses the write. That is not a background crash."""
+
     def blocked():
-        raise DestructiveOperationInProgress('external data write blocked by destructive operation')
+        raise destructive_operation_error('external data write blocked by destructive operation')
 
     with caplog.at_level(logging.INFO, logger='utils.executors'):
         future = submit_with_context(_test_executor, blocked)
-        with pytest.raises(DestructiveOperationInProgress):
+        with pytest.raises(destructive_operation_error):
             future.result(timeout=2)
         time.sleep(0.05)
 

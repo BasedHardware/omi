@@ -76,8 +76,8 @@ identity. Hidden state remains valid while the socket heartbeats. Stale/missing
 presence and dependency failures require a vendor. Deploy presence globally at
 zero allocation and drain older pods/sockets before admitting a canary.
 
-`STT_LIVE_DEMAND_PERCENT` and comma-separated `STT_LIVE_DEMAND_UID_ALLOWLIST`
-select the cohort. `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` defaults to 15: stable
+`STT_LIVE_DEMAND_PERCENT` and the private Firestore `stt-live-demand` cohort
+select routing membership. The old UID env list is a migration fallback only. `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` defaults to 15: stable
 hidden demand admits the existing Parakeet window leg, while visible/unknown
 or consumer demand returns to vendors immediately. Existing window allocation,
 capacity, pressure and recovery controls remain authoritative. Non-English,
@@ -132,7 +132,7 @@ accounted media duration admitted per request. The finite allowance check bounds
 normally narrows it further. The semaphore is not shared across replicas, and an
 accounting-write outage does not have this finite cumulative bound.
 
-> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by the private Firestore sync-lineage-resolve cohort, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 
 Conversation finalization notes and opted-in mobile/app chat use shaped invocation
 when `OMI_SHAPED_AGENT_MODE=on` on prod backend, backend-sync,
@@ -156,7 +156,9 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
-Production backend-listen and pusher set `DREAM_AGENT_MODE=on` (owner dogfood since 2026-10-11) with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
+Backend-listen and pusher share the private Firestore `dream-agent` cohort in
+their deployment environment; no UID env binding is required. Existing
+conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
@@ -298,17 +300,20 @@ query set and log format — no probe, no stage counts, no stamp-append marker
 or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
-Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
-empty admits everyone) limits per-segment binding to listed owners; other uids
-use the kill-switch-off binding behavior.
-Sync appends to live targets always preserve the live origin,
-and fresh live speech on any `sync_live_target` always advances its revision,
-independent of this allowlist or kill switch. Open-live enrichment stays deferred.
-The listen origin stamp is metadata only and ignores the list, so widening finds
-lineage stamped. Prod lists one uid on all five identical services (unset
-admits everyone); dev leaves it unset. Refused eligible uploads log
+Staged rollout uses the private Firestore `sync-lineage-resolve` cohort to limit
+per-segment binding. Missing Firestore fields retain legacy env membership;
+empty or absent legacy lineage keys preserve enable-all, including dev.
+The kill switch wins over binding admission. Sync appends to live targets always
+preserve the live origin, and fresh speech on any `sync_live_target` always
+advances its revision regardless of cohort membership or the lineage kill
+switch. The metadata-only listen origin stamp stays under the kill switch alone.
+Cloud Run preserves omitted live allowlists; listen retains its legacy chart
+value until a separate removal PR after seed and verification. Read errors deny
+cohort membership. Refused eligible uploads log
 `event=sync_lineage_resolve outcome=not_allowlisted` with no ids. The metric
 comes from backend-sync, which is not scraped, so logs are the watch source.
+See [private rollout cohorts](runbooks/rollout-cohorts.md) for seeding, cache
+expiry, deploy ordering and rollback.
 `SYNC_LINEAGE_S1_REQUIRED` (default on; unset or blank on, explicit on-tokens
 on, any unrecognized value including a typo off) additionally requires, inside
 `lineage_resolution_requested` after the kill switch and the allowlist, a
@@ -4700,16 +4705,18 @@ retention contract. No new client capability is advertised by this foundation.
 
 ### Flagged shared batch diarization
 
-Production stage B binds David-only authoritative diarization on backend,
+Production stage B binds authoritative diarization for the private
+`transcription-final-pass` cohort on backend,
 backend-sync, backend-sync-backfill and pusher through the shared Gateway
 `/diarizer-batch` prefix. Sync is enabled from B onward; A disables both sync
-and live authoritative promotion. David's offline/backfill recordings bypass
+and live authoritative promotion. Offline/backfill recordings bypass
 pusher shadow admission, so acceptance checks the sync pipeline output. Exact env stages, caps,
 acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
 
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
-paths. `pyannote_shadow` admits only `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` or
-`TRANSCRIPTION_FINAL_PASS_PERCENT`. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
+paths. `pyannote_shadow` admits the private `transcription-final-pass` cohort or
+`TRANSCRIPTION_FINAL_PASS_PERCENT`. The former UID env list remains a migration
+fallback only. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
 `pyannote` (default), `legacy_ahc`, or the contract-compatible `nemotron` HTTP
 adapter. The latter requires its own serving endpoint and qualification.
 
@@ -4771,8 +4778,9 @@ control channel (renewed every 60 seconds). Listen's `service_status` events
 `ready` and `mobile_batch_admission` carry the optional boolean
 `mobile_standard_batch`; absent/false means normal streaming. Permission expires
 on the client after two minutes without renewal and on every socket close.
-`MOBILE_STANDARD_BATCH_ENABLED`, `MOBILE_STANDARD_BATCH_PERCENT` and
-`MOBILE_STANDARD_BATCH_UIDS` default to off/0/empty. Admission also requires
+`MOBILE_STANDARD_BATCH_ENABLED` and `MOBILE_STANDARD_BATCH_PERCENT` default to
+off/0; the private Firestore `mobile-standard-batch` cohort selects explicit
+members. `MOBILE_STANDARD_BATCH_UIDS` remains a migration fallback only. Admission also requires
 private-cloud sync, ordinary STT and no enabled integrations or developer audio/
 realtime-transcript webhook. Inventory reads are limited to once per 30 seconds;
 unknown inventory keeps streaming. Transcript visibility and voice commands
@@ -4787,12 +4795,15 @@ unchanged bytes; the account-deletion storage gate/purge owns this prefix. It ha
 no application TTL. Sync playback and backend VAD's conversation assignment stay
 unchanged. Deploy archive acceptance on backend-sync before advertising permission
 on listen; rollback revokes new batching but continues accepting pending files.
-Production dogfood binds the three `MOBILE_STANDARD_BATCH_*` flags only on
-backend-listen: enabled, percentage zero, and David
-(`vi7SA9ckQCe4ccobWNxlbdcNdC23`) allowlisted. Sync archive acceptance is
-unconditional; backend, sync workers and pusher require no admission flags.
-Demand-driven STT presence must finish its empty-allowlist rollout and drain
-old sockets before the David-only listen cohort is deployed. Production Helm
+Production admission binds `MOBILE_STANDARD_BATCH_ENABLED=true` and
+`MOBILE_STANDARD_BATCH_PERCENT=0` only on backend-listen. Seed intended members
+in `rollout_cohorts/{uid}.cohorts.prod.mobile-standard-batch` with the
+[operator script](runbooks/rollout-cohorts.md); keep the UID env key absent.
+Dev membership uses its separate `cohorts.dev` map in the same customer project.
+Sync archive acceptance is unconditional; backend, sync workers and pusher
+require no admission flags. Demand-driven STT presence must finish its global
+presence rollout and drain old sockets before enabling the mobile cohort.
+Production Helm
 workflow source is pinned to `main`; its branch input cannot select an
 intermediate presence-only commit. The lead must pre-roll presence on the
 existing dark revision before dispatching the cohort workflow.
@@ -4935,8 +4946,9 @@ cannot claim the existing immutable manifest either.
 
 `SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
 batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
-capacity only for an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default
-empty), or a stable SHA-256 UID bucket in `SYNC_LEGACY_FRESH_PERCENT` (default
+capacity only for private `sync-legacy-fresh` cohort members (the old UID env
+list is a migration fallback), or a stable SHA-256 UID bucket in
+`SYNC_LEGACY_FRESH_PERCENT` (default
 zero). Buckets match transcription final pass; the master flag disables both.
 Malformed/non-finite percentages select nobody beyond the allowlist; finite
 percentages clamp to 0–100. The atomic Redis token reservation still applies to
@@ -5010,7 +5022,10 @@ instead of emitting a per-row repair error.
 
 `FIRST_SUMMARY_DEADLINE_ENABLED` (default false) caps the existing outbox's first
 summary dispatch at original pending time + `FIRST_SUMMARY_DEADLINE_SECONDS`
-(default 120, bounded 60–120); `FIRST_SUMMARY_UID_ALLOWLIST` supports a canary.
+(default 120, bounded 60–120); the private `first-summary` cohort supports a
+canary. A nonempty old UID env list remains a migration fallback; both empty
+and absent keys deny nonmembers unless the independent percentage ramp admits
+them, preserving main #22113.
 First-summary work bypasses demand-tier waiting and uses a 120s lease, renewed
 every 30s for the same owner/task token while the request is alive. Only a
 replacement conversation owner fences persistence; the same owner's result can
@@ -5344,7 +5359,8 @@ capacity tradeoff, not a distributed projection fence (revision overlap remains 
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
 When true, retained server-STT captures use the existing
-`BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` hash cohort. New in-progress rows
+`BATCH_PIPELINE_ENABLED` master switch, `BATCH_PIPELINE_PERCENT` hash ramp and
+private Firestore `batch-pipeline` cohort. New in-progress rows
 reserve `record_lane_owner=batch_live_v1` in their existing create write. Captures
 already in progress at enablement reserve the same owner from the finalizer's
 already-loaded revision using a conditional write, with zero extra reads on a
@@ -5435,7 +5451,8 @@ the new flag is on; there is no per-tick query to discover whether owners exist.
 Already admitted ready GPU work continues through the existing serving path.
 
 For rollback with pending registrations or first-WAL proofs to drain, close new
-admission with existing `BATCH_PIPELINE_ENABLED/PERCENT/UID_ALLOWLIST` controls
+admission with the existing batch master/percentage controls and private
+`batch-pipeline` cohort membership
 while retaining the live flag and serving/recovery paths. Set the new flag false
 after those obligations resolve. Flag-off drains already-loaded owners and existing
 content aliases, but does not discover unknown owners. Do not roll back to an image
@@ -5615,6 +5632,23 @@ not qualify. The flag does not change admission, integration recovery gates,
 or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
+
+Private user rollout membership on Cloud Run, listen and pusher uses the shared
+[Firestore cohort cache](runbooks/rollout-cohorts.md). `OMI_ENV_STAGE` selects the
+separate dev/prod membership maps in the customer data plane. Cloud Run manifests
+omit private UID keys so live env survives a merge; Helm keeps every legacy
+allowlist until a separate removal PR after live seed and verification.
+OIDC sync tasks and delayed inline sync work await the first/expired cohort read
+before selecting lineage routing. Dream pass and model-turn admission, pusher
+shadow finalization, mobile batch renewals and
+live-demand handovers also warm membership before deciding; warm checks make
+zero reads. Live audio archive snapshots each phase decision for an admitted connection
+to avoid packet gaps at cache expiry; cohort changes apply to that archive
+connection on reconnect. Membership changes do not require a Helm env override. Seed the intended members
+in their original environment before deploying the cohort-aware image and its
+matching manifest/chart together. Preserve dev absent-lineage allow-all and
+the live iMessage policy. Cutover order is seed, verify, switch reads, then
+remove env in a separate PR.
 
 ### Deterministic batch worker validation disposition
 

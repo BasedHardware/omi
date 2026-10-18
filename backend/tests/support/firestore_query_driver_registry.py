@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import importlib
 import unittest.mock
+
+from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -2922,7 +2924,18 @@ _add(
         patchers=(_messaging_cleanup, _messaging_decryption),
     )
 )
-_add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
+_add(
+    DriverEntry(
+        'database.channel_visibility.visible_sessions',
+        base={'uid': UID},
+        patchers=(
+            _messaging_visibility,
+            # Drivers run outside serving bootstrap/function fixtures. Model a
+            # successful empty cohort document with the explicit synthetic env fallback.
+            lambda client: unittest.mock.patch('config.rollout_cohorts._membership_resolver', legacy_membership),
+        ),
+    )
+)
 
 _add(
     DriverEntry(
@@ -3067,5 +3080,21 @@ _add(
         'database.summary_debt_queries.due_conversations',
         neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
         domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
+    )
+)
+
+# Background-only discovery. Each boolean field has its own automatic single-field
+# index; point reads of all memberships on serving requests need no query index.
+_add(
+    DriverEntry(
+        'database.rollout_cohorts.read_cohort_members',
+        domains={
+            'name': [
+                'prod:batch-pipeline-recovery',
+                'prod:dream-agent',
+                'dev:batch-pipeline-recovery',
+                'dev:dream-agent',
+            ]
+        },
     )
 )
