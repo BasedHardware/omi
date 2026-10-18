@@ -25,6 +25,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Capture this stdlib-only module before legacy suites replace the database package.
+# The fixture must not import through those synthetic package objects.
+import database.rollout_cohorts as _rollout_cohorts
+
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
     install_database_client_stub,
@@ -282,7 +286,8 @@ def isolated_dream_dynamic_control(monkeypatch):
 def empty_rollout_cohorts(monkeypatch):
     """Unit fixtures have no cohort documents unless the test supplies a store/cache."""
     from concurrent.futures import Future
-    import database.rollout_cohorts as cohorts
+
+    cohorts = _rollout_cohorts
 
     class EmptyCache:
         def get(self, _key):
