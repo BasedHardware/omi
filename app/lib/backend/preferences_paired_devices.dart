@@ -63,7 +63,9 @@ extension PairedDeviceSlots on SharedPreferencesUtil {
         remove('companionBtDevice');
         saveString('btDevice', jsonEncode(companion.toJson()));
       } else {
-        remove('btDevice');
+        // Cleared by a write, not remove(): only a btDevice write emits
+        // deviceChanges, which retires the saved-reconnect target.
+        saveString('btDevice', '');
       }
     }
     final devices = btDevices.where((device) => device.id != deviceId).toList();

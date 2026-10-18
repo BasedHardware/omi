@@ -1499,9 +1499,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (deviceId.isEmpty) return;
     Logger.debug('DeviceProvider: forgetting device $deviceId');
     final preferences = SharedPreferencesUtil();
+    final wasPrimary = preferences.btDevice.id == deviceId;
     preferences.forgetSavedBtDevice(deviceId);
     if (preferences.pairedDeviceIds.isEmpty) {
       preferences.deviceName = '';
+    } else if (wasPrimary) {
+      preferences.deviceName = preferences.btDevice.name;
     }
 
     // The service releases native itself (unmanageDevice when it tracks no

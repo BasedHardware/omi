@@ -341,11 +341,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     // Read the id before forget promotes a paired companion into the primary slot.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
-    if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
-    await _clearStoredDevice();
-    // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
+      provider.markDisconnectIntentional(deviceId);
+      // Forget owns the saved slots: clearing the primary first would leave a paired companion
+      // unpromoted. It also tears down the connection, transport and native service.
       await provider.forgetDevice(deviceId);
+    } else {
+      await _clearStoredDevice();
     }
     PlatformManager.instance.analytics.disconnectFriendClicked();
     if (!mounted) return;

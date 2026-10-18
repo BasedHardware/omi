@@ -47,6 +47,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   /// [connect]. Native keeps connecting and reconnecting after a Dart-side
   /// timeout or drop, so release cannot be inferred from the mirrored [_state].
   bool _nativeReleased = false;
+  // Bumped by disconnect(); with [_disposed], a connect that awaited across a
+  // release must not leave native managing the peripheral for an owner that is gone.
+  int _releaseGeneration = 0;
+  bool _disposed = false;
   // True only while disconnect() awaits unmanageDevice: a ready arriving in
   // this window is buffered in [_readyWhileReleasing] because a failed release
   // must replay it (native kept the link), while a successful one discards it.
@@ -98,11 +102,17 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   Future<void> connect() => _connectInFlight ??= _connect().whenComplete(() => _connectInFlight = null);
 
   Future<void> _connect() async {
+    final release = _releaseGeneration;
+    bool released() => _disposed || release != _releaseGeneration;
     hasRetryableConnectFailure = true;
     if (_state == DeviceTransportState.connected && await isConnected()) return;
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.connection)) {
       throw BluetoothAdapterUnavailableException(BluetoothReadiness.instance.state);
+    }
+    if (released()) {
+      hasRetryableConnectFailure = false;
+      throw 'unmanaged';
     }
 
     _updateState(DeviceTransportState.connecting);
@@ -122,6 +132,20 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       _updateState(DeviceTransportState.disconnected);
       rethrow;
     }
+    if (released()) {
+      _deviceReadyCompleter = null;
+      _updateState(DeviceTransportState.disconnected);
+      hasRetryableConnectFailure = false;
+      // disconnect() sent its own unmanage after this manage; dispose() never unmanages.
+      if (_disposed) {
+        try {
+          await _hostApi.unmanageDevice(_peripheralUuid);
+        } catch (e) {
+          Logger.debug('[NativeBleTransport] unmanageDevice after dispose failed: $e');
+        }
+      }
+      throw 'unmanaged';
+    }
 
     try {
       _services = await deviceReady.timeout(
@@ -140,6 +164,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
 
   @override
   Future<void> disconnect() async {
+    _releaseGeneration++;
     if (_deviceReadyCompleter case final completer? when !completer.isCompleted) {
       completer.completeError('unmanaged');
     }
@@ -322,6 +347,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
 
   @override
   Future<void> dispose() async {
+    _disposed = true;
     _subscriptionGeneration++;
     _audioLivenessTimer?.cancel();
     BleBridge.instance.removeIngressListener(_ingressOwnershipChanged);

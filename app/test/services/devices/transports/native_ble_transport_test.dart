@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -52,6 +53,70 @@ void main() {
       expect(pairingLostNotifications, error == 'pairing_lost' ? 1 : 0);
     });
   }
+
+  for (final release in ['disconnect', 'dispose']) {
+    test('a $release while connect awaits adapter readiness never hands native the peripheral', () async {
+      final adapterRead = Completer<void>();
+      final hostCalls = <String>[];
+      setHostApiHandler('getBluetoothState', (message) async {
+        await adapterRead.future;
+        return ['on'];
+      });
+      setHostApiHandler('manageDevice', (message) async {
+        hostCalls.add('manage');
+        return <Object?>[];
+      });
+      setHostApiHandler('unmanageDevice', (message) async {
+        hostCalls.add('unmanage');
+        return <Object?>[];
+      });
+
+      final transport = NativeBleTransport(_deviceId);
+      final connect = expectLater(transport.connect(), throwsA('unmanaged'));
+      await pumpEventQueue();
+      if (release == 'disconnect') {
+        addTearDown(transport.dispose);
+        await transport.disconnect();
+      } else {
+        await transport.dispose();
+      }
+      hostCalls.clear();
+      adapterRead.complete();
+      await pumpEventQueue();
+
+      expect(hostCalls, isEmpty, reason: 'a released transport must not manage the peripheral');
+      await connect;
+      expect(transport.hasRetryableConnectFailure, isFalse);
+    });
+  }
+
+  test('a dispose while manageDevice is in flight unmanages instead of leaving native an ownerless peripheral',
+      () async {
+    final manageReply = Completer<void>();
+    final hostCalls = <String>[];
+    setHostApiHandler('getBluetoothState', (message) async => ['on']);
+    setHostApiHandler('manageDevice', (message) async {
+      hostCalls.add('manage');
+      await manageReply.future;
+      return <Object?>[];
+    });
+    setHostApiHandler('unmanageDevice', (message) async {
+      hostCalls.add('unmanage');
+      return <Object?>[];
+    });
+
+    final transport = NativeBleTransport(_deviceId);
+    final connect =
+        expectLater(transport.connect(), throwsA('unmanaged'), reason: 'fails now, not after the 60 s ready timeout');
+    await pumpEventQueue();
+    expect(hostCalls, ['manage']);
+    await transport.dispose();
+    manageReply.complete();
+    await pumpEventQueue();
+
+    expect(hostCalls, ['manage', 'unmanage']);
+    await connect;
+  });
 
   test('keeps button listener alive and resubscribes after reconnect', () async {
     final subscribeCalls = <List<Object?>>[];

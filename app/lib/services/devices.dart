@@ -212,11 +212,12 @@ class DeviceService {
     }
   }
 
-  Future<void> _connectToDevice(String id) async {
+  Future<void> _connectToDevice(String id, int release) async {
     // Replace only this device's connection. Other devices stay connected so an
     // Omi pendant and OmiGlass can be attached simultaneously.
     // Caller holds the per-device mutex (see [ensureConnection]).
     await _disposeConnectionUnlocked(id);
+    if (_releaseGenerations[id] != release) return; // forgotten or user-disconnected meanwhile
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
     Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
@@ -390,12 +391,22 @@ class DeviceService {
   /// timeout) must not hold up the glasses sitting next to the phone.
   final Map<String, Mutex> _connectionMutexes = {};
 
+  /// Bumped by [forgetDevice] and a user-initiated [disconnectDevice]. Both are
+  /// lock-free, so a connect that started before one must not store and
+  /// connect a fresh transport for the released device afterwards.
+  final Map<String, int> _releaseGenerations = {};
+
+  void _release(String id) => _releaseGenerations[id] = (_releaseGenerations[id] ?? 0) + 1;
+
   /// [automatic] attempts come from [SavedPendantReconnect] and only ever
   /// target the primary saved device (`SharedPreferencesUtil().btDevice`).
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false, bool automatic = false}) async {
+    final release = _releaseGenerations.putIfAbsent(deviceId, () => 0);
     final mutex = _connectionMutexes.putIfAbsent(deviceId, Mutex.new);
     await mutex.acquire();
     try {
+      // Released while queued on the mutex: do not clear the user's disconnect, just stand down.
+      if (_releaseGenerations[deviceId] != release) return null;
       if (automatic && (_manuallyDisconnected(deviceId) || SharedPreferencesUtil().btDevice.id != deviceId)) {
         return null;
       }
@@ -433,7 +444,7 @@ class DeviceService {
           // changes keep reaching subscribers.
           await existing.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
         } else {
-          await _connectToDevice(deviceId);
+          await _connectToDevice(deviceId, release);
         }
       } on DeviceConnectionException catch (e) {
         Logger.debug(e.cause);
@@ -470,11 +481,12 @@ class DeviceService {
     return null;
   }
 
-  /// Capture-wedge recovery: release the link, then reconnect only the primary
-  /// saved device (companions are left to native auto-reconnect).
+  /// Capture-wedge recovery: release the link, then reconnect it while it is
+  /// still a saved device (primary or companion). The release unmanages it in
+  /// native, so nothing else brings a companion back.
   Future<void> recoverConnection(String deviceId, {required bool Function() shouldRetry}) async {
     await disconnectDevice(deviceId);
-    if (!shouldRetry() || SharedPreferencesUtil().btDevice.id != deviceId) return;
+    if (!shouldRetry() || !SharedPreferencesUtil().pairedDeviceIds.contains(deviceId)) return;
     await ensureConnection(deviceId, force: true);
   }
 
@@ -486,7 +498,10 @@ class DeviceService {
   /// immediately, like on main, and an in-flight forced [ensureConnection] for
   /// the same device simply fails when its transport goes away.
   Future<void> disconnectDevice(String deviceId, {bool userInitiated = false}) async {
-    if (userInitiated) _setManualDisconnect(deviceId, true);
+    if (userInitiated) {
+      _setManualDisconnect(deviceId, true);
+      _release(deviceId);
+    }
     final connection = _connections.remove(deviceId);
     if (connection == null) {
       await BleHostApi().unmanageDevice(deviceId);
@@ -507,6 +522,7 @@ class DeviceService {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     // Persist suppression before the asynchronous teardown.
     _setManualDisconnect(deviceId, true);
+    _release(deviceId);
     clearStaleBondRecoveryRequirement();
     if (_connections.containsKey(deviceId)) {
       await _disposeConnectionUnlocked(deviceId);

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/preferences_paired_devices.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
@@ -27,6 +28,21 @@ class _SlowFakeTransport extends _FakeTransport {
     if (!connectEntered.isCompleted) connectEntered.complete();
     await _gate.future;
     return super.connect();
+  }
+}
+
+/// Holds [dispose] open so a test can land a lock-free release inside it.
+class _SlowDisposeTransport extends _FakeTransport {
+  _SlowDisposeTransport(super.deviceId, this._gate);
+
+  final Completer<void> _gate;
+  final disposeEntered = Completer<void>();
+
+  @override
+  Future<void> dispose() async {
+    if (!disposeEntered.isCompleted) disposeEntered.complete();
+    await _gate.future;
+    return super.dispose();
   }
 }
 
@@ -238,6 +254,53 @@ void main() {
     expect(reconnected?.status, DeviceConnectionState.connected);
     expect(transports['omi-1'], isNot(same(firstTransport)));
   });
+
+  test('capture-wedge recovery reconnects a saved companion, not only the primary', () async {
+    SharedPreferencesUtil().btDevice = _device('omi-1');
+    SharedPreferencesUtil().companionBtDevice = _device('glass-1', type: DeviceType.openglass);
+    await service.ensureConnection('omi-1', force: true);
+    await service.ensureConnection('glass-1', force: true);
+    final wedged = transports.remove('glass-1')!;
+
+    await service.recoverConnection('glass-1', shouldRetry: () => true);
+
+    expect(wedged.disconnectCalls, 1);
+    expect(wedged.disposeCalls, 1);
+    expect(service.connectionFor('glass-1')?.status, DeviceConnectionState.connected);
+    expect(transports['glass-1'], isNot(same(wedged)), reason: 'a fresh transport carries the companion back');
+    expect(transports['omi-1']!.disconnectCalls, 0);
+  });
+
+  for (final release in ['forget', 'user disconnect']) {
+    test('a $release landing while a reconnect disposes the old transport fences that reconnect', () async {
+      const unmanage = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice';
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMessageHandler(
+          unmanage, (_) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]));
+      addTearDown(() => messenger.setMockMessageHandler(unmanage, null));
+      SharedPreferencesUtil().btDevice = _device('omi-1');
+      final gate = Completer<void>();
+      final dropped = _SlowDisposeTransport('omi-1', gate);
+      transports['omi-1'] = dropped;
+      await service.ensureConnection('omi-1', force: true);
+      await dropped.disconnect(); // link drop: the stale transport is replaced on the next forced connect
+      await Future<void>.delayed(Duration.zero);
+      transports.remove('omi-1');
+
+      final reconnect = service.ensureConnection('omi-1', force: true);
+      await dropped.disposeEntered.future;
+      if (release == 'forget') {
+        await service.forgetDevice('omi-1');
+      } else {
+        await service.disconnectDevice('omi-1', userInitiated: true);
+      }
+      gate.complete();
+
+      expect(await reconnect, isNull);
+      expect(service.connectionFor('omi-1'), isNull);
+      expect(transports['omi-1'], isNull, reason: 'no transport is built for the released device');
+    });
+  }
 }
 
 class _RecordingSubscription implements IDeviceServiceSubsciption {

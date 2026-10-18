@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/preferences_paired_devices.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -156,6 +157,22 @@ void main() {
       owner.savedReconnect.stop();
     });
   }
+
+  test('forgetting the only saved pendant retires its saved-reconnect target', () async {
+    await SharedPreferencesUtil().btDeviceSet(pendant(a));
+    final owner = service();
+    await owner.reconnectSavedDevice('launch');
+    expect(owner.connectionFor(a)?.status, DeviceConnectionState.connected);
+    calls.clear();
+
+    SharedPreferencesUtil().forgetSavedBtDevice(a);
+    await pumpEventQueue();
+
+    expect(SharedPreferencesUtil().btDevice.id, isEmpty);
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(owner.connectionFor(a), isNull);
+    owner.savedReconnect.stop();
+  });
 
   test('a failed old-target disarm is retried before managing the replacement', () async {
     await SharedPreferencesUtil().btDeviceSet(pendant(a));

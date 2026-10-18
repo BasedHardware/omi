@@ -6,18 +6,24 @@ import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_
 import 'package:firebase_core/firebase_core.dart';
 // ignore: depend_on_referenced_packages
 import 'package:firebase_core_platform_interface/test.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/preferences_paired_devices.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
@@ -264,5 +270,83 @@ void main() {
     expect(device.pairedCompanionDevice?.id, 'omi-1');
     expect(SharedPreferencesUtil().btDevice.id, 'omi-1', reason: 'roles never rewrite the saved slots');
     expect(SharedPreferencesUtil().companionBtDevice?.id, 'glass-1');
+  });
+
+  group('Forget Device in Device Settings with a pendant and glasses saved', () {
+    const unmanage = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice';
+    final unmanaged = <String>[];
+
+    setUp(() {
+      unmanaged.clear();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(unmanage,
+          (message) async {
+        unmanaged.add((BleHostApi.pigeonChannelCodec.decodeMessage(message) as List<Object?>).first! as String);
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]);
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(unmanage, null);
+    });
+
+    /// Both devices saved (pendant primary, glasses companion), [connected] the one the page shows.
+    DeviceProvider savedPair({required BtDevice connected}) {
+      SharedPreferencesUtil().btDevice = omi;
+      SharedPreferencesUtil().companionBtDevice = glass;
+      SharedPreferencesUtil().deviceName = omi.name;
+      return DeviceProvider()
+        ..connectedDevice = connected
+        ..pairedDevice = connected
+        ..isConnected = true;
+    }
+
+    Future<void> forgetFromSettings(WidgetTester tester, DeviceProvider device) async {
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: true), child: child!),
+        home: ChangeNotifierProvider<DeviceProvider>.value(value: device, child: const DeviceSettings()),
+      ));
+      await tester.pump();
+      final forget = find.byKey(const Key('forget_device_button'));
+      await tester.scrollUntilVisible(forget, 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(forget);
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text('Forget Device')));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      await tester.pumpWidget(const SizedBox());
+      device.dispose();
+      await tester.pump(const Duration(seconds: 5));
+    }
+
+    testWidgets('forgetting the connected pendant promotes the glasses to the primary slot', (tester) async {
+      final device = savedPair(connected: omi);
+
+      await forgetFromSettings(tester, device);
+
+      expect(unmanaged, contains('omi-1'));
+      expect(SharedPreferencesUtil().btDevice.id, 'glass-1');
+      expect(SharedPreferencesUtil().companionBtDevice, isNull);
+      expect(SharedPreferencesUtil().pairedDeviceIds, ['glass-1']);
+      expect(SharedPreferencesUtil().deviceName, 'OmiGlass');
+      expect(device.pairedDevice?.id, 'glass-1', reason: 'the promoted glasses are shown as the offline device');
+    });
+
+    testWidgets('forgetting the connected glasses while the pendant is offline keeps the pendant', (tester) async {
+      final device = savedPair(connected: glass);
+
+      await forgetFromSettings(tester, device);
+
+      expect(unmanaged, contains('glass-1'));
+      expect(unmanaged, isNot(contains('omi-1')));
+      expect(SharedPreferencesUtil().btDevice.id, 'omi-1');
+      expect(SharedPreferencesUtil().companionBtDevice, isNull);
+      expect(SharedPreferencesUtil().pairedDeviceIds, ['omi-1']);
+      expect(SharedPreferencesUtil().deviceName, 'Omi');
+      expect(device.pairedDevice?.id, 'omi-1');
+    });
   });
 }
