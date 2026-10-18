@@ -1,6 +1,4 @@
-from database.chat_history_window import (
-    cache_aligned_history_limit as cache_aligned_history_limit,
-)
+from database.chat_history_window import cache_aligned_history_limit as cache_aligned_history_limit
 from database.channel_visibility import visible_sessions
 import copy
 import hashlib
@@ -14,10 +12,7 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
-from database.firestore_index_registry import (
-    CURRENT_CHAT_SESSION_ORDERED_QUERY,
-    CURRENT_CHAT_SESSION_QUERY,
-)
+from database.firestore_index_registry import CURRENT_CHAT_SESSION_ORDERED_QUERY, CURRENT_CHAT_SESSION_QUERY
 
 # Sessions are per-user and per-app, so this is a ceiling on a small collection
 # rather than a page size; it exists so a pathological account cannot turn one
