@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -171,6 +172,7 @@ void main() {
     await tester.pumpAndSettle();
     final state = tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage));
     expect(state.simulation.nodes.any((n) => n.id == 'hiking'), true);
+    expect(state.hasFittedBounds, true);
     expect(state.simulation.edges, isEmpty);
     expect(find.byKey(const ValueKey('mind_map_load_more')), findsNothing);
   });
@@ -220,5 +222,68 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
     await tester.pumpAndSettle();
     expect(state.simulation.nodes.any((n) => n.label == 'Corrected hiking'), true);
+  });
+
+  testWidgets('changed authorization clears previously readable memories', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async {
+          if (++calls > 1) throw const KnowledgeGraphSessionChanged();
+          return {
+            'nodes': [],
+            'edges': [],
+            'catalog_nodes': [
+              {'id': 'memory:1', 'label': 'Previous account memory'}
+            ]
+          };
+        })));
+    await tester.pumpAndSettle();
+    expect(find.text('Previous account memory'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
+    await tester.pumpAndSettle();
+    expect(find.text('Previous account memory'), findsNothing);
+    expect(find.byKey(const ValueKey('mind_map_memory_catalog')), findsNothing);
+  });
+
+  testWidgets('large canonical pages keep the force simulation bounded', (tester) async {
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async => {
+              'nodes': [
+                for (var i = 0; i < 500; i++) {'id': 'entity:$i', 'label': 'Entity $i'}
+              ],
+              'edges': [],
+            })));
+    await tester.pump();
+    final state = tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage));
+    expect(state.simulation.nodes.length, lessThanOrEqualTo(201));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('expired cursor drops the old revision even when its restart fails', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+      trackOpenEvent: false,
+      loadGraph: () async {
+        if (++calls > 1) throw Exception('offline');
+        return {
+          'nodes': [],
+          'edges': [],
+          'catalog_nodes': [
+            {'id': 'memory:1', 'label': 'Old revision'}
+          ],
+          'has_more': true,
+          'next_cursor': 'stale'
+        };
+      },
+      loadMoreGraph: (_) async => throw const KnowledgeGraphCursorExpired(),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mind_map_load_more')));
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.text('Old revision'), findsNothing);
+    expect(find.byKey(const ValueKey('mind_map_memory_catalog')), findsNothing);
   });
 }

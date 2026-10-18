@@ -173,4 +173,35 @@ void main() {
             }),
         throwsA(isA<KnowledgeGraphSessionChanged>()));
   });
+
+  test('custom backend overrides apply to the next graph read', () async {
+    Env.overrideApiBaseUrl('https://custom.test/');
+    addTearDown(Env.clearApiBaseUrlOverride);
+    await KnowledgeGraphApi.getKnowledgeGraph(
+        cursor: 'next',
+        apiCaller: (url) async {
+          expect(Uri.parse(url).host, 'custom.test');
+          return _ok(_page());
+        });
+  });
+
+  test('a backend change during an await discards the response', () async {
+    addTearDown(Env.clearApiBaseUrlOverride);
+    await expectLater(
+        KnowledgeGraphApi.getKnowledgeGraph(
+            cursor: 'next',
+            apiCaller: (_) async {
+              Env.overrideApiBaseUrl('https://different.test/');
+              return _ok(_page(catalog: [_node('private')]));
+            }),
+        throwsA(isA<KnowledgeGraphSessionChanged>()));
+  });
+
+  test('page merges reject a different backend for the same account', () {
+    expect(
+        () => mergeKnowledgeGraphPages(
+            {'nodes': [], 'edges': [], '_owner_generation': 'same:1', '_backend_origin': 'first'},
+            {..._page(), '_owner_generation': 'same:1', '_backend_origin': 'second'}),
+        throwsA(isA<KnowledgeGraphSessionChanged>()));
+  });
 }

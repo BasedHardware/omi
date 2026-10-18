@@ -268,7 +268,7 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
-    this.fitToBounds = false,
+    this.fitToBounds = true,
     this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
     this.loadMoreGraph,
   });
@@ -436,14 +436,12 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
       Logger.debug('Knowledge graph load failed: $e');
       if (!mounted || generation != _loadGeneration) return;
       if (e is KnowledgeGraphSessionChanged) {
-        simulation.nodes.clear();
-        simulation.edges.clear();
-        simulation.nodeMap.clear();
-        setState(() {
-          _graphData = {'nodes': [], 'edges': []};
-          _error = context.l10n.couldNotLoadKnowledgeGraph;
-        });
+        _clearGraph();
+        setState(() => _error = context.l10n.couldNotLoadKnowledgeGraph);
       } else if (e is KnowledgeGraphCursorExpired) {
+        // The old revision may contain a memory that was just deleted.
+        // Discard it before restarting, including if that restart fails.
+        _clearGraph();
         await _loadGraph();
       } else if (_hasContent) {
         OmiFeedback.error(context, context.l10n.couldNotLoadKnowledgeGraph,
@@ -461,12 +459,26 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
     }
   }
 
+  void _clearGraph() {
+    setState(() {
+      simulation.nodes.clear();
+      simulation.edges.clear();
+      simulation.nodeMap.clear();
+      _graphData = {'nodes': [], 'edges': []};
+      _selectedNodeId = null;
+      _highlightedNodeIds.clear();
+      _hasFittedBounds = false;
+    });
+  }
+
   void _populateGraph(Map<String, dynamic> data) {
     simulation.nodes.clear();
     simulation.edges.clear();
     simulation.nodeMap.clear();
 
-    final nodes = data['nodes'] as List<dynamic>? ?? [];
+    // The canvas runs a quadratic force simulation. Keep the legacy endpoint's
+    // 200-entity overview bound when canonical pages contain more records.
+    final nodes = (data['nodes'] as List<dynamic>? ?? []).take(200).toList();
     final edges = data['edges'] as List<dynamic>? ?? [];
 
     final givenName = SharedPreferencesUtil().givenName;
@@ -1104,10 +1116,12 @@ class GraphPainter3D extends CustomPainter {
       }
     }
 
+    final readableOverview = nodes.length <= 20 && zoom < 0.7;
+    final placedLabels = <Rect>[];
     for (var p in projectedNodes) {
       final node = p.node;
       final centerOffset = Offset(p.x, p.y);
-      final radius = node.radius * p.scale;
+      final radius = readableOverview ? max(4.0, node.radius * p.scale) : node.radius * p.scale;
 
       if (radius < 0.5) continue;
 
@@ -1140,24 +1154,50 @@ class GraphPainter3D extends CustomPainter {
       canvas.drawCircle(centerOffset, radius, _nodePaint);
       _nodePaint.shader = null;
 
-      final showLabel = screenshotMode || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
+      final showLabel =
+          screenshotMode || (readableOverview && p.alpha > 0.2) || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
       if (showLabel) {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
             color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white).withValues(
-              alpha: screenshotMode ? 0.95 : p.alpha * 0.9,
+              alpha: screenshotMode ? 0.95 : (readableOverview ? max(0.8, p.alpha) : p.alpha) * 0.9,
             ),
-            fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
+            fontSize: screenshotMode ? 11.0 : (readableOverview ? 12.0 : (10 * p.scale).clamp(8, 14)),
             fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        var labelOffset = centerOffset + Offset(-tp.width / 2, radius + 3);
+        if (readableOverview) {
+          // A fitted small graph must remain readable without labels colliding
+          // near the owner node. Keep these choices in screen coordinates.
+          Offset? available;
+          for (final candidate in [
+            labelOffset,
+            centerOffset + Offset(-tp.width / 2, -radius - tp.height - 3),
+            centerOffset + Offset(radius + 6, -tp.height / 2),
+            centerOffset + Offset(-radius - tp.width - 6, -tp.height / 2),
+          ]) {
+            final rect = candidate & tp.size;
+            if (rect.left >= 0 &&
+                rect.right <= size.width &&
+                rect.top >= 0 &&
+                rect.bottom <= size.height &&
+                !placedLabels.any((placed) => placed.overlaps(rect.inflate(2)))) {
+              available = candidate;
+              placedLabels.add(rect);
+              break;
+            }
+          }
+          if (available == null) continue;
+          labelOffset = available;
+        }
         if (OmiColors.active == OmiPalette.light) {
           final labelRect = Rect.fromLTWH(
-            centerOffset.dx - tp.width / 2 - 4,
-            centerOffset.dy + radius,
+            labelOffset.dx - 4,
+            labelOffset.dy - 3,
             tp.width + 8,
             tp.height + 6,
           );
@@ -1166,7 +1206,7 @@ class GraphPainter3D extends CustomPainter {
             Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
           );
         }
-        tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
+        tp.paint(canvas, labelOffset);
       }
     }
   }

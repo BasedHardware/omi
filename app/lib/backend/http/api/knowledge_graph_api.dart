@@ -9,7 +9,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 
 class KnowledgeGraphApi {
-  static final String _baseUrl = '${Env.apiBaseUrl}v1/knowledge-graph';
+  static String get _baseUrl => '${Env.apiBaseUrl}v1/knowledge-graph';
 
   /// Short user-facing copy for a knowledge-graph HTTP failure.
   ///
@@ -36,9 +36,12 @@ class KnowledgeGraphApi {
     @visibleForTesting Future<http.Response?> Function(String url)? apiCaller,
     @visibleForTesting bool Function()? isCurrent,
   }) async {
+    final baseUrl = _baseUrl;
     final session = apiCaller == null ? AuthService.instance.captureSessionSnapshot() : null;
-    final current = isCurrent ??
-        () => apiCaller != null || (session != null && AuthService.instance.isSessionSnapshotCurrent(session));
+    bool current() =>
+        _baseUrl == baseUrl &&
+        (isCurrent?.call() ??
+            (apiCaller != null || (session != null && AuthService.instance.isSessionSnapshotCurrent(session))));
     Future<http.Response?> read(String url) async {
       if (!current()) throw const KnowledgeGraphSessionChanged();
       final response = apiCaller != null
@@ -58,16 +61,20 @@ class KnowledgeGraphApi {
 
     Map<String, dynamic>? legacy;
     if (cursor == null) {
-      final compatibility = await read(_baseUrl);
+      final compatibility = await read(baseUrl);
       if (compatibility?.statusCode == 200) {
         legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility!.body) as Map<String, dynamic>)
             .toJson();
         if ((legacy['nodes'] as List).length > 1) {
-          return {...legacy, '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'};
+          return {
+            ...legacy,
+            '_backend_origin': baseUrl,
+            '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
+          };
         }
       }
     }
-    final uri = Uri.parse('$_baseUrl/canonical').replace(queryParameters: {
+    final uri = Uri.parse('$baseUrl/canonical').replace(queryParameters: {
       'limit': '100',
       if (cursor != null) 'cursor': cursor,
     });
@@ -84,12 +91,16 @@ class KnowledgeGraphApi {
       }, {
         ...page.toJson(),
         'canonical': true,
+        '_backend_origin': baseUrl,
         'truncated': page.hasMore,
         '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}',
       });
     }
     if (cursor != null && response?.statusCode == 400) {
       throw const KnowledgeGraphCursorExpired();
+    }
+    if (response?.statusCode == 401 || response?.statusCode == 403) {
+      throw const KnowledgeGraphSessionChanged();
     }
     // The existing compatibility route serves legacy-only accounts. An empty
     // compatibility response during a canonical outage cannot prove emptiness.
@@ -99,7 +110,11 @@ class KnowledgeGraphApi {
             (response?.statusCode == 503 &&
                 (response?.headers['x-omi-knowledge-graph-state'] == 'unestablished' ||
                     (legacy['nodes'] as List).isNotEmpty)))) {
-      return {...legacy, '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'};
+      return {
+        ...legacy,
+        '_backend_origin': baseUrl,
+        '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
+      };
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }
@@ -107,8 +122,9 @@ class KnowledgeGraphApi {
   /// Triggers a rebuild of the knowledge graph.
   ///
   /// Accounts with canonical memory assertions return HTTP 409
-  /// (CANONICAL_GRAPH_MUTATION_CONFLICT) from the backend because their graph
-  /// is already derived and up to date. This method synthesizes a client-side
+  /// (CANONICAL_GRAPH_MUTATION_CONFLICT) because their derived state is
+  /// protected. A conflict does not prove that the map is populated or current.
+  /// This method preserves the historical client-side
   /// [wire.GeneratedRebuildResponse] with status `'canonical_up_to_date'` so
   /// callers can recognize this terminal state without polling or failing.
   static Future<Map<String, dynamic>> rebuildKnowledgeGraph({
@@ -128,7 +144,7 @@ class KnowledgeGraphApi {
     }
     if (response != null && response.statusCode == 409) {
       Logger.debug('Knowledge graph rebuild skipped: account has canonical graph state');
-      // Synthetic client status: account has canonical graph state and is already up to date.
+      // Historical status name: mutation is disabled; this is not a freshness check.
       return const wire.GeneratedRebuildResponse(
         edgesCount: 0,
         nodesCount: 0,
@@ -185,7 +201,10 @@ class KnowledgeGraphApi {
 /// graph entities: a memory's existence does not establish a relationship.
 Map<String, dynamic> mergeKnowledgeGraphPages(Map<String, dynamic> earlier, Map<String, dynamic> page) {
   final owner = earlier['_owner_generation'];
-  if (owner != null && page['_owner_generation'] != owner) throw const KnowledgeGraphSessionChanged();
+  if ((owner != null && page['_owner_generation'] != owner) ||
+      (earlier['_backend_origin'] != null && page['_backend_origin'] != earlier['_backend_origin'])) {
+    throw const KnowledgeGraphSessionChanged();
+  }
   List<Map<String, dynamic>> records(String key) {
     final byId = <String, Map<String, dynamic>>{};
     for (final record in [...?earlier[key] as List?, ...?page[key] as List?]) {
@@ -203,6 +222,7 @@ Map<String, dynamic> mergeKnowledgeGraphPages(Map<String, dynamic> earlier, Map<
   final sharedTruncated = earlier['shared_truncated'] ?? earlier['truncated'] ?? false;
   return {
     'canonical': page['canonical'] == true,
+    '_backend_origin': page['_backend_origin'],
     '_owner_generation': page['_owner_generation'],
     'nodes': nodes,
     'edges': edges,

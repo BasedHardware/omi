@@ -9,10 +9,14 @@ support a relationship. Mobile displays those records as readable memories,
 without synthesizing graph nodes or edges from their existence.
 
 Each page carries a signed cursor. Show More reads the next page and deduplicates
-server IDs. A stale cursor restarts the read from the current revision. Requests
-are bound to an authenticated session; page merges reject another session's
-results. A newer refresh supersedes earlier requests. Failed refreshes retain
-same-session content and offer retry; a changed session clears it.
+server IDs. The canvas retains the existing 200-entity overview bound, avoiding
+unbounded quadratic simulation work as pages accumulate. Catalog records stay
+separate and readable. Recovered maps fit the viewport on first display. A stale
+cursor restarts the read from the current revision. Requests
+are bound to an authenticated session and backend; page merges reject a different
+session or backend. An expired cursor discards the invalidated revision before
+restarting, including when that restart fails. A newer refresh supersedes earlier requests. Failed refreshes retain
+same-session content and offer retry; a changed session or rejected authorization clears it.
 
 For older servers or accounts without available canonical state, the existing
 compatibility graph remains readable. An unavailable canonical read plus an
