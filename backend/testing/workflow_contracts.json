@@ -937,6 +937,25 @@
         "known production capacity failures (serial per-owner burst, provider exhaustion, summaries behind transcription, revision drain) still reproduce, so a fix shows up as a verdict change",
         "privacy-blocked and deleted targets never spend paid recovery calls"
       ]
+    },
+    {
+      "id": "batch_pipeline_characterization_goldens",
+      "risk": "high",
+      "sources": [
+        "backend/utils/batch_pipeline/**",
+        "backend/diarizer/batch_pipeline.py",
+        "backend/database/batch_pipeline*.py",
+        "backend/testing/pipeline_sim/**",
+        "backend/tests/unit/fixtures/pipeline_sim_goldens/**"
+      ],
+      "tests": [
+        "tests/unit/test_pipeline_characterization.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "the externally visible batch-pipeline trace (durable transitions, intake and recovery-task responses, paid calls, projected results) of each seeded golden configuration is unchanged unless the PR regenerates and reviews its golden",
+        "the trace is deterministic for a seed and changes when real pipeline behavior changes"
+      ]
     }
   ]
 }
