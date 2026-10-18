@@ -368,6 +368,44 @@ Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.y
 with `python3 backend/deploy/compose_runtime_env.py`. Do not write routing state
 through dev: dev shares production Redis/Firestore.
 
+## Production routing-off rollout (2026-10-18)
+
+Prod backend-listen uses `STT_ROUTING_MODE=off`, the independent canary's only
+routing override. Dev keeps its existing configuration. Static provider order,
+recovery, capacity rescue, account quarantine and the routing kill switch stay
+available; off does not disable fallback. No account cohort is added by this
+rollout. Manage private cohorts outside this repository.
+
+Rollback: **set `STT_ROUTING_MODE=on` in the prod listen values and prod runtime
+overlay, run `python3 backend/deploy/compose_runtime_env.py`, then deploy through
+the normal prod listen Helm workflow with the same image.** This rolls/drains
+WebSockets. Do not roll back an entire old Helm revision and undo unrelated
+capacity fixes. The routing-only config commit can also be reverted and deployed.
+
+Before deployment, pin the serving image/release SHA, exact main pod set and a
+30-minute pre-deploy baseline. After rollout, verify the reported release identity,
+`STT_ROUTING_MODE=off` on every main pod, Ready pods, public NEG membership and
+complete scrapes. Compare matched 15- and 30-minute windows with the baseline;
+record numerators, denominators, language/provider mix and histogram counts:
+
+| Watch | Baseline and post-deploy measure |
+|---|---|
+| Exhausted chains | `increase(omi_stt_chain_exhausted_total)` / `increase(omi_listen_accepted_total)` |
+| Terminal after text | `increase(omi_live_session_terminal_after_text_total)` / accepted sessions |
+| Transcript success | transcribed / (transcribed + no_transcript) from `omi_live_session_transcript_outcome_total`; exclude too_short |
+| First-text p95 | `histogram_quantile(0.95, sum by(le)(rate(omi_stt_window_first_text_seconds_bucket[15m])))` plus its count |
+
+Use `job="backend-listen-metrics"`, the prod namespace and exact escaped pod
+sets for all watches, as in `listen-stt-canary-queries.promql`. First-text timing
+covers Parakeet-window only; it does not measure Modulate/Soniox end-to-end
+latency. Missing metrics are HOLD, never zero. Outcome completion lags accepts;
+exhaustion and terminal events are not deduplicated session failure rates.
+Watch through at least 60 minutes and 150 classified post-rollout outcomes.
+Investigate any outcome-rate regression against the baseline immediately; use
+the retained sampled latency and outcome safety gates, and routing-on rollback
+for a sustained serving regression. Earlier single-run aborts remain historical;
+the lead accepted pooled same-image/config runs 4b+5b (173 classified outcomes).
+
 ## Soniox runway
 
 `SONIOX_MONTHLY_CEILING_USD` sets the monthly alert ceiling; zero disables
