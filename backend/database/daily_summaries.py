@@ -63,13 +63,13 @@ def upsert_desktop_daily_usage(
     counters: Mapping[str, object],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
-    # An empty uid/date/client_device_id makes a malformed doc path/id; the
-    # counters dict may legitimately omit a counter field. Reject the path
-    # inputs and read each counter with a default so neither crashes.
-    if not isinstance(uid, str) or not uid.strip():
-        raise ValueError('uid must be a non-empty string')
-    if not date or not client_device_id:
-        raise ValueError('date and client_device_id are required')
+    # An empty/whitespace uid/date/client_device_id makes a malformed doc
+    # path/id; the counters dict may legitimately omit a counter field.
+    # Reject the path inputs and read each counter with a default so
+    # neither crashes.
+    uid = _require_id(uid, 'uid')
+    date = _require_id(date, 'date')
+    client_device_id = _require_id(client_device_id, 'client_device_id')
     counters = counters or {}
     user_ref = db.collection('users').document(uid)
     usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')

@@ -124,3 +124,57 @@ def test_create_merges_and_validates_id(monkeypatch):
     assert out == '  s1 '  # id passed through (stripped for the doc path)
     coll.document.assert_called_once_with('s1')
     doc.set.assert_called_once_with({'id': '  s1 ', 'headline': 'h'}, merge=True)
+
+
+# --- upsert_desktop_daily_usage: identifiers + counter tolerance ---
+
+
+def test_upsert_desktop_daily_usage_rejects_bad_identifiers():
+    base = dict(uid='u', date='2026-10-18', timezone_name='UTC', client_device_id='dev1', counters={})
+    for bad in BAD_IDS:
+        for field in ('uid', 'date', 'client_device_id'):
+            args = dict(base)
+            args[field] = bad
+            with pytest.raises(ValueError):
+                ds.upsert_desktop_daily_usage(**args)
+
+
+def _upsert_harness(monkeypatch, existing=None):
+    usage_ref = MagicMock()
+    coll = MagicMock()
+    coll.document.return_value = usage_ref
+    users = MagicMock()
+    users.document.return_value = MagicMock(collection=lambda n: coll)
+    txn = MagicMock()
+    fake_db = MagicMock(collection=lambda n: users)
+    fake_db.transaction = lambda: txn
+    monkeypatch.setattr(ds, 'db', fake_db)
+    # Run the transactional body inline instead of through the retry wrapper.
+    monkeypatch.setattr(ds.firestore, 'transactional', lambda fn: (lambda write_txn: fn(write_txn)))
+    snap = MagicMock()
+    snap.exists = existing is not None
+    snap.to_dict.return_value = existing or {}
+    usage_ref.get.return_value = snap
+    return usage_ref, coll, txn
+
+
+def test_upsert_strips_whitespace_ids_into_composite_doc_id(monkeypatch):
+    usage_ref, coll, txn = _upsert_harness(monkeypatch)
+    ds.upsert_desktop_daily_usage(' u ', ' 2026-10-18 ', 'UTC', ' dev1 ', {})
+    coll.document.assert_called_once_with('2026-10-18__dev1')
+
+
+def test_upsert_partial_and_non_int_counters_never_crash(monkeypatch):
+    # Stored doc carries a poisoned non-int field; the update reports only a
+    # subset of counters with a None — old code raised KeyError/TypeError.
+    usage_ref, coll, txn = _upsert_harness(monkeypatch, existing={'watching_seconds': 'bad', 'listening_seconds': 5})
+    ds.upsert_desktop_daily_usage('u', '2026-10-18', 'UTC', 'dev1', {'watching_seconds': 3})
+    payload = txn.set.call_args[0][1]
+    assert payload['watching_seconds'] == 3  # 'bad' prior reads as 0 → max(0, 3)
+    assert payload['listening_seconds'] == 5  # missing counter keeps prior max
+    assert payload['proactive_cards_shown'] == 0
+    assert payload['ptt_turns'] == 0
+    assert payload['client_device_id'] == 'dev1'
+
+    ds.upsert_desktop_daily_usage('u', '2026-10-18', 'UTC', 'dev1', {'watching_seconds': None})
+    ds.upsert_desktop_daily_usage('u', '2026-10-18', 'UTC', 'dev1', None)
