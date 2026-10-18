@@ -951,12 +951,12 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
     )
     deleted = []
 
-    def fake_canonical_delete(uid, memory_id):
-        deleted.append((uid, memory_id))
-        return True
+    def fake_canonical_delete(uid, memory_ids):
+        deleted.append((uid, list(memory_ids)))
+        return len(memory_ids)
 
     monkeypatch.setattr(
-        'utils.memory.vector_search_service.delete_canonical_memory_vector',
+        'database.vector_db.delete_canonical_memory_vectors_by_ids',
         fake_canonical_delete,
     )
 
@@ -977,7 +977,7 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
         required_account_generation=0,
     )
 
-    assert deleted == [('u1', 'missing'), ('u1', 'tombstoned')]
+    assert deleted == [('u1', ['missing', 'tombstoned'])]
     assert response['stale_index_deleted_count'] == 2
     assert [item['memory_id'] for item in response['items']] == ['live']
 

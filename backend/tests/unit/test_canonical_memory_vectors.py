@@ -404,6 +404,34 @@ def test_account_purge_removes_all_uid_rows_across_provider_id_generations(monke
     }
 
 
+def test_delete_canonical_memory_vectors_by_ids_is_one_metadata_filter(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    first_uid = 'uid-first'
+    second_uid = 'uid-second'
+    kept = _item(memory_id='kept', uid=first_uid, tier=MemoryTier.long_term)
+    stale_a = _item(memory_id='stale-a', uid=first_uid, tier=MemoryTier.long_term)
+    stale_b = _item(memory_id='stale-b', uid=first_uid, tier=MemoryTier.long_term)
+    other_user = _item(memory_id='stale-a', uid=second_uid, tier=MemoryTier.long_term)
+    for item in (kept, stale_a, stale_b, other_user):
+        vector_db.upsert_canonical_memory_vector(item)
+    deletes_before = len(fake_index.deletes)
+
+    deleted = vector_db.delete_canonical_memory_vectors_by_ids(first_uid, ['stale-a', 'stale-b', 'stale-a'])
+
+    assert deleted == 2
+    assert len(fake_index.deletes) == deletes_before + 1
+    assert fake_index.deletes[-1]['filter'] == {
+        '$and': [
+            {'uid': {'$eq': first_uid}},
+            {'memory_id': {'$in': ['stale-a', 'stale-b']}},
+        ]
+    }
+    assert set(fake_index._vectors) == {
+        canonical_memory_provider_id(first_uid, 'kept'),
+        canonical_memory_provider_id(second_uid, 'stale-a'),
+    }
+
+
 def test_delete_canonical_memory_vectors_confirms_absence_when_index_unconfigured(monkeypatch):
     """Privacy deletion must not fail closed on a deployment with no vector store.
 

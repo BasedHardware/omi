@@ -616,6 +616,36 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
     return True
 
 
+def delete_canonical_memory_vectors_by_ids(uid: str, memory_ids: List[str]) -> int:
+    """Delete one user's canonical vectors for these ids in a single filter call.
+
+    Search hydrates ``memproj:`` rows. One metadata delete matches those rows
+    and any legacy row that still carries ``uid`` and ``memory_id``. A provider
+    failure raises once instead of turning into a per-id timeout loop.
+    """
+
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping canonical memory vector delete by ids')
+        return 0
+    if not uid.strip():
+        raise ValueError('uid is required')
+    ids: List[str] = []
+    seen: set[str] = set()
+    for memory_id in memory_ids:
+        if not memory_id or not str(memory_id).strip() or memory_id in seen:
+            continue
+        seen.add(memory_id)
+        ids.append(memory_id)
+    if not ids:
+        return 0
+    index.delete(
+        filter={'$and': [{'uid': {'$eq': uid}}, {'memory_id': {'$in': ids}}]},
+        namespace=MEMORIES_NAMESPACE,
+    )
+    logger.info('delete_canonical_memory_vectors_by_ids uid=%s count=%d', uid, len(ids))
+    return len(ids)
+
+
 def query_memory_vector_candidates(
     uid: str,
     query: str,

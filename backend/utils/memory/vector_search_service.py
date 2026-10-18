@@ -16,7 +16,6 @@ try:
 except ModuleNotFoundError:
     query_memory_vector_candidates = None
 
-from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
@@ -376,18 +375,18 @@ def _note_stale_index_memory_id(stale_index_memory_ids: List[str], memory_id: st
 
 
 def _delete_stale_canonical_memory_vectors(uid: str, memory_ids: List[str]) -> int:
-    """Delete stale rows by the canonical metadata filter.
+    """Delete stale rows with one canonical metadata filter call.
 
     Search reads ``memproj:<hash>`` vectors. ``delete_memory_vectors_batch``
-    only removes the legacy ``{uid}-{memory_id}`` id, so it leaves the row
-    that the next query would hydrate again.
+    only removes the legacy ``{uid}-{memory_id}`` id. A per-id loop would also
+    turn one provider outage into dozens of timeouts on the search request.
     """
 
-    deleted = 0
-    for memory_id in memory_ids:
-        if delete_canonical_memory_vector(uid, memory_id):
-            deleted += 1
-    return deleted
+    try:
+        from database.vector_db import delete_canonical_memory_vectors_by_ids
+    except ModuleNotFoundError:
+        return 0
+    return delete_canonical_memory_vectors_by_ids(uid, memory_ids)
 
 
 def _delete_stale_vector_index_ids(
