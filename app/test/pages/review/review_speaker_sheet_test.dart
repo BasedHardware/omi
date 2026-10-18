@@ -162,8 +162,9 @@ void main() {
       people: [for (var i = 0; i < 30; i++) _person('p-a$i', 'A Person $i')],
     );
     await _openPicker(tester);
-    // "person" matches all 30 fixture people but neither fixture candidate
-    // (Béla, Marcus), so the count below is purely the bounded Everyone tail.
+    // The query "person" matches all 30 fixture people but neither fixture
+    // candidate (Béla, Marcus), so the count below is purely the bounded
+    // Everyone tail.
     await tester.enterText(find.byType(OmiSearchField), 'person');
     await tester.pumpAndSettle();
 
