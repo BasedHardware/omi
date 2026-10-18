@@ -1603,6 +1603,8 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "2",
       "summary": "The live STT demand gate is unavailable; sessions are degrading to the vendor path.",
       "user_impact": "Live STT sessions are falling back to the vendor path because the demand gate is unavailable.",
       "threshold": "At least 50 reason=gate_unavailable outcome=degraded events in 5m for 5m.",

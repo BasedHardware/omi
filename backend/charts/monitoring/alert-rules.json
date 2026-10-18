@@ -1705,12 +1705,7 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": [
-        "alertname"
-      ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h"
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -2727,12 +2722,7 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": [
-        "alertname"
-      ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h"
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -5952,12 +5942,7 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": [
-        "alertname"
-      ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h"
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -11994,12 +11979,7 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": [
-        "alertname"
-      ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h"
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -18222,9 +18202,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h"
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -18496,6 +18476,8 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "2",
       "summary": "The live STT demand gate is unavailable; sessions are degrading to the vendor path.",
       "user_impact": "Live STT sessions are falling back to the vendor path because the demand gate is unavailable.",
       "threshold": "At least 50 reason=gate_unavailable outcome=degraded events in 5m for 5m.",
