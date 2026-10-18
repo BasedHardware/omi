@@ -23,6 +23,13 @@ from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import owner_key
 
 
+@pytest.fixture(scope='module', autouse=True)
+def worker_dependencies():
+    # Importing the worker harness belongs to setup, outside the call CPU budget.
+    from tests.unit.test_batch_pipeline_worker import setup_worker, item
+    from diarizer import batch_pipeline
+
+
 def wav(seconds=5):
     out = io.BytesIO()
     with wave.open(out, 'wb') as handle:

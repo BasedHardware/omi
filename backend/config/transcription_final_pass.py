@@ -3,14 +3,15 @@
 import hashlib
 import os
 
+from config.rollout_cohorts import in_rollout_cohort
+
 
 def enabled_for(uid: str) -> bool:
     if os.getenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy') != 'pyannote_shadow':
         return False
-    allowlist = {s.strip() for s in os.getenv('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', '').split(',') if s.strip()}
     percent = max(0.0, min(100.0, float(os.getenv('TRANSCRIPTION_FINAL_PASS_PERCENT', '0'))))
     bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
-    return uid in allowlist or bucket < percent
+    return in_rollout_cohort(uid, 'transcription-final-pass') or bucket < percent
 
 
 def authoritative_for(uid: str) -> bool:

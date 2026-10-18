@@ -152,7 +152,7 @@ def off(monkeypatch, request):
         monkeypatch.setenv(flag, request.param)
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'false')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
 
 @pytest.fixture

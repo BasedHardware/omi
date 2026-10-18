@@ -583,12 +583,20 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(('status', 'expected_code'), [('busy', 409), ('completed', 200)])
+@pytest.mark.parametrize('deadline', ['false', 'true'])
 async def test_sync_reprocess_response_preserves_status_and_logs_busy_without_ids(
-    monkeypatch, caplog, status, expected_code
+    monkeypatch, caplog, status, expected_code, deadline
 ):
     from utils.batch_pipeline import enrichment
 
-    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
+
+    async def run(executor, func, *args, **kwargs):
+        expected = finalization_router.postprocess_executor if deadline == 'true' else finalization_router.sync_executor
+        assert executor is expected
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', run)
     monkeypatch.setattr(enrichment, 'run_enrichment', MagicMock(return_value=status))
     caplog.set_level(logging.INFO, logger=finalization_router.__name__)
 

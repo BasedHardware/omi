@@ -511,3 +511,27 @@ lease, external effects can exceed the budget, a crashed advisory claim can
 last 300s, and the existing 100-row sweep page can be saturated. Do not add
 stage p95s or exclude held units. Measure the full cohort for at least one hour
 with phase timings before claiming the target or increasing admission.
+
+### Projection discovery progress
+
+`BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
+`false` restores oldest-100 discovery). Assignment and async follow-ups each
+advance their own bounded 100-row keyset scan across pending, persisted and
+ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
+restart begins at the head without dropping any durable obligations. Follow-ups
+launch the whole bounded page before fetching the next one. Discovery order is
+only a hint: existing transactional predecessor, privacy, all-sibling readiness,
+receipt replay and paid-intent fences remain authoritative.
+
+The query reuses the declared prod/dev results composite index:
+`projection_state ASC, committed_at ASC, __name__ ASC` in
+`database/sync_pipeline_indexes.py` and the generated `firestore.indexes.json`.
+No new index or production index mutation is needed.
+
+With accepted-work serving enabled, committed pending/persisted/ready debt is
+rediscovered automatically after deployment; no one-time kick is needed for the
+page deadlock. `quarantine_held` obligations still require their ordinary fenced
+recovery to succeed; pagination neither retries uncertain paid intents nor
+resolves genuine held quarantines. Monitor falling pending age/count and durable
+content/client completion on the deployed release before expanding admission.

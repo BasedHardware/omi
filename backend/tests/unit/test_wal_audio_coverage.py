@@ -523,7 +523,7 @@ def test_flag_parse_default_on_tokens_and_typo_off(monkeypatch):
     )
 
     monkeypatch.delenv(SYNC_WAL_AUDIO_COVERAGE_ENV, raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
     assert sync_wal_audio_coverage_enabled() is True
     monkeypatch.setenv(SYNC_WAL_AUDIO_COVERAGE_ENV, '  ')

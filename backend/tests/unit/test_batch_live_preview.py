@@ -72,6 +72,7 @@ def host():
 def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback(monkeypatch):
     enable(monkeypatch, '5')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '5')
     results = []
     for index in range(1000):
