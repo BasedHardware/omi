@@ -1316,11 +1316,23 @@ def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_ho
     seen: set[str] = set()
     current_id = conversation_id
     for _ in range(max_hops):
-        if current_id in seen:
+        if current_id in seen or not current_id or '/' in current_id or len(current_id.encode()) > 256:
             return None
         seen.add(current_id)
+        if (
+            get_firestore_client()
+            .collection('users')
+            .document(uid)
+            .collection('deleted_conversations')
+            .document(current_id)
+            .get()
+            .exists
+        ):
+            return None
         row = get_conversation_raw_snapshot(uid, current_id)
         if not row:
+            return None
+        if row.get('owner_uid', uid) != uid or row.get('id', current_id) != current_id:
             return None
         if not row.get('deleted'):
             return current_id
