@@ -156,7 +156,7 @@ void main() {
       SharedPreferencesUtil().btDeviceSet(device);
       final transport = NativeBleTransport(_deviceId, requiresBond: true);
       final connection = LimitlessDeviceConnection(device, transport);
-      final service = DeviceService(connectionBuilder: (_) => connection, reconnectKilled: () async => false);
+      final service = DeviceService(connectionBuilder: (_) => connection, reconnectKilled: () => false);
       if (failBeforeReady) {
         service.reconnectSavedDevice('launch');
         async.flushMicrotasks();

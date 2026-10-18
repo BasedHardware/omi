@@ -52,8 +52,10 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
     override fun manageDevice(uuid: String, requiresBond: Boolean) {
         Log.i(TAG, "manageDevice: $uuid, requiresBond=$requiresBond")
         val context = getActivity()?.applicationContext ?: throw IllegalStateException("BLE activity unavailable")
-        bleManager.savedReconnect.allow(uuid)
-        OmiBleForegroundService.setUserDisconnected(context, false)
+        if (bleManager.savedReconnect.isEnabled(uuid) || bleManager.savedReconnect.isBlocked(uuid)) {
+            bleManager.savedReconnect.allow(uuid)
+            OmiBleForegroundService.setUserDisconnected(context, false)
+        }
         OmiBleForegroundService.startService(context, uuid, requiresBond = requiresBond, caller = "Dart")
     }
 
@@ -63,8 +65,10 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
     override fun unmanageDevice(uuid: String) {
         Log.i(TAG, "unmanageDevice: $uuid")
-        bleManager.savedReconnect.block(uuid)
-        getActivity()?.applicationContext?.let { OmiBleForegroundService.setUserDisconnected(it, true) }
+        if (bleManager.savedReconnect.isEnabled(uuid)) {
+            bleManager.savedReconnect.block(uuid)
+            getActivity()?.applicationContext?.let { OmiBleForegroundService.setUserDisconnected(it, true) }
+        }
         OmiBleForegroundService.instance?.unmanageDevice(uuid)
             ?: bleManager.closeGatt(uuid) // Fallback if service not running
     }

@@ -229,7 +229,7 @@ void main() {
         if (forget) {
           service.forgetDevice(_deviceId);
         } else {
-          service.disconnectDevice(_deviceId);
+          service.disconnectDevice(_deviceId, userInitiated: true);
         }
         async.flushMicrotasks();
         expect(unmanageCalls, 1);
@@ -278,7 +278,7 @@ void main() {
       final transportStates = <DeviceTransportState>[];
       timedOut.transport.connectionStateStream.listen(transportStates.add);
 
-      service.disconnectDevice(_deviceId);
+      service.disconnectDevice(_deviceId, userInitiated: true);
       async.elapse(const Duration(seconds: 1));
 
       expect(unmanageCalls, 1, reason: 'native was still connecting; an explicit disconnect must stop it');
@@ -302,7 +302,7 @@ void main() {
     var transportClosed = false;
     connection!.transport.connectionStateStream.listen((_) {}, onDone: () => transportClosed = true);
 
-    await service.disconnectDevice(_deviceId);
+    await service.disconnectDevice(_deviceId, userInitiated: true);
     await pumpEventQueue();
 
     expect(transportClosed, isTrue, reason: 'an undisposed transport stays registered for native events');

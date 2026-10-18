@@ -71,5 +71,6 @@ abstract interface class AnalyticsFeatureFlagAdapter {
 
 /// Boolean kill switches must not treat multivariate arms as enabled.
 abstract interface class AnalyticsBooleanFlagAdapter {
+  bool isBooleanFeatureEnabledCached(String key);
   Future<bool> isBooleanFeatureEnabled(String key);
 }

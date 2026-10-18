@@ -8,7 +8,8 @@
     "app/test/services/devices/saved_pendant_reconnect_test.dart",
     "app/ios/test/omi_ble_connection_policy_test.rb",
     "app/android/app/src/test/kotlin/com/friend/ios/ble/BleSavedReconnectTest.kt",
-    "app/test/services/devices/saved_pendant_launch_timeout_reconnect_test.dart"
+    "app/test/services/devices/saved_pendant_launch_timeout_reconnect_test.dart",
+    "app/test/services/devices/saved_reconnect_review_test.dart"
   ],
   "evidence_prs": [],
   "scope_hints": [

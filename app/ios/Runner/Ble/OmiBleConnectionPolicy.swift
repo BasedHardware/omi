@@ -79,3 +79,13 @@ enum OmiBleConnectionPolicy {
             || nsError.code == CBATTError.insufficientEncryption.rawValue
     }
 }
+
+/// At most seven distinct intermediate states plus the connected outcome per outage.
+struct OmiSavedReconnectTelemetry {
+    private var reported: Set<String> = []
+    mutating func admit(_ result: String) -> Bool {
+        guard !reported.contains(result), reported.count < 7 || result == "connected" else { return false }
+        reported.insert(result)
+        return true
+    }
+}

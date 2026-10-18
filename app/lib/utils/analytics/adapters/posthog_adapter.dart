@@ -183,6 +183,9 @@ class PostHogAnalyticsAdapter
   Map<String, Object> _captureProperties(Map<String, Object>? properties) => {...?properties};
 
   @override
+  bool isBooleanFeatureEnabledCached(String key) => _fresh?.flags[key] == true;
+
+  @override
   Future<bool> isBooleanFeatureEnabled(String key) async {
     final verified = _fresh;
     if (verified != null) return verified.flags[key] == true;

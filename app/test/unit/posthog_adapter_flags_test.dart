@@ -45,6 +45,9 @@ void main() {
     }));
     expect(await adapter.reloadFeatureFlags(), isTrue);
     expect(await adapter.isBooleanFeatureEnabled('kill'), isTrue);
+    expect(adapter.isBooleanFeatureEnabledCached('kill'), isTrue);
+    expect(adapter.isBooleanFeatureEnabledCached('variant'), isFalse);
+    expect(adapter.isBooleanFeatureEnabledCached('missing'), isFalse);
     for (final key in ['off', 'variant', 'string_true', 'missing']) {
       expect(await adapter.isBooleanFeatureEnabled(key), isFalse);
     }

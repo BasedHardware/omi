@@ -1593,12 +1593,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Reset firmware update state when update completes or fails
   void resetFirmwareUpdateState() {
     _isFirmwareUpdateInProgress = false;
+    ServiceManager.instance().device.reconnectPaused = false;
+    unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
     notifyListeners();
   }
 
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
+    ServiceManager.instance().device.reconnectPaused = inProgress;
     if (inProgress) {
       _firmwareUpdatePromptCoordinator.invalidatePresentation();
     }

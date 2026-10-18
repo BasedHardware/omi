@@ -95,6 +95,7 @@ final class OmiBleManager: NSObject {
     private var savedRetryAttempts: [String: Int] = [:]
     private var savedRetryTasks: [String: DispatchWorkItem] = [:]
     private var savedOutageStarted: [String: Date] = [:]
+    private var savedRetryTelemetry: [String: OmiSavedReconnectTelemetry] = [:]
 
     func configureSavedReconnect(uuid: String, enabled: Bool) {
         if enabled {
@@ -102,11 +103,15 @@ final class OmiBleManager: NSObject {
         } else {
             savedReconnect.remove(uuid)
             savedRetryTasks.removeValue(forKey: uuid)?.cancel()
+            savedRetryTelemetry.removeValue(forKey: uuid)
+            savedRetryAttempts.removeValue(forKey: uuid)
+            savedOutageStarted.removeValue(forKey: uuid)
         }
     }
 
     private func reportSavedReconnect(_ uuid: String, result: String) {
         guard savedReconnect.contains(uuid), (savedRetryAttempts[uuid] ?? 0) > 0 else { return }
+        guard savedRetryTelemetry[uuid, default: OmiSavedReconnectTelemetry()].admit(result) else { return }
         let elapsed = Int64(max(0, Date().timeIntervalSince(savedOutageStarted[uuid] ?? Date()) * 1000))
         logBle(uuid: uuid, event: "saved_pendant_reconnect", detail: result)
         flutterApi?.onSavedReconnect(peripheralUuid: uuid, attempt: Int64(savedRetryAttempts[uuid] ?? 0),
@@ -477,6 +482,7 @@ final class OmiBleManager: NSObject {
         savedRetryTasks.removeValue(forKey: uuid)?.cancel()
         savedRetryAttempts[uuid] = 0
         savedOutageStarted.removeValue(forKey: uuid)
+        savedRetryTelemetry.removeValue(forKey: uuid)
         let fresh = source == "discovery" && freshConnections.contains(uuid)
         if captureSession(uuid).ready(fresh: fresh, recovery: captureReconnects[uuid]) {
             captureReconnects.removeValue(forKey: uuid)

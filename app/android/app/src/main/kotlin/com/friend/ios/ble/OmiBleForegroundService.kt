@@ -103,8 +103,9 @@ class OmiBleForegroundService : Service() {
         }
 
         fun startService(context: Context, deviceAddress: String, requiresBond: Boolean = false, caller: String = "unknown") {
-            if (context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    .getBoolean(PREFS_USER_DISCONNECTED, false)) return
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (caller != "Dart" && prefs.getBoolean(PREFS_USER_DISCONNECTED, false)) return
+            if (caller.startsWith("CompanionSvc") && !matchesManagedDevice(deviceAddress, prefs.getString(PREFS_KEY, null))) return
             if (caller.startsWith("CompanionSvc")) {
                 val now = System.currentTimeMillis()
                 if (now - lastCompanionRequestTimestamp < COMPANION_RATE_LIMIT_MS) {
@@ -115,13 +116,13 @@ class OmiBleForegroundService : Service() {
             }
 
             val inst = instance
-            if (inst != null) {
+            if (inst != null && !inst.stopRequested) {
                 // Service already running — any startService call is effectively a
                 // "please (re)connect this device" signal. onConnectRequest either
                 // re-emits ready (link already up) or forces a fresh attempt so a
                 // stuck autoConnect=true passive scan doesn't silently swallow it.
                 Log.d(TAG, "startService($caller): service running, routing connect request for $deviceAddress")
-                if (caller == "Dart") inst.manageDevice(deviceAddress, requiresBond)
+                if (caller == "Dart" && OmiBleManager.instance.savedReconnect.isEnabled(deviceAddress)) inst.manageDevice(deviceAddress, requiresBond)
                 else inst.onConnectRequest(deviceAddress, requiresBond, caller)
                 return
             }
@@ -147,6 +148,8 @@ class OmiBleForegroundService : Service() {
             }
         }
     }
+
+    private var stopRequested = false
 
     // ── Per-device state ──
 
@@ -418,7 +421,7 @@ class OmiBleForegroundService : Service() {
 
         val existing = managedDevices[addr]
         if (existing != null) {
-            if (existing.pairingLost) return
+            if (existing.pairingLost && bleManager.savedReconnect.isEnabled(addr)) return
             if (requiresBond && !existing.requiresBond) existing.requiresBond = true
             // Don't interfere with pending GATT connection or scheduled retry
             if (existing.currentGattHash != null || existing.pendingReconnect != null) return
@@ -432,7 +435,6 @@ class OmiBleForegroundService : Service() {
 
     fun unmanageDevice(address: String) {
         val addr = address.uppercase()
-        bleManager.savedReconnect.setEnabled(addr, false)
         val managed = managedDevices[addr] ?: return
         persistDisconnectEvent(addr, 0, isManual = true, eventType = "disconnect")
         managedDevices.remove(addr)
@@ -453,6 +455,7 @@ class OmiBleForegroundService : Service() {
             bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged") {}
         }
 
+        stopRequested = true
         stopSelf()
     }
 
@@ -462,7 +465,7 @@ class OmiBleForegroundService : Service() {
         synchronized(syncLock) {
             val addr = address.uppercase()
             val managed = managedDevices[addr] ?: return
-            if (managed.pairingLost || bleManager.savedReconnect.isBlocked(addr)) return
+            if ((managed.pairingLost && bleManager.savedReconnect.isEnabled(addr)) || bleManager.savedReconnect.isBlocked(addr)) return
             if (!isBluetoothEnabled || bleManager.isPeripheralConnected(addr)) return
 
             if (bleManager.connectedGatts.containsKey(addr)) bleManager.closeGatt(addr)
@@ -663,7 +666,7 @@ class OmiBleForegroundService : Service() {
 
         if (status == 137) managed.pairingLost = true
         reportSavedReconnect(addr, if (status == 137) "failed:pairing_lost" else "failed:gatt")
-        if (isDestroying || managed.pairingLost || status == -1 || status == 137 || !isBluetoothEnabled) return false
+        if (isDestroying || (managed.pairingLost && bleManager.savedReconnect.isEnabled(addr)) || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
         val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
             addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
@@ -871,7 +874,12 @@ class OmiBleForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        if (getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getBoolean(PREFS_USER_DISCONNECTED, false)) {
+        val caller = intent?.getStringExtra("caller")
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val requested = intent?.getStringExtra("device_address")
+        if ((caller != "Dart" && prefs.getBoolean(PREFS_USER_DISCONNECTED, false)) ||
+            (caller?.startsWith("CompanionSvc") == true && requested != null &&
+                !matchesManagedDevice(requested, prefs.getString(PREFS_KEY, null)))) {
             stopSelf()
             return START_NOT_STICKY
         }

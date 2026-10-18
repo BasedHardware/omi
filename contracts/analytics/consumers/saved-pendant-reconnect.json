@@ -3,7 +3,7 @@
   "kind": "question",
   "owner": "Mobile reliability",
   "question": "Do saved pendants recover after cold-start failure, by trigger, result, platform and release build? Count attempted and connected separately; native and Dart attempts are separate series.",
-  "query": "contracts/analytics/consumers/saved-pendant-reconnect.sql",
+  "query": "contracts/analytics/consumers/saved-pendant-reconnect-presence.sql",
   "events": [
     "savedPendantReconnectObserved"
   ],
@@ -13,5 +13,6 @@
     "trigger",
     "result"
   ],
-  "zero_policy": "No reconnect events is not success. Compare attempts and outcomes within the same build and trigger; missing outcomes require investigation."
+  "zero_policy": "Presence is not recovery. Report attempted episodes and connected outcomes separately for native and Dart owners, with NULL rate when there are no attempts; cross-window outcomes may belong to earlier attempts.",
+  "outcomes_query": "contracts/analytics/consumers/saved-pendant-reconnect.sql"
 }

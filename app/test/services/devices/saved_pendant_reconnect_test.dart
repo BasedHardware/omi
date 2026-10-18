@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/devices/saved_pendant_reconnect.dart';
@@ -7,106 +6,103 @@ import 'package:omi/services/devices/saved_pendant_reconnect.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  for (final flag in ['false', 'throws', 'hangs', 'true']) {
-    test('kill switch $flag: only true disables retries and launch still connects', () {
+  for (final refresh in ['throws', 'hangs', 'false']) {
+    test('cached default ON connects immediately when refresh $refresh', () {
       fakeAsync((async) {
         var calls = 0;
-        final configured = <bool>[];
-        final events = <String>[];
         final retry = SavedPendantReconnect(
           target: () => 'saved',
           blocked: (_) => false,
           connected: (_) => false,
-          connect: (_) async {
+          connect: (_, __) async {
             calls++;
             throw TimeoutException('out of range');
           },
-          configure: (_, enabled) async => configured.add(enabled),
-          killed: () {
-            if (flag == 'throws') return Future.error(StateError('unreachable'));
-            if (flag == 'hangs') return Completer<bool>().future;
-            return Future.value(flag == 'true');
-          },
-          record: (_, __, result, ___) => events.add(result),
+          configure: (_, __) async {},
+          retire: (_) async {},
+          observeTarget: (_) => () {},
+          killed: () => false,
+          refreshKilled: () => refresh == 'throws'
+              ? Future.error(StateError('offline'))
+              : refresh == 'hangs'
+                  ? Completer<bool>().future
+                  : Future.value(false),
+          record: (_, __, ___, ____) {},
         );
         retry.start();
         retry.ensure('launch');
-        async.elapse(const Duration(seconds: 4));
-        expect(calls, 1);
-        expect(configured.first, flag != 'true');
+        async.flushMicrotasks();
+        expect(calls, 1, reason: 'no fake time elapsed while PostHog is unavailable');
         async.elapse(const Duration(minutes: 20));
-        if (flag == 'true') {
-          expect(calls, 1);
-          expect(events, contains('skipped:kill_switch'));
-        } else {
-          expect(calls, greaterThan(3));
-          expect(calls, lessThan(13), reason: 'backoff caps at five minutes, never spins');
-          expect(events, contains('failed:timeout'));
-        }
+        expect(calls, greaterThan(3));
+        expect(calls, lessThan(13));
         retry.stop();
-        final stoppedAt = calls;
+        final stopped = calls;
         async.elapse(const Duration(hours: 1));
-        expect(calls, stoppedAt);
+        expect(calls, stopped);
       });
     });
   }
 
-  test('a native-only reconnect does not reuse the completed Dart attempt outcome', () {
+  test('a late kill disarms native and stops retry timers without delaying launch', () {
     fakeAsync((async) {
-      var connected = false;
-      final outcomes = <String>[];
-      final retry = SavedPendantReconnect(
-        target: () => 'saved',
-        blocked: (_) => false,
-        connected: (_) => connected,
-        connect: (_) async {},
-        configure: (_, __) async {},
-        killed: () async => false,
-        record: (_, __, result, ___) => outcomes.add(result),
-      );
-      retry.start();
-      retry.ensure('launch');
-      async.flushMicrotasks();
-      connected = true;
-      retry.stateChanged('saved', true);
-      connected = false;
-      retry.stateChanged('saved', false);
-      connected = true;
-      retry.stateChanged('saved', true);
-      expect(outcomes.where((result) => result == 'connected'), hasLength(1));
-      retry.stop();
-    });
-  });
-
-  test('dedupes overlapping triggers and rechecks manual intent after flag read', () {
-    fakeAsync((async) {
-      var manual = false;
       var calls = 0;
-      var flagReads = 0;
+      final configured = <bool>[];
       final flag = Completer<bool>();
       final retry = SavedPendantReconnect(
         target: () => 'saved',
-        blocked: (_) => manual,
+        blocked: (_) => false,
         connected: (_) => false,
-        connect: (_) async {
+        connect: (_, __) async {
           calls++;
+          throw TimeoutException('offline');
         },
-        configure: (_, __) async {},
-        killed: () {
-          flagReads++;
-          return flag.future;
-        },
+        configure: (_, enabled) async => configured.add(enabled),
+        retire: (_) async {},
+        observeTarget: (_) => () {},
+        killed: () => false,
+        refreshKilled: () => flag.future,
         record: (_, __, ___, ____) {},
       );
       retry.start();
       retry.ensure('launch');
-      retry.ensure('resume');
-      retry.ensure('adapter_on');
-      expect(flagReads, 1);
-      manual = true;
-      flag.complete(false);
-      async.elapse(const Duration(minutes: 10));
-      expect(calls, 0);
+      async.flushMicrotasks();
+      expect(calls, 1);
+      async.elapse(const Duration(seconds: 3)); // A slow refresh still applies after launch has connected.
+      flag.complete(true);
+      async.flushMicrotasks();
+      expect(configured, [true, false]);
+      expect(retry.killed, isTrue);
+      async.elapse(const Duration(minutes: 20));
+      expect(calls, 1);
+      retry.stop();
+    });
+  });
+
+  test('attempt telemetry stays bounded for a long outage and preserves terminal success', () {
+    fakeAsync((async) {
+      var up = false;
+      final events = <String>[];
+      final retry = SavedPendantReconnect(
+        target: () => 'saved',
+        blocked: (_) => false,
+        connected: (_) => up,
+        connect: (_, __) async => throw TimeoutException('offline'),
+        configure: (_, __) async {},
+        retire: (_) async {},
+        observeTarget: (_) => () {},
+        killed: () => false,
+        record: (_, __, result, ___) => events.add(result),
+      );
+      retry.start();
+      retry.ensure('launch');
+      async.elapse(const Duration(hours: 12));
+      up = true;
+      retry.stateChanged('saved', true);
+      expect(events, ['attempted', 'failed:timeout', 'connected']);
+      retry.stateChanged('saved', false);
+      retry.stateChanged('saved', true);
+      expect(events.where((result) => result == 'connected'), hasLength(1));
       retry.stop();
     });
   });
