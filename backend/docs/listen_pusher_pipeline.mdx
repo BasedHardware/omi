@@ -2544,11 +2544,13 @@ and retained-audio limits are documented in the
 route cap (`HTTP_SYNC_JOBS_RUN_TIMEOUT`, default 1500 s) with a 504 without
 cancelling the downstream pipeline, so an over-budget job would hold the ASGI
 request until Cloud Run kills it at the platform's maximum request timeout.
-The handler therefore ends the attempt itself: one `asyncio.timeout` budget
-(`SYNC_JOB_HANDLER_BUDGET_SECONDS`, derived at startup to sit strictly below
-the route cap, the Cloud Tasks dispatch deadline, and the run lock's TTL minus
-`SYNC_JOB_RESPONSE_MARGIN_SECONDS`) wraps payload parsing, lock admission,
-staged-file downloads, and the pipeline as a single deadline.
+The handler therefore ends the attempt itself: one absolute deadline anchored
+at route entry (`SYNC_JOB_HANDLER_BUDGET_SECONDS`, derived at startup to sit
+strictly below the route cap, the Cloud Tasks dispatch deadline, and the run
+lock's TTL minus `SYNC_JOB_RESPONSE_MARGIN_SECONDS`) wraps the sequencer setup
+reads, payload parsing, lock admission, staged-file downloads, and the
+pipeline as a single budget — the attempt body enforces whatever remains, so a
+stalled setup read cannot buy the attempt a fresh full budget after it.
 
 On expiry the handler defers instead of failing: it writes a
 `deferred_until` marker on the Redis job (replacement time +
@@ -2561,7 +2563,11 @@ run-lock acquire drain, marker write, enqueue, and owner-count write
 together; a mid-flight executor leaf (lock acquire or marker CAS) is drained
 or fenced rather than racing the cleanup clear, and an acquire that cannot
 be settled returns the queue-owned 409 (`acquire_unsettled`) because no
-replacement schedule can be proven past the lock.
+replacement schedule can be proven past the lock. When the enqueue definitively
+failed, the compensating marker clear is best-effort: a clear that also fails
+or times out records its own fallback (`marker_clear_failed`) on top of the
+enqueue failure, because the surviving marker keeps suppressing stale recovery
+after the queue-owned retries exhaust.
 
 Status polling honors the marker: a deferred job — `processing` or `queued`,
 direct or sequenced-excluded — is not stale until `deferred_until` passes
@@ -2571,11 +2577,16 @@ through the poll's run-lease finalizer; for a queued job the overdue marker
 is itself the recovery signal even when earlier retryable failures left
 `attempt`/`started_at` populated. When the chain spends the whole attempt
 contract (`SYNC_TASKS_MAX_ATTEMPTS`), the handler returns the queue-owned
-409 and the UID sequencer's sweep terminalizes the abandoned Redis job
-(reason `sync_budget_chain_exhausted`) before releasing its owner — the
-terminal handoff is required before the lane advances, retried on transient
-Redis failures, and fenced by the run lock so a live attempt's own terminal
-write always wins.
+409 and persists the exhaustion on the owner (`active_budget_deferrals`
+reaching `SYNC_TASKS_MAX_ATTEMPTS`) — that final delivery's own note is the
+only cap signal, because the deferral-time count denotes a scheduled next
+attempt, not a completed one, and the lease normally lapses before the
+delayed final replacement is due. The UID sequencer's sweep terminalizes the
+abandoned Redis job (reason `sync_budget_chain_exhausted`) before releasing
+its owner — the terminal handoff is required before the lane advances,
+retried on transient Redis failures and on a terminalization CAS whose
+re-read still shows a nonterminal job, and fenced by the run lock so a live
+attempt's own terminal write always wins.
 
 ### Conversation playback artifact
 

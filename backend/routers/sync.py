@@ -1968,12 +1968,20 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
+    # One absolute budget for the whole request. The sequenced wrapper's
+    # fence/begin/prior-job reads — and the legacy-migration path's extra
+    # Redis/Firestore work — run before the attempt body, so a budget started
+    # only there would not see time those setup calls consumed and the fresh
+    # full budget could still carry the request past the middleware or Cloud
+    # Tasks dispatch deadline. The deadline is anchored here; the attempt
+    # runs on whatever remains.
+    budget_deadline = time.monotonic() + SYNC_JOB_HANDLER_BUDGET_SECONDS
     if await run_blocking(db_executor, uid_sequencer.production_fence_mode) is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     try:
         payload = await request.json()
     except Exception:
-        return await _run_sync_job_body(request, task_retry_count)
+        return await _run_sync_job_body(request, task_retry_count, budget_deadline=budget_deadline)
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
@@ -2013,7 +2021,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )
                 if marked is None:
-                    return await _run_sync_job_body(request, task_retry_count)
+                    return await _run_sync_job_body(request, task_retry_count, budget_deadline=budget_deadline)
                 age = payload.get('recording_age_seconds')
                 captured_at = (
                     float(payload.get('enqueued_at')) - float(age)
@@ -2039,7 +2047,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
             if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
                 await run_blocking(db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id'])
-        return await _run_sync_job_body(request, task_retry_count)
+        return await _run_sync_job_body(request, task_retry_count, budget_deadline=budget_deadline)
     uid = payload.get('uid')
     job_id = payload.get('job_id')
     if not isinstance(uid, str) or not isinstance(job_id, str) or not isinstance(epoch, int) or epoch <= 0:
@@ -2063,7 +2071,9 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         # (post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS)
         # instead of each spending a fresh margin-sized timeout whose sum
         # reaches the attempt wall before the response is serialized.
-        response = await _run_sync_job_body(request, effective_retry_count, sequenced_attempt_state)
+        response = await _run_sync_job_body(
+            request, effective_retry_count, sequenced_attempt_state, budget_deadline=budget_deadline
+        )
     finally:
         stop.set()
         # Setting stop cannot interrupt a renewal already blocked inside its
@@ -2291,6 +2301,39 @@ async def _defer_sync_job_after_handler_budget_expiry(
             'event=sync_transcription_job outcome=handler_budget_deferrals_exhausted deferrals=%d',
             deferrals,
         )
+        if payload.get('sequencer_epoch') is not None:
+            # This branch is the final delivery's own expiry — the only point
+            # that knows the last scheduled replacement actually ran. The
+            # owner count persisted at deferral time denotes a scheduled next
+            # attempt, not a completed one, and the lease normally lapses
+            # before the delayed final replacement is due, so without this
+            # note the sweep could not tell a still-pending final replacement
+            # from a chain that already spent its contract. Best-effort and
+            # bounded like the other post-budget writes: a lost note degrades
+            # to one extra redriven whole-budget attempt, which re-notes on
+            # its own exhaustion.
+            try:
+                async with asyncio.timeout(time.monotonic() + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
+                    await run_blocking(
+                        db_executor,
+                        sync_backfill_sequencer.note_budget_deferral,
+                        uid,
+                        job_id,
+                        int(payload['sequencer_epoch']),
+                        deferrals + 1,
+                    )
+            except Exception as error:
+                logger.warning(
+                    'event=sync_transcription_job outcome=handler_budget_exhaustion_note_failed exception_type=%s',
+                    type(error).__name__,
+                )
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='budget_replacement',
+                    to_mode='lease_expiry_redrive',
+                    reason='owner_write_failed',
+                    outcome='degraded',
+                )
         return _budget_deferral_fallback('deferrals_exhausted', 'exhausted')
     # One absolute deadline for all post-budget work — run-lock acquire drain,
     # marker, replacement enqueue, and the sequencer-owner count below: each
@@ -2438,7 +2481,19 @@ async def _defer_sync_job_after_handler_budget_expiry(
             if cleared is None:
                 raise RuntimeError('deferred marker clear did not apply')
         except Exception:
+            # A failed clear is a distinct degradation, not merely the
+            # enqueue failure below it: the surviving deferred_until keeps
+            # suppressing stale recovery long after the queue-owned retries
+            # exhaust, and without this record operators cannot tell a
+            # successfully re-armed job from one stalled behind its marker.
             logger.warning('event=sync_transcription_job outcome=handler_budget_deferral_marker_clear_failed')
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='budget_replacement',
+                to_mode='queue_retry',
+                reason='marker_clear_failed',
+                outcome='degraded',
+            )
         return _budget_deferral_fallback(fallback_reason, 'degraded')
     if payload.get('sequencer_epoch') is not None:
         # Sequenced deliveries only: a lease that expires before the delayed
@@ -2508,12 +2563,18 @@ async def _release_expired_attempt_run_lock(attempt_state: dict, *, deadline: Op
         )
 
 
-async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_state: Optional[dict] = None):
+async def _run_sync_job_body(
+    request: Request,
+    task_retry_count: int,
+    attempt_state: Optional[dict] = None,
+    budget_deadline: Optional[float] = None,
+):
     """Run one Cloud Tasks attempt inside the in-request budget.
 
-    The budget anchors here, at handler entry, so payload parsing, lock
-    admission, staged-file downloads, and the pipeline share one deadline
-    instead of the pipeline budget starting only after pre-pipeline I/O. On
+    The budget anchors at route entry (``run_sync_job``) so the sequencer
+    setup reads and payload parsing count against the same deadline the
+    attempt enforces here through ``budget_deadline``; the body falls back to
+    a fresh budget only when called without one. On
     expiry the attempt is cancelled exactly like a lost lease: the run lock
     and staged audio stay held, so a replacement attempt can never overlap an
     executor leaf that cancellation cannot stop. Because that lock outlives
@@ -2531,7 +2592,11 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
     # sequenced wrapper) also receives the shared post-budget deadline so its
     # post-attempt cleanup waits cannot each spend a fresh margin.
     state = attempt_state if attempt_state is not None else {}
-    budget = asyncio.timeout(SYNC_JOB_HANDLER_BUDGET_SECONDS)
+    budget = (
+        asyncio.timeout_at(budget_deadline)
+        if budget_deadline is not None
+        else asyncio.timeout(SYNC_JOB_HANDLER_BUDGET_SECONDS)
+    )
     try:
         async with budget:
             return await _run_sync_job_attempt(request, task_retry_count, state)
