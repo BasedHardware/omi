@@ -9348,6 +9348,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Aproximadamente 1 minuto';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Ir a $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count más';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Ir al mensaje más reciente';
 
   @override
@@ -13520,6 +13530,43 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onTheWayAlmostReady => 'Casi listo';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grabaciones',
+      one: '1 grabación',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals en camino';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Subiendo: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Casi listas: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count necesitan atención',
+      one: '1 necesita atención',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Aún no hay actividad';
 
   @override
@@ -13816,6 +13863,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Algo salió mal al resumir esta conversación.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Se guardaron $saved de $total de audio';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

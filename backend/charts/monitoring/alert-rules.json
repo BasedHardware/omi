@@ -1695,7 +1695,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "4",
-      "threshold": ">20 rps for 10m. Supplied production Prometheus/Cloud Monitoring pre-storm triage, 2026-09-28..2026-10-07 at 1h steps: p50 3.6 / p99 7.2 / max 9.8 rps; threshold above the measured normal maximum.",
+      "threshold": ">20 rps for 10m. Direct Cloud Monitoring 1m RPS, 2026-10-04 07:25Z..2026-10-07 12:00Z (sync-poll-storm days excluded): p50 4.23 / p99 14.33 / max 36.28; longest run >20 was 1m.",
       "summary": "Omi API alert: Backend - 4XX error rate is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi API production service path.",
@@ -2587,7 +2587,7 @@
         },
         "datasourceUid": "beuxmaq8oxhq8e",
         "model": {
-          "aliasBy": "{{metric.label.state}}",
+          "aliasBy": "Instances",
           "datasource": {
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
@@ -2600,7 +2600,7 @@
           "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_MAX",
+            "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
               "resource.label.service_name",
               "=",
@@ -2610,9 +2610,7 @@
               "=",
               "run.googleapis.com/container/instance_count"
             ],
-            "groupBys": [
-              "metric.label.state"
-            ],
+            "groupBys": [],
             "perSeriesAligner": "ALIGN_MEAN",
             "preprocessor": "none",
             "projectName": "based-hardware",
@@ -2675,7 +2673,7 @@
             {
               "evaluator": {
                 "params": [
-                  48
+                  72
                 ],
                 "type": "gte"
               },
@@ -2714,7 +2712,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "36",
-      "threshold": ">=48 instances for 30m (max_instances - 2). Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 18.8 / p90 34 / max 49.5; .github/actions/deploy-backend-stack/action.yml sets backend-sync --max-instances=50.",
+      "threshold": ">=72 total instances for 30m (90% of service-level maxScale=80; source: Cloud Run backend-sync metadata.annotations[\"run.googleapis.com/maxScale\"], read with gcloud run services describe). Re-read after each deploy/restore.",
       "summary": "Omi API alert: Backend-sync instance count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi API production service path.",
@@ -4902,6 +4900,216 @@
     "record": null
   },
   {
+    "uid": "omi-listen-neg-zone-no-traffic",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - Ready NEG zone receives no LB traffic",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) > 0) unless on (zone) (sum by (zone) (label_replace(avg_over_time(avg without (instance) (stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name=\"custom-domains-api-omi-me-backend-listen-49a4-be\",backend_name=\"prod-backend-listen-neg\",backend_type=\"NETWORK_ENDPOINT_GROUP\",backend_scope_type=\"ZONE\"})[10m:1m]), \"zone\", \"$1\", \"backend_scope\", \"(.+)\")) > 0)) and on () (sum(sum by (zone) (label_replace(avg_over_time(avg without (instance) (stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name=\"custom-domains-api-omi-me-backend-listen-49a4-be\",backend_name=\"prod-backend-listen-neg\",backend_type=\"NETWORK_ENDPOINT_GROUP\",backend_scope_type=\"ZONE\"})[10m:1m]), \"zone\", \"$1\", \"backend_scope\", \"(.+)\"))) > 0)) or (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) * 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "__panelId__": "1",
+      "summary": "A zone with Ready backend-listen pods receives no load balancer backend requests.",
+      "threshold": "One or more Ready stable listen pods in a zone, but zero requests to that zonal NEG while the backend is serving traffic, for 10m.",
+      "user_impact": "The load balancer can leave Ready listen capacity idle while other zones handle the traffic, increasing live transcription latency or failures.",
+      "scope": "Stable backend-listen pods in prod-omi-backend, grouped by GKE node zone; backend_scope identifies the served NEG zone.",
+      "verification": "Compare Ready listen pods by zone with backend_request_count grouped by backend_scope for the listen backend service.",
+      "safe_next_action": "Inspect the backend service and its zonal NEG attachments; restore a missing zone only after confirming the NEG and pod endpoints.",
+      "evaluated_bad": "2026-10-18 07:40Z: query A returns us-central1-c=11 Ready pods and us-central1-a=0; no us-central1-c NEG request samples are present.",
+      "evaluated_good": "2026-10-18 07:44Z: query A returns us-central1-a=0 and us-central1-c=0 after zonal NEG attachment; both zones have LB request samples."
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-neg-zone-no-traffic",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-listen-websocket-zone-skew",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - active WebSocket load is skewed by zone",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (zone) (backend_listen_active_ws_connections{job=\"backend-listen-metrics\",namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) / on (zone) (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\"))) < bool on () group_left() (max without (zone) (sum by (zone) (backend_listen_active_ws_connections{job=\"backend-listen-metrics\",namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) / on (zone) (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")))) * 0.5)) and on (zone) (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) >= 5)) and on () (sum(backend_listen_active_ws_connections{job=\"backend-listen-metrics\",namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}) > 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "__panelId__": "11",
+      "summary": "A backend-listen zone has less than half the busiest zone active WebSockets per Ready pod.",
+      "threshold": "At least 5 Ready listen pods per zone and 100 total active WebSockets; zone average below 50% of the busiest zone average for 10m.",
+      "user_impact": "Uneven socket placement can overload a subset of live transcription pods while Ready capacity in another zone sits idle.",
+      "scope": "Stable backend-listen pods in prod-omi-backend; active WebSocket gauge divided by Ready pod count per GKE node zone.",
+      "verification": "Compare Active WS and Avg. WS per pod on the linked backend-listen dashboard, then confirm LB backend_scope traffic.",
+      "safe_next_action": "Check the listen backend NEG attachments and per-zone Ready pod counts before changing capacity.",
+      "evaluated_bad": "2026-10-18 06:00Z: query A returns us-central1-c=1 (alerting) and us-central1-a=0; active WebSockets per Ready pod are 0.00 in c and 33.64 in a.",
+      "evaluated_good": "2026-10-18 08:00Z: query A returns 0 for both zones; active WebSockets per Ready pod are 22.55 in a and 12.67 in c (56% of busiest)."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-websocket-zone-skew",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
     "id": 27,
     "uid": "eew96lge97gg0e",
     "orgID": 1,
@@ -5724,7 +5932,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "57",
-      "threshold": ">20 denied rps for 10m. Supplied production Prometheus/Cloud Monitoring pre-storm triage, 2026-09-28..2026-10-07 at 1h steps: p50 3.7 / p99 6.5 / max 7.1 rps; threshold above the measured normal maximum.",
+      "threshold": ">20 denied rps for 10m. Direct Cloud Monitoring 1m RPS, 2026-10-04 07:25Z..2026-10-07 12:00Z (sync-poll-storm days excluded): p50 3.27 / p99 11.15 / max 24.35; longest run >20 was 2m.",
       "summary": "Omi API alert: Cloud Armor denied requests per second is high.",
       "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
       "scope": "The Omi API production service path.",
@@ -11653,7 +11861,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -11673,7 +11881,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) * 0",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) * 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -15294,14 +15502,14 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live STT - health evidence persistence gaps",
+    "title": "Live STT - health evidence persistence gaps (settlement-normalized proxy)",
     "condition": "D",
     "data": [
       {
         "refId": "A",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -15310,7 +15518,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[5m]))",
+          "expr": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -15321,7 +15529,7 @@
         "refId": "B",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -15330,7 +15538,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[5m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[5m])) + sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[5m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "expr": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -15350,7 +15558,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0",
+          "expression": "$A >= 100 && $B > 0.01",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -15400,22 +15608,22 @@
         }
       }
     ],
-    "updated": "2026-10-04T00:00:00Z",
+    "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "1m",
+    "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT - health evidence persistence gaps",
+      "summary": "Live STT - settlement-normalized health evidence persistence proxy elevated",
       "user_impact": "Routing evidence is incomplete; stages cannot qualify a rollout.",
-      "scope": "omi_stt_cost_routing_settlements_total requires the configured chain; health persistence metrics are diagnostic.",
+      "scope": "Settlement-normalized proxy from cost-routing settlements and evidence errors; this is not a true Redis write-loss rate.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0",
-      "evaluated_bad": "At least one cost-routing settlement in 5m with a dropped or ack-failed evidence record.",
-      "evaluated_good": "Settlements with zero dropped evidence records and zero emission ack errors."
+      "threshold": "Settlement-normalized proxy >1% with at least 100 cost-routing settlements in 15m, sustained for 15m. Switch to dropped/attempted after the new counters have a day of data.",
+      "evaluated_bad": "At least 100 cost-routing settlements in 15m and the settlement-normalized proxy is >1% for 15m.",
+      "evaluated_good": "Fewer than 100 cost-routing settlements in 15m or the settlement-normalized proxy is at most 1%."
     },
     "labels": {
       "alert_identity": "omi-stt-evidence-loss",
@@ -15427,7 +15635,12 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
     },
     "record": null
   },
@@ -17847,5 +18060,909 @@
       "impact": "infrastructure",
       "datasource_uid": "gmp-cloud-run"
     }
+  },
+  {
+    "uid": "omi-stt-evidence-loss-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - health evidence persistence gaps (critical proxy)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 100 && $B > 0.03",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "Live STT - settlement-normalized health evidence persistence proxy critical",
+      "user_impact": "Routing evidence is incomplete; stages cannot qualify a rollout.",
+      "scope": "Settlement-normalized proxy from cost-routing settlements and evidence errors; this is not a true Redis write-loss rate.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "Settlement-normalized proxy >3% with at least 100 cost-routing settlements in 15m, sustained for 10m. Switch to dropped/attempted after the new counters have a day of data.",
+      "evaluated_bad": "At least 100 cost-routing settlements in 15m and the settlement-normalized proxy is >3% for 10m.",
+      "evaluated_good": "Fewer than 100 cost-routing settlements in 15m or the settlement-normalized proxy is at most 3%."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-evidence-loss-critical",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-capture-summary-never-published",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - summary has never published",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "absent_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "30",
+      "summary": "Capture finalization - summary has not published",
+      "threshold": "Warning when no successful summary timestamp has been scraped for 30m and that absence persists for another 30m. This is not a page.",
+      "user_impact": "Summary freshness has not yet been established; this can be expected before the backend-listen image ships or during prolonged restarts and lease handoffs.",
+      "scope": "No backend-listen pod has published the summary timestamp within the last 30m.",
+      "verification": "Check backend-listen rollout and lease state first, then inspect Firestore summary query logs and the metric scrape.",
+      "safe_next_action": "Confirm the backend-listen image is deployed; if it is, investigate why the Firestore summary has not published.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-summary-never-published",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-capture-summary-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - Firestore summary stale",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max(max_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])) > 900",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "30",
+      "summary": "Capture finalization - Firestore summary stale",
+      "threshold": "Critical only after a previously published Firestore summary timestamp is older than 900s for 5m; the 30m query window must still contain a sample.",
+      "user_impact": "The oldest unfinished capture age may be stale because no listen pod has completed a Firestore summary recently.",
+      "scope": "Maximum last-success timestamp across backend-listen pods; missing series is OK for this critical rule until a summary has been published.",
+      "verification": "Check the summary freshness metric and backend-listen Firestore query logs; a missing series is handled by the separate warning.",
+      "safe_next_action": "Restore summary reads and verify a successful Firestore summary republishes the age and status gauges.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-summary-stale",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-gate-unavailable",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Live STT - demand gate unavailable",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  50
+                ],
+                "type": "gte"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "2",
+      "summary": "The live STT demand gate is unavailable; sessions are degrading to the vendor path.",
+      "user_impact": "Live STT sessions are falling back to the vendor path because the demand gate is unavailable.",
+      "threshold": "At least 50 reason=gate_unavailable outcome=degraded events in 5m for 5m.",
+      "scope": "backend-listen omi_fallback_total; to_mode=vendor is the demand-gate sentinel, not a provider.",
+      "verification": "Confirm the vendor sentinel events and demand-gate Redis health.",
+      "safe_next_action": "Restore the demand-gate Redis path and confirm sessions return to normal provider routing."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-gate-unavailable",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-listen-neg-endpoint-coverage",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - attached Ready endpoint coverage is below 80%",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (zone) (omi_listen_lb_attached_ready_endpoints) / on (zone) sum by (zone) (omi_listen_lb_ready_pods) < bool 0.8) and on (zone) (sum by (zone) (omi_listen_lb_ready_pods) >= bool 5)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "A listen zone has Ready pods without matching LB-attached NEG endpoints.",
+      "threshold": "Attached Ready NEG endpoints / Ready listen pods < 0.8 with at least 5 Ready pods in a zone for 10m.",
+      "user_impact": "The load balancer may send live transcription traffic to fewer Ready listen pods than the cluster has available.",
+      "scope": "Configured us-central1 listen zones; endpoint IPs are matched to Ready backend-listen pod IPs.",
+      "verification": "Compare omi_listen_lb_attached_ready_endpoints with omi_listen_lb_ready_pods by zone, then inspect backend-service health.",
+      "safe_next_action": "Check the backend service NEG attachments and pod IPs in the affected zone before changing capacity."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-neg-endpoint-coverage",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-listen-neg-endpoints-unattached",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - zonal NEG endpoints are not attached",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum by (zone) (omi_listen_lb_neg_attached) == bool 0) and on (zone) (sum by (zone) (omi_listen_lb_neg_endpoints) > bool 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "A listen NEG has endpoints in a zone but the global backend service does not attach it.",
+      "threshold": "neg_attached is 0 while neg_endpoints is greater than 0 for 5m.",
+      "user_impact": "Listen capacity in the affected zone is unavailable to the load balancer and can leave other zones carrying all traffic.",
+      "scope": "The configured prod-backend-listen-neg zones compared with backend-service group references.",
+      "verification": "Compare omi_listen_lb_neg_attached and omi_listen_lb_neg_endpoints by zone, then confirm with gcloud compute backend-services get-health.",
+      "safe_next_action": "Attach the existing zonal NEG to the listen backend service after checking endpoint and health state."
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-neg-endpoints-unattached",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-listen-neg-exporter-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - NEG coverage exporter is stale",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_listen_lb_exporter_last_success_timestamp_seconds) > bool 300) or on () absent(omi_listen_lb_exporter_last_success_timestamp_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "The NEG coverage exporter has not completed a successful read cycle recently or its metric is absent.",
+      "threshold": "The last complete collection is older than 5m, or the success timestamp metric is absent, for 10m.",
+      "user_impact": "Operators cannot confirm the load balancer endpoint coverage of Ready listen pods by zone.",
+      "scope": "The production neg-coverage-exporter in prod-omi-monitoring.",
+      "verification": "Inspect exporter logs and omi_listen_lb_exporter_errors_total by stage; verify the workload identity and Kubernetes RBAC.",
+      "safe_next_action": "Restore read-only access to the Compute and Kubernetes APIs, then confirm last_success advances."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-neg-exporter-stale",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

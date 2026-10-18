@@ -184,4 +184,58 @@ describe('useChat session ownership', () => {
       expect.objectContaining({ id: 'file-2', name: 'Attached file' }),
     ]);
   });
+
+  it('replaces streamed marker text with the citation-stripped final message and memories on done', async () => {
+    vi.mocked(sendMessageStream).mockImplementation((async (
+      _text: string,
+      onChunk: (chunk: { type: string; text: string; message?: unknown }) => void,
+    ) => {
+      onChunk({ type: 'think', text: 'Searching conversations' });
+      onChunk({ type: 'data', text: 'I can name them.[1][2][4][' });
+      onChunk({ type: 'data', text: '6][7]' });
+      onChunk({
+        type: 'done',
+        text: '',
+        message: {
+          ...aiMessage('fixture-ai', 'I can name them.'),
+          memories_id: ['conversation-1', 'conversation-2'],
+          memories: [
+            {
+              id: 'conversation-1',
+              created_at: '2026-10-12T00:00:00Z',
+              structured: { title: 'Conversation 1', emoji: '📝' },
+            },
+            {
+              id: 'conversation-2',
+              created_at: '2026-10-12T00:00:00Z',
+              structured: { title: 'Conversation 2', emoji: '📝' },
+            },
+          ],
+        },
+      });
+    }) as never);
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.sendMessage('Who did I meet?');
+    });
+
+    expect(result.current.streamingText).toBe('');
+    expect(result.current.messages).toHaveLength(2);
+    const aiReply = result.current.messages[1];
+    expect(aiReply?.text).toBe('I can name them.');
+    expect(aiReply?.memories).toEqual([
+      {
+        id: 'conversation-1',
+        created_at: '2026-10-12T00:00:00Z',
+        structured: { title: 'Conversation 1', emoji: '📝' },
+      },
+      {
+        id: 'conversation-2',
+        created_at: '2026-10-12T00:00:00Z',
+        structured: { title: 'Conversation 2', emoji: '📝' },
+      },
+    ]);
+  });
 });

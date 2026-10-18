@@ -12,6 +12,16 @@ WIRE_AUDIO = Counter(
     'Listen PCM seconds successfully written to paid transports, including each replay write',
     ['provider', 'demand_cohort'],
 )
+BATCH_WIRE_AUDIO = Counter(
+    'omi_batch_live_stt_provider_wire_audio_seconds_total',
+    'Successful paid transport PCM seconds including replay, pinned to batch preview admission',
+    ['provider', 'batch_cohort'],
+)
+BATCH_CAPTURE_AUDIO = Counter(
+    'omi_batch_live_stt_capture_audio_seconds_total',
+    'Decoded capture seconds before VAD/replay, pinned to batch preview admission',
+    ['batch_cohort'],
+)
 CAPTURE_AUDIO = Counter(
     'omi_listen_demand_capture_audio_seconds_total',
     'Decoded listen capture seconds before VAD or replay',
@@ -101,8 +111,10 @@ def demand_cohort() -> str:
 
 try:
     for _cohort in DEMAND_COHORTS:
+        BATCH_CAPTURE_AUDIO.labels(batch_cohort=_cohort)
         CAPTURE_AUDIO.labels(demand_cohort=_cohort)
         for _provider in ('soniox', 'modulate', 'deepgram'):
+            BATCH_WIRE_AUDIO.labels(provider=_provider, batch_cohort=_cohort)
             WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort)
         for _reason in ('first_text_deadline', 'capacity_full', 'other'):
             _subtypes = (
@@ -130,6 +142,7 @@ class DemandTelemetry:
         if cohort not in DEMAND_COHORTS:
             raise ValueError('invalid demand cohort')
         self.cohort = cohort
+        self.batch_cohort = 'ineligible'
         self.exhausted = False
         self.finished = False
         self.first_audio_at: float | None = None
@@ -143,6 +156,7 @@ class DemandTelemetry:
                 self.first_audio_at = monotonic()
                 self.output_event('first_output', 'started')
             record_metric(CAPTURE_AUDIO, {'demand_cohort': self.cohort}, seconds)
+            record_metric(BATCH_CAPTURE_AUDIO, {'batch_cohort': self.batch_cohort}, seconds)
 
     def observe_visibility(self, payload) -> None:
         foreground, visible = payload.get('foreground'), payload.get('transcript_visible')
@@ -201,11 +215,17 @@ class WireAudioMeter:
 
     def __init__(self, provider: str, sample_rate: int, channels: int = 1):
         self.telemetry = current_telemetry()
+        self.batch_cohort = getattr(self.telemetry, 'batch_cohort', 'ineligible')
         self.provider = provider
         self.bytes_per_second = 2 * sample_rate * channels
 
     def written(self, data: bytes | str) -> None:
         if self.telemetry is not None and isinstance(data, bytes) and data and self.bytes_per_second > 0:
+            record_metric(
+                BATCH_WIRE_AUDIO,
+                {'provider': self.provider, 'batch_cohort': self.batch_cohort},
+                len(data) / self.bytes_per_second,
+            )
             record_metric(
                 WIRE_AUDIO,
                 {'provider': self.provider, 'demand_cohort': cohort_label(self.telemetry)},

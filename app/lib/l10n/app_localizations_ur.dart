@@ -9336,6 +9336,16 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$duration پر جائیں';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+مزید $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'تازہ ترین پیغام پر جائیں';
 
   @override
@@ -13494,6 +13504,43 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onTheWayAlmostReady => 'تقریباً تیار';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز',
+      one: '1 ریکارڈنگ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals راستے میں';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'اپ لوڈ ہو رہی ہیں: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'تقریباً تیار: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count پر توجہ درکار ہے',
+      one: '1 پر توجہ درکار ہے',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'ابھی تک کوئی سرگرمی نہیں';
 
   @override
@@ -13788,6 +13835,11 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved آڈیو محفوظ ہوا، کل $total';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

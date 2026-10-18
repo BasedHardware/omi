@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "הכירו את ה-Omi שלכם",
     "deviceOnboardingIntroSubtitle": "נסו תמלול חי, שאלה אחת וקיצור הדרך של הקשה כפולה.",
     "deviceOnboardingIntroDuration": "כדקה אחת",
+    "quoteJumpToTime": "מעבר אל {duration}",
+    "quoteMoreTimestamps": "+{count} נוספים",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
     "latest": "האחרון",
     "flashFirmware": "צריבת קושחה",
@@ -11556,6 +11558,11 @@
     "homePendingCatchingUp": "משלימים אודיו קודם",
     "onTheWayTitle": "בדרך",
     "onTheWayAlmostReady": "כמעט מוכן",
+    "onTheWayRecordingCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}",
+    "onTheWaySummary": "{totals} בדרך",
+    "onTheWayUploadingCount": "בהעלאה: {count}",
+    "onTheWayAlmostReadyCount": "כמעט מוכנות: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{אחת דורשת תשומת לב} other{{count} דורשות תשומת לב}}",
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
@@ -11645,6 +11652,7 @@
     "summaryLimitBody": "יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.",
     "summaryFailedTitle": "לא ניתן היה לסכם",
     "summaryFailedBody": "משהו השתבש בעת סיכום השיחה הזו.",
+    "playbackPartialAudioSaved": "נשמרו {saved} מתוך {total} של אודיו",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "আপনার Omi-কে জানুন",
     "deviceOnboardingIntroSubtitle": "লাইভ ট্রান্সক্রিপশন, প্রশ্ন করা এবং ডাবল-ট্যাপ শর্টকাট চেষ্টা করুন।",
     "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট",
+    "quoteJumpToTime": "{duration}-এ যান",
+    "quoteMoreTimestamps": "+আরও {count}",
     "jumpToLatestMessage": "সর্বশেষ বার্তায় যান",
     "latest": "সর্বশেষ",
     "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন",
@@ -11556,6 +11558,11 @@
     "homePendingCatchingUp": "আগের অডিও প্রক্রিয়া করা হচ্ছে",
     "onTheWayTitle": "আসছে",
     "onTheWayAlmostReady": "প্রায় প্রস্তুত",
+    "onTheWayRecordingCount": "{count, plural, =1{১টি রেকর্ডিং} other{{count}টি রেকর্ডিং}}",
+    "onTheWaySummary": "{totals} আসছে",
+    "onTheWayUploadingCount": "{count}টি আপলোড হচ্ছে",
+    "onTheWayAlmostReadyCount": "{count}টি প্রায় প্রস্তুত",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{১টিতে মনোযোগ প্রয়োজন} other{{count}টিতে মনোযোগ প্রয়োজন}}",
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
@@ -11645,6 +11652,7 @@
     "summaryLimitBody": "আপনি গত এক ঘণ্টায় একাধিক সারসংক্ষেপ পুনরায় তৈরি করেছেন। পরে আবার চেষ্টা করুন।",
     "summaryFailedTitle": "সারসংক্ষেপ করা যায়নি",
     "summaryFailedBody": "এই কথোপকথনের সারসংক্ষেপ করার সময় কিছু ভুল হয়েছে।",
+    "playbackPartialAudioSaved": "{saved} অডিও সংরক্ষিত, মোট {total}",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Упознајте свој Omi",
     "deviceOnboardingIntroSubtitle": "Испробајте живу транскрипцију, постављање питања и пречицу дуплим додиром.",
     "deviceOnboardingIntroDuration": "Око 1 минута",
+    "quoteJumpToTime": "Иди на {duration}",
+    "quoteMoreTimestamps": "+ још {count}",
     "jumpToLatestMessage": "Иди на најновију поруку",
     "latest": "Најновије",
     "flashFirmware": "Инсталирај фирмвер",
@@ -11556,6 +11558,11 @@
     "homePendingCatchingUp": "Обрађујемо ранији звук",
     "onTheWayTitle": "На путу",
     "onTheWayAlmostReady": "Скоро спремно",
+    "onTheWayRecordingCount": "{count, plural, =1{1 снимак} other{Снимака: {count}}}",
+    "onTheWaySummary": "{totals} на путу",
+    "onTheWayUploadingCount": "Отпрема се: {count}",
+    "onTheWayAlmostReadyCount": "Скоро спремно: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 захтева пажњу} other{Захтева пажњу: {count}}}",
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
@@ -11645,6 +11652,7 @@
     "summaryLimitBody": "У последњих сат времена сте више пута поново генерисали сажетке. Покушајте поново касније.",
     "summaryFailedTitle": "Сажимање није успело",
     "summaryFailedBody": "Дошло је до грешке приликом сажимања овог разговора.",
+    "playbackPartialAudioSaved": "Сачувано {saved} од {total} аудија",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

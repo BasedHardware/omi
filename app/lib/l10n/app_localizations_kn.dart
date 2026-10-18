@@ -9352,6 +9352,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationಗೆ ಹೋಗಿ';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ಇನ್ನೂ $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ';
 
   @override
@@ -13519,6 +13529,43 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onTheWayAlmostReady => 'ಬಹುತೇಕ ಸಿದ್ಧ';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals ದಾರಿಯಲ್ಲಿದೆ';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'ಬಹುತೇಕ ಸಿದ್ಧ: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಗಮನ ಅಗತ್ಯ: $count',
+      one: 'ಗಮನ ಅಗತ್ಯ: 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ';
 
   @override
@@ -13816,6 +13863,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು $total';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

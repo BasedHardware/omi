@@ -373,3 +373,144 @@ def test_worker_proof_survives_the_real_lease_cas_and_unknown_failures_do_not_ga
         assert scheduler.fail(sid, lease.token, 2, quarantine=True, padded_retry_empty=proof)
         job = store.run(lambda tx: tx.get('jobs', sid))
         assert bool(job.get('worker_empty_evidence')) == proof
+
+
+@pytest.mark.parametrize(
+    'duration,expected_recovery_outcome,expected_state,expected_result_outcome',
+    [
+        (10, 'recovered', 'result_ready', 'no_recoverable_speech'),
+        (117, 'failed_held', 'quarantined', None),
+    ],
+)
+def test_skipped_oversized_padded_retry_does_not_terminal_complete_empty_recovery(
+    setup,
+    monkeypatch,
+    legacy_dependencies,
+    duration,
+    expected_recovery_outcome,
+    expected_state,
+    expected_result_outcome,
+):
+    from types import SimpleNamespace
+    import numpy as np
+    from diarizer.batch_pipeline_models import ParakeetWords
+    from tests.unit.test_batch_pipeline_worker import setup_worker, item
+    from utils.batch_pipeline.scheduler import Scheduler, owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    client, store, binding, artifacts, legacy, alternate, _ = terminal_setup(setup, monkeypatch, legacy_dependencies)
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, *_ = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    worker_results = worker.process_batch([item('bad', duration)])
+    assert len(worker_results) == 1
+    job = row(client)
+    job.pop('recovery', None)
+    job.pop('worker_empty_evidence', None)
+    job.update(
+        duration_seconds=duration,
+        owner_key=owner_key(binding.owner_id),
+        attempt=1,
+        state='leased',
+        token='worker-lease',
+        lease_until=1000.0,
+        merge_pending=True,
+    )
+    artifacts.fetch_audio.return_value = wav(duration)
+    scheduler = Scheduler(store)
+    assert scheduler.fail(
+        'bad',
+        'worker-lease',
+        10,
+        quarantine=True,
+        padded_retry_empty=worker_results[0].padded_retry_empty,
+        padded_retry=worker_results[0].padded_retry,
+    )
+    recovery = setup[-1]
+    recovery.stt = transcribe
+    assert recovery.recover('bad', binding.owner_id) == expected_recovery_outcome
+    job = row(client)
+    assert job['state'] == expected_state
+    assert (job.get('result') or {}).get('outcome') == expected_result_outcome
+    alternate.assert_called_once()
+    legacy.assert_not_called()
+    if duration == 117:
+        assert job['recovery_state'] == 'failed_held'
+        assert job['worker_empty_evidence'] == {'padded_retry': 'skipped_oversize', 'version': 1}
+        from database.batch_pipeline_speech_redrive import SpeechRedriveStore
+
+        with pytest.raises(ProjectionBlocked):
+            SpeechRedriveStore(store).prepare(
+                'bad', binding.owner_id, 'plan', job['recovery'], 101, gpu_padded_retry_empty=True
+            )
+        with pytest.raises(ProjectionBlocked):
+            TerminalEmptyStore(store).prepare(
+                'bad', binding.owner_id, 'plan', intent_snapshot(job), 'no_recoverable_speech', True, 101
+            )
+        module = load_operator()
+        with pytest.raises(module.held.Refused):
+            module.inspect_unit(store, artifacts, 'bad', binding.owner_id, module.fingerprint(job), True)
+
+
+def test_skipped_oversized_padded_retry_still_recovers_when_multilingual_succeeds(
+    setup, monkeypatch, legacy_dependencies
+):
+    from types import SimpleNamespace
+    import numpy as np
+    from diarizer.batch_pipeline_models import ParakeetWords
+    from tests.unit.test_batch_pipeline_worker import setup_worker, item
+    from utils.batch_pipeline.scheduler import Scheduler, owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    client, store, binding, artifacts, legacy, alternate, _ = terminal_setup(setup, monkeypatch, legacy_dependencies)
+    alternate.return_value = ([{'text': 'Recovered.', 'timestamp': [1.0, 2.0]}], 'en')
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, *_ = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    worker_results = worker.process_batch([item('bad', 117)])
+    job = row(client)
+    job.pop('recovery', None)
+    job.pop('worker_empty_evidence', None)
+    job.update(
+        duration_seconds=117,
+        owner_key=owner_key(binding.owner_id),
+        attempt=1,
+        state='leased',
+        token='worker-lease',
+        lease_until=1000.0,
+        merge_pending=True,
+    )
+    artifacts.fetch_audio.return_value = wav(117)
+    assert Scheduler(store).fail(
+        'bad',
+        'worker-lease',
+        10,
+        quarantine=True,
+        padded_retry_empty=worker_results[0].padded_retry_empty,
+        padded_retry=worker_results[0].padded_retry,
+    )
+    recovery = setup[-1]
+    recovery.stt = transcribe
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['state'] == 'result_ready'
+    assert row(client)['result']['outcome'] == 'success'
+    alternate.assert_called_once()
+    legacy.assert_not_called()

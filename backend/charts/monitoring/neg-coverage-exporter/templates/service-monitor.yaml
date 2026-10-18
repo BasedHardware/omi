@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: neg-coverage-exporter
+  labels:
+    app.kubernetes.io/name: neg-coverage-exporter
+    release: prod-omi-kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: neg-coverage-exporter
+      app.kubernetes.io/instance: prod-omi-neg-coverage-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

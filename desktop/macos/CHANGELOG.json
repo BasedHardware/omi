@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.502",
+      "date": "2026-10-18",
+      "changes": [
+        "When Claude rejects an expired or revoked sign-in, Settings now offers Connect Claude instead of still showing Connected"
+      ]
+    },
+    {
+      "version": "0.12.501",
+      "date": "2026-10-18",
+      "changes": [
+        "Added compact timestamps below summary sections to jump directly to the supporting transcript"
+      ]
+    },
+    {
+      "version": "0.12.500",
+      "date": "2026-10-17",
+      "changes": [
+        "A deleted memory no longer reappears in Memories search until the app is restarted: when the server truncates the memories list, the cache reconcile now retries within the session instead of waiting for the next launch, so memories deleted on another device stop matching search the same session"
+      ]
+    },
+    {
+      "version": "0.12.499",
+      "date": "2026-10-17",
+      "changes": [
+        "Settings now has a Connect Claude button when Claude is your AI provider but signed out, so a chat that asks you to reconnect Claude has a way to do it"
+      ]
+    },
+    {
+      "version": "0.12.498",
+      "date": "2026-10-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.497",
       "date": "2026-10-17",
       "changes": [

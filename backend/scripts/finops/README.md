@@ -345,3 +345,169 @@ Cross-check measured totals against the canonical KB console receipt dated
 2026-10-15: September $10,315.16; Oct 1–13 $2,657.96; Oct 13 UTC $143.00. These are
 comparison targets, not fixtures or substituted invoice data. No cross-check has
 been executed before access and backfill.
+
+## Mercury vendor spend (dark, Read Only)
+
+`pull_mercury.py` adds company bank-spend reconciliation without adding bank payments
+to the existing GCP/STT/LLM cost pools. It is **default off**:
+`FINOPS_MERCURY_ENABLED=true` and a mounted Mercury **Read Only** token are both
+required. David creates the token and stores it as Secret Manager
+`finops-mercury-readonly`. `cloudrun.secret('mercury')` reads a flat file or the
+usual nested mount at:
+
+```text
+/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest
+```
+
+Local execution accepts explicit `FINOPS_MERCURY_READONLY_TOKEN` only. Disabled,
+missing/empty/unreadable (including non-UTF-8) secrets and Mercury 401/403 responses warn and skip the
+Mercury line without failing other pulls; no Mercury table is read or written on
+a skip. Other API/shape errors fail the run. A previous ready file cannot be
+reused after a skipped/failed pull. Successful-child warnings reach Cloud Logging.
+
+[Mercury's current token policy](https://docs.mercury.com/docs/api-token-security-policies)
+says **Read Only tokens do not require an IP whitelist**. No static-egress/NAT
+change is required or included. Do not use a Read and Write token. If a future
+token policy requires an allowlist, the orchestrator would need a stable public
+egress IP (for example Cloud Run VPC egress routed through Cloud NAT with a reserved
+address) and whitelist that address before activation. That infrastructure is not
+part of this pull. Tokens unused for 45 days may be deleted by Mercury.
+
+The runtime SA is still `finops-writer@based-hardware.iam.gserviceaccount.com`.
+`ro-prod` cannot read this secret's IAM policy (`getIamPolicy` denied on 2026-10-17),
+so secret-level access is unverified. After David creates the secret, if needed:
+
+```bash
+gcloud secrets add-iam-policy-binding finops-mercury-readonly --project=based-hardware --member=serviceAccount:finops-writer@based-hardware.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor
+```
+
+No payload was read and no IAM, mount, flag or deploy change was applied here.
+
+### Projection and classification
+
+The all-accounts [transactions endpoint](https://docs.mercury.com/reference/listtransactions)
+is GET-only. Each daily run refreshes the **90 posted UTC dates ending at the job's
+`--date`** (normally D-2). Requests use `postedStart/postedEnd`, not the API's
+created-date `start/end`. The projection accepts only `status='sent'`, non-null
+`postedAt`, and negative account-USD amounts. It buckets the timezone-aware posted
+timestamp into UTC and applies the half-open end locally. It never uses foreign
+merchant minor-unit amounts or the credit-statement endpoint's different signs.
+Pagination uses the last actual transaction ID as `start_after` (exclusive),
+matching the [official Go SDK](https://github.com/MercuryTechnologies/mercury-go/blob/166dc7d99d3f5fc59672f60deaf910f23ca62860/packages/pagination/pagination.go#L43-L54),
+dedupes IDs in memory, and fails on a non-advancing cursor. It does not infer a
+request cursor from the potentially different `page.nextPage` value.
+
+Raw responses never reach files, BigQuery or logs. The normalized artifact stores
+only date, checked-in canonical vendor, category, USD amount and aggregate count,
+plus window/status metadata. No account/card numbers or IDs, person names, memo,
+note, attachment or raw counterparty strings are persisted. Redirects are refused
+and HTTP/shape failures use bounded messages. Fixtures are synthetic API-shape
+examples containing privacy canaries; no bank API was called to record them.
+
+`mercury_vendor_map.json` schema v2 uses normalized token-boundary aliases, with
+the longest matching alias winning, followed by `mercuryCategory` rules and then
+`categoryData.name` rules, and finally `uncategorized_kind_rules` by transaction
+kind: an unlabelled `outgoingPayment` (wire/ACH) is `other_opex` under the
+synthetic vendor `uncategorized_payment`, because those are suppliers and
+contractors (Sept–Oct 2026 had $4K–$67K wires every few weeks that would
+otherwise block the line). A SaaS paid by wire/ACH must therefore have a vendor
+alias or a Mercury category. Excluded kinds/categories always win. The map keeps
+schema v1 readable with no category rules and the default `$2,500` uncategorized
+threshold. It seeds explicit known vendor aliases and generic category rules;
+rule-classified aggregates use the synthetic vendor labels `mercury_category`
+and `category_data`, never raw counterparty names. Google Workspace has a separate
+alias from Google Cloud, while `Google Payment Corp` maps to GCP; ambiguous
+`Google` remains uncategorized. Annual cadence is deliberately not inferred from
+the merchant name: set `annual: true` only after confirming a vendor's actual
+billing cadence.
+
+| Category | Treatment |
+| --- | --- |
+| `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
+| `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs |
+| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
+| `gcp` | Excluded from TV addition; already covered by GCP billing |
+| `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
+| `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and explicitly excluded hardware categories; collapsed to vendor `excluded` |
+| `unmapped` | Uncategorized outgoing spend, one total and count per UTC date, no counterparty detail |
+
+Category rules reconcile common advertising, shipping, travel, meal, hardware,
+professional-service and office spend without claiming those expenses are SaaS.
+`Software` / `Software & Subscriptions` map to `saas` after vendor aliases and
+Mercury categories have been checked. Thus an Advertising transaction remains
+marketing even if its accounting category says Software & Subscriptions. Vendor
+aliases remain the most specific source: `Google Payment Corp` stays GCP and
+Shopify stays SaaS even when the category fields disagree.
+
+Incoming credits/refunds are outside this outgoing-spend feed and are not netted
+against bills. External ACH/wire transfers are **not** blanket-excluded: they may
+be vendor payments. Transactions without an alias or recognized category remain
+uncategorized. Generic `Stripe`/`Stripe Inc` descriptors
+also remain unmapped; only explicit `Stripe Fee`/`Stripe Fees` aliases classify
+as outgoing fees. Stripe fees withheld from
+incoming payouts cannot be measured as outgoing transactions here; do not invent
+them from net deposits. The initial alias map needs human review against Mercury's
+own dashboard; extend it there, never by logging unknown counterparties. Mixed
+monthly/annual bills for one canonical vendor need separate verified aliases.
+
+### BigQuery and TV contract
+
+The existing `load_bigquery.py` path loads two new date-partitioned aggregate tables:
+
+- `based-hardware.omi_finops.mercury_vendor_spend_daily`: `date`, `vendor`, `category`,
+  `amount_usd` (NUMERIC, positive outgoing spend), `transaction_count`, `run_id`, `computed_at`.
+- `based-hardware.omi_finops.mercury_saas_daily`: `date`, `vendor='all'`, `category='saas'`,
+  **`amount_usd`** (daily TV line), `annual_monthly_usd`, `unmapped_usd`, `unmapped_count`,
+  `coverage_days`, `annual_history_complete`, `inputs_complete`, `run_id`, `computed_at`.
+
+Every successful refresh replaces **all 90 dates**, including zero-spend dates,
+through the existing per-table delete/insert transaction. The daily unmapped row
+exists even when zero and proves a successfully fetched date. Older aggregates
+are retained, not appended/reinserted into the refreshed range. A bounded 100 MiB
+BigQuery history read retrieves only older aggregates for annual amortization.
+Late corrections older than 90 days require an explicit backfill.
+
+TV `amount_usd` = `(non-annual SaaS paid over [date-29,date] + active annual bills/12) / 30.4375`.
+Annual bills remain active from posted day through the day before their 12-month
+anniversary (Feb 29 clamps to Feb 28). Known annual aggregates continue contributing
+after they age out of the 90-day API refresh. NUMERIC outputs round to nine decimal
+places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
+
+`inputs_complete` requires all 30 posted days, annual-history coverage when an
+annual vendor is configured, and no more than `max_uncategorized_usd` of
+uncategorized spend in the rolling 30-day window. The map defaults that threshold
+to `$2,500`. The existing BigQuery fields `unmapped_usd` and `unmapped_count`
+retain their names for loader/admin compatibility; they now mean uncategorized
+USD and transaction count. Unlabelled wires/ACH are `other_opex`, so the
+residual is mostly unlabelled card spend; anything above the threshold (for
+example a kind with no rule) blocks completeness while it remains in the 30-day
+window, then ages out; it is never added to SaaS. Add a category or vendor map rule when its nature is known.
+When annual vendors are configured, a full preceding year of coverage is still
+required, but annual uncategorized spend blocks only when its total exceeds the
+same threshold. This prevents an initial 90-day pull from claiming to know older
+annual bills while allowing small residuals to reconcile.
+The reader should require `inputs_complete=true` and fresh `computed_at` (for
+example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`, and
+use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
+Preserve an explicit measured zero. `wall-cost.ts` currently has the measured STT
+argument; add an analogous SaaS date-map hook in the admin lane and propagate a
+`saasMeasured` source label/snapshot override. That frontend wiring is separate
+from this producer PR.
+
+Bank posting dates and prepayments differ from provider usage days. Reconcile
+`mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the
+unmapped total, allowing timing, credits and prepaid-balance differences; do not
+replace daily usage invoices with same-day bank debits or sum both.
+
+To seed complete annual history, the orchestrator can pull at most 400 days into
+an existing complete FinOps run's raw directory, then invoke the existing loader:
+
+```bash
+# Inside the producer image, writer runtime identity, access/mount/flag already ready.
+python /app/monorepo/backend/scripts/finops/pull_mercury.py --end 2026-10-15 --backfill-from 2025-09-11 --raw /tmp/finops-runs/history/raw
+# Use load_bigquery.py with that run's normal --derived/--raw/--run-id arguments.
+```
+
+The raw directory must belong to a fully assembled FinOps run; do not invoke the
+normal loader with only Mercury inputs. No backfill, database write or deployment
+was run as part of this implementation.

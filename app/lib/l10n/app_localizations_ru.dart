@@ -9357,6 +9357,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Около 1 минуты';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Перейти к $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ ещё $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Перейти к последнему сообщению';
 
   @override
@@ -13526,6 +13536,43 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onTheWayAlmostReady => 'Почти готово';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Записей: $count',
+      one: '1 запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals в пути';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Загружается: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Почти готово: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Требуют внимания: $count',
+      one: '1 требует внимания',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Пока нет активности';
 
   @override
@@ -13821,6 +13868,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'При обобщении этого разговора что-то пошло не так.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Сохранено $saved из $total аудио';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

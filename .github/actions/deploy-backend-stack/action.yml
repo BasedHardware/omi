@@ -256,6 +256,39 @@ runs:
       shell: bash
       run: python3 -m pip install -q pyyaml
 
+    - name: Preflight required deployment secrets before mutations
+      id: preflight-required-secrets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --env="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --manifest="$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-secrets
+
+    - name: Validate backend GMP config without Secret Manager
+      id: prepare-backend-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml" >> "$GITHUB_OUTPUT"
+
+    - name: Validate sync GMP config without Secret Manager
+      id: prepare-sync-gmp-config
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml" >> "$GITHUB_OUTPUT"
+
     - name: Resolve production account-deletion task target
       if: ${{ inputs.runtime_env == 'prod' }}
       id: account-deletion-target
@@ -644,6 +677,7 @@ runs:
           --final-revision="backend-${{ steps.image-tag.outputs.revision_suffix }}"
           --ingress-container=backend-1
           --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+          --config-env
           --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
         )
         if [[ -n "$GMP_CANDIDATE_TAG" ]]; then
@@ -827,6 +861,7 @@ runs:
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_integration_remove_env_extra }}
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           ${{ steps.runtime-env.outputs.backend_integration_identity_flags }}
+          ${{ steps.runtime-env.outputs.backend_integration_flags }}
           --cpu=2
           --memory=2Gi
           --concurrency=40
@@ -858,7 +893,8 @@ runs:
             --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
             --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
             --ingress-container="$ingress"
-            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"
+            --config-env
             --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
           )
           if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi
@@ -937,6 +973,17 @@ runs:
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
           --check-live-cloud-run
+
+    - name: Report live Cloud Run env drift from manifest
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --summary-file "$GITHUB_STEP_SUMMARY"
 
     - name: Gate candidate revisions with the acceptance manifest
       if: ${{ inputs.deploy_profile == 'auto-dev' }}

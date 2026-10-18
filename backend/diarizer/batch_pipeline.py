@@ -13,12 +13,18 @@ import threading
 from typing import Any, Callable, Mapping, Sequence
 
 from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
-from config.batch_pipeline import empty_asr_recovery_enabled, empty_asr_disposition_enabled
+from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from config.batch_pipeline import (
+    empty_asr_recovery_enabled,
+    empty_asr_disposition_enabled,
+    worker_silence_disposition_enabled,
+    worker_validation_disposition_enabled,
+)
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.observability.fallback import record_fallback
 
@@ -125,6 +131,16 @@ def validate_words(words, duration):
         previous = start
         result.append({**word, 'timestamp': [start, end]})
     return result
+
+
+def padded_retry_seconds(samples) -> float:
+    left = 2 * SAMPLE_RATE
+    right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
+    return (len(samples) + left + right) / SAMPLE_RATE
+
+
+def padded_retry_fits(samples, max_padded_seconds: float) -> bool:
+    return padded_retry_seconds(samples) <= min(120, max_padded_seconds)
 
 
 def crop_model_vad_spans(spans, duration):
@@ -240,7 +256,7 @@ class PipelineWorker:
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
-    ) -> Sequence[WorkResult | HeldWork | RecoveryWork]:
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
@@ -268,6 +284,7 @@ class PipelineWorker:
         failure_records = []
         held = set()
         recovery_records = []
+        silence_records = []
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
         def allowed(required):
@@ -302,7 +319,20 @@ class PipelineWorker:
                     and stage == 'assemble_words'
                     and self.recover_words is not None
                 ):
-                    results.append(RecoveryWork(item.segment_id, padded_retry_empty=True))
+                    state = states.get(item.segment_id, {})
+                    results.append(
+                        RecoveryWork(
+                            item.segment_id,
+                            padded_retry_empty=bool(state.get('padded_retry_empty')),
+                            padded_retry=state.get('padded_retry'),
+                            reason=reason,
+                        )
+                    )
+                elif isinstance(exc, BatchValidationError) and worker_validation_disposition_enabled():
+                    # Repeating the same validated GPU failure cannot establish
+                    # silence or corrupt audio. End this chain now and retain
+                    # custody for the independent privacy-fenced recovery path.
+                    results.append(ValidationFailureWork(item.segment_id, stage, reason))
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(
@@ -334,7 +364,22 @@ class PipelineWorker:
                 if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
                     raise ValueError('decoded duration differs from admitted capture')
                 stage = 'vad_windows'
-                spans = list(self.vad(samples))
+                silence = None
+                try:
+                    spans = list(self.vad(samples))
+                except BatchValidationError as error:
+                    if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
+                        raise
+                    # A frame may start beyond a very short real buffer (20 ms
+                    # in production). Only independent strict VAD can establish
+                    # silence; malformed/unavailable evidence stays held.
+                    try:
+                        silence = inspect_worker_silence(item, samples)
+                    except Exception:
+                        pass
+                    if silence is None:
+                        raise
+                    spans = []
                 shapes[item.segment_id]['vad_spans'] = len(spans)
                 clips = list(speech_windows(item, samples, spans, self.config))
                 shapes[item.segment_id]['windows'] = len(clips)
@@ -344,6 +389,7 @@ class PipelineWorker:
                     'samples': samples,
                     'words': [],
                     'silence': not clips,
+                    'silence_payload': silence,
                     'reused': False,
                     'speech_spans': speech_spans,
                     'speech_seconds': sum(span['end'] - span['start'] for span in speech_spans),
@@ -425,6 +471,7 @@ class PipelineWorker:
                     # with a second hypothesis or publish a fabricated silence.
                     reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
                     stage = 'asr_recovery'
+                    fits_retry = padded_retry_fits(state['samples'], self.config.max_padded_seconds)
                     if cap_dispatch_enabled():
                         recovered = self.recover_words(
                             state['samples'],
@@ -432,15 +479,30 @@ class PipelineWorker:
                             before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
                             after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
                         )
-                        if recovered is None:
+                        if recovered is None and (
+                            fits_retry
+                            or not (
+                                reason == 'empty_asr'
+                                and empty_asr_recovery_enabled()
+                                or reason in {'empty_asr', 'no_owned_words'}
+                                and empty_asr_disposition_enabled()
+                            )
+                        ):
                             held.add(item.segment_id)
                             results.append(HeldWork(item.segment_id))
                             continue
-                        words = validate_words(recovered, duration)
                     else:
-                        words = validate_words(
-                            self.recover_words(state['samples'], self.config.max_padded_seconds), duration
-                        )
+                        recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                    if recovered is None or not fits_retry:
+                        words = []
+                        state['padded_retry'] = 'skipped_oversize'
+                        state['padded_retry_empty'] = False
+                        recovery_outcome = 'skipped_oversize'
+                    else:
+                        words = validate_words(recovered, duration)
+                        state['padded_retry'] = 'recovered' if words else 'empty'
+                        state['padded_retry_empty'] = not words
+                        recovery_outcome = 'recovered' if words else 'empty'
                     recovery_records.append(
                         (
                             item.segment_id,
@@ -452,9 +514,27 @@ class PipelineWorker:
                             state['window_min_samples'],
                             state['window_max_samples'],
                             round(state['speech_seconds'] * SAMPLE_RATE),
+                            recovery_outcome,
                         )
                     )
                     stage = 'assemble_words'
+                silence = state['silence_payload']
+                if (
+                    not state['silence']
+                    and not words
+                    and not shapes[item.segment_id]['asr_words']
+                    and worker_silence_disposition_enabled()
+                ):
+                    try:
+                        silence = inspect_worker_silence(item, state['samples'])
+                    except Exception:
+                        # Unavailable/invalid strict VAD is never silence. Keep
+                        # the original empty-ASR quarantine and recovery route.
+                        silence = None
+                    if silence is not None:
+                        state['silence'] = True
+                        state['speech_spans'], state['speech_seconds'] = [], 0.0
+                        self.counts['silence'] += 1
                 if not state['silence'] and not words:
                     raise BatchValidationError(
                         ValidationReason.NO_OWNED_WORDS
@@ -489,6 +569,8 @@ class PipelineWorker:
                     'speech_seconds': state['speech_seconds'],
                     'speech_spans': state['speech_spans'],
                 }
+                if silence is not None:
+                    payload.update(silence)
                 if cap_dispatch_enabled():
                     payload['cap_dispatch'] = {
                         'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
@@ -497,18 +579,35 @@ class PipelineWorker:
                 stage = 'persist'
                 uri = self.persist(item, payload)
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
+                if silence is not None:
+                    silence_records.append(item.segment_id)
             except Exception as exc:
                 fail(item, exc, stage)
         # Emit only strings/integers after every item exception handler has exited.
         # Handler error printers must not inherit the private worker exception.
-        for segment_id, reason, samples, owned, asr_words, clips, shortest, longest, speech in recovery_records:
+        for (
+            segment_id,
+            reason,
+            samples,
+            owned,
+            asr_words,
+            clips,
+            shortest,
+            longest,
+            speech,
+            recovery_outcome,
+        ) in recovery_records:
             try:
                 record_fallback(
                     component='stt_selection',
                     from_mode='batch',
                     to_mode='batch',
                     reason='other',
-                    outcome='recovered' if owned else 'exhausted',
+                    outcome=(
+                        'recovered'
+                        if owned
+                        else ('degraded' if recovery_outcome == 'skipped_oversize' else 'exhausted')
+                    ),
                 )
                 logger.info(
                     'event=batch_asr_recovery segment_id=%s reason=%s samples=%d owned_words=%d outcome=%s '
@@ -517,7 +616,7 @@ class PipelineWorker:
                     reason,
                     samples,
                     owned,
-                    'recovered' if owned else 'empty',
+                    recovery_outcome,
                     asr_words,
                     clips,
                     shortest,
@@ -526,6 +625,14 @@ class PipelineWorker:
                 )
             except Exception:
                 pass  # Metrics/logging cannot invalidate a completed inference.
+        for segment_id in silence_records:
+            try:
+                record_fallback(
+                    component='stt_selection', from_mode='batch', to_mode='none', reason='other', outcome='recovered'
+                )
+                logger.info('event=batch_worker_silence_disposition segment_id=%s outcome=silence', segment_id)
+            except Exception:
+                pass  # Observability cannot invalidate a persisted result.
         for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
             try:
                 logger.error(

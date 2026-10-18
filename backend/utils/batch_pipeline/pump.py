@@ -14,6 +14,7 @@ from utils.batch_pipeline.contracts import (
     PoolCapacity,
     HeldWork,
     RecoveryWork,
+    ValidationFailureWork,
 )
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError
@@ -227,15 +228,35 @@ class Pump:
                             db_executor, self.scheduler.defer, segment, lease.token, time.time(), result.retry_after
                         )
                         continue
-                    if result is None or isinstance(result, RecoveryWork):
-                        failure_kwargs = (
-                            {'quarantine': True, 'padded_retry_empty': result.padded_retry_empty}
-                            if isinstance(result, RecoveryWork)
-                            else {}
+                    if isinstance(result, ValidationFailureWork):
+                        failed = await run_blocking(
+                            db_executor,
+                            self.scheduler.fail,
+                            segment,
+                            lease.token,
+                            time.time(),
+                            worker_failure={'stage': result.stage, 'reason': result.reason},
                         )
-                        if await run_blocking(
-                            db_executor, self.scheduler.fail, segment, lease.token, time.time(), **failure_kwargs
-                        ):
+                        if failed:
+                            await self.drain_owner(lease.item.owner_id)
+                        continue
+                    if result is None or isinstance(result, RecoveryWork):
+                        failed = await (
+                            run_blocking(
+                                db_executor,
+                                self.scheduler.fail,
+                                segment,
+                                lease.token,
+                                time.time(),
+                                quarantine=True,
+                                padded_retry_empty=result.padded_retry_empty,
+                                padded_retry=result.padded_retry,
+                                worker_failure={'stage': 'assemble_words', 'reason': result.reason},
+                            )
+                            if isinstance(result, RecoveryWork)
+                            else run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time())
+                        )
+                        if failed:
                             await self.drain_owner(lease.item.owner_id)
                         continue
                     accepted = await run_blocking(

@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Пазнаёмцеся з Omi",
     "deviceOnboardingIntroSubtitle": "Паспрабуйце жывую расшыфроўку, пытанне і хуткі доступ двайным дотыкам.",
     "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
+    "quoteJumpToTime": "Перайсці да {duration}",
+    "quoteMoreTimestamps": "+ яшчэ {count}",
     "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
     "latest": "Апошні",
     "flashFirmware": "Усталяваць прашыўку",
@@ -11556,6 +11558,11 @@
     "homePendingCatchingUp": "Апрацоўваем ранейшае аўдыя",
     "onTheWayTitle": "У дарозе",
     "onTheWayAlmostReady": "Амаль гатова",
+    "onTheWayRecordingCount": "{count, plural, =1{1 запіс} other{Запісаў: {count}}}",
+    "onTheWaySummary": "{totals} у дарозе",
+    "onTheWayUploadingCount": "Запампоўваецца: {count}",
+    "onTheWayAlmostReadyCount": "Амаль гатова: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 патрабуе ўвагі} other{Патрабуюць увагі: {count}}}",
     "activityEmpty": "Пакуль няма актыўнасці",
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
@@ -11645,6 +11652,7 @@
     "summaryLimitBody": "За апошнюю гадзіну вы некалькі разоў перастваралі падсумаванні. Паспрабуйце пазней.",
     "summaryFailedTitle": "Не ўдалося падсумаваць",
     "summaryFailedBody": "Падчас падсумоўвання гэтай размовы нешта пайшло не так.",
+    "playbackPartialAudioSaved": "Захавана {saved} з {total} аўдыя",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

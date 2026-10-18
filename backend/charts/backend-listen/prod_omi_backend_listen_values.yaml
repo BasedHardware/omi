@@ -105,8 +105,12 @@ env:
     value: "0"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
-  - name: BATCH_PIPELINE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: FIRST_SUMMARY_DEADLINE_PERCENT
+    value: "0"
+  - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
+    value: "false"
+  - name: BATCH_LIVE_STT_RETIRE_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_SERVING_ENABLED
@@ -151,6 +155,14 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED
+    value: "true"
+  - name: BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED
+    value: "true"
+  - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
+    value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
@@ -185,7 +197,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":100}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -232,6 +244,8 @@ env:
   - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
     value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
+    value: "true"
+  - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
@@ -551,6 +565,8 @@ env:
     value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
+  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
+    value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED

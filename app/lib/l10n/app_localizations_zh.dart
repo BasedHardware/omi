@@ -9172,6 +9172,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '大约 1 分钟';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '跳转到$duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+另外$count个';
+  }
+
+  @override
   String get jumpToLatestMessage => '跳转到最新消息';
 
   @override
@@ -13273,6 +13283,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onTheWayAlmostReady => '即将完成';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+      one: '1 条录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '处理中：$totals';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count 条正在上传';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count 条即将完成';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条需要关注',
+      one: '1 条需要关注',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => '暂无活动';
 
   @override
@@ -13562,6 +13609,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get summaryFailedBody => '总结此对话时出了点问题。';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '已保存 $saved / $total 的音频';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

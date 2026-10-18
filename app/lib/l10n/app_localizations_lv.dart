@@ -9345,6 +9345,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Apmēram 1 minūte';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Pāriet uz $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ vēl $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Pārlēkt uz jaunāko ziņojumu';
 
   @override
@@ -13509,6 +13519,43 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onTheWayAlmostReady => 'Gandrīz gatavs';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ieraksti: $count',
+      one: '1 ieraksts',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals ceļā';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Augšupielādē: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Gandrīz gatavi: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nepieciešama uzmanība: $count',
+      one: '1 nepieciešama uzmanība',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Vēl nav aktivitātes';
 
   @override
@@ -13805,6 +13852,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Apkopojot šo sarunu, radās kļūda.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Saglabāts $saved no $total audio';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

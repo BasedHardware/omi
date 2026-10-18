@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
     "deviceOnboardingIntroSubtitle": "Vyskúšajte živý prepis, položte otázku a skratku dvojitým ťuknutím.",
     "deviceOnboardingIntroDuration": "Približne 1 minúta",
+    "quoteJumpToTime": "Prejsť na {duration}",
+    "quoteMoreTimestamps": "+{count} ďalších",
     "jumpToLatestMessage": "Prejsť na najnovšiu správu",
     "latest": "Najnovšia",
     "flashFirmware": "Nahrať firmvér",
@@ -4133,6 +4135,11 @@
     "homePendingCatchingUp": "Spracúvame skorší zvuk",
     "onTheWayTitle": "Na ceste",
     "onTheWayAlmostReady": "Takmer hotovo",
+    "onTheWayRecordingCount": "{count, plural, =1{1 nahrávka} other{Nahrávok: {count}}}",
+    "onTheWaySummary": "{totals} na ceste",
+    "onTheWayUploadingCount": "Nahráva sa: {count}",
+    "onTheWayAlmostReadyCount": "Takmer hotovo: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 si vyžaduje pozornosť} other{Vyžaduje pozornosť: {count}}}",
     "activityEmpty": "Zatiaľ žiadna aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodarilo sa načítať celú vašu aktivitu",
@@ -4222,6 +4229,7 @@
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",
     "summaryFailedTitle": "Zhrnutie sa nepodarilo",
     "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo.",
+    "playbackPartialAudioSaved": "Uložené {saved} z {total} zvuku",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

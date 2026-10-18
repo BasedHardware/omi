@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "با Omi خود آشنا شوید",
     "deviceOnboardingIntroSubtitle": "رونویسی زنده، پرسیدن یک سؤال و میان‌بر دوبار ضربه را امتحان کنید.",
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
+    "quoteJumpToTime": "رفتن به {duration}",
+    "quoteMoreTimestamps": "+{count} مورد دیگر",
     "jumpToLatestMessage": "پرش به آخرین پیام",
     "latest": "آخرین",
     "flashFirmware": "فلش کردن میان‌افزار",
@@ -11556,6 +11558,11 @@
     "homePendingCatchingUp": "در حال پردازش صدای قبلی",
     "onTheWayTitle": "در راه",
     "onTheWayAlmostReady": "تقریباً آماده",
+    "onTheWayRecordingCount": "{count, plural, =1{۱ ضبط} other{{count} ضبط}}",
+    "onTheWaySummary": "{totals} در راه",
+    "onTheWayUploadingCount": "{count} در حال بارگذاری",
+    "onTheWayAlmostReadyCount": "{count} تقریباً آماده",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{۱ مورد نیازمند توجه} other{{count} مورد نیازمند توجه}}",
     "activityEmpty": "هنوز فعالیتی نیست",
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
@@ -11645,6 +11652,7 @@
     "summaryLimitBody": "در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.",
     "summaryFailedTitle": "خلاصه‌سازی انجام نشد",
     "summaryFailedBody": "هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد.",
+    "playbackPartialAudioSaved": "{saved} از {total} صدا ذخیره شد",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

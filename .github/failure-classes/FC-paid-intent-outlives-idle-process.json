@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-paid-intent-outlives-idle-process",
+  "violated_contract": "An at-most-once paid provider intent must execute within a request lifetime that normal service revision draining can observe. A background thread in an otherwise idle Cloud Run instance can be killed during a revision replacement after the paid intent starts but before its result is durably persisted, leaving an uncertain obligation that cannot safely be retried.",
+  "canonical_prevention": "Use named Cloud Tasks wakeups for the existing prepared recovery intent and await provider execution and durable settlement inside an authenticated request. Reconcile running intents without provider redispatch, repair missing wakeups without resetting the intent epoch, and retain privacy and ownership fencing on duplicate delivery.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_serving.py",
+    "backend/tests/unit/test_batch_pipeline_quarantine_recovery.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/quarantine_recovery.py",
+    "backend/routers/batch_pipeline.py"
+  ],
+  "status": "open"
+}

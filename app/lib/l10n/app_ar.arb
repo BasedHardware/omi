@@ -2998,6 +2998,8 @@
     "deviceOnboardingIntroTitle": "تعرّف على Omi",
     "deviceOnboardingIntroSubtitle": "جرّب النسخ المباشر، وطرح سؤال، واختصار النقر المزدوج.",
     "deviceOnboardingIntroDuration": "حوالي دقيقة واحدة",
+    "quoteJumpToTime": "انتقل إلى {duration}",
+    "quoteMoreTimestamps": "+{count} أخرى",
     "jumpToLatestMessage": "الانتقال إلى أحدث رسالة",
     "latest": "الأحدث",
     "flashFirmware": "تحديث البرنامج الثابت",
@@ -4133,6 +4135,11 @@
     "homePendingCatchingUp": "جارٍ اللحاق بالصوت السابق",
     "onTheWayTitle": "في الطريق",
     "onTheWayAlmostReady": "على وشك الجاهزية",
+    "onTheWayRecordingCount": "{count, plural, =1{تسجيل واحد} other{التسجيلات: {count}}}",
+    "onTheWaySummary": "{totals} في الطريق",
+    "onTheWayUploadingCount": "قيد الرفع: {count}",
+    "onTheWayAlmostReadyCount": "على وشك الجاهزية: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{تسجيل واحد بحاجة إلى المراجعة} other{بحاجة إلى المراجعة: {count}}}",
     "activityEmpty": "لا يوجد نشاط بعد",
     "activityNewSemantics": "النشاط، عناصر جديدة",
     "activityLoadFailed": "تعذّر تحميل كل نشاطك",
@@ -4222,6 +4229,7 @@
     "summaryLimitBody": "لقد أعدت إنشاء عدة ملخصات خلال الساعة الماضية. حاول مرة أخرى لاحقًا.",
     "summaryFailedTitle": "تعذر التلخيص",
     "summaryFailedBody": "حدث خطأ ما أثناء تلخيص هذه المحادثة.",
+    "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

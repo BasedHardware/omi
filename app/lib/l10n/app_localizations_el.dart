@@ -9387,6 +9387,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Περίπου 1 λεπτό';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Μετάβαση σε $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count ακόμη';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Μετάβαση στο πιο πρόσφατο μήνυμα';
 
   @override
@@ -13564,6 +13574,43 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onTheWayAlmostReady => 'Σχεδόν έτοιμο';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις',
+      one: '1 ηχογράφηση',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals καθ\' οδόν';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Μεταφόρτωση: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Σχεδόν έτοιμες: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count χρειάζονται προσοχή',
+      one: '1 χρειάζεται προσοχή',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
 
   @override
@@ -13864,6 +13911,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Αποθηκεύτηκαν $saved από $total ήχου';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

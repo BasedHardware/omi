@@ -4,9 +4,12 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
+from database.staged_promote_cache import invalidate_around_write
+
 logger = logging.getLogger(__name__)
 
 
+@invalidate_around_write
 def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> dict:
     # Top-level batch stores are outside users/{uid}; fence and purge them
     # before deleting the last references needed for retryable object erasure.

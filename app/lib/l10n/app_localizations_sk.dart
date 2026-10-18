@@ -9312,6 +9312,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Prejsť na $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count ďalších';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Prejsť na najnovšiu správu';
 
   @override
@@ -13476,6 +13486,43 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onTheWayAlmostReady => 'Takmer hotovo';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nahrávok: $count',
+      one: '1 nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals na ceste';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Nahráva sa: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Takmer hotovo: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vyžaduje pozornosť: $count',
+      one: '1 si vyžaduje pozornosť',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Zatiaľ žiadna aktivita';
 
   @override
@@ -13770,6 +13817,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Pri zhrnutí tohto rozhovoru sa niečo pokazilo.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Uložené $saved z $total zvuku';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

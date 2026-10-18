@@ -47,13 +47,33 @@ MAX_RETRY_ATTEMPTS = 4
 # CliError immediately instead of sleeping a truncated delay and retrying early.
 MAX_RETRY_AFTER_SECONDS = 60.0
 
-# Backend rate-limit policies surfaced to users on 429 (see
-# ``backend/utils/rate_limit_config.py``).
-KNOWN_RATE_LIMIT_POLICIES = {
-    "dev:conversations": "25/hr",
-    "dev:memories": "120/hr",
-    "dev:memories_batch": "15/hr",
+# Dev-API rate-limit policies surfaced to users on 429, as the
+# ``(max_requests, window_seconds)`` pairs the backend declares in
+# ``RATE_POLICIES`` (``backend/utils/rate_limit_config.py``). Mirroring the
+# backend's own units keeps per-minute budgets expressible; writing the label
+# out by hand could only ever say "/hr". A policy absent here is reported by
+# name alone rather than given an invented budget.
+KNOWN_RATE_LIMIT_POLICIES: dict[str, tuple[int, int]] = {
+    "dev:key_read": (120, 3600),
+    "dev:memories_read": (120, 3600),
+    "dev:action_items_read": (120, 3600),
+    "dev:conversation_reads_total": (60, 3600),
+    "dev:conversations_read": (60, 3600),
+    "dev:conversation_detail_read": (60, 3600),
+    "dev:conversation_transcript_read": (25, 3600),
+    "dev:goals_read": (120, 3600),
+    "dev:conversations": (25, 3600),
+    "dev:conversations_from_segments": (30, 3600),
+    "dev:ask": (25, 3600),
+    "dev:memories": (120, 3600),
+    "dev:memories_write_burst": (30, 60),
+    "dev:memories_batch": (15, 3600),
+    "dev:action_items_write": (120, 3600),
+    "dev:goals_write": (120, 3600),
 }
+
+# Window lengths the backend actually uses, in the units a person reads.
+_RATE_LIMIT_WINDOW_LABELS = {60: "min", 3600: "hr", 86400: "day"}
 
 
 class OmiClient:
@@ -233,8 +253,8 @@ class OmiClient:
         policy = _detect_rate_limit_policy(detail)
         # Server errors and rate limit errors get the richer formatters below.
         if response.status_code == 429:
-            policy_label = KNOWN_RATE_LIMIT_POLICIES.get(policy, policy) if policy else None
-            label = f"{policy} ({policy_label})" if policy_label else policy
+            budget = describe_rate_limit_policy(policy) if policy else None
+            label = f"{policy} ({budget})" if budget else policy
             return RateLimitError(
                 message="Rate limited" if not label else f"Rate limited: {label}",
                 detail=_format_rate_limit_detail(retry_after, detail),
@@ -460,6 +480,20 @@ def _detect_rate_limit_policy(detail: Optional[str]) -> Optional[str]:
         return None
     match = _POLICY_RE.search(detail)
     return match.group(1) if match else None
+
+
+def describe_rate_limit_policy(policy: str) -> Optional[str]:
+    """Render a known policy's budget as ``25/hr`` or ``30/min``.
+
+    Returns None for a policy this version does not carry, so the caller names
+    the policy on its own instead of restating it as its own budget.
+    """
+    budget = KNOWN_RATE_LIMIT_POLICIES.get(policy)
+    if budget is None:
+        return None
+    max_requests, window_seconds = budget
+    unit = _RATE_LIMIT_WINDOW_LABELS.get(window_seconds)
+    return f"{max_requests}/{unit}" if unit else f"{max_requests} per {window_seconds}s"
 
 
 def _format_rate_limit_detail(retry_after: Optional[float], detail: Optional[str]) -> str:

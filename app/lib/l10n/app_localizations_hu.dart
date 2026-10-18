@@ -9362,6 +9362,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Ugrás ide: $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count további';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
 
   @override
@@ -13532,6 +13542,43 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onTheWayAlmostReady => 'Majdnem kész';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel',
+      one: '1 felvétel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals úton';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count feltöltés alatt';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count majdnem kész';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count figyelmet igényel',
+      one: '1 figyelmet igényel',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Még nincs tevékenység';
 
   @override
@@ -13830,6 +13877,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Hiba történt a beszélgetés összefoglalása közben.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved / $total hang elmentve';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

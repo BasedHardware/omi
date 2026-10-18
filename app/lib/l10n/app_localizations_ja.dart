@@ -9184,6 +9184,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '約1分';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationに移動';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+他$count件';
+  }
+
+  @override
   String get jumpToLatestMessage => '最新のメッセージにジャンプ';
 
   @override
@@ -13292,6 +13302,43 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onTheWayAlmostReady => 'まもなく完了';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音',
+      one: '1件の録音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '準備中: $totals';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'アップロード中 $count件';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'まもなく完了 $count件';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '要確認 $count件',
+      one: '要確認 1件',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'アクティビティはまだありません';
 
   @override
@@ -13582,6 +13629,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'この会話の要約中に問題が発生しました。';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '音声を $saved 保存済み（全体 $total）';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

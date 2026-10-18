@@ -12,11 +12,14 @@ recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
 
 With ``CONVERSATION_RELEVANCE_JEV_ENABLED`` the model tier asks the Jev decision
 model (``relevance_jev.py``) before ``conv_discard`` for transcript-only
-conversations, and discards only above ``JEV_DISCARD_THRESHOLD`` (#14835).
+conversations. It discards above the default ``JEV_DISCARD_THRESHOLD`` (#14835),
+unless the bounded cutoff or inclusive comparison is explicitly configured.
 """
 
 from __future__ import annotations
 
+import math
+import os
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
@@ -40,13 +43,30 @@ RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
 DecidedBy = Literal['policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic']
 
-# Jev discards only when P(discard) = 1 - P(worth keeping) is above this.
+# Jev discards only when P(discard) = 1 - P(worth keeping) is above this by default.
 # Re-measured 2026-10-05 on the owner's labels (EXP-004): tuned on 55 decided
 # 2026-10 labels, then checked once on 77 held-out 2026-09-23 labels, where 0.80
 # lost 3 of 20 kept conversations against 15-17 for the nano prompt, and kept
 # 10 of 57 noise. Its ranking is good (AUC ~0.85) but calibration is not, so
 # the cut is a measured cutoff, not a probability. Changing it needs a re-measure.
 JEV_DISCARD_THRESHOLD = 0.80
+JEV_DISCARD_THRESHOLD_ENV = 'CONVERSATION_RELEVANCE_JEV_DISCARD_THRESHOLD'
+JEV_DISCARD_INCLUSIVE_ENV = 'CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE'
+
+
+def _jev_discard_policy() -> tuple[float, bool]:
+    """Read the bounded Jev discard cutoff and comparator at decision time."""
+    raw_threshold = os.getenv(JEV_DISCARD_THRESHOLD_ENV)
+    try:
+        threshold = float(raw_threshold) if raw_threshold is not None else JEV_DISCARD_THRESHOLD
+    except (TypeError, ValueError):
+        threshold = JEV_DISCARD_THRESHOLD
+    if not math.isfinite(threshold) or not 0.5 <= threshold <= 0.95:
+        threshold = JEV_DISCARD_THRESHOLD
+
+    raw_inclusive = os.getenv(JEV_DISCARD_INCLUSIVE_ENV, '').strip().lower()
+    inclusive = raw_inclusive in {'1', 'true', 'yes', 'on'}
+    return threshold, inclusive
 
 
 @dataclass(frozen=True)
@@ -73,6 +93,10 @@ class RelevanceDecision:
     model_tier_reached: bool = field(default=False, compare=False)
     nano_verdict: Optional[Literal['keep', 'discard']] = field(default=None, compare=False)
     nano_reason: Optional[str] = field(default=None, compare=False)
+    # Snapshot the effective cutoff when Jev decides so later serialization
+    # cannot report a different policy if the process environment changes.
+    jev_threshold: Optional[float] = None
+    jev_comparison: Optional[Literal['>', '>=']] = None
 
     @property
     def discard(self) -> bool:
@@ -93,7 +117,8 @@ class RelevanceDecision:
         if self.jev_p_discard is not None:
             record['jev'] = {
                 'p_discard': round(self.jev_p_discard, 4),
-                'threshold': JEV_DISCARD_THRESHOLD,
+                'threshold': self.jev_threshold if self.jev_threshold is not None else JEV_DISCARD_THRESHOLD,
+                'comparison': self.jev_comparison if self.jev_comparison is not None else '>',
                 'model': JEV_MODEL,
             }
         return record
@@ -243,11 +268,31 @@ def decide_relevance(
         return RelevanceDecision('keep', decided_by, reason, trigger)
 
     def discard_unless_calendar(
-        decided_by: DecidedBy, reason: str, jev_p_discard: Optional[float] = None
+        decided_by: DecidedBy,
+        reason: str,
+        jev_p_discard: Optional[float] = None,
+        jev_threshold: Optional[float] = None,
+        jev_comparison: Optional[Literal['>', '>=']] = None,
     ) -> RelevanceDecision:
         if calendar_retains():
-            return RelevanceDecision('keep', 'override', 'calendar_overlap', trigger, jev_p_discard=jev_p_discard)
-        return RelevanceDecision('discard', decided_by, reason, trigger, jev_p_discard=jev_p_discard)
+            return RelevanceDecision(
+                'keep',
+                'override',
+                'calendar_overlap',
+                trigger,
+                jev_p_discard=jev_p_discard,
+                jev_threshold=jev_threshold,
+                jev_comparison=jev_comparison,
+            )
+        return RelevanceDecision(
+            'discard',
+            decided_by,
+            reason,
+            trigger,
+            jev_p_discard=jev_p_discard,
+            jev_threshold=jev_threshold,
+            jev_comparison=jev_comparison,
+        )
 
     if PROCESSING_MODES[trigger].relevance is RelevancePolicy.KEEP:
         return keep('policy', trigger.value)
@@ -317,9 +362,20 @@ def decide_relevance(
         if p_discard is None:
             jev_failed = True
             return None
-        if p_discard > JEV_DISCARD_THRESHOLD:
-            return discard_unless_calendar('jev', 'jev_discard', p_discard)
-        return RelevanceDecision('keep', 'jev', 'jev_keep', trigger, jev_p_discard=p_discard)
+        threshold, inclusive = _jev_discard_policy()
+        comparison: Literal['>', '>='] = '>=' if inclusive else '>'
+        should_discard = p_discard >= threshold if inclusive else p_discard > threshold
+        if should_discard:
+            return discard_unless_calendar('jev', 'jev_discard', p_discard, threshold, comparison)
+        return RelevanceDecision(
+            'keep',
+            'jev',
+            'jev_keep',
+            trigger,
+            jev_p_discard=p_discard,
+            jev_threshold=threshold,
+            jev_comparison=comparison,
+        )
 
     def nano_decision() -> Optional[RelevanceDecision]:
         failed = False

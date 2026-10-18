@@ -59,9 +59,12 @@ spec:
                 fieldRef: {fieldPath: metadata.namespace}
             - {name: BATCH_PIPELINE_API_URL, value: {{ .Values.worker.apiUrl | quote }}}
             - {name: BATCH_PIPELINE_WORKER_AUDIENCE, value: {{ .Values.worker.audience | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED, value: {{ .Values.worker.workerSilenceDispositionEnabled | quote }}}
+            - {name: BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED, value: {{ .Values.worker.workerValidationDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED, value: {{ .Values.worker.emptyAsrRecoveryEnabled | quote }}}
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
+            - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}

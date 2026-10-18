@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import unittest.mock
 from types import SimpleNamespace
 
@@ -435,15 +436,21 @@ _driver(
 _driver(
     'utils.memory.canonical_memory_adapter.read_canonical_scan_page',
     base={'uid': UID},
-    domains={'start_after': [None, (T0, 'memory-1')]},
+    domains={
+        'start_after': [None, (T0, 'memory-1')],
+        'include_pending_processing': [False, True],
+        'include_archive': [False, True],
+        'view': ['released', 'history', 'all'],
+    },
+    patchers=(
+        _stub('utils.memory.canonical_memory_adapter.indexed_list_reads_enabled', True),
+        _stub('utils.memory.canonical_memory_adapter.belief_model_enabled', True),
+    ),
     neutrals={
         'limit': LIMIT,
         'device_scope_request': (None, 'post-read visibility only'),
-        'include_pending_processing': (False, 'post-read visibility only'),
-        'include_archive': (False, 'post-read visibility only'),
         'now': NOW,
         'budget': BUDGET,
-        'view': ('released', 'post-read temporal visibility only'),
         'as_of': (None, 'post-read temporal visibility only'),
         'item_filter': (None, 'post-read predicate only'),
     },
@@ -701,3 +708,15 @@ for key, reason in {
     'utils.multipart.parse_multipart_form': 'AST false positive: Request.stream reads the incoming multipart HTTP body',
 }.items():
     SKIPS[key] = SkipEntry(key, reason, BODY_DIGEST[key])
+
+
+def _completed_status_enabled(client):
+    return unittest.mock.patch.dict(os.environ, {'SYNC_DURABLE_STATUS_RECONCILIATION': 'true', 'OMI_ENV_STAGE': 'prod'})
+
+
+_driver(
+    'utils.sync.completed_status.get_completed_legacy_status',
+    base={'job_id': 'legacy-job', 'uid': UID, 'job': None},
+    patchers=(_completed_status_enabled,),
+    profile='expired-legacy-handle',
+)

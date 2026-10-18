@@ -17379,6 +17379,18 @@ abstract class AppLocalizations {
   /// **'About 1 minute'**
   String get deviceOnboardingIntroDuration;
 
+  /// Accessibility label for a supporting transcript timestamp; duration uses localized time units
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to {duration}'**
+  String quoteJumpToTime(String duration);
+
+  /// Expand the remaining supporting transcript timestamps in this summary section
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more'**
+  String quoteMoreTimestamps(int count);
+
   /// Accessibility label and tooltip for the jump-to-latest button in chat
   ///
   /// In en, this message translates to:
@@ -23985,6 +23997,36 @@ abstract class AppLocalizations {
   /// **'Almost ready'**
   String get onTheWayAlmostReady;
 
+  /// On the Way: how many recordings, in the summary line and a day header (e.g. '11 recordings')
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String onTheWayRecordingCount(int count);
+
+  /// On the Way summary line at the top. totals is the recording count and total length, e.g. '45 recordings · 8h 54m'
+  ///
+  /// In en, this message translates to:
+  /// **'{totals} on the way'**
+  String onTheWaySummary(String totals);
+
+  /// On the Way summary and day header: how many recordings are still syncing to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'{count} uploading'**
+  String onTheWayUploadingCount(int count);
+
+  /// On the Way summary and day header: how many recordings are being turned into conversations
+  ///
+  /// In en, this message translates to:
+  /// **'{count} almost ready'**
+  String onTheWayAlmostReadyCount(int count);
+
+  /// On the Way summary and day header, in warning colour: how many recordings Omi refused or could not sync
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 needs attention} other{{count} need attention}}'**
+  String onTheWayNeedsAttentionCount(int count);
+
   /// Empty state of the Activity page
   ///
   /// In en, this message translates to:
@@ -24518,6 +24560,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Something went wrong while summarizing this conversation.'**
   String get summaryFailedBody;
+
+  /// Conversation player label replacing remaining time when the stored audio covers much less than the conversation, e.g. "0:03 of 5:49 audio saved"
+  ///
+  /// In en, this message translates to:
+  /// **'{saved} of {total} audio saved'**
+  String playbackPartialAudioSaved(String saved, String total);
 
   /// Title for the optional onboarding step that invites connecting Telegram
   ///

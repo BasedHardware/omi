@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Soniox transport exceptions log once at the first socket death, with bounded
+`operation`, `exception_class`, `received_close_code`, `sent_close_code`,
+`close_cause`, and `session_age_bucket` fields. `-1` means no close frame was
+observed in that direction; an empty received close frame is reported as `1005`
+(no status received). The WebSocket library's keepalive timeout is a sent `1011`
+and has `close_cause=keepalive_ping_timeout`. These diagnostics omit exception
+text and provider close reasons, and retain the existing typed failure and
+recovery behavior.
+
 ## Default-off funded transcription cap
 
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
@@ -290,9 +299,11 @@ or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
-empty admits everyone) limits per-segment binding, the pinned live origin, the
-live revision fence and the open-live enrichment deferral to listed owners; any
-other uid behaves exactly as with the kill switch off, and the kill switch wins.
+empty admits everyone) limits per-segment binding to listed owners; other uids
+use the kill-switch-off binding behavior.
+Sync appends to live targets always preserve the live origin,
+and fresh live speech on any `sync_live_target` always advances its revision,
+independent of this allowlist or kill switch. Open-live enrichment stays deferred.
 The listen origin stamp is metadata only and ignores the list, so widening finds
 lineage stamped. Prod lists one uid on all five identical services (unset
 admits everyone); dev leaves it unset. Refused eligible uploads log
@@ -3632,6 +3643,34 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+
+`SYNC_LIVE_OVERLAP_ENABLED` defaults on. An unstamped upload can adopt a
+completed or in-progress live conversation when its speech interval strictly
+overlaps that row, both rows identify the same known device/source/lock
+partition, and the live row has content and live provenance. Discovery reads
+only interval metadata (up to 128 rows, 10-second RPC deadline); the assignment
+transaction rereads and validates all candidates, preferring the greatest
+overlap. Empty reconnect stubs, touching intervals, other devices and deleted
+rows stay excluded. Explicit targets retain priority. The existing merge path
+owns transcript dedupe, speaker assignments, lifecycle and revision fencing;
+live identities are never donated into each other. Adoption pins `started_at`
+even without `audio_timeline` (production listen has v2 disabled), preserving
+offsets from the listener's cached origin. Earlier sync speech keeps its exact
+negative offset and is marked `unplaced`; it remains visible without claiming
+seek alignment. Fresh live writes advance `sync_content_revision` for every
+adopted target, so an older processor cannot overwrite a delayed live final.
+Neither safeguard depends on the lineage rollout allowlist.
+
+This admission creates no hidden donor and no pending merge debt. Lookup failure
+uses ordinary retained sync publication immediately; live document capacity
+exhaustion uses the existing size-rollover fallback. Captured speech never waits
+for another upload to make a hidden row visible. Storage/commit failures still
+propagate to existing durable job retries. Set `SYNC_LIVE_OVERLAP_ENABLED=false`
+on the four sync writers to restore the old admission path. Bounded
+`event=sync_live_overlap` outcomes distinguish merged, published and lookup-failed
+attempts without account or transcript labels. Other live/live overlap causes
+and cached Home donor eviction are outside this change.
+
 Compatibility is equality of all three fields: two locked captures are compatible,
 so locked chunks merge, append to a locked explicit target and deduplicate on retry
 exactly as unlocked ones do. A mismatch means a field differs.
@@ -4813,6 +4852,10 @@ Backfill ownership and expired-head retirement are defined in [the two-lane runb
 
 Backfill admission transactionally creates or repairs its sequencer owner. Completion and retirement transactionally park empty owners outside the hot reconcile query while retaining their fencing epochs; admission wakes them atomically. The bounded pending reconcile scan self-heals legacy missing owners over a configurable window (default 30 minutes), honors the staggered deadline before claiming or retiring waiting work, and meters `sync_backfill_owner_repaired`. The operator-only dry-run/apply procedure is in [backfill owner repair](runbooks/sync-two-lane.md#backfill-owner-repair).
 
+### Bounded backfill preparation
+
+The per-owner sequencer can warm a bounded prefix of staged-audio downloads while its head runs. Execution remains serial, including adjacent recordings, assignment, merge and billing. `SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED=off` stops preparation and ignores cached bytes; the default width is 2 only with at least 8 pending jobs. Generation validation protects deletion and replacement. Queue limits and backfill maxScale are unchanged. Bounds, fairness and throughput limits are in [bounded owner preparation](runbooks/sync-owner-concurrency.md).
+
 ### Sync VAD segment cache
 
 `vad_is_empty(..., cache=True)` stores sync VAD segments in Redis for 24 hours by
@@ -4976,6 +5019,21 @@ each heartbeat adds a CAS read/write. Three empty kept results terminally block
 the obligation with `empty_output_exhausted`, outside the indexed due scan,
 without clearing any structured content. Intake discards never enter that index.
 Appends and retries preserve the original time; later enriched revisions retain coalescing.
+
+`FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED=false` is an independent dark drain
+control on integration and both sync task handlers. With the deadline master switch
+still on, an existing finite `summary_deadline_at` keeps its dispatch ceiling,
+demand bypass, short lease/heartbeat, repair cadence and output requirement after
+percent/allowlist rollback. A scoped owner context carries that policy through the
+synchronous processing/persistence callback and resets on every exit. New outbox
+marks ignore that context, so nested marks cannot widen cohort admission. A callback
+returning no output retains the admitted obligation without consuming the existing
+three-empty-model-result budget. A confirmed persisted rule discard settles normally. Completed/effects-only rows and new out-of-cohort conversations
+retain their existing coalescing behavior. No read, new queue or paid-intent reset
+is added. It cannot reconstruct already-deleted outboxes; existing debt repair
+requires its own explicit enablement and eligible owner cohort. Turning the
+preserve control off restores legacy rollout behavior; turning the deadline master
+off disables deadline handling entirely.
 
 `SUMMARY_DEBT_REPAIR_ENABLED` (default false) adds completed server-minimum debt
 to the existing repair owner: one globally leased two-minute page, at most 100
@@ -5244,6 +5302,27 @@ flags does not remove persisted label authority or reset paid recovery intents.
 
 ### Batch projection contention and replay
 
+`BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED=false` is a dark control on integration.
+When it and `BATCH_PIPELINE_SERVING_ENABLED=true` are enabled, the authenticated
+batch metrics route only refreshes queue gauges on the database executor. It no
+longer runs cleanup, enrichment repair, lease recovery, ordered merge or projection
+on each scrape. The supervised serving loop and explicit reconcile RPC retain those
+obligations, including after admission rollback. Without the serving switch, the
+metrics route retains its legacy drain so this control cannot silently remove the
+only configured drain. Replica/revision overlap still requires Firestore fences and
+owner claims; this control does not serialize the remaining reconcilers.
+
+`BATCH_PIPELINE_PROJECTION_TIMING_ENABLED=false` independently enables static,
+content-free `event=batch_projection_phase` start/finish/error logs around read,
+assignment, bridge, private playback, enrichment scheduling, accounting, completion
+and publication. Durations use the monotonic clock. No owner, segment, conversation,
+payload, or exception message is logged. A started phase without its terminal event
+helps locate a stalled RPC or process shutdown; it is not a completed latency sample.
+Keep first-summary eligibility and repair enabled for admitted owners while rolling
+back batch admission: lowering `FIRST_SUMMARY_DEADLINE_PERCENT` also removes their
+short dispatch/repair/lease policy, even when durable summary debt already exists.
+These controls do not bypass predecessor ordering or the all-sibling completion fence.
+
 `BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED=false` is the dark default on every serving role.
 Enable it on integration to coalesce concurrent projection per owner using an advisory Redis
 NX/300-second token lease with one-second connect/read timeouts. Token-checked release cannot remove a replacement lease; expiry
@@ -5407,9 +5486,14 @@ volume before any future enablement. There is no new client polling loop.
 
 The default-off `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED` permits a
 `no_recoverable_speech` result only after positive strict VAD, a GPU padded retry
-that returned empty, and an empty independent multilingual recovery. The worker
-persists padded-empty evidence under its lease; CPU recovery pins the paid
-provider before dispatch. This terminal empty span is distinct from silence,
+that actually ran and returned empty, and an empty independent multilingual
+recovery. The worker persists `worker_empty_evidence.padded_retry=empty` under
+its lease only when the padded retry ran; units exceeding `min(120,
+max_padded_seconds)` (>116s) skip the GPU padded retry and persist
+`padded_retry=skipped_oversize` (`padded_retry_empty=False`), so CPU recovery
+still attempts strict VAD / multilingual STT on them without terminal-completing
+an empty multilingual response. CPU recovery pins the paid provider before
+dispatch. This terminal empty span is distinct from silence,
 adds no transcript words and no transcription usage, and releases successful
 siblings through normal projection/client completion. The encrypted artifact
 retains VAD and closed exhaustion evidence; correctness metrics count its captured
@@ -5419,3 +5503,200 @@ that these spans were silent. Uncertain/provider/validation failures remain held
 and no further paid intent is granted. The one-owner historical operator and old
 GPU-canary VAD/explicit-epoch-2 route are documented in
 [`batch-pipeline-serving.md`](batch-pipeline-serving.md#terminal-empty-recognition-dark).
+
+
+### Dark batch-covered live preview
+
+`BATCH_LIVE_STT_RETIRE_PERCENT` defaults to `0` and uses the exact unsalted batch
+admission bucket. Before the first live socket, listen requires the prepared
+conversation's durable `record_lane_owner=batch_live_v1`, matching conversation
+ID, current batch/live admission, private-cloud sync, platform keys, single
+channel, a declared TDT-supported language with a fully supported expected-language
+profile, and pusher enabled. Resumed legacy
+records never qualify just because the owner is admitted. The already loaded
+conversation snapshot is reduced to scalar eligibility fields; transcripts and
+photos are never retained by this gate. Fresh capture resolves the privacy level
+through the existing write resolver before stamping ownership, so E2EE remains
+excluded and the write performs no second privacy lookup. No new Firestore scan
+is introduced.
+
+Selected sessions prefer configured `parakeet-window`, reusing the resident
+self-hosted TDT model. The internal preference is passed only by this dark gate;
+existing client engine hints keep their previous semantics. Window allocation
+and configured targets remain authoritative (the checked-in prod allocation is
+100%). No RNNT model load or new GPU deployment is proposed.
+Provider/model/language policy and the managed chain's health, account, capacity
+and failover gates remain authoritative; vendor failover is still available.
+Admission is pinned before a cap-paused return and stays fixed on resume.
+While the retirement percentage is positive, the entire eligible population
+(treatment and controls) is excluded from the separate live-demand experiment.
+Controls use normal configured routing; treatment prefers TDT windows. At zero,
+the previous live-demand behavior is preserved. Parity capture refreshes route
+and request metadata before the first provider event, retaining cap-paused
+client audio. Selection is applied once per connection. There is no silent/none-preview mode. Batch ownership and final
+transcript projection are unchanged. Unknown or unsupported language profiles
+retain existing live STT.
+Compatible listen **and pusher** artifacts and all-live batch qualification must
+precede this ramp; Cloud Run deployment alone does not install GKE artifacts.
+
+`omi_batch_live_stt_capture_audio_seconds_total{batch_cohort}` counts decoded
+capture; `omi_batch_live_stt_provider_wire_audio_seconds_total{provider,batch_cohort}`
+counts successful paid PCM writes, including replay, with admission pinned before
+dialing. Labels are only `admitted`, `eligible_control`, `ineligible` plus provider.
+Compare Soniox wire seconds / capture seconds between arms and before/after ramp;
+wire hours are `/3600`, not vendor acknowledgements or an invoice. Missing series
+or zero capture exposure cannot establish savings. Paid failover remains visible
+in the admitted arm. Disabling the ramp takes effect on reconnect; drain existing
+WebSockets before claiming rollback complete.
+
+`FIRST_SUMMARY_DEADLINE_PERCENT=0` admits only explicit `FIRST_SUMMARY_UID_ALLOWLIST`
+owners (an omitted or empty allowlist at zero percent admits nobody). Positive
+values add the same percentage bucket to the retained summary allowlist
+independently of batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`. A
+positive percentage with an empty summary allowlist is cohort-only; `100` admits
+all owners. Keep existing allowlists when ramping or rolling back.
+`SUMMARY_DEBT_REPAIR_ENABLED` remains false. The 120-second budget is dispatch,
+not model completion.
+
+The dark [durable expiry custody guard](runbooks/sync-two-lane.md#durable-expiry-custody-dark)
+adds `SYNC_DURABLE_REDRIVE_GUARD` and `SYNC_LEGACY_COMPLETION_CONVERGENCE`
+(code/dev default false; enabled on prod `backend-sync` and `backend-sync-backfill`). Expired accepted requests move atomically into durable
+`redrive_required` custody unless the content ledger already proves completion;
+missing-job worker ACKs retain staged bytes. Scheduler gauges expose unresolved
+custody and its nearest source/attention deadline. Legacy retries can converge
+completed ledger results under their existing Redis run lock before provider work.
+
+### Dark worker empty-ASR silence disposition
+
+`BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED` defaults to `false` on
+worker processes (`worker.workerSilenceDispositionEnabled: false` in the
+batch-pipeline-worker Helm chart). After empty ASR and its existing padded
+retry, the worker reuses integration's `recovery_disposition.inspect_audio`
+strict local Silero VAD and `silence_payload`. Only validated zero-speech
+results persist as silence through the normal leased worker commit, with
+`words_provider=strict_local_vad`, empty speech spans and zero speech seconds.
+No quarantine or external provider dispatch is introduced for those results.
+Speech-positive, malformed or unavailable VAD retains the existing empty-ASR
+quarantine/multilingual recovery route. Positive ASR with no owned words does
+not qualify. The flag does not change admission, integration recovery gates,
+or paid-call authorization. Rollback sets the worker flag to `false`.
+`batch_worker_silence_disposition` records persisted local silence results;
+`omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
+
+### Deterministic batch worker validation disposition
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` defaults to `true` and
+ships on in the worker Helm chart. A Pyannote frame wholly beyond a tiny real
+buffer may complete as `silence` only after independent strict local VAD
+validates the real PCM, including a partial final window. Other closed worker
+validation failures stop GPU retries at attempt one, retain `worker_failure`
+stage/reason and enter the existing fenced recovery route. They preserve audio,
+privacy generations, accepted paid intents and ordered projection fencing;
+the held item does not block later results. Empty ASR on speech and positive
+context words outside ownership never establish silence by themselves.
+Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
+retries. Current debt counts only jobs still in `state=quarantined`; historical
+quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
+### Legacy sync double-empty recovery (dark)
+
+`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
+legacy sync keeps its bounded empty-result confirmation, then validates the
+local WAV and uses the same `recovery_disposition.inspect_audio` strict local
+VAD as batch recovery. Only an affirmative zero-span result is silence.
+Positive spans use one independent Modulate multilingual dispatch (`attempts=2`
+disables client retries), with funded sync admission rechecked before dispatch.
+The owner-scoped `sync_empty_recovery` intent is keyed by the existing stable
+segment identity; it has no application TTL. The sole paid call is claimed with
+atomic create and its encrypted response is persisted with a version precondition
+before parsing/assignment. A replay reuses the saved response; an unresolved
+intent fails closed without redispatch. Positive VAD after an already-multilingual
+double-empty stays retryable without a third call.
+Nonempty recovered words enter the existing ordered assignment and durable
+segment checkpoint path. VAD/decode errors, malformed responses, empty alternate
+recognition, or empty postprocessing remain retryable failures and preserve
+retry material. Existing cap-recovery intents retain their separate budget and
+reconciliation path. This flag does not route jobs into batch or change intake.
+Rollback: set the flag to `false`; no historical completion is rewritten.
+
+While enabled, `sync_empty_strict_vad` logs the acoustic verdict **before** funded
+admission or multilingual dispatch: `speech`, `silence`, or `inspection_error`.
+It includes lane, provider, a stable HMAC segment reference, full segment duration,
+strict span count and speech seconds; it never includes owner IDs or content.
+Deduplicate by lane/segment reference within one release window and retain unknown
+inspections separately. Speech / valid inspections measures strict-VAD-positive
+double-empty segments even when recovery later fails; it is not ASR accuracy.
+
+### Dark batch projection follow-ups
+
+`BATCH_PIPELINE_HEAD_PRIORITY_ENABLED` (default `false`) prioritizes a ready
+capture-order head within its existing scheduler class and bounded queue scan;
+duration, eligible unit kind and privacy are checked before any splice, so a
+head this pool cannot lease leaves FIFO intact. Strict ordered merge remains authoritative.
+`BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
+owner claim to ordered multipart assignment. Persisted receipts then drive
+bounded tracked async bridge/playback/enrichment follow-ups, including a
+post-playback redirect check for late bridge audio. Each coordinator has a
+120-second deadline and at most two seconds for advisory-claim cleanup; timeout
+frees the slot and retries the durable receipt on a later sweep. All siblings still need
+ready receipts before atomic usage/content/client completion. Both controls
+are independent of new admission; rollback reuses the same queues and receipts.
+See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
+for restart, privacy, ordering and p95 qualification limits. This changes no
+client wire fields or live STT ownership rules.
+
+
+### Paid quarantine recovery request lifetime
+
+`BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
+serving reconciliation loop prepares the existing fenced recovery intent and
+queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
+origin, declared separately from the worker audience in dev and prod) plus
+`/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
+The handler awaits the sole provider call and result persistence before replying,
+so ordinary Cloud Run revision draining sees an active request. Background sweeps
+enqueue prepared work or reconcile running artifacts. Any dispatch failure
+(including missing configuration or a lost enqueue acknowledgement) falls back
+to inline recovery with the same token. The task and inline path race through
+the same transactional start fence, so at most one can invoke paid STT. The
+shared fallback metric records this degraded inline execution. A disabled
+handler host or owner cohort returns retryable HTTP 503, never a successful ack.
+A two-minute wake-name generation repairs exhausted tasks without authorizing a
+second provider call. Existing privacy, lease, content ownership and intent-token
+fences apply to every delivery, including duplicates and admission rollback.
+
+Integration declares a 3,600-second Cloud Run request timeout in both manifests,
+above the 1,500-second task dispatch deadline and application path timeout.
+Modulate has a 300-second client budget. If the application returns 504,
+cancelling the ASGI await does not stop its executor thread: that thread may
+still persist the result while its instance survives. A retry adopts the same
+`running` token and only reconciles artifacts; it never starts a second paid
+call. Ordinary drain protection ends with the request; a timeout followed by
+instance death can still leave uncertain work held (including the existing
+900-second abandonment fence). This is not permission to reset the token.
+
+Kill switch: set `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false` to restore inline
+sweeping. Already enqueued tasks still use the same intent fence. No historical
+`failed_held` intent is reset. An exceptional instance kill can still leave an
+uncertain paid call held; this requires provider result reconciliation or an
+explicit new epoch, never blind retry. Do not weaken the quarantine-to-completion
+gate or exclude censored held work to hide this residual obligation.
+
+### Sync finalize target recovery
+
+`SYNC_FINALIZE_TARGET_RECOVERY_ENABLED` defaults on (unset/blank); explicit off or
+an unrecognized token restores strict donor-refresh failures. After transcript
+assignment and audio persistence, donor refresh follows only the server-authored
+`sync_merged_into` returned by the rejecting transaction, with at most 16 targets.
+Deleted/missing targets without a successor complete without refresh or donor
+retraction. Other refresh errors defer cleanup, preserving donor tasks and the
+pending revision receipt; later appends retry it. Audio copy remains strict.
+The transaction still rejects writes into deleted conversations. Bounded
+`sync_bridge_refresh` reasons expose degraded completion. Remaining internal
+finalize errors are retryable `sync_finalize_failed`, provider/model `unknown`,
+with a class/site-only `sync_finalize_exception` diagnostic. Deleted-target
+acknowledgement belongs only to the legacy post-persistence callback. The shared bridge helper keeps its string-or-superseded contract;
+synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
+the kill switch on every sync-intake service; classification remains internal.

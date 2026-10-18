@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.batch_pipeline import enabled_for, recovery_owners
+from config.batch_pipeline import recovery_owners
 
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
@@ -45,21 +45,57 @@ def hosts(config):
     }
 
 
-def test_only_david_is_admitted_on_every_sync_host(manifest, monkeypatch):
+def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():
-            for key in ('BATCH_PIPELINE_ENABLED', 'BATCH_PIPELINE_PERCENT', 'BATCH_PIPELINE_UID_ALLOWLIST'):
-                monkeypatch.setenv(key, env[key]['value'])
-            assert enabled_for(UID) is (stage == 'prod')
-            for excluded in ('', 'another-owner', UID + '-suffix'):
-                assert not enabled_for(excluded)
+            assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            if stage == 'prod':
+                assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
+                assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
+            else:
+                allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
+                assert allowlist is None or allowlist.get('value', '') == ''
             assert env['BATCH_PIPELINE_WORKER_ENABLED']['value'] == 'false'
             assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED']['value'] == 'false'
             if stage == 'dev':
                 assert env['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'false'
-                assert env['BATCH_PIPELINE_UID_ALLOWLIST']['value'] == ''
+                assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
+    assert listen_chart_envs[0].get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
+    assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
+    prod_hosts = hosts(manifest['prod'])
+    assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
+    assert prod_hosts['backend-sync-backfill']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '0'
+    assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
+
+
+def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, monkeypatch):
+    from config import summary_guarantee
+
+    prod_hosts = hosts(manifest['prod'])
+    for service in ('backend-sync', 'backend-sync-backfill'):
+        env = prod_hosts[service]
+        assert env['SYNC_DURABLE_REDRIVE_GUARD'] == {'value': 'true', 'category': 'rollout'}
+        assert env['SYNC_LEGACY_COMPLETION_CONVERGENCE'] == {'value': 'true', 'category': 'rollout'}
+    for service in ('backend', 'backend-integration', 'backend-listen'):
+        env = prod_hosts[service]
+        assert 'SYNC_DURABLE_REDRIVE_GUARD' not in env
+        assert 'SYNC_LEGACY_COMPLETION_CONVERGENCE' not in env
+
+    for service in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = prod_hosts[service]
+        assert env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'] == 'true'
+        assert env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'] == '0'
+        assert 'FIRST_SUMMARY_UID_ALLOWLIST' not in env
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'])
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'])
+        monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+        assert not summary_guarantee.enabled('any-user')
+        monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary-owner')
+        assert summary_guarantee.enabled('canary-owner')
+        assert not summary_guarantee.enabled('any-user')
 
 
 def test_quarantine_recovery_is_david_only_on_prod_integration(
@@ -126,12 +162,29 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
             assert values['BATCH_PIPELINE_WORKER_AUDIENCE']['value'] == ''
 
 
+def test_worker_head_priority_is_prod_only_and_values_driven():
+    chart = ROOT / 'charts/batch-pipeline-worker'
+    defaults = yaml.safe_load((chart / 'values.yaml').read_text())
+    prod = yaml.safe_load((chart / 'prod_omi_batch-pipeline-worker_values.yaml').read_text())
+    dev = yaml.safe_load((chart / 'dev_omi_batch-pipeline-worker_values.yaml').read_text())
+    deployment = (chart / 'templates/deployment.yaml').read_text()
+
+    assert (
+        '- {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, ' 'value: {{ .Values.worker.headPriorityEnabled | quote }}}'
+    ) in deployment
+    assert defaults['worker']['headPriorityEnabled'] is False
+    assert dev['worker']['headPriorityEnabled'] is False
+    assert prod['worker']['headPriorityEnabled'] is True
+
+
 @pytest.mark.parametrize(
     'name,reader',
     [
         ('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'authoritative_labels_enabled'),
         ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'empty_asr_recovery_enabled'),
         ('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'require_live_target_enabled'),
+        ('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'head_priority_enabled'),
+        ('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'async_projection_enabled'),
     ],
 )
 def test_record_controls_default_off_and_read_at_call_time(monkeypatch, name, reader):

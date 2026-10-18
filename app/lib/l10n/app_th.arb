@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "ทำความรู้จักกับ Omi ของคุณ",
     "deviceOnboardingIntroSubtitle": "ลองการถอดเสียงสด การถามคำถาม และทางลัดแตะสองครั้ง",
     "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
+    "quoteJumpToTime": "ข้ามไปที่ {duration}",
+    "quoteMoreTimestamps": "+อีก {count}",
     "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
     "latest": "ล่าสุด",
     "flashFirmware": "แฟลชเฟิร์มแวร์",
@@ -4133,6 +4135,11 @@
     "homePendingCatchingUp": "กำลังประมวลผลเสียงก่อนหน้า",
     "onTheWayTitle": "กำลังมา",
     "onTheWayAlmostReady": "ใกล้เสร็จแล้ว",
+    "onTheWayRecordingCount": "{count, plural, =1{1 การบันทึก} other{{count} การบันทึก}}",
+    "onTheWaySummary": "{totals} กำลังมา",
+    "onTheWayUploadingCount": "กำลังอัปโหลด {count}",
+    "onTheWayAlmostReadyCount": "ใกล้เสร็จแล้ว {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{ต้องการความสนใจ 1} other{ต้องการความสนใจ {count}}}",
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
@@ -4222,6 +4229,7 @@
     "summaryLimitBody": "คุณสร้างสรุปใหม่หลายครั้งในชั่วโมงที่ผ่านมา โปรดลองอีกครั้งในภายหลัง",
     "summaryFailedTitle": "สรุปไม่ได้",
     "summaryFailedBody": "เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้",
+    "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

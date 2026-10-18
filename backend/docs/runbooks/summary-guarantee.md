@@ -11,6 +11,13 @@ its existing outbox obligation by the original acceptance time +
 `FIRST_SUMMARY_DEADLINE_SECONDS` (120 default, clamped 60–120). Appends,
 coalescing, lease/retry and repair retain that original time. This is a dispatch
 budget, not a promise that an unavailable provider finishes in 120 seconds.
+`FIRST_SUMMARY_DEADLINE_PERCENT` defaults to `0`. A positive percentage adds
+owners in the same unsalted batch bucket to the explicit summary allowlist,
+independently of batch admission so protection survives admission rollback. At positive percentages an empty list selects only that cohort; at
+zero an empty list admits nobody (fail-safe; set `FIRST_SUMMARY_DEADLINE_PERCENT=100` for all owners). Retain the existing allowlist
+for a cohort ramp and rollback. Invalid percentages admit no additional owners;
+the global flag still kills every owner. This does not enable summary-debt repair.
+
 Ordinary demand priority cannot defer this first wake. Later revisions retain
 the existing quiet window and 1,800-second lease.
 
@@ -133,8 +140,8 @@ emission can lose a Prometheus observation; the durable metadata remains truth.
    `FIRST_SUMMARY_DEADLINE_ENABLED=false` on every changed host; retain the
    index and metadata. No data rewrite is needed. Existing owner contexts keep
    their persistence fences for already-running workers; future work uses the
-   original scheduling/lease policy. Empty allowlist alone is **not rollback**:
-   when the global gate is true, it selects all owners.
+   original scheduling/lease policy. At `FIRST_SUMMARY_DEADLINE_PERCENT=0`, an
+   empty or omitted allowlist fails closed and admits nobody.
 
 ## Local acceptance
 

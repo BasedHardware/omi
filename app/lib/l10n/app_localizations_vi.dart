@@ -9322,6 +9322,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Chuyển đến $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count nữa';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
 
   @override
@@ -13478,6 +13488,43 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onTheWayAlmostReady => 'Sắp xong';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi',
+      one: '1 bản ghi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals đang đến';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count đang tải lên';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count sắp xong';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cần chú ý',
+      one: '1 cần chú ý',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Chưa có hoạt động';
 
   @override
@@ -13775,6 +13822,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Đã lưu $saved trên $total âm thanh';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

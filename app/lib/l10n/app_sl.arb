@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
     "deviceOnboardingIntroSubtitle": "Preizkusite živo transkripcijo, postavite vprašanje in bližnjico z dvojnim dotikom.",
     "deviceOnboardingIntroDuration": "Približno 1 minuta",
+    "quoteJumpToTime": "Skoči na {duration}",
+    "quoteMoreTimestamps": "+ še {count}",
     "jumpToLatestMessage": "Skoči na najnovejše sporočilo",
     "latest": "Najnovejše",
     "flashFirmware": "Namesti vdelano programsko opremo",
@@ -11556,6 +11558,11 @@
     "homePendingCatchingUp": "Obdelujemo prejšnji zvok",
     "onTheWayTitle": "Na poti",
     "onTheWayAlmostReady": "Skoraj pripravljeno",
+    "onTheWayRecordingCount": "{count, plural, =1{1 posnetek} other{Posnetkov: {count}}}",
+    "onTheWaySummary": "{totals} na poti",
+    "onTheWayUploadingCount": "Nalaganje: {count}",
+    "onTheWayAlmostReadyCount": "Skoraj pripravljeno: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 potrebuje pozornost} other{Potrebuje pozornost: {count}}}",
     "activityEmpty": "Še ni dejavnosti",
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
@@ -11645,6 +11652,7 @@
     "summaryLimitBody": "V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.",
     "summaryFailedTitle": "Povzemanje ni uspelo",
     "summaryFailedBody": "Pri povzemanju tega pogovora je prišlo do napake.",
+    "playbackPartialAudioSaved": "Shranjeno {saved} od {total} zvoka",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

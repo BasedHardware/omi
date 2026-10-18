@@ -171,6 +171,10 @@ enum AgentClient {
       await bridge.invalidateSurface(surface)
     }
 
+    func requestProviderAuth() async {
+      await bridge.requestProviderAuth()
+    }
+
     func setGlobalAuthHandlers(
       onAuthRequired: AuthRequiredHandler?,
       onAuthSuccess: AuthSuccessHandler?

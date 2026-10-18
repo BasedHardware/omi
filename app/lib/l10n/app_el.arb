@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Γνωρίστε το Omi σας",
     "deviceOnboardingIntroSubtitle": "Δοκιμάστε τη ζωντανή μεταγραφή, την ερώτηση και τη συντόμευση με διπλό πάτημα.",
     "deviceOnboardingIntroDuration": "Περίπου 1 λεπτό",
+    "quoteJumpToTime": "Μετάβαση σε {duration}",
+    "quoteMoreTimestamps": "+{count} ακόμη",
     "jumpToLatestMessage": "Μετάβαση στο πιο πρόσφατο μήνυμα",
     "latest": "Πρόσφατο",
     "flashFirmware": "Εγκατάσταση firmware",
@@ -4133,6 +4135,11 @@
     "homePendingCatchingUp": "Επεξεργασία προηγούμενου ήχου",
     "onTheWayTitle": "Καθ' οδόν",
     "onTheWayAlmostReady": "Σχεδόν έτοιμο",
+    "onTheWayRecordingCount": "{count, plural, =1{1 ηχογράφηση} other{{count} ηχογραφήσεις}}",
+    "onTheWaySummary": "{totals} καθ' οδόν",
+    "onTheWayUploadingCount": "Μεταφόρτωση: {count}",
+    "onTheWayAlmostReadyCount": "Σχεδόν έτοιμες: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 χρειάζεται προσοχή} other{{count} χρειάζονται προσοχή}}",
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
@@ -4222,6 +4229,7 @@
     "summaryLimitBody": "Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.",
     "summaryFailedTitle": "Δεν ήταν δυνατή η σύνοψη",
     "summaryFailedBody": "Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.",
+    "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

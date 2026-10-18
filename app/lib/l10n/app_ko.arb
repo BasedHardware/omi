@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Omi 알아보기",
     "deviceOnboardingIntroSubtitle": "실시간 받아쓰기, 질문하기, 두 번 탭 단축키를 체험해 보세요.",
     "deviceOnboardingIntroDuration": "약 1분",
+    "quoteJumpToTime": "{duration}(으)로 이동",
+    "quoteMoreTimestamps": "+{count}개 더",
     "jumpToLatestMessage": "최신 메시지로 이동",
     "latest": "최신",
     "flashFirmware": "펌웨어 플래시",
@@ -4133,6 +4135,11 @@
     "homePendingCatchingUp": "이전 오디오 처리 중",
     "onTheWayTitle": "준비 중",
     "onTheWayAlmostReady": "거의 완료",
+    "onTheWayRecordingCount": "{count, plural, =1{녹음 1개} other{녹음 {count}개}}",
+    "onTheWaySummary": "준비 중: {totals}",
+    "onTheWayUploadingCount": "업로드 중 {count}개",
+    "onTheWayAlmostReadyCount": "거의 완료 {count}개",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{확인 필요 1개} other{확인 필요 {count}개}}",
     "activityEmpty": "아직 활동이 없습니다",
     "activityNewSemantics": "활동, 새 항목",
     "activityLoadFailed": "활동을 모두 불러오지 못했습니다",
@@ -4222,6 +4229,7 @@
     "summaryLimitBody": "지난 1시간 동안 요약을 여러 번 다시 생성했습니다. 나중에 다시 시도해 주세요.",
     "summaryFailedTitle": "요약하지 못함",
     "summaryFailedBody": "이 대화를 요약하는 중 문제가 발생했습니다.",
+    "playbackPartialAudioSaved": "오디오 {saved} 저장됨 (전체 {total})",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

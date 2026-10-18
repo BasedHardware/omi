@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Susipažinkite su savo Omi",
     "deviceOnboardingIntroSubtitle": "Išbandykite tiesioginį transkribavimą, klausimo uždavimą ir dvigubo palietimo spartųjį veiksmą.",
     "deviceOnboardingIntroDuration": "Maždaug 1 minutė",
+    "quoteJumpToTime": "Pereiti į {duration}",
+    "quoteMoreTimestamps": "+ dar {count}",
     "jumpToLatestMessage": "Peršokti į naujausią pranešimą",
     "latest": "Naujausias",
     "flashFirmware": "Įrašyti programinę aparatinę įrangą",
@@ -4133,6 +4135,11 @@
     "homePendingCatchingUp": "Apdorojamas ankstesnis garsas",
     "onTheWayTitle": "Pakeliui",
     "onTheWayAlmostReady": "Beveik paruošta",
+    "onTheWayRecordingCount": "{count, plural, =1{1 įrašas} other{Įrašų: {count}}}",
+    "onTheWaySummary": "{totals} pakeliui",
+    "onTheWayUploadingCount": "Įkeliama: {count}",
+    "onTheWayAlmostReadyCount": "Beveik paruošta: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 reikia dėmesio} other{Reikia dėmesio: {count}}}",
     "activityEmpty": "Veiklos dar nėra",
     "activityNewSemantics": "Veikla, nauji elementai",
     "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
@@ -4222,6 +4229,7 @@
     "summaryLimitBody": "Per pastarąją valandą kelis kartus iš naujo sugeneravote santraukas. Bandykite vėliau.",
     "summaryFailedTitle": "Nepavyko apibendrinti",
     "summaryFailedBody": "Apibendrinant šį pokalbį kažkas nutiko.",
+    "playbackPartialAudioSaved": "Išsaugota {saved} iš {total} garso",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

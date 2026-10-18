@@ -3103,6 +3103,8 @@
     "deviceOnboardingIntroTitle": "Ismerd meg az Omidat",
     "deviceOnboardingIntroSubtitle": "Próbáld ki az élő átírást, a kérdésfeltevést és a dupla koppintásos gyorsbillentyűt.",
     "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
+    "quoteJumpToTime": "Ugrás ide: {duration}",
+    "quoteMoreTimestamps": "+{count} további",
     "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
     "latest": "Legújabb",
     "flashFirmware": "Firmware flashelése",
@@ -4229,6 +4231,11 @@
     "homePendingCatchingUp": "Korábbi hang feldolgozása",
     "onTheWayTitle": "Úton",
     "onTheWayAlmostReady": "Majdnem kész",
+    "onTheWayRecordingCount": "{count, plural, =1{1 felvétel} other{{count} felvétel}}",
+    "onTheWaySummary": "{totals} úton",
+    "onTheWayUploadingCount": "{count} feltöltés alatt",
+    "onTheWayAlmostReadyCount": "{count} majdnem kész",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 figyelmet igényel} other{{count} figyelmet igényel}}",
     "activityEmpty": "Még nincs tevékenység",
     "activityNewSemantics": "Tevékenység, új elemek",
     "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
@@ -4318,6 +4325,7 @@
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",
     "summaryFailedTitle": "Nem sikerült összefoglalni",
     "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben.",
+    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

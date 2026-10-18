@@ -9367,6 +9367,16 @@ class AppLocalizationsMk extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Околу 1 минута';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Оди на $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ уште $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Оди до последната порака';
 
   @override
@@ -13541,6 +13551,43 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onTheWayAlmostReady => 'Речиси готово';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимки',
+      one: '1 снимка',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals на пат';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Се прикачуваат: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Речиси готови: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count бараат внимание',
+      one: '1 бара внимание',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Сè уште нема активност';
 
   @override
@@ -13837,6 +13884,11 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Нешто тргна наопаку при сумирањето на овој разговор.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Зачувано $saved од $total аудио';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';

@@ -31,8 +31,15 @@ def enabled_for(owner_id: str) -> bool:
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
     owners = {value.strip() for value in os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', '').split(',') if value.strip()}
+    return owner_id in owners or in_percent_cohort(owner_id, percent)
+
+
+def in_percent_cohort(owner_id: str, percent: float) -> bool:
+    """Shared unsalted admission bucket; invalid percentages never admit."""
+    if not owner_id or not math.isfinite(percent) or not 0 <= percent <= 100:
+        return False
     bucket = int.from_bytes(hashlib.sha256(owner_id.encode()).digest()[:4], 'big') / 2**32 * 100
-    return owner_id in owners or bucket < percent
+    return bucket < percent
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
@@ -152,3 +159,40 @@ def speech_empty_multilingual_enabled() -> bool:
 def terminal_empty_disposition_enabled() -> bool:
     """Dark, evidenced terminal empty result; never grants another paid intent."""
     return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def read_only_metrics_enabled() -> bool:
+    """A scrape may stop draining only while the supervised drain is enabled."""
+    return (
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    )
+
+
+def projection_timing_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_silence_disposition_enabled() -> bool:
+    """Dark worker-side use of integration's strict local silence evidence."""
+    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_validation_disposition_enabled() -> bool:
+    """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
+    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+
+
+def head_priority_enabled() -> bool:
+    """Prefer a queued capture-order head without changing lease/merge authority."""
+    return os.getenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false').strip().lower() == 'true'
+
+
+def async_projection_enabled() -> bool:
+    """Persist in order, then drain durable follow-ups outside the owner claim."""
+    return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def recovery_tasks_enabled() -> bool:
+    """Ship-on request-backed paid recovery; false restores inline sweeping."""
+    return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'

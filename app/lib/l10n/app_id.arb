@@ -3042,6 +3042,8 @@
     "deviceOnboardingIntroTitle": "Kenali Omi Anda",
     "deviceOnboardingIntroSubtitle": "Coba transkripsi langsung, mengajukan pertanyaan, dan pintasan ketuk dua kali.",
     "deviceOnboardingIntroDuration": "Sekitar 1 menit",
+    "quoteJumpToTime": "Lompat ke {duration}",
+    "quoteMoreTimestamps": "+{count} lainnya",
     "jumpToLatestMessage": "Lompat ke pesan terbaru",
     "latest": "Terbaru",
     "flashFirmware": "Flash Firmware",
@@ -4168,6 +4170,11 @@
     "homePendingCatchingUp": "Mengejar audio sebelumnya",
     "onTheWayTitle": "Dalam perjalanan",
     "onTheWayAlmostReady": "Hampir siap",
+    "onTheWayRecordingCount": "{count, plural, =1{1 rekaman} other{{count} rekaman}}",
+    "onTheWaySummary": "{totals} dalam perjalanan",
+    "onTheWayUploadingCount": "{count} sedang diunggah",
+    "onTheWayAlmostReadyCount": "{count} hampir siap",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 perlu perhatian} other{{count} perlu perhatian}}",
     "activityEmpty": "Belum ada aktivitas",
     "activityNewSemantics": "Aktivitas, item baru",
     "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
@@ -4257,6 +4264,7 @@
     "summaryLimitBody": "Anda telah membuat ulang beberapa ringkasan dalam satu jam terakhir. Coba lagi nanti.",
     "summaryFailedTitle": "Tidak dapat meringkas",
     "summaryFailedBody": "Terjadi kesalahan saat meringkas percakapan ini.",
+    "playbackPartialAudioSaved": "{saved} dari {total} audio tersimpan",
     "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
     "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

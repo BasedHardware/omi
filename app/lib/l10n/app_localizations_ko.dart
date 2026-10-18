@@ -9185,6 +9185,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '약 1분';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$duration(으)로 이동';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count개 더';
+  }
+
+  @override
   String get jumpToLatestMessage => '최신 메시지로 이동';
 
   @override
@@ -13298,6 +13308,43 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onTheWayAlmostReady => '거의 완료';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+      one: '녹음 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '준비 중: $totals';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '업로드 중 $count개';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '거의 완료 $count개';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '확인 필요 $count개',
+      one: '확인 필요 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => '아직 활동이 없습니다';
 
   @override
@@ -13588,6 +13635,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get summaryFailedBody => '이 대화를 요약하는 중 문제가 발생했습니다.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '오디오 $saved 저장됨 (전체 $total)';
+  }
 
   @override
   String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
