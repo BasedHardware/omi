@@ -140,6 +140,37 @@ def test_pair_founds_a_group_with_independent_id_and_longest_primary(store):
     assert store.rows[path('pendant')]['capture_group']['revision'] == 1
 
 
+def test_legacy_call_group_is_readable_and_never_relinked_or_migrated(store):
+    members = [
+        {'id': 'desktop', 'source': 'desktop', 'started_at': T0, 'finished_at': T0 + timedelta(seconds=600)},
+        {'id': 'pendant', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(seconds=300)},
+        {'id': 'extra', 'source': 'omi', 'started_at': T0, 'finished_at': T0 + timedelta(seconds=100)},
+    ]
+    legacy_group = {
+        'id': 'stored-call-group',
+        'kind': 'desktop_pendant_call',
+        'primary_id': 'desktop',
+        'revision': 4,
+        'members': members,
+    }
+    store.rows.update(
+        {
+            path(member['id']): row(member['id'], member['source'], capture_group=deepcopy(legacy_group))
+            for member in members
+        }
+    )
+    before = deepcopy(store.rows)
+
+    assert groups_db.join_capture_group(UID, 'desktop', 'pendant', evidence()) is None
+    assert store.rows == before
+    assert groups_db.leave_capture_group(UID, 'extra', sticky=False) is True
+    retained = store.rows[path('desktop')]['capture_group']
+    assert retained['id'] == 'stored-call-group'
+    assert retained['kind'] == 'desktop_pendant_call'
+    assert retained['primary_id'] == 'desktop'
+    assert {member['id'] for member in retained['members']} == {'desktop', 'pendant'}
+
+
 def test_third_capture_joins_through_a_member_and_primary_moves_without_new_id(store):
     store.rows.update(
         {

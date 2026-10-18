@@ -1987,12 +1987,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryHistory => 'ইতিহাস';
 
   @override
-  String get memoryAllowUse => 'ব্যবহারের অনুমতি দিন';
-
-  @override
-  String get memoryDontUse => 'ব্যবহার করবেন না';
-
-  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override

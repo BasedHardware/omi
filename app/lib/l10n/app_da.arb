@@ -3217,8 +3217,6 @@
     "speechProfileEnrollmentPrompt": "Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.",
     "home": "Hjem",
     "failedToUpdateBaselineStatus": "Kunne ikke opdatere dette minde. Prøv igen.",
-    "memoryAllowUse": "Tillad brug",
-    "memoryDontUse": "Brug ikke",
     "unstarConversation": "Fjern stjerne fra samtale",
     "moreOptions": "Flere indstillinger",
     "filterByDate": "Filtrer efter dato",

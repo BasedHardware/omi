@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।",
     "home": "होम",
     "failedToUpdateBaselineStatus": "यह याद अपडेट नहीं हो सकी। दोबारा कोशिश करें।",
-    "memoryAllowUse": "उपयोग की अनुमति दें",
-    "memoryDontUse": "उपयोग न करें",
     "unstarConversation": "बातचीत से स्टार हटाएँ",
     "moreOptions": "और विकल्प",
     "filterByDate": "तारीख के अनुसार फ़िल्टर करें",

@@ -2,11 +2,10 @@
 
 Callers of ``process_conversation`` name a ``ProcessingTrigger`` and nothing
 else about mode. Each trigger's row in ``PROCESSING_MODES`` fixes whether
-enrichment runs now, whether it is a reprocess, whether JIT first-open may
-defer derived work, and whether relevance is assessed. Independent booleans
-at call sites let "run now" silently imply "skip discard" on four
-first-processing paths; one row per reason makes every combination a
-reviewed decision.
+enrichment runs now, whether it is a reprocess, and whether relevance is
+assessed. Independent booleans at call sites let "run now" silently imply
+"skip discard" on first-processing paths; one row per reason makes every
+combination a reviewed decision.
 
 Stdlib-only: sync intake and several stubbed test harnesses import it.
 """
@@ -43,8 +42,6 @@ class ProcessingMode:
     # Regenerating an existing conversation: no created-side effects (folder
     # assignment, webhooks, first-completion telemetry), non-user app usage.
     reprocess: bool
-    # Run derived work eagerly even when JIT first-open would defer it.
-    bypass_jit_first_open: bool
     # KEEP for triggers that are themselves a user action on this row, plus
     # SERVER_RECOVERY: the repair run must never discard the recovered copy.
     relevance: RelevancePolicy
@@ -54,21 +51,21 @@ _ASSESS, _KEEP = RelevancePolicy.ASSESS, RelevancePolicy.KEEP
 
 PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
     {
-        ProcessingTrigger.CAPTURE_END: ProcessingMode(False, False, False, _ASSESS),
+        ProcessingTrigger.CAPTURE_END: ProcessingMode(False, False, _ASSESS),
         # Ending a capture is not a judgment about its content; a discard here
         # stays one tap from restore.
-        ProcessingTrigger.CLIENT_FINALIZE: ProcessingMode(True, False, False, _ASSESS),
+        ProcessingTrigger.CLIENT_FINALIZE: ProcessingMode(True, False, _ASSESS),
         # Reassessed over the whole merged transcript on every append, so a
         # fragment that later gains real speech is promoted automatically.
-        ProcessingTrigger.SYNC_UPDATE: ProcessingMode(True, True, True, _ASSESS),
-        ProcessingTrigger.FIRST_OPEN: ProcessingMode(True, False, False, _KEEP),
-        ProcessingTrigger.BACKLOG_CHOICE: ProcessingMode(True, True, True, _KEEP),
-        ProcessingTrigger.USER_REPROCESS: ProcessingMode(True, True, True, _KEEP),
-        ProcessingTrigger.MERGE: ProcessingMode(True, False, False, _KEEP),
+        ProcessingTrigger.SYNC_UPDATE: ProcessingMode(True, True, _ASSESS),
+        ProcessingTrigger.FIRST_OPEN: ProcessingMode(True, False, _KEEP),
+        ProcessingTrigger.BACKLOG_CHOICE: ProcessingMode(True, True, _KEEP),
+        ProcessingTrigger.USER_REPROCESS: ProcessingMode(True, True, _KEEP),
+        ProcessingTrigger.MERGE: ProcessingMode(True, False, _KEEP),
         # Regenerates an existing, already-kept survivor over its longer transcript:
         # no created-side effects, and relevance must not hide the whole occasion.
-        ProcessingTrigger.SMART_MERGE: ProcessingMode(True, True, True, _KEEP),
-        ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, True, _KEEP),
+        ProcessingTrigger.SMART_MERGE: ProcessingMode(True, True, _KEEP),
+        ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, _KEEP),
     }
 )
 

@@ -1995,12 +1995,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryHistory => 'Geçmiş';
 
   @override
-  String get memoryAllowUse => 'Kullanıma izin ver';
-
-  @override
-  String get memoryDontUse => 'Kullanma';
-
-  @override
   String get undo => 'Geri Al';
 
   @override

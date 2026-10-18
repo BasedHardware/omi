@@ -379,12 +379,10 @@ jobs:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
-            MEMORY_BELIEF_MODEL_ENABLED=false
             FREE_TIER_LOCAL_PROCESSING=false
             FREE_TIER_EMERGENCY_STOP=false
             FREE_TIER_LOCAL_PROCESSING_COHORT=
             BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=false
-            MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
             MENTOR_PIPELINE=cohort
             POSTHOG_HOST=https://us.posthog.com

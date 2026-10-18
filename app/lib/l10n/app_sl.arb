@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
     "home": "Domov",
     "failedToUpdateBaselineStatus": "Tega spomina ni bilo mogoče posodobiti. Poskusite znova.",
-    "memoryAllowUse": "Dovoli uporabo",
-    "memoryDontUse": "Ne uporabljaj",
     "unstarConversation": "Odstrani zvezdico s pogovora",
     "moreOptions": "Več možnosti",
     "filterByDate": "Filtriraj po datumu",

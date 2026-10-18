@@ -1977,12 +1977,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistory => 'ประวัติ';
 
   @override
-  String get memoryAllowUse => 'อนุญาตให้ใช้';
-
-  @override
-  String get memoryDontUse => 'ไม่ต้องใช้';
-
-  @override
   String get undo => 'เลิกทำ';
 
   @override

@@ -1999,12 +1999,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryHistory => 'చరిత్ర';
 
   @override
-  String get memoryAllowUse => 'ఉపయోగాన్ని అనుమతించు';
-
-  @override
-  String get memoryDontUse => 'ఉపయోగించవద్దు';
-
-  @override
   String get undo => 'మరలుచేయండి';
 
   @override

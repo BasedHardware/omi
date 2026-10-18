@@ -1990,12 +1990,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryHistory => 'تاریخ';
 
   @override
-  String get memoryAllowUse => 'استعمال کی اجازت دیں';
-
-  @override
-  String get memoryDontUse => 'استعمال نہ کریں';
-
-  @override
   String get undo => 'واپس لیں';
 
   @override

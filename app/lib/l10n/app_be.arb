@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
     "home": "Галоўная",
     "failedToUpdateBaselineStatus": "Не атрымалася абнавіць гэты ўспамін. Паспрабуйце яшчэ раз.",
-    "memoryAllowUse": "Дазволіць выкарыстанне",
-    "memoryDontUse": "Не выкарыстоўваць",
     "unstarConversation": "Зняць зорку з размовы",
     "moreOptions": "Дадатковыя параметры",
     "filterByDate": "Фільтр па даце",

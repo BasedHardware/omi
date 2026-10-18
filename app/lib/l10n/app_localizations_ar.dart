@@ -1972,12 +1972,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistory => 'السجل';
 
   @override
-  String get memoryAllowUse => 'السماح بالاستخدام';
-
-  @override
-  String get memoryDontUse => 'عدم الاستخدام';
-
-  @override
   String get undo => 'تراجع';
 
   @override

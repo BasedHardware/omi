@@ -1986,12 +1986,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistory => 'History';
 
   @override
-  String get memoryAllowUse => 'Allow Use';
-
-  @override
-  String get memoryDontUse => 'Don\'t Use';
-
-  @override
   String get undo => 'Undo';
 
   @override

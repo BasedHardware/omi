@@ -29,7 +29,6 @@ from utils import metrics
 from utils.conversations import smart_merge
 from utils.conversations.processing_trigger import ProcessingTrigger
 
-WALL_ENV = 'CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE'
 SKIP_LINE = f'event=smart_merge decision=skip reason=intervening_discarded uid={UID} conversation=n'
 INCIDENT = datetime(2026, 10, 5, 13, 6, 10, tzinfo=timezone.utc)
 
@@ -37,8 +36,6 @@ INCIDENT = datetime(2026, 10, 5, 13, 6, 10, tzinfo=timezone.utc)
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.delenv(WALL_ENV, raising=False)
     return World(monkeypatch)
 
 
@@ -224,15 +221,13 @@ def test_tombstone_claims_without_full_lineage_still_block(world, caplog, tomb_e
     assert not world.raw('n').get('deleted')
 
 
-@pytest.mark.parametrize('wall_mode', ['off', 'shadow', 'on'])
-def test_drifted_same_recording_pair_with_barrier_never_merges(world, caplog, wall_mode):
+def test_drifted_same_recording_pair_with_barrier_never_merges(world, caplog):
     """p finished 600 s, n created 720 s / started 400 s / finished 1020 s,
-    discarder 650-680 s. Under ``on`` the wall-clock rescue would otherwise
-    admit the pair; the barrier must win in every mode."""
+    discarder 650-680 s. The wall-clock rescue would otherwise admit the pair;
+    the barrier must win."""
     _drifted_pair(world)
     _add(world, 'd', 640, 650, 680, discarded=True)
     world.jev_answers = [0.9]
-    world.monkeypatch.setenv(WALL_ENV, wall_mode)
     caplog.set_level('INFO', logger=smart_merge.logger.name)
 
     assert world.finish('n') is False
@@ -355,8 +350,6 @@ def _project(row, field_paths):
 def sdk_world(monkeypatch):
     """Real SDK client over mocked RPCs; the production query functions run unpatched."""
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
-    monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.delenv(WALL_ENV, raising=False)
     real_preceding = smart_merge_db.find_preceding_conversations
     world = World(monkeypatch)
     world.add('p', 0, 10)

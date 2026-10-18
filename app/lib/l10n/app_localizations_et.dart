@@ -1988,12 +1988,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get memoryHistory => 'Ajalugu';
 
   @override
-  String get memoryAllowUse => 'Luba kasutamine';
-
-  @override
-  String get memoryDontUse => 'Ära kasuta';
-
-  @override
   String get undo => 'Tühista';
 
   @override

@@ -1,0 +1,3 @@
+{
+  "change": "Meeting notes now use approved calendar, device identity, and screen-frame context without rollout gates; screen-frame egress still requires bucket and signer readiness, with the privacy judge as the first product gate."
+}

@@ -1972,12 +1972,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryHistory => 'Histórico';
 
   @override
-  String get memoryAllowUse => 'Permitir uso';
-
-  @override
-  String get memoryDontUse => 'Não usar';
-
-  @override
   String get undo => 'Desfazer';
 
   @override

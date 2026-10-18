@@ -1996,12 +1996,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get memoryHistory => 'История';
 
   @override
-  String get memoryAllowUse => 'Разрешить использование';
-
-  @override
-  String get memoryDontUse => 'Не использовать';
-
-  @override
   String get undo => 'Отменить';
 
   @override

@@ -1998,12 +1998,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryHistory => 'Lịch sử';
 
   @override
-  String get memoryAllowUse => 'Cho phép dùng';
-
-  @override
-  String get memoryDontUse => 'Không dùng';
-
-  @override
   String get undo => 'Hoàn tác';
 
   @override

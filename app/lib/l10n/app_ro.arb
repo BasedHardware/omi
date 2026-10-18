@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.",
     "home": "Acasă",
     "failedToUpdateBaselineStatus": "Nu s-a putut actualiza această amintire. Încearcă din nou.",
-    "memoryAllowUse": "Permite utilizarea",
-    "memoryDontUse": "Nu utiliza",
     "unstarConversation": "Elimină steaua conversației",
     "moreOptions": "Mai multe opțiuni",
     "filterByDate": "Filtrează după dată",

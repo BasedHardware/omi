@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.",
     "home": "Trang chủ",
     "failedToUpdateBaselineStatus": "Không thể cập nhật kỷ niệm này. Vui lòng thử lại.",
-    "memoryAllowUse": "Cho phép dùng",
-    "memoryDontUse": "Không dùng",
     "unstarConversation": "Bỏ gắn sao cuộc trò chuyện",
     "moreOptions": "Tùy chọn khác",
     "filterByDate": "Lọc theo ngày",

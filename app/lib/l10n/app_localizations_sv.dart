@@ -1993,12 +1993,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
-  String get memoryAllowUse => 'Tillåt användning';
-
-  @override
-  String get memoryDontUse => 'Använd inte';
-
-  @override
   String get undo => 'Ångra';
 
   @override

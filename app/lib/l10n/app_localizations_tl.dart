@@ -2004,12 +2004,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get memoryHistory => 'Kasaysayan';
 
   @override
-  String get memoryAllowUse => 'Payagan ang paggamit';
-
-  @override
-  String get memoryDontUse => 'Huwag gamitin';
-
-  @override
   String get undo => 'Undo';
 
   @override

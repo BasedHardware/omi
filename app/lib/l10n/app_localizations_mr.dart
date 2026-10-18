@@ -1991,12 +1991,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
-  String get memoryAllowUse => 'वापर करू द्या';
-
-  @override
-  String get memoryDontUse => 'वापरू नका';
-
-  @override
   String get undo => 'पूर्ववत् करा';
 
   @override

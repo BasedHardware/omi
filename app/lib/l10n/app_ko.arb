@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.",
     "home": "홈",
     "failedToUpdateBaselineStatus": "이 추억을 업데이트하지 못했어요. 다시 시도해 주세요.",
-    "memoryAllowUse": "사용 허용",
-    "memoryDontUse": "사용 안 함",
     "unstarConversation": "대화 별표 해제",
     "moreOptions": "추가 옵션",
     "filterByDate": "날짜별 필터",

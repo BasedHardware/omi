@@ -2010,12 +2010,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryHistory => 'Historique';
 
   @override
-  String get memoryAllowUse => 'Autoriser l\'utilisation';
-
-  @override
-  String get memoryDontUse => 'Ne pas utiliser';
-
-  @override
   String get undo => 'Annuler';
 
   @override

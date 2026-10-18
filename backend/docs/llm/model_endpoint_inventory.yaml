@@ -38,8 +38,6 @@ model_config_features:
     - learnings
     - memories
     - memory_category
-    - memory_conflict
-    - memory_conflict_flex
     - memory_l1
     - memory_l2_flex
     - notifications
@@ -147,8 +145,6 @@ surfaces:
   - utils/llm/trends.py::feature:trends
   - utils/llm/wake_word_adjudication.py::feature:wake_word_adjudication
   - utils/llm/working_observations.py::feature:memory_l1
-  - utils/memory/belief_backfill.py::feature:<dynamic>
-  - utils/memory/belief_evidence.py::feature:memory_conflict
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation
@@ -398,7 +394,6 @@ surfaces:
   - utils/llm/memories.py::feature:memories
   - utils/llm/memories.py::feature:learnings
   - utils/llm/memories.py::feature:memory_category
-  - utils/llm/memories.py::feature:memory_conflict
   current_provider_model: openai/gpt-x-luna memories feature
   request_shape: return-only memory-log JSON (memories + profile)
   gateway_lane_capability_needed: generated omi:auto:memories lane

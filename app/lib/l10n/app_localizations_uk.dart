@@ -1994,12 +1994,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistory => 'Історія';
 
   @override
-  String get memoryAllowUse => 'Дозволити використання';
-
-  @override
-  String get memoryDontUse => 'Не використовувати';
-
-  @override
   String get undo => 'Скасувати';
 
   @override

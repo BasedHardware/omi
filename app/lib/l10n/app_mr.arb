@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.",
     "home": "मुख्यपृष्ठ",
     "failedToUpdateBaselineStatus": "हे स्मृती अद्यतनित करता आले नाही. पुन्हा प्रयत्न करा.",
-    "memoryAllowUse": "वापर करू द्या",
-    "memoryDontUse": "वापरू नका",
     "unstarConversation": "संभाषणावरील तारा काढा",
     "moreOptions": "अधिक पर्याय",
     "filterByDate": "तारखेनुसार फिल्टर करा",

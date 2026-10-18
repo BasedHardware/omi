@@ -449,7 +449,6 @@ def _spy_managed_effects(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, 
         'extract_memories_inner': MagicMock(),
         'trigger_apps': MagicMock(),
         'assign_folder': MagicMock(return_value=(None, 0.0, '')),
-        'init_first_open': MagicMock(return_value=True),
         'should_defer': MagicMock(return_value=True),
     }
     monkeypatch.setattr(pc, '_get_structured', spies['get_structured'])
@@ -457,16 +456,9 @@ def _spy_managed_effects(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, 
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(
-        pc,
-        'resolve_authorized_first_open_plan',
-        lambda **kwargs: SimpleNamespace(defer_derived_work=True),
-    )
-    monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     return spies
 
 
@@ -476,7 +468,6 @@ def _assert_no_managed(spies: dict[str, MagicMock]) -> None:
     spies['extract_memories_inner'].assert_not_called()
     spies['trigger_apps'].assert_not_called()
     spies['assign_folder'].assert_not_called()
-    spies['init_first_open'].assert_not_called()
 
 
 def _capture_has_projection(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, Any]:
@@ -632,7 +623,9 @@ def _assert_projection_on_reread(store: dict[str, Any]) -> None:
     assert reread['client_processing']['structure']['title'] == PROJECTION_TITLE
     assert store['timeline'], 'winner never wrote'
     assert store['timeline'][0] == 'admit', 'winner must stamp on the admission CAS, before coordinator persist'
-    assert 'update' not in store['timeline'], 'winner must not issue a second client_processing write'
+    assert not any(
+        'client_processing' in update for update in store['updates']
+    ), 'winner must not issue a second client_processing write'
 
 
 def _prepare_durable_finalize(monkeypatch: pytest.MonkeyPatch, conv: Any, conversation: Conversation) -> dict[str, Any]:

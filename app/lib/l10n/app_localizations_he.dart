@@ -1971,12 +1971,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryHistory => 'היסטוריה';
 
   @override
-  String get memoryAllowUse => 'אפשר שימוש';
-
-  @override
-  String get memoryDontUse => 'אל תשתמש';
-
-  @override
   String get undo => 'בטל';
 
   @override

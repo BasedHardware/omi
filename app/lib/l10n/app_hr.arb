@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "Kako bi Omi znao koji je vaš glas — govorite oko 5 sekundi o bilo čemu.",
     "home": "Početna",
     "failedToUpdateBaselineStatus": "Nije moguće ažurirati ovu uspomenu. Pokušajte ponovo.",
-    "memoryAllowUse": "Dopusti korištenje",
-    "memoryDontUse": "Nemoj koristiti",
     "unstarConversation": "Ukloni zvjezdicu s razgovora",
     "moreOptions": "Više opcija",
     "filterByDate": "Filtriraj po datumu",

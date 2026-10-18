@@ -177,7 +177,7 @@ def memory_transcript_from_segments(
 
 
 def _owner_evidence_view(segment: Any) -> Any:
-    """Adapt JIT mapping rows to the attribute shape consumed by the shared owner gate."""
+    """Adapt mapping rows to the attribute shape consumed by the shared owner gate."""
     if not isinstance(segment, Mapping):
         return segment
     return SimpleNamespace(

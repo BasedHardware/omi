@@ -18,8 +18,6 @@ WORDS = ' '.join(['word'] * 30)
 ORIGIN = 'recording-1'
 SESSION = 'session-1'
 
-WALL_ENV = 'CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE'
-
 
 def _segments(count=2, *, speaker=0, text=WORDS, length=10.0, first_start=0.0):
     return [
@@ -68,32 +66,6 @@ def _drifted_pair():
     s_segments = _segments(count=1, first_start=0.0) + _segments(count=1, first_start=595.0)
     n_segments = _segments()
     return survivor, s_segments, new, n_segments
-
-
-@pytest.mark.parametrize(
-    'raw, mode',
-    [
-        ('', 'off'),
-        ('   ', 'off'),
-        ('off', 'off'),
-        (' OFF ', 'off'),
-        ('shadow', 'shadow'),
-        (' SHADOW ', 'shadow'),
-        ('on', 'on'),
-        ('On', 'on'),
-        ('merge', 'off'),
-        ('true', 'off'),
-        ('bogus', 'off'),
-    ],
-)
-def test_wallclock_gap_mode_parsing(monkeypatch, raw, mode):
-    monkeypatch.setenv(WALL_ENV, raw)
-    assert config.smart_merge_wallclock_gap_mode().value == mode
-
-
-def test_wallclock_gap_mode_unset_defaults_off(monkeypatch):
-    monkeypatch.delenv(WALL_ENV, raising=False)
-    assert config.smart_merge_wallclock_gap_mode() is config.SmartMergeWallclockGapMode.OFF
 
 
 def test_newest_wallclock_fragment_picks_max_finish_not_max_start():

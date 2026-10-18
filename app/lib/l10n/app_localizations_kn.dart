@@ -1996,12 +1996,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get memoryHistory => 'ಇತಿಹಾಸ';
 
   @override
-  String get memoryAllowUse => 'ಬಳಕೆಗೆ ಅನುಮತಿಸಿ';
-
-  @override
-  String get memoryDontUse => 'ಬಳಸಬೇಡಿ';
-
-  @override
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';
 
   @override

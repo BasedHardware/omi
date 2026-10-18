@@ -1955,12 +1955,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get memoryHistory => '기록';
 
   @override
-  String get memoryAllowUse => '사용 허용';
-
-  @override
-  String get memoryDontUse => '사용 안 함';
-
-  @override
   String get undo => '실행 취소';
 
   @override

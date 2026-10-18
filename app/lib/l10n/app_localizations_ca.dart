@@ -2003,12 +2003,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
-  String get memoryAllowUse => 'Permet l\'ús';
-
-  @override
-  String get memoryDontUse => 'No ho facis servir';
-
-  @override
   String get undo => 'Desfer';
 
   @override

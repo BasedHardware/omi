@@ -24,7 +24,7 @@ Merging a manifest PR triggers `.github/workflows/gcp_firestore_indexes.yml`. De
 
 `web/admin` has a separate TypeScript query contract at `web/admin/lib/__tests__/firestore-query-contract.test.ts`, run by `web-checks.yml` for changes under `web/admin/**` and `firestore.indexes.json`. `web/personas-open-source` queries Firestore client-side and is outside the Python guard; its only composite shapes (`messages`: `pluginId ASC, timestamp ASC` and `botName ASC, timestamp ASC`) are declared in the registry and READY in prod (verified 2026-10-01); its Firebase project is build-time configurable.
 
-The real-Firestore oracle is `backend/scripts/firestore_index_oracle.py`, exposed as `index-oracle` in `.github/workflows/jit_qa_manual_operator.yml`. Run it when validating a query/index change against Firestore's actual planning response or investigating a suspected index gap. It is an oracle and does not provision indexes.
+The real-Firestore oracle is `backend/scripts/firestore_index_oracle.py`. Use it when validating a query/index change against Firestore's actual planning response or investigating a suspected index gap. It is an oracle and does not provision indexes.
 
 ## Respond to a missing-index alert
 

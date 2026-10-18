@@ -2000,12 +2000,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get memoryHistory => 'Istoric';
 
   @override
-  String get memoryAllowUse => 'Permite utilizarea';
-
-  @override
-  String get memoryDontUse => 'Nu utiliza';
-
-  @override
   String get undo => 'Anulează';
 
   @override

@@ -3210,8 +3210,6 @@
     "speechProfileEnrollmentPrompt": "Pour qu’Omi reconnaisse votre voix — parlez de ce que vous voulez pendant environ 5 secondes.",
     "home": "Accueil",
     "failedToUpdateBaselineStatus": "Impossible de mettre à jour ce souvenir. Réessayez.",
-    "memoryAllowUse": "Autoriser l'utilisation",
-    "memoryDontUse": "Ne pas utiliser",
     "unstarConversation": "Retirer la conversation des favoris",
     "moreOptions": "Plus d’options",
     "filterByDate": "Filtrer par date",

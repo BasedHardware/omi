@@ -1967,12 +1967,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
-  String get memoryAllowUse => 'उपयोग की अनुमति दें';
-
-  @override
-  String get memoryDontUse => 'उपयोग न करें';
-
-  @override
   String get undo => 'पूर्ववत करें';
 
   @override
