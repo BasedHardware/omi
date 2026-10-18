@@ -33,8 +33,6 @@ from google.cloud import firestore
 from config.desktop_pendant_call_link import CALL_GROUP_KIND, call_pair, desktop_meeting
 from ._client import get_firestore_client
 
-from utils.conversations.datetime_utils import coerce_utc_datetime
-
 logger = logging.getLogger(__name__)
 
 CAPTURE_GROUP_FIELD = 'capture_group'
@@ -45,7 +43,15 @@ _CONVERSATIONS = 'conversations'
 
 
 def _aware(value: Any) -> Optional[datetime]:
-    return coerce_utc_datetime(value)
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
 
 
 def _source(row: Mapping[str, Any]) -> Optional[str]:

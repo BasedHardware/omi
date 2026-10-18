@@ -3,16 +3,17 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from utils.conversations.datetime_utils import coerce_utc_datetime
-
 
 def ensure_timezone_aware(value: Any) -> datetime:
     """Return an aware datetime, treating legacy naive values, ISO strings, and invalid inputs gracefully."""
-    coerced = coerce_utc_datetime(value)
-    if coerced is not None:
-        return coerced
     if isinstance(value, datetime):
-        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
     return datetime.min.replace(tzinfo=timezone.utc)
 
 
