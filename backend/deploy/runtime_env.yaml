@@ -607,7 +607,9 @@ environments:
             source: environment
           REDIS_DB_HOST:
             source: environment
-          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED:
+            source: literal
+            value: 'false'
           STT_PRERECORDED_MODEL:
             source: literal
             value: parakeet,modulate-velma-2
@@ -2897,7 +2899,9 @@ environments:
             source: environment
           REDIS_DB_HOST:
             source: environment
-          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED:
+            source: literal
+            value: 'false'
           STT_PRERECORDED_MODEL:
             source: literal
             value: parakeet,modulate-velma-2
