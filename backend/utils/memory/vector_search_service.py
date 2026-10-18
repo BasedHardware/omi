@@ -12,10 +12,11 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 try:
-    from database.vector_db import delete_memory_vectors_batch, query_memory_vector_candidates
+    from database.vector_db import query_memory_vector_candidates
 except ModuleNotFoundError:
-    delete_memory_vectors_batch = None
     query_memory_vector_candidates = None
+
+from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
 
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
@@ -374,6 +375,21 @@ def _note_stale_index_memory_id(stale_index_memory_ids: List[str], memory_id: st
         stale_index_memory_ids.append(memory_id)
 
 
+def _delete_stale_canonical_memory_vectors(uid: str, memory_ids: List[str]) -> int:
+    """Delete stale rows by the canonical metadata filter.
+
+    Search reads ``memproj:<hash>`` vectors. ``delete_memory_vectors_batch``
+    only removes the legacy ``{uid}-{memory_id}`` id, so it leaves the row
+    that the next query would hydrate again.
+    """
+
+    deleted = 0
+    for memory_id in memory_ids:
+        if delete_canonical_memory_vector(uid, memory_id):
+            deleted += 1
+    return deleted
+
+
 def _delete_stale_vector_index_ids(
     *,
     uid: str,
@@ -391,7 +407,7 @@ def _delete_stale_vector_index_ids(
     bounded = [memory_id for memory_id in memory_ids if memory_id][:MAX_STALE_INDEX_DELETES_PER_REQUEST]
     if not bounded:
         return 0
-    delete = deleter if deleter is not None else delete_memory_vectors_batch
+    delete = deleter if deleter is not None else _delete_stale_canonical_memory_vectors
     if delete is None:
         return 0
     try:

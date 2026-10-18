@@ -938,6 +938,50 @@ def test_hydration_deletes_missing_and_tombstoned_index_ids_and_skips_live_overr
     assert 'users/u1/memory_items/missing' in db_client.document_paths
 
 
+def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch):
+    now = datetime.now(timezone.utc)
+    live = _memory_item('live', tier=MemoryTier.long_term, now=now)
+    tombstoned = _memory_item('tombstoned', tier=MemoryTier.long_term, now=now, status=MemoryItemStatus.tombstoned)
+    missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{live.memory_id}': _stored_item(live),
+            f'users/u1/memory_items/{tombstoned.memory_id}': _stored_item(tombstoned),
+        }
+    )
+    deleted = []
+
+    def fake_canonical_delete(uid, memory_id):
+        deleted.append((uid, memory_id))
+        return True
+
+    monkeypatch.setattr(
+        'utils.memory.vector_search_service.delete_canonical_memory_vector',
+        fake_canonical_delete,
+    )
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(
+            hits=[
+                _hit(missing, score=0.99),
+                _hit(tombstoned, score=0.90),
+                _hit(live, score=0.80),
+            ]
+        ),
+        limit=10,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert deleted == [('u1', 'missing'), ('u1', 'tombstoned')]
+    assert response['stale_index_deleted_count'] == 2
+    assert [item['memory_id'] for item in response['items']] == ['live']
+
+
 def test_hydration_bounds_stale_index_deletes_and_ignores_deleter_failures():
     now = datetime.now(timezone.utc)
     missing_items = [_memory_item(f'missing-{index}', tier=MemoryTier.long_term, now=now) for index in range(51)]
