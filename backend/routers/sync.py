@@ -193,6 +193,8 @@ from utils.sync.capture_manifest import (
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
 from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
+from config.sync_owner_concurrency import preparation_width
+from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 # Only the API process importing this router owns held-audio STT recovery.
@@ -2294,6 +2296,20 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
+        sequencer_epoch = payload.get('sequencer_epoch')
+        if (
+            sync_lane == SyncLane.BACKFILL.value
+            and isinstance(sequencer_epoch, int)
+            and sequencer_epoch > 0
+            and preparation_width() > 1
+        ):
+            # Pure future downloads share this instance with a possible next
+            # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
+            # conversation authority. A cross-instance delivery simply misses.
+            start_background_task(
+                run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
+                name='sync:owner-prefetch',
+            )
         if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
