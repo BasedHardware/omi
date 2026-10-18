@@ -3240,15 +3240,14 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    report_persistence(
-        persisted,
-        completed=conversation,
-        derived_effects=(
-            DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
-            if recovery_minimum_fallback
-            else DerivedEffectsDisposition.RUN
-        ),
-    )
+    if recovery_minimum_fallback:
+        report_persistence(
+            persisted,
+            completed=conversation,
+            derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS,
+        )
+    else:
+        report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
             'processing result fenced before canonical completion side effects uid=%s conversation=%s',
