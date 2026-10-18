@@ -16,8 +16,18 @@ sys.path.insert(0, str(HERE.parents[1] / "examples"))
 
 import goals_to_csv as m  # noqa: E402
 
+# Real GoalResponse shape — metric fields nest under "metric".
 GOAL = {
     "id": "g1",
+    "title": "Drink water",
+    "metric": {"type": "numeric", "current": 1.0, "target": 4.0, "unit": "liters"},
+    "is_active": True,
+    "created_at": "2026-10-17T12:00:00+02:00",
+}
+
+# A pre-flattened export — the fallback path reads flat keys too.
+GOAL_FLAT = {
+    "id": "g2",
     "title": "Drink water",
     "category": "health",
     "goal_type": "numeric",
@@ -25,7 +35,6 @@ GOAL = {
     "target_value": 4.0,
     "unit": "liters",
     "is_active": True,
-    "created_at": "2026-10-17T12:00:00+02:00",
 }
 
 

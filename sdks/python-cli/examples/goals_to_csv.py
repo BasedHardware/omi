@@ -77,9 +77,19 @@ def fmt_num(value: Optional[float]) -> str:
     return f"{value:g}" if value is not None else ""
 
 
+def _metric(item: Dict[str, Any], key: str) -> Any:
+    """GoalResponse nests the categorical + metric under "metric"
+    ({type,current,target,unit}) — read it with a flat-key fallback for
+    exports that already flattened the shape."""
+    metric = item.get("metric")
+    if isinstance(metric, dict) and metric.get(key) is not None:
+        return metric.get(key)
+    return item.get(f"{key}_value" if key in ("current", "target") else key)
+
+
 def progress_pct(item: Dict[str, Any]) -> str:
     """Completion percentage toward target; blank for qualitative/no-target."""
-    cur, target = number(item.get("current_value")), number(item.get("target_value"))
+    cur, target = number(_metric(item, "current")), number(_metric(item, "target"))
     if cur is None or target is None or target == 0:
         return ""
     return f"{100 * cur / target:.1f}"
@@ -108,10 +118,10 @@ def normalize_row(item: Any) -> Optional[List[str]]:
     return [
         spreadsheet_text(item.get("id") or item.get("goal_id")),
         spreadsheet_text(item.get("title") or item.get("description")),
-        spreadsheet_text(item.get("goal_type")),
-        fmt_num(number(item.get("current_value"))),
-        fmt_num(number(item.get("target_value"))),
-        spreadsheet_text(item.get("unit")),
+        spreadsheet_text(_metric(item, "type") or item.get("goal_type")),
+        fmt_num(number(_metric(item, "current"))),
+        fmt_num(number(_metric(item, "target"))),
+        spreadsheet_text(_metric(item, "unit")),
         progress_pct(item),
         "1" if item.get("is_active", True) else "0",
         iso_utc(item.get("created_at")),
@@ -146,7 +156,7 @@ def convert(payload: Any, types: Optional[set], statuses: Optional[set]) -> List
     for raw in unwrap(payload):
         if not isinstance(raw, dict):
             continue
-        gtype = str(raw.get("goal_type") or "qualitative").strip().lower()
+        gtype = str(_metric(raw, "type") or raw.get("goal_type") or "qualitative").strip().lower()
         status = "active" if raw.get("is_active", True) else "inactive"
         if types is not None and gtype not in types:
             continue
