@@ -9,18 +9,38 @@ the merged conversation with the wrong created_at.
 from datetime import datetime, timezone
 
 from utils.conversations.merge_conversations import (
-    _merge_order_key, _merge_transcript_segments, _normalize_conversation_timestamps)
+    _merge_order_key,
+    _merge_transcript_segments,
+    _normalize_conversation_timestamps,
+)
 
 T = lambda h, m=0, s=0: datetime(2026, 5, 30, h, m, s, tzinfo=timezone.utc)
-_SEG = lambda text: {'id': text, 'text': text, 'speaker': 'SPEAKER_00',
-                     'speaker_id': 0, 'is_user': False, 'start': 0.0, 'end': 5.0}
+_SEG = lambda text: {
+    'id': text,
+    'text': text,
+    'speaker': 'SPEAKER_00',
+    'speaker_id': 0,
+    'is_user': False,
+    'start': 0.0,
+    'end': 5.0,
+}
 
 
 def _convs():
-    pendant = {'id': 'pendant', 'created_at': T(10), 'started_at': T(10),
-               'finished_at': T(10, 0, 5), 'transcript_segments': [_SEG('recorded at ten')]}
-    api = {'id': 'api', 'created_at': T(12), 'started_at': None,
-           'finished_at': None, 'transcript_segments': [_SEG('created at noon')]}
+    pendant = {
+        'id': 'pendant',
+        'created_at': T(10),
+        'started_at': T(10),
+        'finished_at': T(10, 0, 5),
+        'transcript_segments': [_SEG('recorded at ten')],
+    }
+    api = {
+        'id': 'api',
+        'created_at': T(12),
+        'started_at': None,
+        'finished_at': None,
+        'transcript_segments': [_SEG('created at noon')],
+    }
     return pendant, api
 
 
@@ -32,14 +52,42 @@ def test_order_key_falls_back_to_created_at():
 def test_order_key_keeps_sentinel_without_timestamps():
     conv = {'id': 'legacy', 'created_at': None, 'started_at': None}
     from utils.conversations.merge_conversations import _UTC_MIN
+
     assert _merge_order_key(conv) == _UTC_MIN
 
 
 def test_merge_places_untimed_source_chronologically():
     pendant, api = _convs()
-    convs = sorted(_normalize_conversation_timestamps([api, pendant]),
-                   key=_merge_order_key)
+    convs = sorted(_normalize_conversation_timestamps([api, pendant]), key=_merge_order_key)
     assert [c['id'] for c in convs] == ['pendant', 'api']
     assert convs[0]['created_at'] == T(10)
-    assert [s['text'] for s in _merge_transcript_segments(convs)] == [
-        'recorded at ten', 'created at noon']
+    assert [s['text'] for s in _merge_transcript_segments(convs)] == ['recorded at ten', 'created at noon']
+
+
+def test_three_source_ordering_sentinel_then_two_timed():
+    """One sentinel + two timed sources: the untimed row still lands
+    chronologically between the timed ones by its created_at."""
+    early = {
+        'id': 'early',
+        'created_at': T(9),
+        'started_at': T(9),
+        'finished_at': T(9, 0, 5),
+        'transcript_segments': [_SEG('nine')],
+    }
+    api_mid = {
+        'id': 'api-mid',
+        'created_at': T(11),
+        'started_at': None,
+        'finished_at': None,
+        'transcript_segments': [_SEG('eleven')],
+    }
+    late = {
+        'id': 'late',
+        'created_at': T(13),
+        'started_at': T(13),
+        'finished_at': T(13, 0, 5),
+        'transcript_segments': [_SEG('thirteen')],
+    }
+    convs = sorted(_normalize_conversation_timestamps([late, api_mid, early]), key=_merge_order_key)
+    assert [c['id'] for c in convs] == ['early', 'api-mid', 'late']
+    assert [s['text'] for s in _merge_transcript_segments(convs)] == ['nine', 'eleven', 'thirteen']
