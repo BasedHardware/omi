@@ -55,6 +55,8 @@ run_proof() {
   echo "::endgroup::"
 }
 
+run_proof "sync/live overlap admission race (coarse hint, contention retry, no twin)" \
+  "$PYTHON" scripts/sync_live_overlap_contention_emulator_test.py
 run_proof "destructive gate contention (same-kind block / stale takeover fence)" \
   "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \

@@ -342,7 +342,6 @@ def test_live_score_only_update_does_not_advance_content_revision(monkeypatch):
     planned = SimpleNamespace(segments=[scored], absorbed_into={}, with_segments=lambda accepted: accepted)
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'merge_live_segments', lambda *args, **kwargs: planned)
-    monkeypatch.setattr(db, 'sync_lineage_resolve_active_for', lambda uid: True)
     result = db.update_conversation_segments('u', 'c', [scored], live_segments=[scored])
     assert store.rows[path]['sync_content_revision'] == 7
     assert scores.FIELD not in result[0]
