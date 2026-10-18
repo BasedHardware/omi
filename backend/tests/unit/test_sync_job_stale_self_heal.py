@@ -118,3 +118,34 @@ def test_is_sync_job_stale_sequenced_queued(monkeypatch):
         'updated_at': time.time() - 2000,
     }
     assert sync_jobs.is_sync_job_stale(retrying_queued) is False
+
+
+def test_is_sync_job_stale_sequenced_completed_never_stale():
+    # Completed sequenced jobs must never be evaluated stale regardless of age
+    completed_job = {
+        'id': 'j10',
+        'status': 'completed',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time() - 50000,
+    }
+    assert sync_jobs.is_sync_job_stale(completed_job) is False
+
+
+def test_is_sync_job_stale_sequenced_malformed_env(monkeypatch):
+    # Malformed env must fall back safely to 43200s default without raising
+    monkeypatch.setenv('SYNC_SEQUENCED_STALE_SECONDS', 'invalid_number')
+    recent_job = {
+        'id': 'j11',
+        'status': 'queued',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time() - 1000,
+    }
+    assert sync_jobs.is_sync_job_stale(recent_job) is False
+
+    old_job = {
+        'id': 'j12',
+        'status': 'queued',
+        'dispatch_mode': 'sequenced',
+        'updated_at': time.time() - 45000,
+    }
+    assert sync_jobs.is_sync_job_stale(old_job) is True

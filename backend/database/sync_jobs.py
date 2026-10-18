@@ -265,6 +265,14 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
+def _sequenced_stale_seconds() -> int:
+    try:
+        seconds = int(os.getenv('SYNC_SEQUENCED_STALE_SECONDS', '43200'))
+    except (ValueError, TypeError):
+        seconds = 43200
+    return seconds if seconds > 0 else 43200
+
+
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:
     """Return whether a 'processing' job has gone silent past the stale bound.
 
@@ -287,12 +295,12 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     if status == 'queued' and (job.get('started_at') is not None or job.get('attempt') is not None):
         return False
 
-    if dispatch_mode == 'sequenced':
+    if dispatch_mode == 'sequenced' and status in ('queued', 'processing'):
         # The UID owner/sweeper owns liveness for accepted sequenced jobs.
         # Waiting in the per-UID queue can take several hours on heavy accounts.
         # However, an unstarted queued or lost processing sequenced job exceeding
         # the 12h wait limit must not deadlock the account queue forever (#21943).
-        threshold = int(os.getenv('SYNC_SEQUENCED_STALE_SECONDS', '43200'))
+        threshold = _sequenced_stale_seconds()
     elif status == 'processing':
         threshold = STALE_THRESHOLD_SECONDS
     elif status == 'queued' and dispatch_mode == 'cloud_tasks':
