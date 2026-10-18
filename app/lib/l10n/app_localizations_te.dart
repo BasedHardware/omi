@@ -13215,6 +13215,19 @@ class AppLocalizationsTe extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'మీ Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'మీ Omiని జత చేయండి, రోజంతా హ్యాండ్స్-ఫ్రీగా సంభాషణలను రికార్డ్ చేస్తుంది.';
+
+  @override
+  String get firstCaptureConnect => 'నా Omiని కనెక్ట్ చేయండి';
+
+  @override
+  String get firstCaptureNoDevice => 'నాకు ఇంకా Omi లేదు';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

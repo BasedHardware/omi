@@ -13253,6 +13253,19 @@ class AppLocalizationsTa extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'உங்கள் Omi-ஐ இணைக்கவும்';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'உங்கள் Omi-ஐ இணைத்து, நாள் முழுவதும் உங்கள் உரையாடல்களைக் கைகள் இல்லாமல் பதிவு செய்யும்.';
+
+  @override
+  String get firstCaptureConnect => 'எனது Omi-ஐ இணைக்கவும்';
+
+  @override
+  String get firstCaptureNoDevice => 'என்னிடம் இன்னும் Omi இல்லை';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

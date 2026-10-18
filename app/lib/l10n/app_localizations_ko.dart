@@ -12982,6 +12982,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Omi 연결하기';
+
+  @override
+  String get firstCaptureConnectDescription => 'Omi를 페어링하면 하루 종일 핸즈프리로 대화를 녹음합니다.';
+
+  @override
+  String get firstCaptureConnect => '내 Omi 연결하기';
+
+  @override
+  String get firstCaptureNoDevice => '아직 Omi가 없어요';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

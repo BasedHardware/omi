@@ -13161,6 +13161,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Kết nối Omi của bạn';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Ghép nối Omi của bạn và thiết bị sẽ ghi lại cuộc trò chuyện của bạn rảnh tay, cả ngày.';
+
+  @override
+  String get firstCaptureConnect => 'Kết nối Omi của tôi';
+
+  @override
+  String get firstCaptureNoDevice => 'Tôi chưa có Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

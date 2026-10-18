@@ -13218,6 +13218,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Conectează-ți Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Asociază-ți Omi și va înregistra conversațiile tale hands-free, pe tot parcursul zilei.';
+
+  @override
+  String get firstCaptureConnect => 'Conectează-mi Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Nu am încă un Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

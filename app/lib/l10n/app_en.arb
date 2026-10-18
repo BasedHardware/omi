@@ -15913,6 +15913,22 @@
     "firstCaptureOmi": "I Have an Omi",
     "firstCapturePhone": "This Phone",
     "firstCaptureWatch": "Apple Watch",
+    "firstCaptureConnectTitle": "Connect your Omi",
+    "@firstCaptureConnectTitle": {
+        "description": "Onboarding device step title"
+    },
+    "firstCaptureConnectDescription": "Pair your Omi and it captures your conversations hands-free, all day.",
+    "@firstCaptureConnectDescription": {
+        "description": "Onboarding device step description"
+    },
+    "firstCaptureConnect": "Connect my Omi",
+    "@firstCaptureConnect": {
+        "description": "Onboarding device step primary button"
+    },
+    "firstCaptureNoDevice": "I don't have an Omi yet",
+    "@firstCaptureNoDevice": {
+        "description": "Onboarding device step secondary button, opens the store"
+    },
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",
     "firstCaptureKeepGoing": "Keep going… 30 seconds is ideal.",
