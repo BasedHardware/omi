@@ -105,14 +105,20 @@ def test_quarantine_recovery_uses_private_membership_only_on_prod_integration(
 ):
     for stage, config in manifest.items():
         for name, env in hosts(config).items():
-            assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in env
+            if name == 'backend-listen':
+                assert env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST']['value'] == ''
+            else:
+                assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in env
             expected = 'on' if stage == 'prod' and name == 'backend-integration' else 'off'
             assert env['BATCH_PIPELINE_RECOVERY_MODE']['value'] == expected
-    for host in recovery_base_hosts.values():
-        assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in host['env']
+    for name, host in recovery_base_hosts.items():
+        if name == 'backend-listen':
+            assert host['env']['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST']['value'] == ''
+        else:
+            assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in host['env']
     for chart_env in listen_chart_envs:
         assert chart_env['BATCH_PIPELINE_RECOVERY_MODE'] == 'off'
-        assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in chart_env
+        assert chart_env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == ''
 
 
 def test_only_always_cpu_integration_host_runs_projection_pump(manifest):

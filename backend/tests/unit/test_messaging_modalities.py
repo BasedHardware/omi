@@ -322,8 +322,13 @@ def test_exact_prod_policy_all_paid_telegram_legacy_imessage_without_seat_io(mon
                     return found
         return None
 
-    policy = find(manifest)
-    assert policy
+    assert find(manifest) is None  # Cloud Run must retain its live policy on merge.
+    policy = json.dumps(
+        {
+            'telegram': {'enabled': True, 'cohort': '*'},
+            'imessage': {'enabled': True, 'cohort': ['synthetic-rollout-member'], 'seat_cap': 'off'},
+        }
+    )
     monkeypatch.setenv('OMI_MESSAGING_CHANNEL_POLICY', policy)
     monkeypatch.delenv('OMI_MESSAGING_KILL_SWITCH_DOC', raising=False)
     monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
