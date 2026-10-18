@@ -1273,5 +1273,215 @@
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-listen-neg-zone-no-traffic",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - Ready NEG zone receives no LB traffic",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) > 0) unless on (zone) (sum by (zone) (label_replace(avg_over_time(avg without (instance) (stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name=\"custom-domains-api-omi-me-backend-listen-49a4-be\",backend_name=\"prod-backend-listen-neg\",backend_type=\"NETWORK_ENDPOINT_GROUP\",backend_scope_type=\"ZONE\"})[10m:1m]), \"zone\", \"$1\", \"backend_scope\", \"(.+)\")) > 0)) and on () (sum(sum by (zone) (label_replace(avg_over_time(avg without (instance) (stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name=\"custom-domains-api-omi-me-backend-listen-49a4-be\",backend_name=\"prod-backend-listen-neg\",backend_type=\"NETWORK_ENDPOINT_GROUP\",backend_scope_type=\"ZONE\"})[10m:1m]), \"zone\", \"$1\", \"backend_scope\", \"(.+)\"))) > 0)) or (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) * 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "__panelId__": "1",
+      "summary": "A zone with Ready backend-listen pods receives no load balancer backend requests.",
+      "threshold": "One or more Ready stable listen pods in a zone, but zero requests to that zonal NEG while the backend is serving traffic, for 10m.",
+      "user_impact": "The load balancer can leave Ready listen capacity idle while other zones handle the traffic, increasing live transcription latency or failures.",
+      "scope": "Stable backend-listen pods in prod-omi-backend, grouped by GKE node zone; backend_scope identifies the served NEG zone.",
+      "verification": "Compare Ready listen pods by zone with backend_request_count grouped by backend_scope for the listen backend service.",
+      "safe_next_action": "Inspect the backend service and its zonal NEG attachments; restore a missing zone only after confirming the NEG and pod endpoints.",
+      "evaluated_bad": "2026-10-18 07:40Z: query A returns us-central1-c=11 Ready pods and us-central1-a=0; no us-central1-c NEG request samples are present.",
+      "evaluated_good": "2026-10-18 07:44Z: query A returns us-central1-a=0 and us-central1-c=0 after zonal NEG attachment; both zones have LB request samples."
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-neg-zone-no-traffic",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-listen-websocket-zone-skew",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Backend-listen - active WebSocket load is skewed by zone",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (zone) (backend_listen_active_ws_connections{job=\"backend-listen-metrics\",namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) / on (zone) (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\"))) < bool on () group_left() (max without (zone) (sum by (zone) (backend_listen_active_ws_connections{job=\"backend-listen-metrics\",namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) / on (zone) (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")))) * 0.5)) and on (zone) (sum by (zone) ((kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"} == 1) * on (namespace,pod) group_left(node) kube_pod_info{namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}  * on (node) group_left(zone) label_replace(kube_node_info{job=\"kube-state-metrics\"}, \"zone\", \"$1\", \"provider_id\", \"gce://[^/]+/([^/]+)/.*\")) >= 5)) and on () (sum(backend_listen_active_ws_connections{job=\"backend-listen-metrics\",namespace=\"prod-omi-backend\",pod=~\"prod-omi-backend-listen-[a-f0-9]+-[a-z0-9]+\"}) > 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "__panelId__": "11",
+      "summary": "A backend-listen zone has less than half the busiest zone active WebSockets per Ready pod.",
+      "threshold": "At least 5 Ready listen pods per zone and 100 total active WebSockets; zone average below 50% of the busiest zone average for 10m.",
+      "user_impact": "Uneven socket placement can overload a subset of live transcription pods while Ready capacity in another zone sits idle.",
+      "scope": "Stable backend-listen pods in prod-omi-backend; active WebSocket gauge divided by Ready pod count per GKE node zone.",
+      "verification": "Compare Active WS and Avg. WS per pod on the linked backend-listen dashboard, then confirm LB backend_scope traffic.",
+      "safe_next_action": "Check the listen backend NEG attachments and per-zone Ready pod counts before changing capacity.",
+      "evaluated_bad": "2026-10-18 06:00Z: query A returns us-central1-c=1 (alerting) and us-central1-a=0; active WebSockets per Ready pod are 0.00 in c and 33.64 in a.",
+      "evaluated_good": "2026-10-18 08:00Z: query A returns 0 for both zones; active WebSockets per Ready pod are 22.55 in a and 12.67 in c (56% of busiest)."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-listen-websocket-zone-skew",
+      "component": "live-transcription",
+      "impact": "user-experience"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

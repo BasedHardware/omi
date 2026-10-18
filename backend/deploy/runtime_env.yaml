@@ -134,6 +134,7 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: ELEVENLABS_API_KEY
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -606,6 +607,7 @@ environments:
             source: environment
           REDIS_DB_HOST:
             source: environment
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             source: literal
             value: parakeet,modulate-velma-2
@@ -876,6 +878,7 @@ environments:
               category: service_auth
             USE_VERTEX_AI:
               value: 'true'
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -1150,6 +1153,7 @@ environments:
             CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'false'}
             USE_VERTEX_AI:
               value: 'true'
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -1444,6 +1448,7 @@ environments:
             CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'false'}
             USE_VERTEX_AI:
               value: 'true'
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -1725,6 +1730,7 @@ environments:
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -2420,6 +2426,7 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: ELEVENLABS_API_KEY
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -2618,8 +2625,8 @@ environments:
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'true', category: rollout}
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -2890,6 +2897,7 @@ environments:
             source: environment
           REDIS_DB_HOST:
             source: environment
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             source: literal
             value: parakeet,modulate-velma-2
@@ -3194,6 +3202,7 @@ environments:
               category: service_auth
             USE_VERTEX_AI:
               value: 'true'
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -3282,8 +3291,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -3556,6 +3565,7 @@ environments:
             CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'true'}
             USE_VERTEX_AI:
               value: 'true'
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -3673,8 +3683,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -3927,6 +3937,7 @@ environments:
             CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {category: rollout, value: 'true'}
             USE_VERTEX_AI:
               value: 'true'
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -4034,8 +4045,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -4285,6 +4296,7 @@ environments:
             DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
             DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
@@ -4339,8 +4351,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
