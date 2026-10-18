@@ -14,6 +14,7 @@ os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 
 import database.goals as goals_db
 import utils.llm.goals as llm_goals
+from utils.llm.goals import safe_float, safe_optional_float
 from models.goal import GoalSuggestionResponse
 from routers import goals as goals_router
 
@@ -312,24 +313,105 @@ class TestGoalRouterEndpointDefensive:
         assert GoalSuggestionResponse(**res).suggested_target == 10.0
 
 
+class TestBooleanTrapDefensive:
+    """Verifies float parsing helpers explicitly guard against Python bool-is-int subclass trap."""
+
+    def test_safe_float_and_optional_float_boolean_trap(self):
+        assert safe_float(True, 10.0) == 10.0
+        assert safe_float(False, 10.0) == 10.0
+        assert safe_float("True", 10.0) == 10.0
+        assert safe_float(None, 10.0) == 10.0
+        assert safe_float("", 10.0) == 10.0
+        assert safe_float(float("nan"), 10.0) == 10.0
+        assert safe_float(float("inf"), 10.0) == 10.0
+        assert safe_float(12.5, 10.0) == 12.5
+
+        assert safe_optional_float(True) is None
+        assert safe_optional_float(False) is None
+        assert safe_optional_float(None) is None
+        assert safe_optional_float("nan") is None
+        assert safe_optional_float(42.0) == 42.0
+
+    def test_suggest_goal_coerces_boolean_hallucinations_from_llm(self, monkeypatch):
+        llm_json = """
+        {
+            "suggested_title": "Drink more water",
+            "suggested_type": "numeric",
+            "suggested_target": true,
+            "suggested_min": false,
+            "suggested_max": true,
+            "reasoning": "Stay hydrated"
+        }
+        """
+        monkeypatch.setattr(llm_goals, "track_usage", lambda *_a, **_k: nullcontext())
+        monkeypatch.setattr(
+            llm_goals,
+            "get_llm",
+            lambda _name: SimpleNamespace(invoke=lambda _p: SimpleNamespace(content=llm_json)),
+        )
+        with patch("utils.memory.memory_service.MemoryService.read", return_value=[SimpleNamespace(dict=lambda: {"content": "water"})]):
+            res = llm_goals.suggest_goal("u1")
+
+        assert res["suggested_target"] == 10.0
+        assert res["suggested_min"] == 0.0
+        assert res["suggested_max"] == 10.0
+
+    def test_goal_suggestion_response_self_healing_validator(self):
+        """GoalSuggestionResponse self-heals invalid inputs (nulls, booleans, reversed bounds)."""
+        raw = {
+            "suggested_title": None,
+            "suggested_type": "invalid_type",
+            "suggested_target": True,
+            "suggested_min": 50.0,
+            "suggested_max": 10.0,
+            "reasoning": None,
+        }
+        model = GoalSuggestionResponse.model_validate(raw)
+        assert model.suggested_title == "Make progress every day"
+        assert model.suggested_type == "scale"
+        assert model.suggested_target == 10.0
+        assert model.suggested_min == 10.0
+        assert model.suggested_max == 50.0
+        assert model.reasoning == "Start tracking your daily progress!"
+
+
 class TestExtractProgressNullSafety:
     """Verifies progress extraction works safely with null current_value and qualitative goals."""
 
-    def test_extract_progress_with_none_current_value(self, monkeypatch):
-        """Goals with current_value=None are formatted safely and update on new values."""
+    def test_extract_progress_skips_purely_qualitative_goals_saving_tokens(self, monkeypatch):
+        """Purely qualitative goals (no target, metric, or current value) must be skipped to save tokens."""
         goals_data = {
-            "goal_q": {
-                "id": "goal_q",
+            "goal_qual": {
+                "id": "goal_qual",
                 "title": "Read Literature",
                 "goal_type": None,
                 "current_value": None,
                 "target_value": None,
+                "metric": None,
+            }
+        }
+        prompts = _setup_stub_goals(monkeypatch, goals_data)
+        result = llm_goals.extract_and_update_goal_progress("u1", "I read 3 books this month")
+
+        assert result is None
+        # Assert LLM was never invoked — 0 tokens burned!
+        assert len(prompts) == 0
+
+    def test_extract_progress_with_none_current_value_on_numeric_goal(self, monkeypatch):
+        """Numeric goals with current_value=None format safely and update on new values."""
+        goals_data = {
+            "goal_num": {
+                "id": "goal_num",
+                "title": "Read 10 Books",
+                "goal_type": "numeric",
+                "current_value": None,
+                "target_value": 10.0,
             }
         }
         prompts = _setup_stub_goals(
             monkeypatch,
             goals_data,
-            llm_reply='[{"goal_id": "goal_q", "found": true, "value": 3.0, "reasoning": "read 3 books"}]',
+            llm_reply='[{"goal_id": "goal_num", "found": true, "value": 3.0, "reasoning": "read 3 books"}]',
         )
         saved_updates = []
         monkeypatch.setattr(
@@ -342,6 +424,6 @@ class TestExtractProgressNullSafety:
 
         assert result is not None
         assert result.get("status") == "updated"
-        assert saved_updates == [("goal_q", 3.0)]
+        assert saved_updates == [("goal_num", 3.0)]
         assert len(prompts) == 1
-        assert 'progress: not set/not set' in prompts[0]
+        assert ('progress: 0.0/10.0' in prompts[0]) or ('progress: not set/10.0' in prompts[0])

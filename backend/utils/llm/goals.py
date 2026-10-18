@@ -109,15 +109,27 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
 
 
 def _safe_float(val: Any, default: float) -> float:
-    if val is None or val == "":
+    if val is None or isinstance(val, bool) or val == "":
         return default
     try:
         f = float(val)
-        if math.isnan(f) or math.isinf(f):
-            return default
-        return f
+        return f if math.isfinite(f) else default
     except (TypeError, ValueError):
         return default
+
+
+def _safe_optional_float(val: Any) -> Optional[float]:
+    if val is None or isinstance(val, bool) or val == "":
+        return None
+    try:
+        f = float(val)
+        return f if math.isfinite(f) else None
+    except (TypeError, ValueError):
+        return None
+
+
+safe_float = _safe_float
+safe_optional_float = _safe_optional_float
 
 
 def _sanitize_goal_suggestion(suggestion: Any) -> Dict[str, Any]:
@@ -250,26 +262,8 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         goal_title = str(goal.get('title') or 'Unknown')
 
         # Safely parse numeric current and target values if present
-        raw_current = goal.get('current_value')
-        raw_target = goal.get('target_value')
-
-        current_val: Optional[float] = None
-        if raw_current is not None:
-            try:
-                cv = float(raw_current)
-                if not (math.isnan(cv) or math.isinf(cv)):
-                    current_val = cv
-            except (TypeError, ValueError):
-                current_val = None
-
-        target_val: Optional[float] = None
-        if raw_target is not None:
-            try:
-                tv = float(raw_target)
-                if not (math.isnan(tv) or math.isinf(tv)):
-                    target_val = tv
-            except (TypeError, ValueError):
-                target_val = None
+        current_val = _safe_optional_float(goal.get('current_value'))
+        target_val = _safe_optional_float(goal.get('target_value'))
 
         # Build progress description safely supporting numeric and qualitative goals
         if current_val is not None and target_val is not None and target_val > 0:
@@ -348,6 +342,12 @@ def extract_and_update_goal_progress(
             goal_id = goal.get('id', '')
             if not goal_id:
                 continue
+            # Purely qualitative goals (no target and no metric) cannot receive numeric progress.
+            # Skip them from the prompt to avoid burning LLM tokens and prevent LLM hallucination
+            # from corrupting qualitative goals into a half-numeric state.
+            if goal.get('target_value') is None and goal.get('metric') is None and goal.get('current_value') is None:
+                continue
+
             goal_title = goal.get('title', '')
             current_value = goal.get('current_value')
             target_value = goal.get('target_value')
@@ -404,16 +404,14 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 goal = goals_by_id.get(goal_id)
                 if not goal:
                     continue
-                new_value = float(result_dict['value'])
-                # Validate: reject NaN, inf, and negative values
-                if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
+                # Double-guard: never write numeric progress to a purely qualitative goal
+                if goal.get('target_value') is None and goal.get('metric') is None and goal.get('current_value') is None:
                     continue
-                old_value = goal.get('current_value')
-                if old_value is not None:
-                    try:
-                        old_value = float(old_value)
-                    except (TypeError, ValueError):
-                        old_value = None
+                parsed_val = _safe_optional_float(result_dict.get('value'))
+                if parsed_val is None or parsed_val < 0:
+                    continue
+                new_value = parsed_val
+                old_value = _safe_optional_float(goal.get('current_value'))
                 if old_value is None or new_value != old_value:
                     if idempotency_key_prefix is None:
                         goals_db.update_goal_progress(uid, goal_id, new_value)
