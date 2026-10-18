@@ -162,7 +162,7 @@ def test_staged_negative_cache_blackhole_preserves_reads_and_writes(blackhole, m
     monkeypatch.delenv('OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED', raising=False)
     durable = Mock(return_value=[])
     if phase in ('fill_check', 'fill'):
-        gets = iter(['v', None] if phase == 'fill_check' else ['v', None, 'v'])
+        gets = iter([None] if phase == 'fill_check' else [None, 'v'])
 
         def get(key):
             value = next(gets, 'timeout')
@@ -171,7 +171,9 @@ def test_staged_negative_cache_blackhole_preserves_reads_and_writes(blackhole, m
         def set(key, value, **kwargs):
             return client.set(key, value, **kwargs) if kwargs.get('pxat') else True
 
-        monkeypatch.setattr(staged_promote_cache, '_redis', lambda: SimpleNamespace(set=set, get=get))
+        monkeypatch.setattr(
+            staged_promote_cache, '_redis', lambda: SimpleNamespace(set=set, get=get, eval=lambda *a: 'v')
+        )
     if phase == 'invalidate':
         assert bounded(lambda: staged_promote_cache.invalidate_around_write(durable)('u')) == []
         durable.assert_called_once_with('u')

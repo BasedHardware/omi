@@ -50,8 +50,37 @@ class Redis:
         if nx and key in self.data and self.expiry[key] > self.clock.time() * 1000:
             return False
         self.data[key] = value
-        self.expiry[key] = pxat if pxat is not None else (self.clock.time() + ex) * 1000
+        self.expiry[key] = pxat if pxat is not None else (self.clock.time() + ex) * 1000 if ex else float('inf')
         return True
+
+    def eval(self, script, count, version_key, writers_key, *args):
+        # Model the three atomic commands for unit fault/interleaving tests.
+        # The production Lua itself is separately exercised with local Redis.
+        self.calls.append(('eval', version_key, {'script': script}))
+        if script == cache._READ_VERSION:
+            if writers_key in self.data:
+                return cache.BUSY
+            version = self.get(version_key)
+            if not version:
+                self.set(version_key, args[0], ex=int(args[1]))
+                version = args[0]
+            return version
+        self.set(version_key, cache.BUSY)
+        writers = self.data.setdefault(writers_key, {})
+        if script == cache._BEGIN_WRITE:
+            if 'poison' in writers:
+                return 0
+            writers[args[0]] = '1'
+            return 1
+        assert script == cache._END_WRITE
+        if args[0] not in writers or args[1] != 1:
+            writers['poison'] = '1'
+        writers.pop(args[0], None)
+        if not writers:
+            self.data.pop(writers_key)
+            self.set(version_key, args[2], ex=int(args[3]))
+            return 1
+        return 0
 
 
 @pytest.fixture

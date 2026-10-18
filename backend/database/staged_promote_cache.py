@@ -1,8 +1,8 @@
 """Write-invalidated negative cache of the complete staged compatibility projection.
 
 Only an empty marker is stored, never rows or response content. The route still
-reads its account-generation fence on every poll. Writers rotate an independent
-random UID version before mutation and in finally, including partial failures.
+reads its account-generation fence on every poll. Writers keep a non-cacheable
+fence until every overlapping mutation and compatibility invalidation completes.
 """
 
 import functools
@@ -25,6 +25,39 @@ OPERATIONS = Counter(
     ['outcome'],
 )
 logger = logging.getLogger(__name__)
+BUSY = '!busy'
+
+# These scripts never lock a writer. Tokens make repeated completion fail safe and stop
+# one overlapping/late completion from releasing another writer's fence. Busy
+# and poisoned state deliberately has no expiry: uncertainty disables caching.
+_READ_VERSION = """
+if redis.call('EXISTS', KEYS[2]) == 1 then return '!busy' end
+local version = redis.call('GET', KEYS[1])
+if not version then
+    redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+    return ARGV[1]
+end
+return version
+"""
+_BEGIN_WRITE = """
+redis.call('SET', KEYS[1], '!busy')
+if redis.call('HGET', KEYS[2], 'poison') then return 0 end
+redis.call('HSET', KEYS[2], ARGV[1], '1')
+return 1
+"""
+_END_WRITE = """
+redis.call('SET', KEYS[1], '!busy')
+local tracked = redis.call('HGET', KEYS[2], ARGV[1])
+if not tracked or ARGV[2] ~= '1' then
+    redis.call('HSET', KEYS[2], 'poison', '1')
+end
+redis.call('HDEL', KEYS[2], ARGV[1])
+if redis.call('HLEN', KEYS[2]) == 0 then
+    redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+    return 1
+end
+return 0
+"""
 
 
 @functools.lru_cache(maxsize=1)
@@ -34,6 +67,11 @@ def _redis():
 
 def _version_key(uid: str) -> str:
     return 'staged-promote-empty:v1:version:' + hashlib.sha256(uid.encode()).hexdigest()
+
+
+def compatibility_version_key(uid: str) -> str:
+    # Preserve the existing compatibility-cache namespace and random-token ABI.
+    return f'fsr:s5:candidates:version:{uid}'
 
 
 def _unavailable(outcome: str) -> None:
@@ -48,47 +86,88 @@ def _unavailable(outcome: str) -> None:
     )
 
 
-def invalidate(uid: str) -> None:
-    # Unconditional even on flag-off writers: other revisions can have entries.
+def rotate_compatibility_version(uid: str, *, client=None) -> bool:
     try:
-        _redis().set(_version_key(uid), uuid4().hex, ex=VERSION_TTL_SECONDS)
+        client = client if client is not None else _redis()
+        if client.set(compatibility_version_key(uid), uuid4().hex, ex=VERSION_TTL_SECONDS):
+            return True
+    except Exception:
+        pass
+    _unavailable('invalidation_unavailable')
+    return False
+
+
+def _begin(uid: str) -> tuple[str, bool]:
+    token = ''  # An unconfirmed ticket can only poison; it can never publish.
+    try:
+        token = uuid4().hex
+        key = _version_key(uid)
+        confirmed = _redis().eval(_BEGIN_WRITE, 2, key, key + ':writers', token) == 1
+        return token, confirmed
+    except Exception:
+        _unavailable('invalidation_unavailable')
+        # Completion poisons rather than publishing after an uncertain begin.
+        return token, False
+
+
+def _finish(uid: str, token: str, confirmed: bool) -> None:
+    try:
+        key = _version_key(uid)
+        _redis().eval(_END_WRITE, 2, key, key + ':writers', token, int(confirmed), uuid4().hex, VERSION_TTL_SECONDS)
         OPERATIONS.labels(outcome='invalidated').inc()
     except Exception:
+        # If the script did not run, BEGIN's busy fence remains. If it completed
+        # but its reply was lost, publication required all dependencies first.
         _unavailable('invalidation_unavailable')
 
 
-def invalidate_around_write(fn):
+def invalidate_around_write(fn, *, invalidate_dependency=rotate_compatibility_version):
     @functools.wraps(fn)
     def wrapped(uid, *args, **kwargs):
-        invalidate(uid)
+        token, began = _begin(uid)
         try:
             return fn(uid, *args, **kwargs)
         finally:
             # A batch may commit a prefix before raising; preserve its error
             # while fencing both pre-write readers and readers during mutation.
-            invalidate(uid)
+            try:
+                dependency_rotated = invalidate_dependency(uid)
+            except Exception:
+                _unavailable('invalidation_unavailable')
+                dependency_rotated = False
+            _finish(uid, token, began and dependency_rotated)
 
     return wrapped
+
+
+def invalidate(uid: str) -> None:
+    # Public one-shot invalidation uses the same dependency and overlap fences.
+    invalidate_around_write(lambda owner: None)(uid)
 
 
 def load_projection(uid: str, generation: int, loader) -> list[dict]:
     if os.getenv('OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED', '').strip().lower() == 'false':
         return loader()
+    key: str | None = None
     try:
         client = _redis()
         version_key = _version_key(uid)
-        client.set(version_key, uuid4().hex, nx=True, ex=VERSION_TTL_SECONDS)
-        version = client.get(version_key)
-        if not version:
-            # Eviction never means a fixed, reusable default token.
-            raise ValueError('cache version unavailable')
-        token = version.decode() if isinstance(version, bytes) else str(version)
-        key = f'{version_key}:{generation}:{token}'
-        if client.get(key) in (b'1', '1') and client.get(version_key) == version:
-            OPERATIONS.labels(outcome='hit').inc()
-            return []
+        version = client.eval(_READ_VERSION, 2, version_key, version_key + ':writers', uuid4().hex, VERSION_TTL_SECONDS)
+        if version in (BUSY, BUSY.encode()):
+            OPERATIONS.labels(outcome='bypass').inc()
+            version = None
+        if version:
+            token = version.decode() if isinstance(version, bytes) else str(version)
+            key = f'{version_key}:{generation}:{token}'
+            if client.get(key) in (b'1', '1') and client.get(version_key) == version:
+                OPERATIONS.labels(outcome='hit').inc()
+                return []
     except Exception:
         _unavailable('unavailable')
+        return loader()
+
+    if key is None:
+        # Run the origin outside this try so an origin error is never retried.
         return loader()
 
     OPERATIONS.labels(outcome='miss').inc()

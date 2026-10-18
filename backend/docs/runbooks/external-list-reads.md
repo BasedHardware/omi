@@ -139,18 +139,36 @@ existing sync route, uses a lazy Redis client with 100ms socket/connect bounds, 
 executor work. Read, fill and invalidation faults record shared fallback telemetry and preserve
 original reads/mutation results. Flag-off promote reads do no negative-cache Redis I/O.
 
-Each UID has a random version with a seven-day TTL, initialized with SET NX. Missing/evicted
-versions never fall back to a reusable token. The marker key includes authenticated UID (hashed),
-fresh account generation and the version captured **before** projection. Fill compares that version
-again and can only address its captured key; a concurrent write or version eviction cannot bless
-an old result under a new key. Hits recheck the version after reading the marker.
+Each UID has a random healthy version with a seven-day TTL. An atomic Redis Lua lookup
+initializes a missing version with a fresh UUID, never a fixed reusable token. The marker key
+includes authenticated UID (hashed), fresh account generation and the version captured **before**
+projection. Fill compares that version again and can only address its captured key; a concurrent
+write cannot bless an old result under a new key. Hits recheck the version after the marker read.
+
+Before mutation, an atomic Lua command sets the negative version to a non-cacheable busy sentinel
+and records a unique writer token. Busy readers bypass **both negative hits and fills**, running
+the original projection with its existing Candidate compatibility-cache semantics. In `finally`,
+every covered writer rotates the existing `fsr:s5:candidates:version:{uid}` compatibility version,
+even if its mutation raised after a partial commit. Only a confirmed rotation plus a confirmed
+begin may release that writer's token. Atomic completion publishes a fresh negative version only
+when every overlapping writer has completed successfully. It never locks or serializes mutations.
+
+A compatibility SET failure, missing/uncertain writer token or poisoned overlapping writer leaves
+negative caching disabled. A failed completion retains the busy sentinel. Lost replies cannot
+retry the mutation; if completion actually published a version before its reply was lost, every
+dependency had already been confirmed. Busy/poison state has **no automatic expiry**: timeouts
+must not turn an unconfirmed mutation into a cacheable empty projection. An abandoned writer can
+therefore leave a UID bypassed until an operator reviews/resets that cache state; no automatic
+repair or production mutation is included here. Monitor `bypass` and invalidation faults alongside
+reads/request. The Lua commands require Redis scripting; a denied/unavailable EVAL fails open to
+the original read/mutation, without making the negative cache a request prerequisite.
 
 All eight legacy staged mutation owners invalidate before mutation and in `finally`: create,
 delete, complete promotion, suppress terminal, batch scores, promote, clear and conversation-item
 recovery. Router retirement delegates to delete; migration/reconciliation delegates to Candidate
 owners. The existing Candidate invalidation decorator now surrounds its five mutation entrypoints
 (create/coalesce, compatibility score, resolve task, resolve without mutation, reconcile migrated)
-with the same before/finally fence. Workstream Candidate resolution also invalidates conservatively,
+with the same coordinator. Workstream Candidate resolution also invalidates conservatively,
 even though its subject is outside staged compatibility. Claim/reservation helpers only write
 resolution-claim records, not either projected collection. No other in-tree application writer was
 found for these collections. Recursive account-subtree erasure also uses the before/finally
@@ -159,10 +177,19 @@ fence, including partial erasure failures. Account-generation changes always sel
 The final invalidation also fences fills started during a mutation, and runs on errors because a
 multi-batch writer may have committed a prefix. Writers invalidate even when their local read flag
 is off, protecting enabled readers on other revisions. With healthy Redis, a completed normal write
-is visible to the next poll. Redis outages, old deployed writers without these hooks, and external
-manual/operator writes can retain a marker until its original 90-second deadline; kill the cache
-lever during a coordinated older-writer rollback or when immediate freshness is required during an
-outage. The pre-existing Candidate compatibility cache retains its own independent outage TTL.
+is visible to the next poll. If compatibility invalidation fails after a confirmed busy fence,
+the original compatibility entry may still return its baseline stale empty result for its own TTL
+(default 30 seconds); it can never acquire a new 90-second negative lease. Recovery/expiry of that
+compatibility entry exposes pending work even while negative caching stays bypassed.
+
+Immediate visibility cannot be guaranteed when Redis does not confirm the pre-write fence itself,
+or when old deployed/external writers bypass these hooks. A previously published marker may then
+survive until its original 90-second deadline. Redis eviction/loss of coordinator metadata is also
+outside durable mutation authority: random versions prevent ABA reuse, and a missing completion
+token poisons rather than releases the cache, but simultaneous lost state and unavailable fences
+cannot provide a distributed visibility guarantee. Disable the read lever during a coordinated
+older-writer rollback or when immediate freshness is required through Redis faults. No new
+negative-cache lease is published following a known dependency-invalidation failure.
 
 If a cold empty projection costs R modeled billed Firestore reads (including its control read), a
 warm hit costs **one control read**, even with retained history. Stable polls every 60 seconds with
@@ -184,7 +211,7 @@ strings, UID, keys and apps are never labels. `omi_external_list_cache_total{rou
 `hit`, `miss`, `stored`; disabled, truncated and oversized writes are not `stored`.
 `omi_staged_promote_empty_cache_total{outcome}` separately counts bounded negative-cache outcomes
 `hit`, `miss`, `stored`, `expired`, `version_changed`, `invalidated`, `unavailable` and
-`invalidation_unavailable`. It has no UID, generation, client or query labels.
+`invalidation_unavailable`, `bypass`. It has no UID, generation, client or query labels.
 
 The HTTP/list counters register through `utils.observability.external_lists`; the negative-cache
 counter registers through `database.staged_promote_cache`. All use the default Prometheus registry,
