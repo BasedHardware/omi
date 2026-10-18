@@ -117,7 +117,7 @@ def goal_line(item: Dict[str, Any]) -> str:
     # ({type, current, target, unit, ...}) — read it, falling back to flat
     # keys for exports that already flattened the shape.
     metric = item.get("metric") if isinstance(item.get("metric"), dict) else {}
-    cat = one_line(metric.get("type") or item.get("category"))
+    cat = one_line(metric.get("type") or item.get("category") or item.get("goal_type"))
     if cat and " " not in cat:
         parts.append(f"+{cat.lstrip('+')}")
 
