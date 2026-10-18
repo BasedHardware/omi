@@ -3036,7 +3036,7 @@ _add(
 # index; point reads of all memberships on serving requests need no query index.
 _add(
     DriverEntry(
-        'database.rollout_cohorts._read_cohort_members',
+        'database.rollout_cohorts.read_cohort_members',
         domains={
             'name': [
                 'prod:batch-pipeline-recovery',

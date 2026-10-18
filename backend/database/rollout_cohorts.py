@@ -4,7 +4,7 @@ from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
 from database import _client
 
 
-def _read_memberships(uid: str) -> dict[str, dict[str, bool]]:
+def read_memberships(uid: str) -> dict[str, dict[str, bool]]:
     doc = _client.data_plane_db.collection(COLLECTION).document(uid).get(timeout=1.0, retry=None)
     if not doc.exists:
         return {}
@@ -18,7 +18,7 @@ def _read_memberships(uid: str) -> dict[str, dict[str, bool]]:
     return members
 
 
-def _read_cohort_members(name: str) -> tuple[str, ...]:
+def read_cohort_members(name: str) -> tuple[str, ...]:
     environment, name = name.split(':', 1)
     if environment not in {'prod', 'dev', 'local', 'offline'} or name not in COHORT_ENVS:
         raise ValueError('invalid cohort discovery scope')

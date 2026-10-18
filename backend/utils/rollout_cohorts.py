@@ -15,16 +15,16 @@ from typing import Any, Callable
 
 from config import rollout_cohorts as policy
 from config.rollout_cohorts import (
-    COLLECTION,
+    COLLECTION as COLLECTION,
     COHORT_ENVS,
     valid_uid,
     rollout_environment,
     in_rollout_cohort,
-    rollout_cohort_members,
-    load_rollout_cohorts,
-    warm_rollout_cohorts,
+    rollout_cohort_members as rollout_cohort_members,
+    load_rollout_cohorts as load_rollout_cohorts,
+    warm_rollout_cohorts as warm_rollout_cohorts,
 )
-from database.rollout_cohorts import _read_memberships, _read_cohort_members
+from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
 
 TTL_SECONDS = 60
@@ -108,7 +108,7 @@ class _TTLReads:
         return future.result() if future.done() else None
 
 
-_cache = _TTLReads(_read_memberships)
+_cache = _TTLReads(read_memberships)
 
 
 def _in_rollout_cohort(
@@ -148,7 +148,7 @@ async def _warm_rollout_cohorts(uid: str) -> None:
         pass  # The pending cache entry denies admission until its read completes.
 
 
-_member_cache = _TTLReads(_read_cohort_members, capacity=4 * len(COHORT_ENVS))
+_member_cache = _TTLReads(read_cohort_members, capacity=4 * len(COHORT_ENVS))
 
 
 def _rollout_cohort_members(name: str) -> tuple[str, ...]:

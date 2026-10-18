@@ -155,16 +155,16 @@ def test_real_adapter_bounds_rpc_and_validates_document(monkeypatch):
     monkeypatch.setattr(database._client, 'data_plane_db', client)
     doc = client.collection.return_value.document.return_value.get.return_value
     doc.exists = False
-    assert cohorts._read_memberships('owner') == {}
+    assert cohorts.read_memberships('owner') == {}
     doc.exists = True
     doc.to_dict.return_value = {'cohorts': {'prod': {'batch-pipeline': True}}}
-    assert cohorts._read_memberships('owner') == {'prod': {'batch-pipeline': True}}
+    assert cohorts.read_memberships('owner') == {'prod': {'batch-pipeline': True}}
     client.collection.assert_called_with('rollout_cohorts')
     client.collection.return_value.document.return_value.get.assert_called_with(timeout=1.0, retry=None)
     for malformed in [None, {}, {'cohorts': []}, {'cohorts': {'batch-pipeline': 'true'}}]:
         doc.to_dict.return_value = malformed
         with pytest.raises(ValueError):
-            cohorts._read_memberships('owner')
+            cohorts.read_memberships('owner')
 
 
 def test_absent_keys_cannot_widen_legacy_enable_all_gates(monkeypatch):
