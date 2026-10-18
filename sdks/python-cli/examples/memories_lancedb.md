@@ -43,10 +43,14 @@ tbl = db.create_table("memories", data=records)
 ## Direct ingest mode
 
 ```sh
-pip install lancedb
+pip install lancedb sentence-transformers
 python memories_to_lancedb.py memories.json --ingest ./lancedb_data \
     --table memories --embedding-model all-MiniLM-L6-v2
 ```
+
+`--ingest` declares `text` as the embedding function's source field, so
+the table gets a real `vector` column — `tbl.search(...)` below is then
+semantic, not just metadata.
 
 ## Semantic search
 
@@ -54,8 +58,9 @@ python memories_to_lancedb.py memories.json --ingest ./lancedb_data \
 import lancedb
 db = lancedb.connect("./lancedb_data")
 tbl = db.open_table("memories")
-# sub-millisecond similarity search
-results = (tbl.search(query_vector)
+# sub-millisecond similarity search — pass the raw text; the table's
+# embedding function vectorizes the query
+results = (tbl.search("a memory about work")
              .where("category = 'Work'")
              .limit(10)
              .to_list())

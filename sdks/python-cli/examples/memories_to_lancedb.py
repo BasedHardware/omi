@@ -115,7 +115,13 @@ def emit_payload(sources: List[str]) -> str:
 
 
 def ingest(sources: List[str], db_path: str, table_name: str, model: str) -> int:
-    """Direct LanceDB ingest — requires `pip install lancedb`."""
+    """Direct LanceDB ingest — embeds ``text`` so semantic search works.
+
+    Uses LanceDB's embedding registry to declare ``text`` as the source
+    field of a generated ``vector`` column — without it the table is a
+    plain record store and ``tbl.search(query)`` can't do the semantic
+    search the recipe documents. Requires ``lancedb`` +
+    ``sentence-transformers``."""
     try:
         import lancedb as ldb
     except ImportError:
@@ -123,12 +129,38 @@ def ingest(sources: List[str], db_path: str, table_name: str, model: str) -> int
             "direct ingest needs `pip install lancedb` — "
             "or use the payload mode (default) and feed it to lancedb yourself"
         )
+    try:
+        from lancedb.embeddings import get_registry
+        from lancedb.pydantic import LanceModel, Vector
+
+        emb = get_registry().get("sentence-transformers").create(name=model)
+    except Exception as e:
+        raise ValueError(
+            "semantic ingest needs the embedding stack — "
+            "`pip install lancedb sentence-transformers` "
+            f"({e})"
+        )
 
     rs = rows(sources)
     if not rs:
         return 0
+
+    class Memory(LanceModel):
+        id: str
+        text: str = emb.SourceField()
+        vector: Vector(emb.ndims()) = emb.VectorField()
+        category: str = ""
+        tags: List[str] = []
+        visibility: str = ""
+        manually_added: Optional[bool] = None
+        reviewed: Optional[bool] = None
+        app_id: str = ""
+        created_at: Optional[str] = None
+        updated_at: Optional[str] = None
+
     db = ldb.connect(db_path)
-    tbl = db.create_table(table_name, data=rs, mode="overwrite", exist_ok=True)
+    tbl = db.create_table(table_name, schema=Memory, mode="overwrite")
+    tbl.add(rs)
     return tbl.count_rows()
 
 
@@ -138,15 +170,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     ap.add_argument("inputs", nargs="+", help="JSON export files")
     ap.add_argument("-o", "--output", help="Destination payload path (exclusive create)")
-    ap.add_argument("--ingest", metavar="DB_PATH", help="Ingest directly into a LanceDB at this path")
+    ap.add_argument(
+        "--ingest", metavar="DB_PATH", help="Ingest directly into a LanceDB at this path"
+    )
     ap.add_argument("--table", default="memories", help="LanceDB table name for --ingest")
-    ap.add_argument("--embedding-model", default="all-MiniLM-L6-v2", help="Embedding model name (metadata)")
+    ap.add_argument(
+        "--embedding-model", default="all-MiniLM-L6-v2", help="Embedding model name (metadata)"
+    )
     args = ap.parse_args(argv)
 
     try:
         if args.ingest:
             n = ingest(args.inputs, args.ingest, args.table, args.embedding_model)
-            print(f"memories_to_lancedb: ingested {n} row(s) into {args.ingest}/{args.table}", file=sys.stderr)
+            print(
+                f"memories_to_lancedb: ingested {n} row(s) into {args.ingest}/{args.table}",
+                file=sys.stderr,
+            )
             return 0
         out_text = emit_payload(args.inputs)
     except (OSError, ValueError, json.JSONDecodeError) as e:

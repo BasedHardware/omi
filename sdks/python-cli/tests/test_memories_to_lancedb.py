@@ -75,7 +75,8 @@ class TestPayload(unittest.TestCase):
 
 class TestIngestGuard(unittest.TestCase):
     def test_ingest_path(self):
-        """Direct ingest: real lancedb when installed, clean error when not."""
+        """Direct ingest: with the full stack, `text` becomes a vector
+        column (semantic search); without it, a clean error."""
         import importlib.util
 
         has_lancedb = importlib.util.find_spec("lancedb") is not None
@@ -83,8 +84,26 @@ class TestIngestGuard(unittest.TestCase):
             src = Path(td) / "m.json"
             src.write_text(json.dumps({"memories": [MEM, {**MEM, "id": "m2"}]}))
             if has_lancedb:
-                n = m.ingest([str(src)], str(Path(td) / "db"), "memories", "model")
+                db_path = str(Path(td) / "db")
+                try:
+                    n = m.ingest([str(src)], db_path, "memories", "all-MiniLM-L6-v2")
+                except ValueError as e:
+                    # lancedb present but the embedding stack isn't —
+                    # the honest error names what's missing.
+                    self.assertIn("sentence-transformers", str(e))
+                    return
+                except OSError:
+                    # model not cached + hub unreachable — the ingest
+                    # path is still wired; only the vector assertion
+                    # needs a real model.
+                    self.skipTest("all-MiniLM-L6-v2 not downloadable here")
                 self.assertEqual(n, 2)
+                # the reviewer's ask: semantic search needs a real
+                # `vector` column — assert the schema produced one.
+                import lancedb as ldb
+
+                tbl = ldb.connect(db_path).open_table("memories")
+                self.assertIn("vector", tbl.schema.names)
             else:
                 with self.assertRaises(ValueError) as ctx:
                     m.ingest([str(src)], str(Path(td) / "db"), "memories", "model")
