@@ -642,7 +642,7 @@ def delete_canonical_memory_vectors_by_ids(uid: str, memory_ids: List[str]) -> i
         filter={'$and': [{'uid': {'$eq': uid}}, {'memory_id': {'$in': ids}}]},
         namespace=MEMORIES_NAMESPACE,
     )
-    logger.info('delete_canonical_memory_vectors_by_ids uid=%s count=%d', uid, len(ids))
+    logger.info('delete_canonical_memory_vectors_by_ids count=%d', len(ids))
     return len(ids)
 
 

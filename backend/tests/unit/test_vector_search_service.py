@@ -956,7 +956,7 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
         return len(memory_ids)
 
     monkeypatch.setattr(
-        'database.vector_db.delete_canonical_memory_vectors_by_ids',
+        'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
         fake_canonical_delete,
     )
 

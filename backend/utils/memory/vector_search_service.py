@@ -12,12 +12,14 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 try:
-    from database.vector_db import query_memory_vector_candidates
+    from database.vector_db import delete_canonical_memory_vectors_by_ids, query_memory_vector_candidates
 except ModuleNotFoundError:
+    delete_canonical_memory_vectors_by_ids = None
     query_memory_vector_candidates = None
 
 
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
+from utils.log_sanitizer import sanitize_pii
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.vector_search_telemetry import (
@@ -382,9 +384,7 @@ def _delete_stale_canonical_memory_vectors(uid: str, memory_ids: List[str]) -> i
     turn one provider outage into dozens of timeouts on the search request.
     """
 
-    try:
-        from database.vector_db import delete_canonical_memory_vectors_by_ids
-    except ModuleNotFoundError:
+    if delete_canonical_memory_vectors_by_ids is None:
         return 0
     return delete_canonical_memory_vectors_by_ids(uid, memory_ids)
 
@@ -412,7 +412,11 @@ def _delete_stale_vector_index_ids(
     try:
         deleted = delete(uid, bounded)
     except Exception:
-        logger.warning('stale memory vector index delete failed uid=%s count=%d', uid, len(bounded))
+        logger.warning(
+            'stale memory vector index delete failed uid=%s count=%d',
+            sanitize_pii(uid),
+            len(bounded),
+        )
         return 0
     if isinstance(deleted, int):
         return deleted
