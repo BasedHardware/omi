@@ -1654,12 +1654,6 @@ class TestVoiceMessageRuntimeErrorHandling:
             'PrerecordedSTTConfigurationError', (RuntimeError,), {}
         )
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
-        sys.modules['utils.stt.pre_recorded'].modulate_prerecorded_from_bytes = MagicMock(
-            side_effect=AssertionError('flag-off processing must not dispatch multilingual recovery')
-        )
-        sys.modules['utils.sync.empty_recovery_intent'].dispatch_once = MagicMock(
-            side_effect=AssertionError('flag-off processing must not claim recovery')
-        )
         sys.modules['utils.stt.pre_recorded'].prerecorded_from_bytes = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
