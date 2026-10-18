@@ -59,30 +59,40 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     super.dispose();
   }
 
+  /// One operation at a time: a checkout or restore in flight owns the page until it settles, and
+  /// nothing that settles after a dismissal may navigate again.
+  bool get _locked => _busy || _dismissed;
+
   void _dismiss() {
-    if (_dismissed) return;
+    if (_locked) return;
     _dismissed = true;
     PlatformManager.instance.analytics.upgradeModalDismissed();
     Navigator.of(context).pop(false);
   }
 
   Future<void> _restore() async {
-    final usage = context.read<UsageProvider>();
-    await usage.fetchSubscription();
-    if (!mounted) return;
-    final l10n = context.l10n;
-    if (usage.subscription?.subscription.plan.isPaid == true) {
-      OmiFeedback.confirm(context, l10n.unlimitedPlan);
-      _dismissed = true;
-      Navigator.of(context).pop(true);
-      return;
+    if (_locked) return;
+    setState(() => _busy = true);
+    try {
+      final usage = context.read<UsageProvider>();
+      await usage.fetchSubscription();
+      if (!mounted || _dismissed) return;
+      final l10n = context.l10n;
+      if (usage.subscription?.subscription.plan.isPaid == true) {
+        OmiFeedback.confirm(context, l10n.unlimitedPlan);
+        _dismissed = true;
+        Navigator.of(context).pop(true);
+        return;
+      }
+      OmiFeedback.info(context, l10n.freePlan);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    OmiFeedback.info(context, l10n.freePlan);
   }
 
   Future<void> _purchase(PaywallOffer offer) async {
     final price = _yearly ? (offer.yearly ?? offer.monthly) : (offer.monthly ?? offer.yearly);
-    if (price == null || _busy) return;
+    if (price == null || _locked) return;
     // Never open a checkout that would charge at once under a $0 trial button.
     if (widget.checkout == null && context.read<UsageProvider>().subscription?.trialEligible != true) {
       OmiFeedback.error(context, context.l10n.couldNotProcessSubscription);
@@ -100,7 +110,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 trialDays: TrialPaywallPage.trialDays,
               );
       final outcome = await start(context, price, offer.tierId);
-      if (!mounted) return;
+      if (!mounted || _dismissed) return;
       if (outcome == PaywallCheckoutOutcome.purchased) {
         _dismissed = true;
         Navigator.of(context).pop(true);
