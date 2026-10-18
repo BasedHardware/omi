@@ -1,0 +1,3 @@
+{
+  "change": "Keep loading older tasks while deletions are pending, without skipping tasks after a change."
+}

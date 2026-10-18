@@ -431,8 +431,9 @@ void main() {
             return ActionItemsResponse(actionItems: [deleted, retained, overlap], hasMore: true);
           }
           // The server still includes the staged deletion while its Undo toast is open.
-          // The shorter visible list requests an overlapping page.
-          expect(offset, 2);
+          // It counts toward the server offset even though it is hidden locally.
+          expect(offset, 3);
+          // A stale server page can still overlap; retain the ID-deduplication contract.
           return ActionItemsResponse(actionItems: [overlap, next]);
         },
       );
