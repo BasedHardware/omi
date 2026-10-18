@@ -286,3 +286,34 @@ def test_updated_or_created_index_fills_the_page_past_hidden_rows(monkeypatch):
 
     assert page_ids(3, 0) == ['m1', 'm4', 'm5']
     assert page_ids(2, 0) + page_ids(2, 2) == ['m1', 'm4', 'm5', 'm6']
+
+
+def test_clean_page_pays_one_pass(monkeypatch):
+    """No hidden rows -> the candidate window never regrows.
+
+    Pins the read cost of the index path: a clean page must issue exactly one
+    updated_at window and one created_at window sized to the request — any
+    future change that makes clean pages pay regrowth reads is a regression.
+    """
+    rows = [_memory_row(f'm{i}', created_at=_at_hour(10 - i), updated_at=_at_hour(10 - i)) for i in range(10)]
+    calls = []
+
+    def counting_window(_memories_ref, order_field, candidate_limit, *, budget=None):
+        calls.append((order_field, candidate_limit))
+        ordered = sorted(
+            (row for row in rows if row.get(order_field) is not None),
+            key=lambda row: (row[order_field], row['id']),
+            reverse=True,
+        )
+        return [_FakeDoc(row) for row in ordered[:candidate_limit]]
+
+    monkeypatch.setattr(memories_db, '_stream_memory_list_index_window', counting_window)
+
+    page = memories_db.list_memory_updated_or_created_index(
+        'uid-review', limit=3, offset=0, firestore_client=_FakeDB([])
+    )
+    assert [row['id'] for row in page] == ['m0', 'm1', 'm2']
+    assert calls == [
+        ('updated_at', 3),
+        ('created_at', 3),
+    ]
