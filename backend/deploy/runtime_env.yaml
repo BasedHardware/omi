@@ -2327,7 +2327,7 @@ environments:
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -2628,6 +2628,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -2737,7 +2738,7 @@ environments:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -2823,6 +2824,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -3080,7 +3082,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3293,6 +3295,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -3444,7 +3447,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3676,6 +3679,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -3824,7 +3828,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -4178,7 +4182,7 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}

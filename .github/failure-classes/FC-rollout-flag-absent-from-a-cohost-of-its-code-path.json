@@ -7,7 +7,8 @@
     "backend/scripts/runtime_env_capability_contracts.py",
     "backend/tests/unit/test_backend_runtime_env_validator.py",
     "backend/tests/unit/test_pusher_static_capability_admission.py",
-    "backend/tests/unit/test_conversation_notes_v2_beta_rollout.py"
+    "backend/tests/unit/test_conversation_notes_v2_beta_rollout.py",
+    "backend/tests/unit/test_summary_production_policy.py"
   ],
   "evidence_prs": [
     11834,

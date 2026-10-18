@@ -32,6 +32,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
@@ -236,6 +238,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
@@ -478,6 +482,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -790,6 +796,8 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -1152,6 +1160,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -1483,6 +1492,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-hhibjajaja-uc.a.run.app
             category: service_auth
