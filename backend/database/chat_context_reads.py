@@ -84,7 +84,9 @@ def get_recent_activity(uid, since="", exclude_session=None, *, firestore_client
     # observed Firestore latency, independently of the outer coroutine deadline.
     for document in query.stream(timeout=ACTIVITY_READ_SECONDS, retry=no_retry()):
         row = document.to_dict() or {}
-        row.setdefault('id', document.id)
+        doc_id = getattr(document, 'id', None)
+        if doc_id:
+            row.setdefault('id', doc_id)
         if exclude_session is not None and row.get('chat_session_id') == exclude_session:
             continue
         if row.get('reported') is True or chat_db.is_automatic_chat_message(row):

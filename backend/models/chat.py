@@ -654,7 +654,10 @@ class Message(BaseModel):
         include_file_info: bool = False,
         app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
-        sorted_messages = sorted(messages, key=lambda m: (_coerce_message_datetime(m.created_at), str(m.id)))
+        sorted_messages = sorted(
+            messages,
+            key=lambda m: (_coerce_message_datetime(getattr(m, 'created_at', None)), str(getattr(m, 'id', ''))),
+        )
         app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
@@ -665,7 +668,7 @@ class Message(BaseModel):
                 app_name_by_id=app_name_by_id,
                 app_name_resolver=app_name_resolver,
             )
-            msg_dt = _coerce_message_datetime(message.created_at)
+            msg_dt = _coerce_message_datetime(getattr(message, 'created_at', None))
             msg_text = f"({msg_dt.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
 
             # Add file info if requested and files exist
@@ -685,7 +688,10 @@ class Message(BaseModel):
         include_file_info: bool = False,
         app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
-        sorted_messages = sorted(messages, key=lambda m: (_coerce_message_datetime(m.created_at), str(m.id)))
+        sorted_messages = sorted(
+            messages,
+            key=lambda m: (_coerce_message_datetime(getattr(m, 'created_at', None)), str(getattr(m, 'id', ''))),
+        )
         app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
@@ -709,7 +715,7 @@ class Message(BaseModel):
                     '<attachments>' + ''.join(f"<file>{file.name}</file>" for file in message.files) + '</attachments>'
                 )
 
-            msg_dt = _coerce_message_datetime(message.created_at)
+            msg_dt = _coerce_message_datetime(getattr(message, 'created_at', None))
             msg = f"""<message>
 <created_at>{msg_dt.strftime('%d %b %Y at %H:%M UTC')}</created_at>
 <sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id, app_name_resolver=app_name_resolver)}</sender>

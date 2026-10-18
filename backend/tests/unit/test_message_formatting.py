@@ -153,3 +153,32 @@ def test_get_messages_as_string_and_xml_with_mixed_naive_and_aware_timestamps():
     assert '<content>naive message</content>' in res_xml
     assert '<content>aware message</content>' in res_xml
     assert res_xml.index('naive message') < res_xml.index('aware message')
+
+
+def test_get_messages_as_string_and_xml_with_duck_typed_objects():
+    from types import SimpleNamespace
+
+    msg1 = SimpleNamespace(
+        text='first duck message',
+        sender='human',
+        created_at=datetime(2026, 10, 18, 10, 0, 0, tzinfo=timezone.utc),
+        files_id=[],
+        files=[],
+    )
+    msg2 = SimpleNamespace(
+        text='second duck message',
+        sender='ai',
+        created_at=datetime(2026, 10, 18, 11, 0, 0, tzinfo=timezone.utc),
+        files_id=[],
+        files=[],
+    )
+
+    res_str = Message.get_messages_as_string([msg2, msg1])
+    assert 'first duck message' in res_str
+    assert 'second duck message' in res_str
+    assert res_str.index('first duck message') < res_str.index('second duck message')
+
+    res_xml = Message.get_messages_as_xml([msg2, msg1])
+    assert '<content>first duck message</content>' in res_xml
+    assert '<content>second duck message</content>' in res_xml
+    assert res_xml.index('first duck message') < res_xml.index('second duck message')

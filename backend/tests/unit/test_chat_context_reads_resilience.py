@@ -128,3 +128,23 @@ def test_get_recent_activity_handles_mixed_timestamp_types_and_since_filter():
     assert len(results) == 3
     # Verify sorted ascending by coerced timestamp
     assert [r["id"] for r in results] == ["doc-3", "doc-2", "doc-4"]
+
+
+def test_get_recent_activity_with_duck_typed_doc_lacking_id_attr():
+    from types import SimpleNamespace
+
+    docs = [
+        SimpleNamespace(to_dict=lambda: {"chat_session_id": "active"}),
+        SimpleNamespace(
+            to_dict=lambda: {
+                "id": "doc-fallback",
+                "chat_session_id": "other",
+                "created_at": datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc),
+            }
+        ),
+    ]
+    client = _FakeFirestoreClient(docs)
+
+    results = get_recent_activity("user-1", exclude_session="active", firestore_client=client)
+    assert len(results) == 1
+    assert results[0]["id"] == "doc-fallback"
