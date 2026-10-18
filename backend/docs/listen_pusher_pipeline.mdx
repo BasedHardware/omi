@@ -5549,6 +5549,22 @@ or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
 
+### Deterministic batch worker validation disposition
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` defaults to `true` and
+ships on in the worker Helm chart. A Pyannote frame wholly beyond a tiny real
+buffer may complete as `silence` only after independent strict local VAD
+validates the real PCM, including a partial final window. Other closed worker
+validation failures stop GPU retries at attempt one, retain `worker_failure`
+stage/reason and enter the existing fenced recovery route. They preserve audio,
+privacy generations, accepted paid intents and ordered projection fencing;
+the held item does not block later results. Empty ASR on speech and positive
+context words outside ownership never establish silence by themselves.
+Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
+retries. Current debt counts only jobs still in `state=quarantined`; historical
+quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
 ### Legacy sync double-empty recovery (dark)
 
 `SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
