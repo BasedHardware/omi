@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -15,6 +15,11 @@ def _clean_uid(uid: Optional[str]) -> str:
     if not cleaned:
         raise ValueError("uid cannot be empty")
     return cleaned
+
+
+def _clean_test_uids(values: Iterable[object]) -> set[str]:
+    """Normalize legacy target values while retaining the runtime string check."""
+    return {value.strip() for value in values if isinstance(value, str)}
 
 
 def _has_uid(uid: Optional[str]) -> bool:
@@ -613,7 +618,7 @@ def get_pending_announcements(
 
         # 8. Check test_uids (if set, only those users see the announcement)
         if targeting.test_uids:
-            clean_test_uids = {u.strip() for u in targeting.test_uids if isinstance(u, str)}
+            clean_test_uids = _clean_test_uids(targeting.test_uids)
             if clean_uid not in clean_test_uids:
                 continue
 
