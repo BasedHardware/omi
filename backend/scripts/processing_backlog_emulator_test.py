@@ -101,6 +101,17 @@ def main():
         persist(client.transaction(), {'processing_deferred': False})
         assert store.read(uid)['count'] == 0 and store.read(uid)['units'] == 0
         assert not store.items(uid).document('text').get().exists
+        # Failed paging releases choice only without a durable reservation.
+        paused = store.start(uid, period='2026-10', remaining=20, cutoff=100, request_key='pause-proof')
+        paused_token = paused['token']
+        pause_owner = store.claim(uid, paused_token, '2026-10')
+        assert not store.pause_if_unreserved(uid, paused_token, 'stale-owner')
+        assert store.checkpoint(uid, paused_token, pause_owner, {'reserved': {'id': 'attempt'}})
+        assert not store.pause_if_unreserved(uid, paused_token, pause_owner)
+        assert store.read(uid)['state'] == 'processing'
+        assert store.checkpoint(uid, paused_token, pause_owner, {'reserved': {}})
+        assert store.pause_if_unreserved(uid, paused_token, pause_owner)
+        assert store.read(uid)['state'] == 'waiting_choice'
     print(
         'PASS: atomic totals/update/clear, concurrent consent, completed replay, month/stale-token fences, queued upgrade intent'
     )

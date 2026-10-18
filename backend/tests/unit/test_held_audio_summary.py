@@ -183,3 +183,12 @@ def test_partial_receipts_and_retries_adjust_summary_under_lease(monkeypatch):
 def test_fractional_pieces_do_not_accumulate_rounding_drift(monkeypatch):
     assert cap_hold.summary_after({'seconds': 0.4, 'count': 1}, 0.4, 1)['seconds'] == 0.8
     assert cap_hold.remaining_seconds({'state': 'held', 'piece_plan': {}, 'seconds': 80}) == 0
+
+
+def test_held_summary_is_present_with_legacy_dispatch_alone(monkeypatch):
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    result = summary.client_held_audio(
+        'synthetic', allowance=SimpleNamespace(managed=False), rows=[{'id': 'held', 'started_at': 100, 'seconds': 60}]
+    )
+    assert result.seconds == 60 and result.retain_live is True

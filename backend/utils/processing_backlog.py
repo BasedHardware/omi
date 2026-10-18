@@ -60,7 +60,7 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
     )
 
 
-def choose(uid: str, *, request_key: str, automatic: bool = False) -> dict | None:
+def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
     if not funded_processing.enabled():
         return None
     from database import processing_backlog as store
@@ -69,7 +69,20 @@ def choose(uid: str, *, request_key: str, automatic: bool = False) -> dict | Non
     result = snapshot(uid, allowance=allowance)
     if result is None:
         return None
-    begin = result.state not in {'none', 'capped'} and (not automatic or not result.exceeds_remaining)
+    # The first delivery of an old payment event is not fresh upgrade consent.
+    # Record declined intent too, so retries cannot reinterpret it after reset.
+    intent_period = None
+    if automatic:
+        try:
+            moment = (
+                intent_at if isinstance(intent_at, datetime) else datetime.fromtimestamp(float(intent_at), timezone.utc)
+            )
+            intent_period = moment.astimezone(timezone.utc).strftime('%Y-%m')
+        except (TypeError, ValueError, OverflowError, OSError):
+            pass
+    begin = result.state not in {'none', 'capped'} and (
+        not automatic or intent_period == funded_processing.period_id() and not result.exceeds_remaining
+    )
     if not begin and not automatic:
         return None
     chosen = store.start(

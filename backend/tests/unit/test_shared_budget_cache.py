@@ -1,7 +1,6 @@
 """Prepared shared-cache/client contracts; counted fake-store reads, no external IO."""
 
 from collections import OrderedDict
-from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -65,7 +64,6 @@ def clock(monkeypatch):
     for module in (cache, unit_session):
         monkeypatch.setattr(module, 'time', SimpleNamespace(monotonic=lambda: value[1]))
     monkeypatch.setattr(cache, '_sessions', OrderedDict())
-    monkeypatch.setattr(funded, '_scope', ContextVar('test_shared_budget_scope', default=None))
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', '2026-10-01')
@@ -107,16 +105,15 @@ def test_pipeline_allowance_and_unscoped_chat_budget_share_unit_session(clock):
     assert db.reads - before == 3
 
 
-def test_same_uid_clients_are_isolated_even_inside_one_admission_scope(clock):
+def test_same_uid_clients_are_isolated_with_fresh_dispatch_reads(clock):
     first, second = store(25000), store(100000)
-    with funded.admission_scope():
-        assert funded.processing_allowed('u', firestore_client=first)
-        assert not funded.processing_allowed('u', firestore_client=second)
-        reads = first.reads + second.reads
-        assert funded.processing_allowed('u', firestore_client=first)
-        assert not funded.processing_allowed('u', firestore_client=second)
-        assert first.reads + second.reads == reads
-    assert first.reads == second.reads == 36
+    assert funded.processing_allowed('u', firestore_client=first)
+    assert not funded.processing_allowed('u', firestore_client=second)
+    reads = first.reads + second.reads
+    assert funded.processing_allowed('u', firestore_client=first)
+    assert not funded.processing_allowed('u', firestore_client=second)
+    assert first.reads + second.reads == reads + 6
+    assert first.reads == second.reads == 39
     assert len(cache._sessions) == 2
     assert all(entry.firestore_client is not None for entry in cache._sessions.values())
 

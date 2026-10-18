@@ -803,6 +803,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                             upgrade(
                                 uid,
                                 f'plan-change:{new_subscription.stripe_subscription_id}:{request.price_id}:{new_subscription.current_period_start}',
+                                intent_at=time.time(),
                             )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
@@ -1072,7 +1073,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     from utils.processing_backlog_worker import upgrade_async
 
                     if allowance_increased(existing_subscription, subscription):
-                        await upgrade_async(uid, f'checkout:{session.get("id")}')
+                        await upgrade_async(uid, f'checkout:{session.get("id")}', intent_at=event.get("created"))
             if persisted is False and webhook_ledger_enabled():
                 return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
@@ -1286,7 +1287,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         from utils.processing_backlog_worker import upgrade_async
 
                         if allowance_increased(current_subscription, new_subscription):
-                            await upgrade_async(uid, f'subscription-upgrade:{event.get("id")}')
+                            await upgrade_async(
+                                uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get("created")
+                            )
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
                 except FirestoreNotFound:
                     logger.warning(

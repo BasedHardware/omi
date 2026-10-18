@@ -1,11 +1,9 @@
 """One flagged funded-compute admission boundary, shared by every producer.
 
 Warm checks read only the open hour/day buckets, never scan a month per LLM
-call. A processing scope reuses its admission for already-admitted fanout.
+call. Each dispatch rechecks admission against current usage.
 """
 
-from contextvars import ContextVar
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import wraps
 import os
@@ -15,20 +13,15 @@ from typing import Any, Mapping
 from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from config.stt_cap_dispatch import enabled as legacy_enabled
 
-_scope: ContextVar[dict | None] = ContextVar('funded_processing_scope', default=None)
 _UNSET = object()
 
 
 def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, firestore_client: Any = None):
     # Admission callers short-circuit before loading database/provider dependencies.
     from config import ladder_v1 as ladder_policy
-    from database.funded_usage_session import budget_session, client_identity
+    from database.funded_usage_session import budget_session
     from utils.transcription_allowance import TranscriptionAllowance
 
-    scope = _scope.get()
-    key = (uid, client_identity(firestore_client))
-    if scope is not None and key in scope:
-        return scope[key][1]
     with budget_session(uid, firestore_client=firestore_client) as session:
         try:
             client_kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
@@ -97,8 +90,6 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
                 'event=funded_processing outcome=unavailable exception_type=%s', type(exc).__name__
             )
             result = TranscriptionAllowance('on_device', 0, 'allowance_unavailable', limit_seconds=0)
-    if scope is not None:
-        scope[key] = (firestore_client, result)
     return result
 
 
@@ -143,18 +134,6 @@ def period_id() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m')
 
 
-@contextmanager
-def admission_scope():
-    if _scope.get() is not None:
-        yield
-        return
-    token = _scope.set({})
-    try:
-        yield
-    finally:
-        _scope.reset(token)
-
-
 def scoped(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
@@ -163,7 +142,7 @@ def scoped(fn):
         from utils.llm.usage_tracker import track_usage
 
         uid = args[0] if args else kwargs['uid']
-        with admission_scope(), track_usage(uid, 'conversation_processing'):
+        with track_usage(uid, 'conversation_processing'):
             return fn(*args, **kwargs)
 
     return wrapped

@@ -197,6 +197,8 @@ claims remain authoritative. A previous month's choice never funds a new month.
 Checkout and immediate plan changes start a run only when its whole estimate fits;
 monthly renewal does not mint backlog intent. Declined/empty upgrade estimates
 also get an idempotency receipt, so a later retry cannot auto-spend after reset.
+Automatic intent carries the actual payment event creation time; even a first
+delivery in a later UTC month remains waiting for an explicit choice.
 An upgrade arriving during an active choice queues a same-month continuation; it
 never replaces the live worker lease or extends consent across a reset.
 No retention/deletion policy changes.
@@ -211,5 +213,6 @@ its atomic backlog transition adds one item read and two writes to the existing
 conversation transaction. Cold/evicted sessions and 900-second reconciliation read
 H monthly hourly documents (+2D elapsed-day documents for ladder); they retain only
 closed-bucket sums. Hour/day rollover closes old buckets once. A bounded 1,024-user
-process cache and per-operation scope share these snapshots across fanout. These
-are admission snapshots, not distributed spend reservations; admitted work can drain.
+process cache shares closed-bucket totals; every later funded dispatch rereads open
+usage so an earlier admission cannot hide a newly exhausted allowance. These are
+admission snapshots, not distributed spend reservations; already dispatched work can drain.

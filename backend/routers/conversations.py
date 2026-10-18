@@ -285,7 +285,7 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
     conversation_id = conversation.get('id')
     if not conversation_id or not conversation.get('jit_first_open'):
         return
-    if conversation.get('processing_deferred') or not generated_compute_allowed(uid, 'conv_folder'):
+    if conversation.get('processing_deferred') or not generated_compute_allowed(uid, 'conv_folder', allow_byok=False):
         return
     try:
         token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))

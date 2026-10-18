@@ -223,6 +223,9 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'),
         # Model-free backlog persistence: display projection never enters canonical structure.
         ('utils/conversations/process_conversation.py', '_store_budget_waiting'),
+        # Storage-only budget-denial wrapper forwards validated display projection
+        # to _store_budget_waiting; no model or intelligence reads it.
+        ('utils/conversations/process_conversation.py', 'preserve_capture'),
         # Flag-off eager deny: threads the display projection into the same
         # persist helpers; has_projection is the existing S6 plan input, not
         # an intelligence read of projection contents.
@@ -307,6 +310,7 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', 'preserve_capture', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'ClientProcessing'),
         Reference(
             'utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'client_processing'

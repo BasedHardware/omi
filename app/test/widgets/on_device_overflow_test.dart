@@ -81,7 +81,7 @@ void main() {
               padding: const EdgeInsets.all(20),
               child: OnDeviceAtCapSheet(copy: copy, onDontAskAgain: (value) => dontAsk = value, onContinue: (_) {})));
       expect(find.text(copy.title), findsOneWidget);
-      expect(copy.title, l10n.onDeviceAtCapTitle);
+      expect(copy.title, "Processing paused. You've reached this month's limit.");
       expect(find.text(copy.body), findsOneWidget);
       expect(find.text(copy.onDeviceUpgradeLine), findsOneWidget);
       await _tap(tester, find.byType(CheckboxListTile));

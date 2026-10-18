@@ -118,12 +118,9 @@ def generated_compute_scope(uid: str) -> Iterator[None]:
     if not generated_compute_enabled():
         yield
         return
-    from utils import funded_processing
-
     token = _generation_uid.set(uid)
     try:
-        with funded_processing.admission_scope():
-            yield
+        yield
     finally:
         _generation_uid.reset(token)
 

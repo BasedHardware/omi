@@ -169,6 +169,27 @@ def checkpoint(uid: str, token: str, lease: str, updates: dict) -> bool:
         return commit(client.transaction())
 
 
+def pause_if_unreserved(uid: str, token: str, lease: str) -> bool:
+    """A failed page is user-retryable unless a durable attempt needs reconciliation."""
+    client = get_firestore_client()
+    ref = summary_ref(uid)
+
+    @firestore.transactional
+    def commit(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('token') != token or row.get('lease') != lease or row.get('lease_until', 0) <= time.time():
+            return False
+        # The reservation write may have committed before its response failed.
+        # Never let a new choice erase that attempt or debit it twice.
+        if row.get('reserved'):
+            return False
+        tx.update(ref, {'state': 'waiting_choice', 'lease_until': 0})
+        return True
+
+    with external_write_fence(uid, firestore_client=client):
+        return commit(client.transaction())
+
+
 def finish(uid: str, token: str, lease: str, period: str) -> bool:
     """Finish one choice and consume an already-authorized same-month upgrade.
 

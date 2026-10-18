@@ -322,3 +322,123 @@ def test_unavailable_allowance_never_claims_monthly_limit_exhaustion(monkeypatch
         summary={},
     )
     assert result.state == 'capped' and result.budget_exhausted is False
+
+
+@pytest.mark.parametrize('trigger', list(pipeline.ProcessingTrigger))
+def test_cap_denial_preserves_existing_enrichment_and_discard_state(monkeypatch, trigger):
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'processing_allowed', lambda uid: False)
+    now = datetime.now(timezone.utc)
+    conv = Conversation(
+        id='enriched',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        structured=Structured(title='Existing title', overview='Existing summary'),
+        discarded=True,
+        transcript_segments=[TranscriptSegment(is_user=True, text='Stored transcript', start=0, end=1)],
+    )
+    before = conv.model_dump()
+    persist = Mock(side_effect=AssertionError('enrichment overwritten'))
+    monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
+    monkeypatch.setattr(pipeline, '_enrich_meeting_context', Mock(side_effect=AssertionError('funded work')))
+    dispositions, persistence = [], []
+    result = pipeline.process_conversation(
+        'synthetic',
+        'en',
+        conv,
+        trigger=trigger,
+        persistence_observer=persistence.append,
+        derived_effects_disposition_observer=dispositions.append,
+    )
+    assert result.model_dump() == before
+    assert persistence == [False]
+    assert dispositions == [pipeline.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS]
+    persist.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'intent_at,accepted',
+    [
+        (datetime(2026, 1, 31, tzinfo=timezone.utc).timestamp(), False),
+        (datetime(2026, 2, 1, tzinfo=timezone.utc).timestamp(), True),
+        (None, False),
+        ('malformed', False),
+    ],
+)
+def test_late_first_upgrade_delivery_cannot_spend_new_month(monkeypatch, intent_at, accepted):
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-02')
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
+    monkeypatch.setattr(
+        backlog,
+        'snapshot',
+        lambda *a, **k: ProcessingBacklog(
+            state='waiting_choice', remaining_units=130, estimated_units=10, exceeds_remaining=False
+        ),
+    )
+    start = Mock(return_value={'state': 'processing', 'period': '2026-02'})
+    monkeypatch.setattr(worker.store, 'start', start)
+    result = backlog.choose('synthetic', request_key='upgrade-first-delivery', automatic=True, intent_at=intent_at)
+    assert (result is not None) is accepted
+    assert start.call_args.kwargs['begin'] is accepted
+    assert start.call_args.kwargs['period'] == '2026-02'
+
+
+def test_precreated_on_device_ingress_still_becomes_waiting(monkeypatch):
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'processing_allowed', lambda uid: False)
+    now = datetime.now(timezone.utc)
+    conv = Conversation(
+        id='precreated',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        structured=Structured(),
+        status='processing',
+        transcript_segments=[TranscriptSegment(is_user=True, text='Raw on-device text', start=0, end=1)],
+    )
+    persist = Mock(return_value=True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
+    result = pipeline.process_conversation('synthetic', 'en', conv)
+    assert result.processing_deferred and result.status.value == 'completed'
+    assert result.transcript_segments[0].text == 'Raw on-device text'
+    assert persist.call_args.args[1]['processing_deferred'] is True
+
+
+@pytest.mark.parametrize('existing', [False, True])
+def test_later_dispatch_denial_keeps_capture_instead_of_ingress_cleanup(monkeypatch, existing):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    now = datetime.now(timezone.utc)
+    fields = dict(
+        started_at=now,
+        finished_at=now,
+        transcript_segments=[TranscriptSegment(is_user=True, text='Must survive mid-pipeline cap', start=0, end=1)],
+    )
+    captured = (
+        Conversation(
+            id='enriched', created_at=now, structured=Structured(title='Old summary'), discarded=True, **fields
+        )
+        if existing
+        else CreateConversation(**fields)
+    )
+    create = Mock(return_value=True)
+    persist = Mock(side_effect=AssertionError('existing enrichment overwritten'))
+    monkeypatch.setattr(pipeline.lifecycle_service, 'create_completed_conversation', create)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
+
+    @pipeline._preserve_capture_on_budget_denial
+    def pipeline_that_crosses_cap(uid, language, conversation):
+        raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted'})
+
+    result = pipeline_that_crosses_cap('synthetic', 'en', captured)
+    assert result.transcript_segments[0].text == 'Must survive mid-pipeline cap'
+    if existing:
+        assert result.model_dump() == captured.model_dump()
+        create.assert_not_called()
+    else:
+        assert result.processing_deferred
+        create.assert_called_once()
+    persist.assert_not_called()

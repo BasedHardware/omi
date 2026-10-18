@@ -14,6 +14,8 @@ from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
+from functools import wraps
+
 from fastapi import HTTPException
 
 from utils.sync.repeat_work_metrics import conversation_scope, record_final, record_feature, bind_generation
@@ -641,6 +643,8 @@ def _get_structured(
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except Exception as e:
+        if funded_processing.enabled() and _is_funded_budget_denial(e):
+            raise
         raise conversation_processing_http_exception(e) from e
 
 
@@ -2815,6 +2819,48 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
 
 @spelling_context_run
 @conversation_scope
+def _is_funded_budget_denial(error):
+    return (
+        isinstance(error, HTTPException)
+        and error.status_code == 402
+        and isinstance(error.detail, dict)
+        and error.detail.get('error') == 'usage_budget_exhausted'
+    )
+
+
+def _preserve_capture_on_budget_denial(function):
+    @wraps(function)
+    def preserve_capture(uid, language_code, conversation, *args, **kwargs):
+        if not funded_processing.enabled():
+            return function(uid, language_code, conversation, *args, **kwargs)
+        # A later model dispatch can observe a cap crossed by earlier usage.
+        # Keep the ingress snapshot, even when a downstream step mutated it.
+        captured = conversation.model_copy(deep=True)
+        try:
+            return function(uid, language_code, conversation, *args, **kwargs)
+        except HTTPException as error:
+            if not _is_funded_budget_denial(error):
+                raise
+            raw = (
+                _is_ingress_create(captured)
+                or captured.processing_deferred
+                or (captured.status == ConversationStatus.processing and captured.structured == Structured())
+            )
+            persisted = False
+            if raw:
+                captured, persisted = _store_budget_waiting(
+                    uid, captured, client_projection=kwargs.get('client_projection')
+                )
+            if kwargs.get('persistence_observer') is not None:
+                kwargs['persistence_observer'](persisted)
+            if kwargs.get('derived_effects_disposition_observer') is not None:
+                kwargs['derived_effects_disposition_observer'](DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+            return captured
+
+    return preserve_capture
+
+
+@_preserve_capture_on_budget_denial
 @funded_processing.scoped
 def process_conversation(
     uid: str,
@@ -2906,9 +2952,20 @@ def process_conversation(
     if funded_processing.enabled():
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
-            stored, persisted = _store_budget_waiting(uid, conversation, client_projection=client_projection)
-            report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
-            return stored
+            raw_capture = (
+                not is_initial_creation
+                and conversation.status == ConversationStatus.processing
+                and conversation.structured == Structured()
+            )
+            if is_initial_creation or waiting or raw_capture:
+                stored, persisted = _store_budget_waiting(uid, conversation, client_projection=client_projection)
+                report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+                return stored
+            # A retry/reprocess of an existing enriched row must not replace its
+            # structure, discard state or derived-work markers with a raw shell.
+            # Its transcript is already persisted by ingress; deny this attempt.
+            report_persistence(False, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+            return conversation
         if waiting:
             conversation.processing_deferred = False
     # The synthetic release-probe identity (dev pusher release lane) is

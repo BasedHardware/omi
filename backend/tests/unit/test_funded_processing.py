@@ -50,20 +50,18 @@ def test_legacy_warm_checks_read_only_current_and_once_closing_hour(monkeypatch)
     assert query.call_count == 2
 
 
-def test_scope_reuses_admission_only_within_one_operation(monkeypatch):
+def test_each_call_rechecks_admission_within_one_operation(monkeypatch):
     monkeypatch.setattr(funded, 'enabled', lambda: True)
     monkeypatch.setattr(funded, 'legacy_enabled', lambda: False)
     monkeypatch.setattr(users_db, 'get_user_valid_subscription', lambda uid, *, provision=False: None)
     gate = Mock(return_value=SimpleNamespace(managed=False))
     monkeypatch.setattr(stt_cap_dispatch, 'funded_allowance', gate)
-    with funded.admission_scope():
-        assert not funded.processing_allowed('synthetic')
-        assert not funded.processing_allowed('synthetic')
-    assert gate.call_count == 1
-    gate.return_value = SimpleNamespace(managed=True)
-    with funded.admission_scope():
-        assert funded.processing_allowed('synthetic')
+    assert not funded.processing_allowed('synthetic')
+    assert not funded.processing_allowed('synthetic')
     assert gate.call_count == 2
+    gate.return_value = SimpleNamespace(managed=True)
+    assert funded.processing_allowed('synthetic')
+    assert gate.call_count == 3
 
 
 def test_unlimited_legacy_plan_does_not_read_finite_usage(monkeypatch):

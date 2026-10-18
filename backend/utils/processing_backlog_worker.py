@@ -1,6 +1,7 @@
 """Bounded, fenced explicit-choice worker; reuses the held-audio receipt machinery."""
 
 import asyncio
+from datetime import datetime, timezone
 import logging
 import time
 from typing import Any
@@ -30,9 +31,19 @@ def _page(uid, kind, cursor):
         collection = store.items(uid)
         query = collection.order_by('started_at', direction=firestore.Query.DESCENDING)
         field = 'started_at'
+    # Mapping cursors do not make the SDK append the document-name order.
+    # Both fields must reach RunQuery to avoid skipping a timestamp's siblings.
+    query = query.order_by('__name__', direction=firestore.Query.DESCENDING)
     if cursor:
         query = query.start_after({field: cursor['at'], '__name__': collection.document(cursor['id'])})
     return [(kind, snap) for snap in query.limit(PAGE).stream()]
+
+
+def _timestamp(value):
+    if isinstance(value, datetime):
+        # Older manifests can contain Firestore timestamps, including naive UTC.
+        return (value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)).timestamp()
+    return float(value or 0)
 
 
 def _candidate(kind, snap) -> dict[str, Any]:
@@ -65,10 +76,9 @@ def _process_text(uid, identity):
     if lease is None:
         return False
     try:
-        with funded_processing.admission_scope():
-            result = process_conversation(
-                uid, row.get('language') or 'en', Conversation(**row), trigger=ProcessingTrigger.BACKLOG_CHOICE
-            )
+        result = process_conversation(
+            uid, row.get('language') or 'en', Conversation(**row), trigger=ProcessingTrigger.BACKLOG_CHOICE
+        )
         return not result.processing_deferred
     finally:
         store.release_item(uid, identity, lease)
@@ -125,15 +135,22 @@ async def run(uid: str, *, continuation: bool = False):
         pages = await run_blocking(db_executor, _page, uid, 'audio', job.get('cursor_audio'))
         pages += await run_blocking(db_executor, _page, uid, 'text', job.get('cursor_text'))
         candidates = sorted(
-            (_candidate(kind, snap) for kind, snap in pages), key=lambda row: (row['at'], row['id']), reverse=True
+            (_candidate(kind, snap) for kind, snap in pages),
+            key=lambda row: (_timestamp(row['at']), row['id']),
+            reverse=True,
         )[:PAGE]
         for item in candidates:
             if fence_lost.is_set() or not funded_processing.enabled() or job['period'] != funded_processing.period_id():
                 return
             remaining = job.get('remaining')
+            # Keep the original Firestore field type in the durable cursor.
             cursor = {'at': item['at'], 'id': item['id']}
             updates: dict[str, Any] = {'cursor_' + item['kind']: cursor, 'lease_until': time.time() + 1800}
-            if item['queued_at'] > job['cutoff'] or remaining is not None and item['units'] > remaining:
+            if (
+                _timestamp(item['queued_at']) > _timestamp(job['cutoff'])
+                or remaining is not None
+                and item['units'] > remaining
+            ):
                 if not await save(updates):
                     return
                 continue
@@ -158,6 +175,15 @@ async def run(uid: str, *, continuation: bool = False):
             )
     except Exception as exc:
         logger.warning('event=processing_backlog outcome=deferred exception_type=%s', type(exc).__name__)
+        try:
+            # Read the durable reservation under the lease fence: a checkpoint
+            # may have committed even if its response was lost. Never clear or
+            # replace an attempt whose application/receipt may still be live.
+            await run_blocking(db_executor, store.pause_if_unreserved, uid, token, lease)
+        except Exception as pause_exc:
+            logger.warning(
+                'event=processing_backlog outcome=pause_deferred exception_type=%s', type(pause_exc).__name__
+            )
     finally:
         heartbeat.cancel()
         await asyncio.gather(heartbeat, return_exceptions=True)
@@ -181,14 +207,17 @@ def kick(uid: str):
         start_background_task(run(uid), name='processing_backlog')
 
 
-def upgrade(uid: str, request_key: str):
+def upgrade(uid: str, request_key: str, *, intent_at):
     """Only payment intent calls this; monthly renewal/reset never creates intent."""
-    if choose(uid, request_key=request_key, automatic=True) is not None:
+    if choose(uid, request_key=request_key, automatic=True, intent_at=intent_at) is not None:
         kick(uid)
 
 
-async def upgrade_async(uid: str, request_key: str):
-    if await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True) is not None:
+async def upgrade_async(uid: str, request_key: str, *, intent_at):
+    if (
+        await run_blocking(db_executor, choose, uid, request_key=request_key, automatic=True, intent_at=intent_at)
+        is not None
+    ):
         kick(uid)
 
 
