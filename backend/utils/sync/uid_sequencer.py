@@ -338,20 +338,25 @@ def _finalize_abandoned_budget_chain_job(uid: str, job_id: str, epoch: int, *, n
     # owner must still name this job/epoch with its lease (or dispatch
     # retry) deadline past — before writing any terminal state; a renewal
     # retains the owner so the replacement's own terminal write decides.
+    # The recheck runs inside the lock-release try/finally: both of its
+    # early returns (recheck failure, owner renewed) must drop the lock they
+    # hold, or its TTL outlives the renewed replacement's whole attempt
+    # contract and the one-in-flight UID lane stays blocked past every
+    # queue retry.
     try:
-        release_due = registry.owner_release_due(uid, job_id, epoch, now=now)
-    except Exception as error:
-        logger.error(
-            'event=sync_uid_sequencer action=budget_chain_finalize outcome=fence_recheck_failed '
-            'job_id=%s exception_type=%s',
-            job_id,
-            type(error).__name__,
-        )
-        return False
-    if not release_due:
-        logger.info('event=sync_uid_sequencer action=budget_chain_finalize outcome=owner_renewed job_id=%s', job_id)
-        return False
-    try:
+        try:
+            release_due = registry.owner_release_due(uid, job_id, epoch, now=now)
+        except Exception as error:
+            logger.error(
+                'event=sync_uid_sequencer action=budget_chain_finalize outcome=fence_recheck_failed '
+                'job_id=%s exception_type=%s',
+                job_id,
+                type(error).__name__,
+            )
+            return False
+        if not release_due:
+            logger.info('event=sync_uid_sequencer action=budget_chain_finalize outcome=owner_renewed job_id=%s', job_id)
+            return False
         # A fence job may have durably completed its content ledger after
         # budget cancellation cancelled the await but before the terminal
         # write: converge that proven completion into the Redis result before
