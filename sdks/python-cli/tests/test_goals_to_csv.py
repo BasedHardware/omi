@@ -34,19 +34,19 @@ class TestRow(unittest.TestCase):
         row = m.normalize_row(GOAL)
         self.assertEqual(len(row), len(m.FIELDS))
         self.assertEqual(row[0], "g1")
-        self.assertEqual(row[7], "25.0")  # 1/4
-        self.assertEqual(row[8], "1")
+        self.assertEqual(row[6], "25.0")  # progress_pct: 1/4
+        self.assertEqual(row[7], "1")  # is_active
 
     def test_inactive_flag(self):
-        self.assertEqual(m.normalize_row({**GOAL, "is_active": False})[8], "0")
+        self.assertEqual(m.normalize_row({**GOAL, "is_active": False})[7], "0")
 
     def test_qualitative_no_pct(self):
         row = m.normalize_row({"id": "g", "title": "be kind", "goal_type": None})
-        self.assertEqual(row[7], "")
+        self.assertEqual(row[6], "")
 
     def test_zero_target_no_divide(self):
         row = m.normalize_row({"id": "g", "current_value": 1, "target_value": 0})
-        self.assertEqual(row[7], "")
+        self.assertEqual(row[6], "")
 
     def test_formula_guard(self):
         row = m.normalize_row({"id": "g", "title": "=SUM(1,2)"})
@@ -81,7 +81,7 @@ class TestOutput(unittest.TestCase):
     def test_bom_header_crlf(self):
         blob = m.emit_csv([m.normalize_row(GOAL)])
         self.assertTrue(blob.startswith(b'\xef\xbb\xbf'))
-        self.assertIn(b"id,title,category,goal_type", blob)
+        self.assertIn(b"id,title,goal_type", blob)
         self.assertIn(b"\r\n", blob)
 
     def test_exclusive_write(self):

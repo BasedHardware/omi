@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Convert an Omi goal JSON export to CSV for spreadsheets, pandas, and bulk
-imports — the goal-domain counterpart to the memories CSV recipe.
+imports — the goal-domain counterpart to the conversations CSV recipe.
 
 Usage:
-  omi goal list --json | python goals_to_csv.py -o goals.csv
+  omi --json goal list --include-inactive --limit 100 | python goals_to_csv.py -o goals.csv
   python goals_to_csv.py goals.json --type numeric --status active -o goals.csv
 
-Fixed columns: id, title, category, goal_type, current_value, target_value,
+Fixed columns: id, title, goal_type, current_value, target_value,
 unit, progress_pct, is_active, created_at. ``progress_pct`` is the completion
 percentage toward target; timestamps normalize to ISO-8601 UTC. Output
 defaults to stdout; ``-o`` writes exclusively (never overwrites).
@@ -27,7 +27,6 @@ from typing import Any, Dict, List, Optional
 FIELDS = (
     "id",
     "title",
-    "category",
     "goal_type",
     "current_value",
     "target_value",
@@ -109,7 +108,6 @@ def normalize_row(item: Any) -> Optional[List[str]]:
     return [
         spreadsheet_text(item.get("id") or item.get("goal_id")),
         spreadsheet_text(item.get("title") or item.get("description")),
-        spreadsheet_text(item.get("category")),
         spreadsheet_text(item.get("goal_type")),
         fmt_num(number(item.get("current_value"))),
         fmt_num(number(item.get("target_value"))),
