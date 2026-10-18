@@ -186,10 +186,7 @@ CaptureWedgeMonitor composeCaptureWedgeMonitor() {
     },
     bleRetry: (deviceId) async {
       final deviceService = ServiceManager.instance().device;
-      await deviceService.disconnectDevice(deviceId);
-      if (!monitor.hasActiveEpisode(deviceId)) return;
-      if (SharedPreferencesUtil().btDevice.id != deviceId) return;
-      await deviceService.ensureConnection(deviceId, force: true);
+      await deviceService.recoverConnection(deviceId, shouldRetry: () => monitor.hasActiveEpisode(deviceId));
     },
     transferRetry: () => RecordingTransferCoordinator.instance.wake(WakeTrigger.dataStalled),
     appBuild: () => AnalyticsManager.appBuild,
