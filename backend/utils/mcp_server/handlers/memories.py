@@ -44,6 +44,7 @@ from utils.mcp_server.errors import (
     stable_error_code,
     tool_error_from_http,
 )
+from utils.other.list_budget import ListReadBudget
 from utils.other.endpoints import check_rate_limit_context, check_rate_limit_inline
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,7 @@ def memories_page_core(
     categories: Optional[List[str]] = None,
     max_scan: int = MCP_MEMORY_LIST_MAX_SCAN,
     cursor_kind: str,
+    budget: Optional[ListReadBudget] = None,
 ) -> Dict[str, Any]:
     """Shared validated memory page for the MCP ``get_memories`` tool and REST list.
 
@@ -259,11 +261,39 @@ def memories_page_core(
             categories=valid_categories or None,
         )
     else:
-        result = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
+        # One mixed-view read replaces growing prefix rereads when budgeted.
+        # A request budget also owns the memory resilience attempt allowance;
+        # repeatedly entering MemoryService.read would exhaust that allowance
+        # after two successful batches. Keep its retry boundary around one
+        # operation and slice the materialized window locally.
+        window = None
+        if budget is not None:
+            needs_full_scan = (
+                sort in {'created_desc', 'updated_desc', 'manual_first'}
+                or reviewed is not None
+                or manually_added is not None
+                or updated_after is not None
+                or not include_sensitive
+                or bool(valid_categories)
+            )
+            read_limit = max_scan if needs_full_scan else min(max_scan, offset + limit + 1)
+            window = [
                 memory.model_dump(mode='json')
-                for memory in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
-            ],
+                for memory in MemoryService(db_client=db).read(uid, limit=read_limit, offset=0, budget=budget)
+            ]
+        result = collect_filtered_memories(
+            lambda batch_offset, batch_limit: (
+                window[batch_offset : batch_offset + batch_limit]
+                if window is not None
+                else [
+                    memory.model_dump(mode='json')
+                    for memory in MemoryService(db_client=db).read(
+                        uid,
+                        limit=batch_limit,
+                        offset=batch_offset,
+                    )
+                ]
+            ),
             limit=limit,
             offset=offset,
             reviewed=reviewed,
@@ -275,6 +305,9 @@ def memories_page_core(
             categories=valid_categories or None,
             max_scan=max_scan,
         )
+        if budget is not None and budget.truncated:
+            result['scan_truncated'] = True
+            result['has_more'] = True
         resume_uml = None
         # The bounded scan walks at most max_scan raw rows per call, so an
         # offset beyond the collected window could never be reached: emit a
