@@ -172,6 +172,7 @@ def test_sync_budget_deferral_reasons_keep_their_exact_labels():
     assert fallback_mod.bucket_reason('enqueue_uncertain') == 'enqueue_uncertain'
     assert fallback_mod.bucket_reason('marker_timeout') == 'marker_timeout'
     assert fallback_mod.bucket_reason('acquire_unsettled') == 'acquire_unsettled'
+    assert fallback_mod.bucket_reason('marker_clear_failed') == 'marker_clear_failed'
 
 
 def test_web_search_security_reasons_keep_their_exact_labels():

@@ -243,6 +243,26 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
         return True
     if job.get('status') not in ('processing', 'queued'):
         return True
+    # A still-future deferred_until marker means the chain's final scheduled
+    # replacement has not run yet: the persisted count denotes a successfully
+    # enqueued next attempt, not a completed one, and the replacement is
+    # deliberately delayed past this lease (RUN_LOCK_TTL + 60s) — so the sweep
+    # normally lands here first. Terminalizing now would make that already
+    # paid-for final delivery a stale epoch the moment the lane advances.
+    # Sequenced jobs are exempt from stale polling, so nothing else would ever
+    # finalize the job: keep the owner and re-check after the marker horizon.
+    # This check precedes the run-lock fence on purpose — releasing the owner
+    # while the marker is live strands the job even if an attempt holds the
+    # lock, because a capped attempt can no longer defer to re-arm the chain.
+    raw_marker = job.get('deferred_until')
+    marker_until = (
+        float(raw_marker) if isinstance(raw_marker, (int, float)) and not isinstance(raw_marker, bool) else None
+    )
+    if marker_until is not None and time.time() < marker_until:
+        logger.info(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=replacement_pending job_id=%s', job_id
+        )
+        return False
     if sync_job_run_lock_present(job_id):
         # An attempt still holds the run lock under the released lease: its
         # own terminal write (or its deferral) must win, never the sweep's.
@@ -263,8 +283,28 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
         return False
     if finalized is not None:
         logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
-    else:
-        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
+        return True
+    # CAS lost: the terminal write did not apply while the job read
+    # nonterminal. Accept only a re-read that proves terminality or absence —
+    # releasing the owner on a lost CAS would strand the accepted job (no
+    # sweep identity remains, polls never stale-finalize sequenced jobs)
+    # until the Redis TTL despite the claimed handoff.
+    try:
+        settled = get_sync_job(job_id)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_verify_failed '
+            'job_id=%s exception_type=%s',
+            job_id,
+            type(error).__name__,
+        )
+        return False
+    if isinstance(settled, dict) and settled.get('status') not in TERMINAL_STATUSES:
+        logger.warning(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost_nonterminal job_id=%s', job_id
+        )
+        return False
+    logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
     return True
 
 
