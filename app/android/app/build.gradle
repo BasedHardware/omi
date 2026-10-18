@@ -155,6 +155,16 @@ flutter {
 }
 
 dependencies {
+    // Local brain routing layer: MiniLM-L6-v2 through the LiteRT CompiledModel API.
+    // CompiledModel rather than the Interpreter API because the on-device harness was
+    // written and measured against it, and because one code path then serves CPU
+    // and GPU without a rewrite.
+    //
+    // Declared here rather than inside android {} because implementation() is not a
+    // method of the Android DSL. Inside android {} the app module fails to configure
+    // and no Gradle build of this branch can produce an APK.
+    implementation 'com.google.ai.edge.litert:litert:2.1.0'
+
     testImplementation 'org.robolectric:robolectric:4.16.1'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20231013'
