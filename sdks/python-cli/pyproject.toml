@@ -72,6 +72,11 @@ dev = [
     "mypy>=1.8,<2.0",
     "build>=1.0,<2.0",
     "twine>=5.0,<7.0",
+    # lancedb recipe tests create a real vector column — without the
+    # vector stack in the dev extra, CI skips the whole file and the
+    # "semantic ingest works" assertion is vacuous.
+    "lancedb>=0.13,<1.0",
+    "sentence-transformers>=2.7,<4.0",
 ]
 
 [tool.setuptools.dynamic]
