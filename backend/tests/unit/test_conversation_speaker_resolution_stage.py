@@ -1304,10 +1304,9 @@ def test_off_advisory_elapsed_extends_the_legacy_embedding_deadline(env, monkeyp
     monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 60.0)
 
     values = []
-    real_monotonic = time.monotonic
 
     def fake_monotonic():
-        value = real_monotonic() + len(values) * 0.05
+        value = 100.0 + len(values) * 0.05
         values.append(value)
         return value
 
