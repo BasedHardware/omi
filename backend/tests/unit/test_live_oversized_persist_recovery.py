@@ -254,12 +254,15 @@ async def test_oversized_persist_probes_rollover_when_the_batch_reaches_the_shri
 @pytest.mark.anyio
 async def test_transient_persist_failure_keeps_the_whole_batch_retried(monkeypatch):
     """Only the permanent size limit may shrink the batch: transient failures keep today's
-    whole-batch retry so no speech is ever dropped because of a timeout or contention."""
+    whole-batch retry so no speech is ever dropped because of a timeout or contention.
+    The fixture is a fault that can vary between attempts (a RuntimeError-shaped storage
+    fault): a ValueError from the transaction's own planning is the deterministic
+    poisoned-row class and is covered by the deterministic-defect escape suite."""
     batches = []
 
     async def update(_conversation, segments, _photos, _finished_at, _started_at):
         batches.append(len(segments))
-        raise ValueError('transient')
+        raise RuntimeError('transient storage fault')
 
     rollover = AsyncMock(return_value=None)
     processor, _state, clock = _processor(monkeypatch, segments=_raw_segments(3), update=update, rollover=rollover)
@@ -751,7 +754,8 @@ async def test_stalled_full_cap_backlog_probes_the_rollover_on_its_own_clock(mon
 
 @pytest.mark.anyio
 async def test_transient_failures_neither_count_nor_reset_the_stall_debt(monkeypatch):
-    """The stall debt is earned only by permanent rejections: a transient failure in
+    """The stall debt is earned only by the deterministic classes (storage rejections
+    and in-process defects): a transient failure in
     the middle of a rejection series keeps the earned debt intact (it counts down only
     via an escape or a successful persist), while the transient arm keeps the
     whole-batch retry."""
@@ -760,7 +764,11 @@ async def test_transient_failures_neither_count_nor_reset_the_stall_debt(monkeyp
     async def update(_conversation, segments, _photos, _finished_at, _started_at):
         batches.append(len(segments))
         if len(batches) == 2:
-            raise ValueError('transient contention blip')
+            # A fault that varies between attempts: the transient arm keeps
+            # the whole-batch retry without touching the earned stall debt.
+            # (A ValueError here would be the deterministic poisoned-row
+            # class and would legitimately probe instead.)
+            raise RuntimeError('transient contention blip')
         raise _size_limit_error()
 
     rollover = AsyncMock(return_value=None)

@@ -5037,3 +5037,45 @@ lacked the permission-revocation status, so the dead subscription was re-dialed
 and re-logged on every future notification with the token row kept forever —
 the notification-pipeline twin of the oversized-conversation write that
 replays its doomed write on every sweep.
+
+### Deterministic-defect escape for the legacy live persist loop
+
+The legacy live persist loop's failure classification previously split into
+exactly two classes: permanent Firestore write rejections (size limit,
+permission denied, failed-precondition policy refusal) shrink the retained
+batch and probe the mid-session rollover, and everything else was treated as
+transient with the whole-batch retry. That split missed the deterministic
+in-process class: a `ValueError` or pydantic `ValidationError` raised inside
+the transaction's own planning — the strict stored-transcript decode
+(`bytes.fromhex`/`json` failures surface as `ValueError`), a cyclic
+absorption receipt, a segment shape the model refuses — is a property of the
+row or of the retained batch, so the identical replay can only reproduce it.
+The one deliberate carve-out keeps the SDK's spent-transaction exhaustion
+(`ValueError('Failed to commit transaction ...')`, classified contention by
+the storage boundary) transient, since a fresh transaction succeeds.
+Prod backend-listen 2026-10 showed exactly that shape:
+`Live transcript persist failed; retained 5 segment(s) for retry
+type=ValueError` at x58/30m, the same five segments retained for the life of
+the session while the transient arm re-fired the ERROR line every backoff
+tick (≤8s) and maxlen silently evicted older speech. Since 2026-10 the loop
+classifies those shapes (`_is_deterministic_persist_defect`) and gives them
+the same escape the storage class already has: the shrink, the bounded
+mid-session rollover probe on the same 60s/stall cadence, and the same
+queued-speech handoff to the fresh generation — with its own truthful
+`omi_fallback_total{component="other",from_mode="live_transcript_persist",reason="malformed_doc"}`.
+The storage classes keep their `document_size_limit` reason. Genuinely
+transient faults — contention, an expired transaction id, timeouts, lost
+sockets (`RuntimeError`-shaped and anything outside the deterministic pair) —
+keep the whole-batch retry; the split is by "can a retry of the same batch
+succeed", not by which layer raised.
+
+Failure-Class: FC-permanent-write-rejection-retried-forever — sibling
+instance in `backend/routers/listen/transcripts.py` (legacy live persist
+arm, prod backend-listen 2026-10, `Live transcript persist failed; retained
+5 segment(s) for retry type=ValueError` x58/30m): a deterministically
+failing write was replayed forever under the transient whole-batch retry —
+the in-process twin of the oversized-conversation write that replays its
+doomed write on every sweep. The recovery the permanent storage class
+already had (shrink + mid-session rollover probe) now covers the
+deterministic in-process shapes, and the loop boundary owns the
+"retry cannot succeed" split for both layers.

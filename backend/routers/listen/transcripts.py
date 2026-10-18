@@ -61,6 +61,7 @@ from utils.transcribe_decisions import (
     should_skip_speaker_detection,
 )
 from database._client import is_permanent_firestore_write_rejection
+from pydantic import ValidationError
 from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
@@ -85,6 +86,41 @@ LEGACY_PERSIST_SHRINK_FLOOR = 4
 # dropped tail is instantly replaced by fresh speech. At the 8s backoff cap
 # this is roughly five minutes of refusals.
 LEGACY_PERSIST_STALL_REJECTS = 100
+
+
+def _is_deterministic_persist_defect(error: BaseException) -> bool:
+    """True when a legacy persist failure cannot change on a retry of the same batch.
+
+    The in-process planning of one drain is deterministic: the same row plus
+    the same batch raise the same error again. A ``ValueError`` or pydantic
+    ``ValidationError`` from that planning — the strict stored-transcript
+    decode (``bytes.fromhex``/``json`` failures surface as ``ValueError``), a
+    cyclic absorption receipt, a segment shape the model refuses — is a
+    property of the row or of the batch itself, not of this attempt, so the
+    transient whole-batch retry can only replay it (prod backend-listen
+    2026-10: ``Live transcript persist failed; retained 5 segment(s) for retry
+    type=ValueError`` re-firing every backoff tick with the same five
+    segments). The one deliberate carve-out is the SDK's spent-transaction
+    exhaustion, a bare ``ValueError('Failed to commit transaction ...')``:
+    ``firestore_failure_reason`` classifies it as contention because a fresh
+    transaction succeeds, so it stays transient here too. Firestore-rejection
+    shapes are classified separately by ``is_permanent_firestore_write_rejection``
+    and stay authoritative for the storage classes; this predicate only widens
+    the rollover escape to the deterministic in-process shapes. Anything else
+    — contention, an expired transaction id, a timeout, a lost socket —
+    plausibly varies between attempts and stays transient.
+    """
+    if isinstance(error, ValidationError):
+        # Same deterministic poison as the ValueError arm: a row/batch shape
+        # the model refuses every time (a pydantic ValidationError, itself a
+        # ValueError subclass here, caught explicitly for self-documentation).
+        return True
+    if isinstance(error, ValueError):
+        # The SDK's _Transactional raises a bare ValueError once its own
+        # commit attempts are spent; the storage boundary calls that
+        # contention, and a fresh transaction can indeed succeed.
+        return not str(error).lower().startswith('failed to commit transaction')
+    return False
 
 
 def _observe_refusal(speaker, reason, scope=None):
@@ -865,6 +901,27 @@ class TranscriptProcessor:
         """
         return is_permanent_firestore_write_rejection(error)
 
+    def _handle_deterministic_legacy_persist(self, error: Exception) -> bool:
+        """True when a legacy persist failed with a deterministic in-process defect.
+
+        Firestore-rejection shapes are classified separately (above); this arm
+        catches the equally permanent sibling shape inside the transaction
+        itself: the stored row cannot be decoded (``bytes.fromhex`` /
+        ``binascii`` / ``json`` failures raised as ``ValueError`` from the
+        strict transcript decode), the absorption receipt is cyclic, or the
+        planned write fails pydantic validation. None of those can change on a
+        retry of the same batch against the same row — the poison lives in the
+        row or in this batch's own data — yet the transient arm replayed them
+        identically every backoff tick (prod backend-listen 2026-10,
+        ``Live transcript persist failed; retained 5 segment(s) for retry
+        type=ValueError`` at ×58/30m with the same five segments retained).
+        Failures that plausibly vary between attempts — anything that is not a
+        ``ValueError``/``ValidationError`` raised from the in-process planning
+        of this batch — stay transient. The caller answers with the same
+        rollover probe the permanent arm already runs, on the same cadence.
+        """
+        return _is_deterministic_persist_defect(error)
+
     def _requeue_legacy_persist(self, segments, photos) -> None:
         """Retain a failed legacy drain for the next tick (buffers are bounded deques)."""
         for raw in segments or []:
@@ -1073,21 +1130,24 @@ class TranscriptProcessor:
                 raise
             except Exception as error:
                 oversized = self._handle_oversized_legacy_persist(error)
+                deterministic_defect = not oversized and self._handle_deterministic_legacy_persist(error)
                 retained_count = len(legacy_retry_segments or [])
                 failures = getattr(self, '_legacy_persist_failures', 0) + 1
                 self._legacy_persist_failures = failures
                 self._legacy_retry_until = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
-                if oversized:
-                    # Permanent rejection: the write itself is refused and no
-                    # replay of the same payload against the same row can
-                    # succeed. Above the shrink floor the newest tail is
-                    # dropped, not retried, so the oldest speech keeps its
-                    # place and persists first on the smaller row; at or below
-                    # the floor the drop buys nothing, so the batch is kept
-                    # whole. Escape comes from the rollover probe — the same
-                    # recovery the no-merge-result path already uses — at a
-                    # bounded cadence, with the speech kept queued for the
-                    # fresh generation.
+                if oversized or deterministic_defect:
+                    # Deterministic failure: the write is refused (Firestore
+                    # rejection) or its in-process planning raises the same
+                    # poisoned answer every time (strict decode / receipt /
+                    # validation defect), so no replay of the same payload
+                    # against the same row can succeed. Above the shrink floor
+                    # the newest tail is dropped, not retried, so the oldest
+                    # speech keeps its place and persists first on the smaller
+                    # row; at or below the floor the drop buys nothing, so the
+                    # batch is kept whole. Escape comes from the rollover
+                    # probe — the same recovery the no-merge-result path
+                    # already uses — at a bounded cadence, with the speech
+                    # kept queued for the fresh generation.
                     self._legacy_persist_rejects = getattr(self, '_legacy_persist_rejects', 0) + 1
                     below_floor = retained_count <= LEGACY_PERSIST_SHRINK_FLOOR
                     saturated = below_floor
@@ -1128,7 +1188,7 @@ class TranscriptProcessor:
                         component='other',
                         from_mode='live_transcript_persist',
                         to_mode='none' if not self.segment_buffer else 'shrink_retry',
-                        reason='document_size_limit',
+                        reason='document_size_limit' if oversized else 'malformed_doc',
                         outcome='degraded',
                         log=logger,
                     )
