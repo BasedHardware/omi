@@ -136,13 +136,26 @@ class TaskIntegrationProvider extends ChangeNotifier {
     }
   }
 
+  /// Default writes run one at a time in the order they were chosen, so the
+  /// server ends on the user's latest choice; only that choice publishes.
+  Future<void> _defaultWrites = Future.value();
+  int _defaultChoice = 0;
+
   /// Set default app and save to backend.
   ///
   /// Only publishes the selection after the server accepts it so local state
-  /// cannot claim a default that was never persisted.
+  /// cannot claim a default that was never persisted. A save made while an
+  /// earlier one is in flight waits for it; a choice replaced before it is sent
+  /// is skipped, and a replaced choice never publishes.
   Future<bool> setSelectedApp(TaskIntegrationApp app) async {
     final generation = _sessionGeneration;
+    final choice = ++_defaultChoice;
+    final previous = _defaultWrites;
+    final written = Completer<void>();
+    _defaultWrites = written.future;
     try {
+      await previous;
+      if (generation != _sessionGeneration || choice != _defaultChoice) return false;
       final read = ConnectionRead(() => _setDefaultTaskIntegration(app.key), statusTimeout);
       _activeReads.add(read);
       bool success;
@@ -151,7 +164,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       } finally {
         _activeReads.remove(read);
       }
-      if (generation != _sessionGeneration || !success) return false;
+      if (generation != _sessionGeneration || choice != _defaultChoice || !success) return false;
 
       // A status read issued before this write cannot restore the prior default.
       _readGeneration++;
@@ -163,6 +176,8 @@ class TaskIntegrationProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error saving default task integration: $e');
       return false;
+    } finally {
+      written.complete();
     }
   }
 

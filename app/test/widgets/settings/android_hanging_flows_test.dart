@@ -338,4 +338,35 @@ void main() {
     expect(find.text('Try Again'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('choosing Asana while a Todoist default save is pending keeps Asana', (tester) async {
+    final writes = <String>[];
+    final pending = <String, Completer<bool>>{};
+    final provider = TaskIntegrationProvider(
+        fetchStatus: () async => TaskIntegrationsResponse(integrations: {
+              'asana': {'app_key': 'asana', 'connected': true},
+              'todoist': {'app_key': 'todoist', 'connected': true},
+            }),
+        setDefaultTaskIntegrationFn: (key) {
+          writes.add(key);
+          return (pending[key] = Completer<bool>()).future;
+        });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pump();
+    await tester.tap(find.text('Asana'));
+    await tester.pump();
+    if (pending['asana'] != null) pending['asana']!.complete(true);
+    pending['todoist']!.complete(true);
+    await tester.pump();
+    if (pending['asana']?.isCompleted == false) pending['asana']!.complete(true);
+    await tester.pumpAndSettle();
+
+    expect(writes.last, 'asana', reason: 'the server ends on the latest choice');
+    expect(provider.selectedApp, TaskIntegrationApp.asana);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

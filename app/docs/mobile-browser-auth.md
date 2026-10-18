@@ -44,12 +44,15 @@ check; it never becomes an endless spinner or a confirmed grant.
 - [x] Task selection follows server-confirmed authorization.
 - [x] Latest task selection wins even while an older authorization is still
       launching; late receipts after page or account changes do nothing.
+- [x] Overlapping default saves land in choice order; only the latest publishes.
+- [x] An MCP registration is reused only for its own URL, never after an edit.
 - [x] Hermetic production-widget, native-bridge and provider regressions.
 - [ ] Merge the fix and ship an Android store release (also validate iOS).
 - [ ] On Samsung S26 Ultra, complete referral Google signup and return to Omi.
 - [ ] Verify the reported integration(s) connect and display the server result.
 - [ ] Identify the separate repeated Try Again screen with app version and a
       screenshot or exact screen name; investigate any remaining failure.
+- [ ] Keep #21378 open until the release ships and the customer confirms.
 
 Featurebase incident: https://github.com/BasedHardware/omi/issues/21378.
 The report does not identify the failing integration(s), app version or general
@@ -72,7 +75,8 @@ remaining mobile and web client gaps:
   endpoints cannot claim setup complete. Only explicit setup/enable intent may
   auto-install after confirmation.
 - MCP waits for approval AND the server's enable receipt, bounds creation/status
-  calls, retries an existing registration, cancels on leaving and cannot pop a
+  calls, retries an existing registration only for the URL it was made for,
+  stops waiting when the URL is edited, cancels on leaving and cannot pop a
   different route from a late callback.
 - External settings/home pages join affiliate signup in the system browser;
   embedded Google popup handling and spoofed user agents are retired. URL/uid

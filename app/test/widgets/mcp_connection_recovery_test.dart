@@ -70,6 +70,68 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a URL edited while registration is pending never reuses the earlier server', (tester) async {
+    final created = <String>[];
+    final first = Completer<Map<String, dynamic>?>();
+    await pump(
+        tester,
+        AddMcpServerPage(
+            addServer: (name, url, {description}) {
+              created.add(url);
+              return created.length == 1
+                  ? first.future
+                  : Future.value(
+                      {'app_id': 'mcp-b', 'requires_oauth': true, 'auth_url': 'https://provider.test/auth-b'});
+            },
+            appDetailsLoader: (_) async => {'status': 'pending_mcp_auth'},
+            probeTimeout: const Duration(seconds: 1),
+            waitTimeout: const Duration(seconds: 5)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextFormField).at(2), 'https://other.example.test/mcp');
+    first.complete({'app_id': 'mcp-a', 'requires_oauth': true, 'auth_url': 'https://provider.test/auth-a'});
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(browser.launches, isEmpty, reason: "server A's authorization never opens for the URL B now in the form");
+
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(created, ['https://mcp.example.test/mcp', 'https://other.example.test/mcp'], reason: 'B is registered');
+    expect(browser.launches.single.$1, 'https://provider.test/auth-b');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('editing the URL while waiting on a server stops that wait and registers the new one', (tester) async {
+    final created = <String>[];
+    await pump(
+        tester,
+        AddMcpServerPage(
+            addServer: (name, url, {description}) async {
+              created.add(url);
+              final id = created.length == 1 ? 'a' : 'b';
+              return {'app_id': 'mcp-$id', 'requires_oauth': true, 'auth_url': 'https://provider.test/auth-$id'};
+            },
+            appDetailsLoader: (_) async => {'status': 'pending_mcp_auth'},
+            probeTimeout: const Duration(seconds: 1),
+            waitTimeout: const Duration(seconds: 30)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(browser.launches.map((l) => l.$1), ['https://provider.test/auth-a']);
+
+    await tester.enterText(find.byType(TextFormField).at(2), 'https://other.example.test/mcp');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(created, ['https://mcp.example.test/mcp', 'https://other.example.test/mcp']);
+    expect(browser.launches.map((l) => l.$1), ['https://provider.test/auth-a', 'https://provider.test/auth-b']);
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('malformed MCP creation never claims success and releases the button', (tester) async {
     await pump(tester, AddMcpServerPage(addServer: (name, url, {description}) async => {'requires_oauth': false}));
     await tester.tap(find.widgetWithText(OmiButton, 'Connect'));

@@ -47,6 +47,19 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _urlController.addListener(_serverChanged);
+  }
+
+  /// A registration and its authorization belong to the URL they were made for.
+  /// Editing the URL away from it stops waiting on that server; the registration
+  /// stays keyed to its own URL, so only returning to that exact URL reuses it.
+  void _serverChanged() {
+    final submitted = _submittedUrl;
+    if (submitted == null || _urlController.text.trim() == submitted) return;
+    if (_connectionWait == null && !_isPolling) return;
+    _connectionWait?.cancel();
+    _connectionWait = null;
+    if (_isPolling && mounted) setState(() => _isPolling = false);
   }
 
   @override
@@ -83,11 +96,13 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       if (mounted && SharedPreferencesUtil().uid == uid) _startPollingForCompletion();
       return;
     }
+    // Own the submission before awaiting: the response belongs to this URL, not
+    // to whatever the field holds when it arrives.
+    final url = _urlController.text.trim();
     setState(() => _isLoading = true);
     try {
       final result = await widget
-          .addServer(_nameController.text.trim(), _urlController.text.trim(),
-              description: _descriptionController.text.trim())
+          .addServer(_nameController.text.trim(), url, description: _descriptionController.text.trim())
           .timeout(const Duration(seconds: 45));
       if (!mounted || SharedPreferencesUtil().uid != uid) return;
       if (result == null || result['error'] != null) {
@@ -100,13 +115,15 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
         return;
       }
       _appId = id;
-      _submittedUrl = _urlController.text.trim();
+      _submittedUrl = url;
       _submittedUid = uid;
+      final authUrl = result['auth_url'];
+      _authUrl = result['requires_oauth'] == true && authUrl is String ? authUrl : null;
+      // The user moved on to another server while this one registered.
+      if (_urlController.text.trim() != url) return;
       if (result['requires_oauth'] == true) {
-        final url = result['auth_url'];
-        _authUrl = url is String ? url : null;
-        if (url is! String ||
-            !await launchIntegrationOAuth(() async => url,
+        if (authUrl is! String ||
+            !await launchIntegrationOAuth(() async => authUrl,
                 isCurrent: () => mounted && SharedPreferencesUtil().uid == uid)) {
           if (mounted) _showError(context.l10n.mcpConnectionFailed);
           return;
