@@ -105,8 +105,10 @@ env:
     value: "0"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
+  - name: FIRST_SUMMARY_DEADLINE_ENABLED
+    value: "true"
   - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "0"
+    value: "100"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT

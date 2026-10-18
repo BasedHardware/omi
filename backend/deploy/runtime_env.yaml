@@ -1280,6 +1280,15 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
+              value: 'on'
+              category: ops_kill
+            SYNC_BACKFILL_OWNER_CONCURRENCY:
+              value: '2'
+              category: reliability
+            SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD:
+              value: '8'
+              category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
@@ -1536,6 +1545,8 @@ environments:
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         backend-integration:
+          flags:
+            --timeout: 3600s
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1730,6 +1741,9 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
+              value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
+              category: service_auth
             BATCH_PIPELINE_UID_ALLOWLIST:
               value: ''
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -2146,7 +2160,7 @@ environments:
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -2435,6 +2449,7 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -2543,7 +2558,7 @@ environments:
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -2618,6 +2633,7 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           HOSTED_DIARIZATION_API_URL:
             value: http://172.16.160.20/diarizer-batch
             category: service_discovery
@@ -2873,7 +2889,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3078,6 +3094,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -3235,7 +3252,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3460,6 +3477,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -3595,6 +3613,15 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
+              value: 'on'
+              category: ops_kill
+            SYNC_BACKFILL_OWNER_CONCURRENCY:
+              value: '2'
+              category: reliability
+            SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD:
+              value: '8'
+              category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
@@ -3602,7 +3629,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3930,6 +3957,8 @@ environments:
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
+          flags:
+            --timeout: 3600s
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3953,7 +3982,7 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
@@ -4118,6 +4147,9 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: service_auth
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}

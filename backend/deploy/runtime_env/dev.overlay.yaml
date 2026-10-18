@@ -601,6 +601,9 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
+            value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
+            category: service_auth
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: ''
           BATCH_PIPELINE_SERVING_ENABLED:

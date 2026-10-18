@@ -191,3 +191,8 @@ def head_priority_enabled() -> bool:
 def async_projection_enabled() -> bool:
     """Persist in order, then drain durable follow-ups outside the owner claim."""
     return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def recovery_tasks_enabled() -> bool:
+    """Ship-on request-backed paid recovery; false restores inline sweeping."""
+    return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'

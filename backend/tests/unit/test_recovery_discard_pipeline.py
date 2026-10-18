@@ -176,6 +176,102 @@ async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blo
 
 
 @pytest.mark.asyncio
+async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention(pipeline, monkeypatch, capsys):
+    text = 'Call mom before five.'
+
+    async def no_merge(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', no_merge)
+    _seed(
+        pipeline,
+        transcript=[{'id': 'seg-short', 'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': True}],
+    )
+    monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *_: (text, text, {}))
+
+    response, counters = await _run_and_verify(pipeline)
+    row, job = pipeline.store.rows[CONVERSATION_PATH], pipeline.store.rows[JOB_PATH]
+
+    assert response == {'status': 'done'}
+    assert row['status'] == job['status'] == 'completed'
+    assert row['discarded'] is False
+    assert row['structured']['title'] == text
+    assert row['structured']['overview'] == ''
+    assert row['terminal_no_derived_effects'] is True
+    assert not any('processing_attention_items' in path for path in pipeline.store.rows)
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    pipeline.paid_notes.assert_not_called()
+    event = next(json.loads(line) for line in capsys.readouterr().out.splitlines() if 'kept_minimum' in line)
+    assert event == {
+        'event': 'selfheal_guard',
+        'outcome': 'kept_minimum',
+        'reason': 'content_below_floor',
+        'transcript_words': 4,
+        'content_floor_words': 12,
+    }
+
+
+@pytest.mark.asyncio
+async def test_short_contentful_recovery_preserves_capture_appended_after_read(pipeline, monkeypatch):
+    text = 'Call mom before five.'
+
+    async def no_merge(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', no_merge)
+    _seed(
+        pipeline,
+        transcript=[{'id': 'seg-short', 'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': True}],
+    )
+    monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *_: (text, text, {}))
+
+    persist = lifecycle.persist_processed_conversation
+
+    def append_capture_before_persist(uid, data, **kwargs):
+        row = pipeline.store.rows[CONVERSATION_PATH]
+        row['audio_files'].append(
+            {'id': 'later-audio', 'uid': UID, 'conversation_id': CID, 'chunk_timestamps': [], 'duration': 1}
+        )
+        segments = conversations_db.decode_transcript_segments_verified(
+            UID, row['transcript_segments'], bool(row.get('transcript_segments_compressed'))
+        )
+        segments[0]['audio_alignment'] = 'unplaced'
+        late_transcript = conversations_db.encode_conversation_for_write(
+            UID, {'transcript_segments': segments}, level=row['data_protection_level']
+        )
+        row.update(late_transcript)
+        return persist(uid, data, **kwargs)
+
+    monkeypatch.setattr(lifecycle, 'persist_processed_conversation', append_capture_before_persist)
+    response, counters = await _run_and_verify(pipeline)
+
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'done'}
+    assert row['status'] == pipeline.store.rows[JOB_PATH]['status'] == 'completed'
+    assert row['audio_files'][-1]['id'] == 'later-audio'
+    segments = conversations_db.decode_transcript_segments_verified(
+        UID, row['transcript_segments'], bool(row.get('transcript_segments_compressed'))
+    )
+    assert segments[0]['audio_alignment'] == 'unplaced'
+    assert row['relevance_decision']['trigger'] == 'server_recovery'
+    assert row['relevance_decision']['verdict'] == 'keep'
+    assert row['relevance_decision']['reason'] == 'content_below_floor'
+    assert row['terminal_no_derived_effects'] is True
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    conversation_writes = [data for path, data in pipeline.writes if path == CONVERSATION_PATH]
+    assert conversation_writes
+    for data in conversation_writes:
+        for field in (
+            'transcript_segments',
+            'transcript_segments_compressed',
+            'audio_files',
+            'speaker_resolution',
+            'data_protection_level',
+        ):
+            assert field not in data
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'corruption', ['encrypted_garbage', 'non_list_json', 'invalid_utf8', 'standard_garbage', 'plaintext_payload']
 )

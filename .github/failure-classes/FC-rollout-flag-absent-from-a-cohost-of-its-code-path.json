@@ -1,12 +1,14 @@
 {
   "schema_version": 1,
   "id": "FC-rollout-flag-absent-from-a-cohost-of-its-code-path",
-  "violated_contract": "A rollout flag must be declared on every deployed service that executes the code path it gates, or the same user action can produce different behavior on different processing hosts.",
-  "canonical_prevention": "Enumerate the services that host each gated code path and validate effective values across runtime_env, charts, and workflow/action overlays. Exercise each entrypoint and verify deployment validators reject a co-host that is missing the required setting.",
+  "violated_contract": "A rollout flag must be declared on every deployed service that executes the code path it gates, or hosts can behave differently for the same user action.",
+  "canonical_prevention": "Enumerate every service that hosts each active gated code path and validate effective values across composed runtime_env, charts, and workflow/action overlays. Exercise each entrypoint and verify deployment validators reject a co-host missing a required setting.",
   "canonical_prevention_artifact": [
     "backend/scripts/runtime_env_capability_contracts.py",
     "backend/tests/unit/test_backend_runtime_env_validator.py",
     "backend/tests/unit/test_pusher_static_capability_admission.py",
+    "backend/tests/unit/test_conversation_notes_v2_beta_rollout.py",
+    "backend/tests/unit/test_summary_production_policy.py",
     "backend/tests/unit/test_route_policy_inventory.py"
   ],
   "evidence_prs": [

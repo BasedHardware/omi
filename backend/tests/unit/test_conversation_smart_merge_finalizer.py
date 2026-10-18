@@ -100,6 +100,31 @@ async def _finalize(trigger=ProcessingTrigger.CAPTURE_END):
     )
 
 
+@pytest.mark.asyncio
+async def test_completed_minimum_reaches_processing_under_its_existing_job(harness, monkeypatch):
+    calls, row = harness
+    row.update(summary_title_provenance='server_minimum', summary_output_present=False)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    original = finalizer.run_blocking
+    processed = []
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.process_with_episode_budget:
+            processed.append(args)
+            # A failed summary must fail this delivery before terminal fanout,
+            # retaining the existing durable job's retry rather than skipping it.
+            raise RuntimeError('synthetic provider unavailable')
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    with pytest.raises(finalizer.ConversationFinalizationError):
+        await _finalize()
+    assert len(processed) == 1
+    assert processed[0][0] is finalizer.process_conversation
+    assert finalizer.lifecycle_service.complete_finalization_fanout not in calls
+
+
 def test_default_off_reservation_does_not_claim_record_owner(monkeypatch):
     from utils.batch_pipeline import live as batch_live
 

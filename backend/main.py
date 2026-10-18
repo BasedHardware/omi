@@ -353,6 +353,7 @@ methods_timeout = {
 
 # Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
+    "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
@@ -395,6 +396,12 @@ def _run_fsr_loop(loop_name, callback, interval_seconds):
 
     on_skip = withdraw_queue_oldest_ready_ages if loop_name == 'publish_all_queue_oldest_ready_ages' else None
     return loop_lease(loop_name).run(attributed, interval_seconds, on_skip=on_skip) or {}
+
+
+# Install while importing on the main thread, after the server's signal setup.
+from utils.other.fsr_leader_lease import install_loop_lease_sigterm_handler
+
+install_loop_lease_sigterm_handler()
 
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
@@ -672,7 +679,10 @@ async def shutdown_event():
     from database.durable_queue_age import withdraw_queue_oldest_ready_ages
 
     try:
-        await run_blocking(db_executor, release_loop_leases)
+        if singleton_loops_enabled():
+            await asyncio.to_thread(release_loop_leases)
+        else:
+            await run_blocking(db_executor, release_loop_leases)
     except Exception:
         logging.getLogger(__name__).warning('fsr_leader_lease release scheduling failed; leases will expire')
     if singleton_loops_enabled():
