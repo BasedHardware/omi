@@ -111,14 +111,12 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
 
     def test_cost_stack_counts_every_line_and_marks_estimates(self):
-        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY
+        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY, MEASURED
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "Cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
-        for line in [
-            "gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttEstimateUsd",
-            "saasMeasuredUsd", "saasEstimateUsd", "revenuePerDay",
-        ]:
+        for line in ["gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttEstimateUsd",
+                     "saasMeasuredUsd", "saasEstimateUsd", "revenuePerDay"]:
             self.assertIn(line, fields)
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
                   for o in cost["fieldConfig"]["overrides"]}
@@ -126,8 +124,13 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
             self.assertNotIn("custom.stacking", styled[name])  # still in the stack
         self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est."})
+        self.assertEqual(set(MEASURED), {"STT measured", "SaaS measured (Mercury)"})
+        for name in MEASURED:
+            self.assertIn(name, styled)
+            self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
         self.assertIn("Soniox console", cost["description"])
+        self.assertIn("measured SaaS (Mercury)", cost["description"])
         self.assertNotIn("FinOps modelled", cost["description"])
 
     def test_status_colors_curve_placeholder_and_data_through(self):
@@ -145,7 +148,7 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(through[0]["gridPos"]["h"], 1)
         health = next(p for p in board["panels"] if p["title"] == "Health")
         names = [o["properties"][0]["value"] for o in health["fieldConfig"]["overrides"]]
-        self.assertTrue(all(len(n) <= 12 for n in names), names)
+        self.assertTrue(all(len(n) <= 12 for n in names), names)  # no wrap at 1440
 
     def test_field_order_is_pinned_not_alphabetical(self):
         board = load("omi-tv-v2")
@@ -176,7 +179,7 @@ class WallV2Contract(unittest.TestCase):
             for other in range(9):
                 name = "Sep 26" + CURVE_MARK * other + " B"
                 self.assertEqual(bool(re.search(pattern, name)), other == age, (age, other))
-        self.assertEqual([o["properties"][2]["value"] for o in ramp][0], 3)
+        self.assertEqual([o["properties"][2]["value"] for o in ramp][0], 3)  # newest is thickest
 
     def test_cohort_lines_end_at_an_explained_maturing_band(self):
         board = load("omi-tv-v2")
@@ -195,7 +198,7 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(props["custom.lineWidth"], 0)
             self.assertEqual(props["custom.hideFrom"], {"legend": False, "tooltip": True, "viz": False})
             self.assertIn("band", panel["description"])
-            self.assertNotIn("Oct 24", panel["description"])
+            self.assertNotIn("Oct 24", panel["description"])  # cohorts roll daily: no release date
 
     def test_unit_economics_is_daily_and_breaks_on_missing_days(self):
         board = load("omi-tv-v2")
