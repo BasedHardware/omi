@@ -5,7 +5,8 @@ A simple, viral-optimized app that shows all people you've met
 sorted by their IQ scores (smartest to dumbest).
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
+from .iq_auth import verify_iq_auth
 from fastapi.responses import HTMLResponse, JSONResponse
 from typing import List, Optional, Dict
 import logging
@@ -1715,7 +1716,10 @@ async def root():
 
 
 @router.get("/iq", response_class=HTMLResponse)
-async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")):
+async def iq_rating_page(
+    uid: Optional[str] = Query(None, description="User ID"),
+    iq_rating_token: Optional[str] = Query(None, description="Auth token"),
+):
     """IQ Rating page."""
     if not uid:
         html = IQ_RATING_HTML.format(
@@ -1723,6 +1727,7 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
         )
         return HTMLResponse(content=html)
     
+    verify_iq_auth(iq_rating_token=iq_rating_token)
     try:
         logger.info(f"IQ rating request for uid: {uid[:8]}...")
         
@@ -1760,7 +1765,10 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
 
 
 @router.get("/iq/api")
-async def iq_rating_api(uid: str = Query(..., description="User ID")):
+async def iq_rating_api(
+    uid: str = Query(..., description="User ID"),
+    _auth: bool = Depends(verify_iq_auth),
+):
     """API endpoint to get IQ ratings as JSON."""
     try:
         people_with_iq = get_people_for_user(uid)
@@ -1787,21 +1795,34 @@ async def iq_rating_api(uid: str = Query(..., description="User ID")):
 
 
 @router.post("/iq/hide")
-async def hide_person_route(uid: str = Query(...), person_id: str = Query(...)):
+async def hide_person_route(
+    uid: str = Query(...),
+    person_id: str = Query(...),
+    _auth: bool = Depends(verify_iq_auth),
+):
     """Hide a person from the list (not a real name)."""
     success = hide_person(uid, person_id)
     return {"success": success, "person_id": person_id}
 
 
 @router.post("/iq/unhide")
-async def unhide_person_route(uid: str = Query(...), person_id: str = Query(...)):
+async def unhide_person_route(
+    uid: str = Query(...),
+    person_id: str = Query(...),
+    _auth: bool = Depends(verify_iq_auth),
+):
     """Unhide a person."""
     success = unhide_person(uid, person_id)
     return {"success": success, "person_id": person_id}
 
 
 @router.post("/iq/adjust")
-async def adjust_iq_route(uid: str = Query(...), person_id: str = Query(...), delta: int = Query(...)):
+async def adjust_iq_route(
+    uid: str = Query(...),
+    person_id: str = Query(...),
+    delta: int = Query(...),
+    _auth: bool = Depends(verify_iq_auth),
+):
     """Adjust a person's IQ score. delta can be positive or negative."""
     new_iq = adjust_iq(uid, person_id, delta)
     if new_iq is not None:
@@ -1810,7 +1831,10 @@ async def adjust_iq_route(uid: str = Query(...), person_id: str = Query(...), de
 
 
 @router.get("/iq/preload")
-async def preload_data(uid: str = Query(..., description="User ID")):
+async def preload_data(
+    uid: str = Query(..., description="User ID"),
+    _auth: bool = Depends(verify_iq_auth),
+):
     """Preload data for a user in background."""
     if get_people_for_user(uid) is not None:
         return {"status": "already_loaded", "uid": uid}
@@ -1825,7 +1849,10 @@ async def preload_data(uid: str = Query(..., description="User ID")):
 
 
 @router.get("/iq/refresh")
-async def refresh_data(uid: str = Query(..., description="User ID")):
+async def refresh_data(
+    uid: str = Query(..., description="User ID"),
+    _auth: bool = Depends(verify_iq_auth),
+):
     """Force refresh data for a user (re-fetch from API)."""
     # Clear existing data
     conn = sqlite3.connect(DB_PATH)
