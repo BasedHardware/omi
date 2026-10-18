@@ -237,3 +237,15 @@ def test_update_app_does_not_destroy_old_logo_on_422(monkeypatch):
     with pytest.raises(fastapi.HTTPException):
         apps_router.update_app('a1', app_data={'name': 'x'}, file=_Upload(), uid='u')
     assert deleted == []
+
+
+def test_delete_persona_without_image_does_not_touch_gcs(monkeypatch):
+    """Legacy persona rows carry no image key — delete must not call GCS."""
+    monkeypatch.setenv('ADMIN_KEY', 'k')
+    monkeypatch.setattr(apps_router, 'get_persona_by_id_db', lambda p: {'approved': False})
+    calls = {'logo': []}
+    monkeypatch.setattr(apps_router, 'delete_app_logo', lambda img: calls['logo'].append(img))
+    monkeypatch.setattr(apps_router, 'delete_persona_db', lambda p: None)
+    monkeypatch.setattr(apps_router, 'delete_app_cache_by_id', lambda i: None)
+    apps_router.delete_persona('p-legacy', secret_key='k')
+    assert calls['logo'] == []
