@@ -1,7 +1,7 @@
 import logging
 from typing import Awaitable, Callable, List, Optional
 
-from fastapi import Depends, HTTPException, Request, Security
+from fastapi import Depends, HTTPException, Request, Response, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
@@ -15,6 +15,8 @@ from utils.api_key_families import (
     unknown_api_key_detail,
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
+from utils.ladder_v1 import enforce_daily_cap
+from config import ladder_v1 as ladder_policy
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -88,6 +90,7 @@ api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 async def get_uid_from_mcp_api_key(
     api_key: str = Security(api_key_header),
     request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
 ) -> str:
     if not api_key or not api_key.startswith("Bearer "):
         raise HTTPException(
@@ -110,6 +113,7 @@ async def get_uid_from_mcp_api_key(
     user_id = user_data["user_id"]
     await _enforce_account_deletion_access(user_id)
     await _enforce_cutover_access(user_id, request)
+    await _enforce_ladder_api(user_id, response)
     await _check_api_key_rate_limit_async(
         prefix="mcp",
         uid=user_id,
@@ -123,6 +127,7 @@ async def get_uid_from_mcp_api_key(
 async def get_mcp_api_key_auth(
     api_key: str = Security(api_key_header),
     request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
 ) -> "ApiKeyAuth":
     """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
 
@@ -151,6 +156,7 @@ async def get_mcp_api_key_auth(
 
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
+    await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -257,6 +263,7 @@ class ApiKeyAuth:
 async def get_api_key_auth(
     api_key: str = Security(api_key_header),
     request: Request = None,  # pyright: ignore[reportArgumentType]
+    response: Response = None,  # pyright: ignore[reportArgumentType]
 ) -> ApiKeyAuth:
     """Extract user ID and scopes from API key"""
     if not api_key or not api_key.startswith("Bearer "):
@@ -281,6 +288,7 @@ async def get_api_key_auth(
 
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
+    await _enforce_ladder_api(user_data["user_id"], response)
 
     return ApiKeyAuth(
         uid=user_data["user_id"],
@@ -704,3 +712,17 @@ async def get_developer_memory_default_memory_batch_write_context(
         policy_name="dev:memories_batch",
     )
     return auth_context
+
+
+async def _enforce_ladder_api(uid: str, response: Response | None) -> None:
+    # MCP and developer API traffic is bounded by the daily request count and,
+    # once wired, the per-request read limit. It does not draw the monthly
+    # usage budget.
+    daily = None
+    if ladder_policy.mcp_daily_caps_enabled():
+        daily = await run_blocking(db_executor, enforce_daily_cap, uid)
+    if daily is not None and response is not None:
+        response.headers['X-Omi-Usage-State'] = daily['state']
+        response.headers['X-Omi-Usage-Reset-At'] = str(daily['reset_at'])
+        if daily['state'] == 'nudge':
+            response.headers['X-Omi-Storefront-Trigger'] = 'mcp_daily_cap'

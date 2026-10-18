@@ -110,6 +110,19 @@ def _install_document_read_probe() -> None:
 
 _install_document_read_probe()
 
+
+def _install_action_item_write_fences() -> None:
+    # Match the SDK read probe's import-isolation seam. No clients or IO here.
+    try:
+        from database.action_item_write_fence import install_write_fences
+    except ImportError:
+        return
+    install_write_fences()
+
+
+_install_action_item_write_fences()
+
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None

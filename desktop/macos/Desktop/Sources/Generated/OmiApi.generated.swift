@@ -1494,6 +1494,52 @@ public enum OmiAPI {
   }
 
 
+  public struct ChatAtCap: Codable {
+    public let body: String
+    public let resetAt: Int
+    public let resetLine: String
+    public let state: String?
+    public let title: String
+    public let trigger: String?
+    public let upgradeLabel: String?
+    public let upgradePlan: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case body
+      case resetAt = "reset_at"
+      case resetLine = "reset_line"
+      case state
+      case title
+      case trigger
+      case upgradeLabel = "upgrade_label"
+      case upgradePlan = "upgrade_plan"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      body = try c.decode(String.self, forKey: .body)
+      resetAt = try c.decode(Int.self, forKey: .resetAt)
+      resetLine = try c.decode(String.self, forKey: .resetLine)
+      state = try c.decodeIfPresent(String.self, forKey: .state)
+      title = try c.decode(String.self, forKey: .title)
+      trigger = try c.decodeIfPresent(String.self, forKey: .trigger)
+      upgradeLabel = try c.decodeIfPresent(String.self, forKey: .upgradeLabel)
+      upgradePlan = try c.decodeIfPresent(String.self, forKey: .upgradePlan)
+    }
+
+    public init(body: String, resetAt: Int, resetLine: String, state: String? = nil, title: String, trigger: String? = nil, upgradeLabel: String? = nil, upgradePlan: String? = nil) {
+      self.body = body
+      self.resetAt = resetAt
+      self.resetLine = resetLine
+      self.state = state
+      self.title = title
+      self.trigger = trigger
+      self.upgradeLabel = upgradeLabel
+      self.upgradePlan = upgradePlan
+    }
+  }
+
+
   public struct ChunkSpan: Codable {
     public let end: Double
     public let start: Double
@@ -1672,6 +1718,7 @@ public enum OmiAPI {
     public let pluginsResults: [PluginResult]?
     public let privateCloudSyncEnabled: Bool?
     public let processingConversationId: String?
+    public let processingDeferred: Bool?
     public let processingMemoryId: String?
     public let processingState: ConversationProcessingState?
     public let screenshotSharingEnabled: Bool?
@@ -1726,6 +1773,7 @@ public enum OmiAPI {
       case pluginsResults = "plugins_results"
       case privateCloudSyncEnabled = "private_cloud_sync_enabled"
       case processingConversationId = "processing_conversation_id"
+      case processingDeferred = "processing_deferred"
       case processingMemoryId = "processing_memory_id"
       case processingState = "processing_state"
       case screenshotSharingEnabled = "screenshot_sharing_enabled"
@@ -1782,6 +1830,7 @@ public enum OmiAPI {
       pluginsResults = try c.decodeIfPresent([PluginResult].self, forKey: .pluginsResults)
       privateCloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .privateCloudSyncEnabled)
       processingConversationId = try c.decodeIfPresent(String.self, forKey: .processingConversationId)
+      processingDeferred = try c.decodeIfPresent(Bool.self, forKey: .processingDeferred)
       processingMemoryId = try c.decodeIfPresent(String.self, forKey: .processingMemoryId)
       processingState = try c.decodeIfPresent(ConversationProcessingState.self, forKey: .processingState)
       screenshotSharingEnabled = try c.decodeIfPresent(Bool.self, forKey: .screenshotSharingEnabled)
@@ -1804,7 +1853,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1837,6 +1886,7 @@ public enum OmiAPI {
       self.pluginsResults = pluginsResults
       self.privateCloudSyncEnabled = privateCloudSyncEnabled
       self.processingConversationId = processingConversationId
+      self.processingDeferred = processingDeferred
       self.processingMemoryId = processingMemoryId
       self.processingState = processingState
       self.screenshotSharingEnabled = screenshotSharingEnabled
@@ -5027,6 +5077,44 @@ public enum OmiAPI {
   }
 
 
+  public struct StorefrontCapChoice: Codable {
+    public let body: String
+    public let dontAskAgainLabel: String
+    public let onDeviceLabel: String
+    public let onDeviceUpgradeLine: String
+    public let title: String
+    public let upgradeLabel: String
+
+    private enum CodingKeys: String, CodingKey {
+      case body
+      case dontAskAgainLabel = "dont_ask_again_label"
+      case onDeviceLabel = "on_device_label"
+      case onDeviceUpgradeLine = "on_device_upgrade_line"
+      case title
+      case upgradeLabel = "upgrade_label"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      body = try c.decode(String.self, forKey: .body)
+      dontAskAgainLabel = try c.decode(String.self, forKey: .dontAskAgainLabel)
+      onDeviceLabel = try c.decode(String.self, forKey: .onDeviceLabel)
+      onDeviceUpgradeLine = try c.decode(String.self, forKey: .onDeviceUpgradeLine)
+      title = try c.decode(String.self, forKey: .title)
+      upgradeLabel = try c.decode(String.self, forKey: .upgradeLabel)
+    }
+
+    public init(body: String, dontAskAgainLabel: String, onDeviceLabel: String, onDeviceUpgradeLine: String, title: String, upgradeLabel: String) {
+      self.body = body
+      self.dontAskAgainLabel = dontAskAgainLabel
+      self.onDeviceLabel = onDeviceLabel
+      self.onDeviceUpgradeLine = onDeviceUpgradeLine
+      self.title = title
+      self.upgradeLabel = upgradeLabel
+    }
+  }
+
+
   public struct StorefrontCurrent: Codable {
     public let cancelAtPeriodEnd: Bool?
     public let interval: String?
@@ -5075,6 +5163,7 @@ public enum OmiAPI {
 
   public struct StorefrontPrice: Codable {
     public let amountMinor: Int
+    public let confirmLines: [String]?
     public let ctaLabel: String?
     public let currency: String
     public let headline: String
@@ -5086,6 +5175,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case amountMinor = "amount_minor"
+      case confirmLines = "confirm_lines"
       case ctaLabel = "cta_label"
       case currency
       case headline
@@ -5099,6 +5189,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       amountMinor = try c.decode(Int.self, forKey: .amountMinor)
+      confirmLines = try c.decodeIfPresent([String].self, forKey: .confirmLines)
       ctaLabel = try c.decodeIfPresent(String.self, forKey: .ctaLabel)
       currency = try c.decode(String.self, forKey: .currency)
       headline = try c.decode(String.self, forKey: .headline)
@@ -5109,8 +5200,9 @@ public enum OmiAPI {
       subline = try c.decodeIfPresent(String.self, forKey: .subline)
     }
 
-    public init(amountMinor: Int, ctaLabel: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
+    public init(amountMinor: Int, confirmLines: [String]? = nil, ctaLabel: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
       self.amountMinor = amountMinor
+      self.confirmLines = confirmLines
       self.ctaLabel = ctaLabel
       self.currency = currency
       self.headline = headline
@@ -5124,7 +5216,9 @@ public enum OmiAPI {
 
 
   public struct StorefrontResponse: Codable {
+    public let atCap: StorefrontCapChoice?
     public let catalogRevision: Int
+    public let chatAtCap: ChatAtCap?
     public let current: StorefrontCurrent?
     public let header: String?
     public let schemaVersion: Int?
@@ -5134,7 +5228,9 @@ public enum OmiAPI {
     public let yearlyToggleLabel: String?
 
     private enum CodingKeys: String, CodingKey {
+      case atCap = "at_cap"
       case catalogRevision = "catalog_revision"
+      case chatAtCap = "chat_at_cap"
       case current
       case header
       case schemaVersion = "schema_version"
@@ -5146,7 +5242,9 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      atCap = try c.decodeIfPresent(StorefrontCapChoice.self, forKey: .atCap)
       catalogRevision = try c.decode(Int.self, forKey: .catalogRevision)
+      chatAtCap = try c.decodeIfPresent(ChatAtCap.self, forKey: .chatAtCap)
       current = try c.decodeIfPresent(StorefrontCurrent.self, forKey: .current)
       header = try c.decodeIfPresent(String.self, forKey: .header)
       schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
@@ -5156,8 +5254,10 @@ public enum OmiAPI {
       yearlyToggleLabel = try c.decodeIfPresent(String.self, forKey: .yearlyToggleLabel)
     }
 
-    public init(catalogRevision: Int, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
+    public init(atCap: StorefrontCapChoice? = nil, catalogRevision: Int, chatAtCap: ChatAtCap? = nil, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
+      self.atCap = atCap
       self.catalogRevision = catalogRevision
+      self.chatAtCap = chatAtCap
       self.current = current
       self.header = header
       self.schemaVersion = schemaVersion
@@ -5232,8 +5332,11 @@ public enum OmiAPI {
 
 
   public struct StorefrontUsage: Codable {
+    public let hoursLeft: Int?
     public let kind: String?
+    public let mcpCapReached: Bool?
     public let meterLine: String?
+    public let moreLabel: String?
     public let nudgeLine: String?
     public let percent: Int?
     public let periodId: String?
@@ -5241,8 +5344,11 @@ public enum OmiAPI {
     public let resetLabel: String?
 
     private enum CodingKeys: String, CodingKey {
+      case hoursLeft = "hours_left"
       case kind
+      case mcpCapReached = "mcp_cap_reached"
       case meterLine = "meter_line"
+      case moreLabel = "more_label"
       case nudgeLine = "nudge_line"
       case percent
       case periodId = "period_id"
@@ -5252,8 +5358,11 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      hoursLeft = try c.decodeIfPresent(Int.self, forKey: .hoursLeft)
       kind = try c.decodeIfPresent(String.self, forKey: .kind)
+      mcpCapReached = try c.decodeIfPresent(Bool.self, forKey: .mcpCapReached)
       meterLine = try c.decodeIfPresent(String.self, forKey: .meterLine)
+      moreLabel = try c.decodeIfPresent(String.self, forKey: .moreLabel)
       nudgeLine = try c.decodeIfPresent(String.self, forKey: .nudgeLine)
       percent = try c.decodeIfPresent(Int.self, forKey: .percent)
       periodId = try c.decodeIfPresent(String.self, forKey: .periodId)
@@ -5261,9 +5370,12 @@ public enum OmiAPI {
       resetLabel = try c.decodeIfPresent(String.self, forKey: .resetLabel)
     }
 
-    public init(kind: String? = nil, meterLine: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
+    public init(hoursLeft: Int? = nil, kind: String? = nil, mcpCapReached: Bool? = nil, meterLine: String? = nil, moreLabel: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
+      self.hoursLeft = hoursLeft
       self.kind = kind
+      self.mcpCapReached = mcpCapReached
       self.meterLine = meterLine
+      self.moreLabel = moreLabel
       self.nudgeLine = nudgeLine
       self.percent = percent
       self.periodId = periodId
@@ -17720,6 +17832,31 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func processWaitingRecordingsV1UsersProcessingBacklogProcessPost(client: OmiApiClient, idempotencyKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/users/processing-backlog/process"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getUserProfileEndpointV1UsersProfileGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/users/profile"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -20025,5 +20162,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 514 Swift client methods generated.
+  // Total: 515 Swift client methods generated.
 }

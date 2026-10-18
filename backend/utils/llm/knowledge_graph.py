@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, cast
 import threading
@@ -312,6 +313,8 @@ def extract_knowledge_from_memory(
     db_client: Any = None,
     strict_parse: bool = False,
 ) -> Optional[Dict[str, Any]]:
+    if not generated_compute_allowed(uid, 'knowledge_graph'):
+        return None
     existing_nodes = kg_db.get_knowledge_nodes(uid, db_client=db_client)
     extraction = extract_kg_from_text(
         uid,
@@ -414,6 +417,7 @@ def rebuild_knowledge_graph(
     *,
     db_client: Any = None,
 ) -> Dict[str, Any]:
+    require_generated_compute(uid, 'knowledge_graph')
     staged = _StagedRebuild()
     node_lock = threading.Lock()
 
@@ -468,6 +472,7 @@ def rebuild_knowledge_graph(
 
     # Only now is the replacement graph fully known. Anything that interrupts the
     # extraction above leaves the account's stored graph untouched.
+    require_generated_compute(uid, 'knowledge_graph')
     kg_db.delete_knowledge_graph(uid, db_client=db_client)
     # `upsert_knowledge_node` resolves a node it does not find by id against label
     # and alias, so the id a node lands on is the one it returns, not necessarily

@@ -114,6 +114,7 @@ from utils.memory.knowledge_ledger import (
     reopen_standalone_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
+from utils.memory.category_reads import read_category_window
 from utils.memory.read_resilience import (
     MemoryBackingStoreStream,
     MemoryBackingStoreUnavailable,
@@ -2606,6 +2607,45 @@ class MemoryService:
 
     @resilient_memory_read
     def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
+        include_archive: bool = False,
+        now: Optional[datetime] = None,
+        budget: Optional[ListReadBudget] = None,
+        view: str = 'released',
+        as_of: Optional[datetime] = None,
+        authoritative: bool = False,
+        category_filter: Optional[Set[str]] = None,
+    ) -> List[MemoryDB]:
+        kwargs: Dict[str, Any] = dict(
+            device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
+            include_archive=include_archive,
+            now=now,
+            budget=budget,
+            view=view,
+            as_of=as_of,
+            authoritative=authoritative,
+        )
+        if category_filter is None:
+            return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
+        # One admission owns all internal windows and their shared budget.
+        return read_category_window(
+            self._read_compatibility_window,
+            uid,
+            limit=limit,
+            offset=offset,
+            category_filter=category_filter,
+            max_window=HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+            **kwargs,
+        )
+
+    def _read_compatibility_window(
         self,
         uid: str,
         *,

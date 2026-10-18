@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -90,11 +93,14 @@ class RecordingListItem extends StatelessWidget {
                                 style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(height: 3),
-                              Text(
-                                statusLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: statusColor, fontSize: 12),
+                              _OnDeviceStatus(
+                                recording: recording,
+                                fallback: Text(
+                                  statusLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: statusColor, fontSize: 12),
+                                ),
                               ),
                             ],
                           ),
@@ -116,6 +122,29 @@ class RecordingListItem extends StatelessWidget {
             ),
           ),
         );
+      },
+    );
+  }
+}
+
+/// A pending recording's on-device status ("Waiting for charger") while the on-device flag is on;
+/// otherwise [fallback], the row's usual status line.
+class _OnDeviceStatus extends StatelessWidget {
+  const _OnDeviceStatus({required this.recording, required this.fallback});
+
+  final LocalRecording recording;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    if (recording.state != LocalRecordingState.pending) return fallback;
+    final controller = OnDeviceTranscriptionController.instance;
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        if (!controller.isActive) return fallback;
+        final atCap = context.select<UsageProvider, bool>((p) => p.isOutOfCredits);
+        return onDeviceRecordingChip(context, controller, atCap: atCap) ?? fallback;
       },
     );
   }

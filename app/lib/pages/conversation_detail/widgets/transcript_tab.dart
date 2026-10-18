@@ -477,7 +477,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
           onSegmentTap: widget.onSegmentTap,
           onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
-          editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+          editSegment: segments.any((s) => s.sttProvider?.startsWith('on_device:') == true)
+              ? null
+              : (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
           onConfirmSpeakerLabel: (segment) => _confirmSpeakerLabel(provider, segment),
           onRejectSpeakerLabel: (segment) => _rejectSpeakerLabel(provider, segment),
           startedAt: conversation.startedAt ?? conversation.createdAt,
@@ -485,7 +487,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
             if (segments.isNotEmpty)
               _TranscriptHeading(
                 conversation: conversation,
-                onSelect: provider.speakerLabelingSessionActive || _selection != null
+                onSelect: segments.any((s) => s.sttProvider?.startsWith('on_device:') == true) ||
+                        provider.speakerLabelingSessionActive ||
+                        _selection != null
                     ? null
                     : () => _beginSelection(provider),
               ),
@@ -528,6 +532,7 @@ class _TranscriptHeading extends StatelessWidget {
   /// Missing or uncountable resolution omits the count, matching the header chip's uncounted
   /// "others" rule.
   static int? _speakerCount(ServerConversation conversation) {
+    if (conversation.transcriptSegments.any((s) => s.sttProvider?.startsWith('on_device:') == true)) return null;
     final resolution = conversation.speakerResolution;
     if (resolution == null || !resolution.countable) return null;
     final segments = conversation.transcriptSegments;

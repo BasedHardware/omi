@@ -20,6 +20,8 @@ def additional_schema_groups(output_dir: Path) -> dict[str, dict[str, Any]]:
         'storefront': {
             'output': output_dir / 'storefront_wire.g.dart',
             'schemas': (
+                'ChatAtCap',
+                'StorefrontCapChoice',
                 'StorefrontCurrent',
                 'StorefrontPrice',
                 'StorefrontResponse',

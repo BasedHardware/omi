@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_serializer
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -1146,6 +1146,14 @@ class ConversationResponse(BaseModel):
     status: str
     discarded: bool
     meeting_treatment_eligible: bool = False
+    processing_deferred: bool = False
+
+    @model_serializer(mode='wrap')
+    def serialize_processing_deferred(self, handler):
+        data = handler(self)
+        if not self.processing_deferred:
+            data.pop('processing_deferred', None)
+        return data
 
 
 class UpdateConversationRequest(BaseModel):
@@ -1163,6 +1171,7 @@ class UpdateConversationRequest(BaseModel):
 
 
 class DevTranscriptSegment(BaseModel):
+    stt_provider: Optional[str] = Field(default=None, max_length=120)
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
 
     text: str = Field(description="The text spoken in this segment")
@@ -1743,6 +1752,7 @@ def create_conversation(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
     )
 
 
@@ -1844,6 +1854,7 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
         id=conversation['id'],
         status=status,
         discarded=bool(conversation.get('discarded', False)),
+        processing_deferred=bool(conversation.get('processing_deferred', False)),
         meeting_treatment_eligible=projected_meeting_treatment_eligible(conversation),
     )
 
@@ -2297,6 +2308,7 @@ def _create_conversation_from_segments(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        processing_deferred=conversation.processing_deferred,
         meeting_treatment_eligible=meeting_treatment_eligible,
     )
 

@@ -15,6 +15,7 @@ answer" and keep their existing safe default. Nothing here raises.
 """
 
 from __future__ import annotations
+from utils.generated_compute import current_generated_compute_allowed
 
 import logging
 import math
@@ -101,6 +102,8 @@ def ask_jev(
     ``record_decision_metrics=False`` suppresses ``omi_jev_decision_total`` and
     its latency histogram when another verifier uses the shared Jev client.
     """
+    if not current_generated_compute_allowed('jev_decisions', allow_byok=False):
+        return None
     started = time.monotonic()
     outcome = 'success'
     try:

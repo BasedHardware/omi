@@ -3045,6 +3045,24 @@
       ]
     },
     {
+      "collectionGroup": "stt_cap_holds",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "listed_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "review_proposals",
       "queryScope": "COLLECTION",
       "fields": [

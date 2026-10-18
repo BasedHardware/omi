@@ -150,6 +150,16 @@ def _forget(uid):
                     del holder.values[key]
 
 
+def forget_request_reads(uid):
+    """Drop this request's memoized reads after a durable write.
+
+    Request dedupe has no Redis generation of its own. Writers of a document
+    that ``memo`` may have already returned call this so a later read in the
+    same request sees the write. No request scope is a no-op.
+    """
+    _forget(uid)
+
+
 # These are correctness limits, not merely tunable defaults.
 _CACHE_TTLS = {
     'deletion_marker_cache': ('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),

@@ -1184,6 +1184,17 @@ export interface ChartDataset {
   label: string;
 }
 
+export interface ChatAtCap {
+  body: string;
+  reset_at: number;
+  reset_line: string;
+  state?: "paused";
+  title: string;
+  trigger?: "usage_budget";
+  upgrade_label?: string | null;
+  upgrade_plan?: string | null;
+}
+
 export interface ChatEvidenceEnvelope {
   references?: Array<ChatEvidenceReference>;
   request_id?: string | null;
@@ -1252,6 +1263,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  chat_at_cap?: ChatAtCap | null;
   is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
@@ -1260,6 +1272,7 @@ export interface ChatUsageQuota {
   reset_at?: number | null;
   unit: ChatQuotaUnit;
   used: number;
+  uses_shared_budget?: boolean;
 }
 
 export interface CheckVerificationRequest {
@@ -1391,6 +1404,7 @@ export interface Conversation {
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
+  processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
@@ -1474,6 +1488,7 @@ export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
   meeting_treatment_eligible?: boolean;
+  processing_deferred?: boolean;
   status: string;
 }
 
@@ -1590,6 +1605,7 @@ export interface ConversationSearchItem {
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
+  processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
@@ -1753,6 +1769,7 @@ export interface CreateConversationTranscriptSegment {
   speaker?: string | null;
   speaker_id?: number | null;
   start: number;
+  stt_provider?: string | null;
   text: string;
 }
 
@@ -2906,6 +2923,21 @@ export interface HasSpeechProfileResponse {
   has_profile: boolean;
 }
 
+export interface HeldAudioRecording {
+  id: string;
+  seconds: number;
+  started_at: number;
+}
+
+export interface HeldAudioSummary {
+  count?: number;
+  recordings?: Array<HeldAudioRecording>;
+  reset_at: number;
+  retain_live: boolean;
+  seconds: number;
+  state?: "paused" | "recovering";
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -3847,9 +3879,11 @@ export interface PlanIdentityUserSubscriptionResponse {
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
+  processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: PlanIdentitySubscription;
   transcription_allowance?: TranscriptionAllowanceSnapshot | null;
@@ -3963,6 +3997,20 @@ export interface ProactivityTarget {
 export interface ProcessConversationRequest {
   calendar_meeting_context?: CalendarMeetingContext | null;
   client_processing?: unknown | null;
+}
+
+export interface ProcessingBacklog {
+  budget_exhausted?: boolean;
+  deferred_conversations?: number;
+  deferred_seconds?: number;
+  estimated_hours?: number;
+  estimated_percent?: number;
+  estimated_units?: number;
+  exceeds_remaining?: boolean;
+  held_audio_count?: number;
+  held_audio_seconds?: number;
+  remaining_units?: number | null;
+  state: "capped" | "waiting_choice" | "processing" | "none";
 }
 
 export interface ProductMemorySearchItem {
@@ -5000,6 +5048,15 @@ export interface StoreRecordingPermissionResponse {
   store_recording_permission: boolean;
 }
 
+export interface StorefrontCapChoice {
+  body: string;
+  dont_ask_again_label: string;
+  on_device_label: string;
+  on_device_upgrade_line: string;
+  title: string;
+  upgrade_label: string;
+}
+
 export interface StorefrontCurrent {
   cancel_at_period_end?: boolean;
   interval?: "month" | "year" | null;
@@ -5013,6 +5070,7 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_lines?: Array<string> | null;
   cta_label?: string | null;
   currency: string;
   headline: string;
@@ -5024,7 +5082,9 @@ export interface StorefrontPrice {
 }
 
 export interface StorefrontResponse {
+  at_cap?: StorefrontCapChoice | null;
   catalog_revision: number;
+  chat_at_cap?: ChatAtCap | null;
   current?: StorefrontCurrent | null;
   header?: string | null;
   schema_version?: 2;
@@ -5050,8 +5110,11 @@ export interface StorefrontTier {
 }
 
 export interface StorefrontUsage {
+  hours_left?: number | null;
   kind?: "usage_budget" | "transcription" | "unavailable";
+  mcp_cap_reached?: boolean;
   meter_line?: string | null;
+  more_label?: string | null;
   nudge_line?: string | null;
   percent?: number | null;
   period_id?: string | null;
@@ -5792,9 +5855,11 @@ export interface UserSubscriptionResponse {
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
   desktop_grandfather_until?: number | null;
+  held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
   phone_call_quota?: PhoneCallQuota | null;
+  processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
   transcription_allowance?: TranscriptionAllowanceSnapshot | null;
@@ -6195,6 +6260,7 @@ export interface OmiApiSchemas {
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
+  "ChatAtCap": ChatAtCap;
   "ChatEvidenceEnvelope": ChatEvidenceEnvelope;
   "ChatEvidenceReference": ChatEvidenceReference;
   "ChatFirstSubject": ChatFirstSubject;
@@ -6412,6 +6478,8 @@ export interface OmiApiSchemas {
   "HTTPValidationError": HTTPValidationError;
   "HarnessEdit": HarnessEdit;
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
+  "HeldAudioRecording": HeldAudioRecording;
+  "HeldAudioSummary": HeldAudioSummary;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -6560,6 +6628,7 @@ export interface OmiApiSchemas {
   "ProactivityOutcomeResponse": ProactivityOutcomeResponse;
   "ProactivityTarget": ProactivityTarget;
   "ProcessConversationRequest": ProcessConversationRequest;
+  "ProcessingBacklog": ProcessingBacklog;
   "ProductMemorySearchItem": ProductMemorySearchItem;
   "ProductMemorySearchResponse": ProductMemorySearchResponse;
   "ProductRolloutObservability": ProductRolloutObservability;
@@ -6701,6 +6770,7 @@ export interface OmiApiSchemas {
   "StoreMeetingRequest": StoreMeetingRequest;
   "StoreMeetingResponse": StoreMeetingResponse;
   "StoreRecordingPermissionResponse": StoreRecordingPermissionResponse;
+  "StorefrontCapChoice": StorefrontCapChoice;
   "StorefrontCurrent": StorefrontCurrent;
   "StorefrontPrice": StorefrontPrice;
   "StorefrontResponse": StorefrontResponse;
@@ -11178,6 +11248,16 @@ export interface OmiApiPaths {
       operationId: "set_private_cloud_sync_v1_users_private_cloud_sync_post";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/processing-backlog/process": {
+    post: {
+      operationId: "process_waiting_recordings_v1_users_processing_backlog_process_post";
+      responses: {
+        "200": ProcessingBacklog;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -20524,6 +20604,26 @@ export async function set_private_cloud_sync_v1_users_private_cloud_sync_post(qu
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function process_waiting_recordings_v1_users_processing_backlog_process_post(header: { Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ProcessingBacklog> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/processing-backlog/process`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      "Idempotency-Key": String(header.Idempotency_Key),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_profile_endpoint_v1_users_profile_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserProfileResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/profile`;
@@ -22247,4 +22347,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 514 client methods generated.
+// Total: 515 client methods generated.

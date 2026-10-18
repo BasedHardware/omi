@@ -1,5 +1,7 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
+from utils.generated_compute import generated_compute_allowed, generated_compute_enabled
+
 import asyncio
 from datetime import datetime, timezone
 from collections import Counter
@@ -602,6 +604,10 @@ async def run_pass(
     dry_run=False,
     bootstrap_tools=None,
 ):
+    if generated_compute_enabled() and not await run_blocking(
+        db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
+    ):
+        return {'status': 'not_admitted', 'reason': 'usage_budget_exhausted'}
     if not enabled():
         report = {'status': 'not_admitted', 'reason': 'disabled'}
         if not dry_run:

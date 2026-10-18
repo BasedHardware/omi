@@ -96,13 +96,10 @@ class RegistryFixture(unittest.TestCase):
         )
         self.write("desktop/windows/src/renderer/flags.ts", "import.meta.env.VITE_ENABLE_MISSING_WINDOWS\n")
         self.write("web/admin/src/flags.ts", "process.env.NEXT_PUBLIC_ENABLE_MISSING_WEB\n")
+        self.write("web/app/src/lib/gate.ts", "class Gate {\n  static readonly enabledFlag = 'missing-web-posthog';\n}\n")
         errors = "\n".join(self.errors())
         for key in (
-            "missing_macos_kill",
-            "missing_enable",
-            "missing-mobile-experiment",
-            "VITE_ENABLE_MISSING_WINDOWS",
-            "NEXT_PUBLIC_ENABLE_MISSING_WEB",
+            "missing_macos_kill", "missing_enable", "missing-mobile-experiment", "VITE_ENABLE_MISSING_WINDOWS", "NEXT_PUBLIC_ENABLE_MISSING_WEB", "missing-web-posthog"
         ):
             self.assertIn(f"unregistered feature flag: {key}", errors)
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)

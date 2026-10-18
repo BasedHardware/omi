@@ -10,7 +10,7 @@ import time
 import wave
 
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
-from config.stt_cap_dispatch import enabled as cap_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (

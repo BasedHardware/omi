@@ -458,6 +458,18 @@ tests/unit/test_frame_request_bucket_contract.py::test_runtime_manifest_alone_ca
 tests/unit/test_episode_writer.py::test_two_judges_reuse_candidates_and_reference
 # The first import of the destructive-operation fence happens inside this test under file isolation.
 tests/unit/test_executors.py::test_submit_with_context_defers_destructive_operation_fence_without_traceback
+# 2026-10-18: the enabled non-BYOK admission call pays the funded-processing import
+# in its call phase. 0.33s CPU inside the loaded pre-push (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_compute_admission_import_purity.py::test_enabled_non_byok_call_uses_real_budget_owner_without_importing_byok
+# 2026-10-18: lane-metering shadow merge imports usage_units in the call phase.
+# 0.32-0.36s CPU on the saturated pre-push host (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_ladder_v1_cutover.py::test_live_batch_and_on_device_are_disjoint
+# 2026-10-18: authenticated backlog process pays the conversation import in the
+# call phase. 0.27s in a quiet 40-file run, 0.33s twice inside loaded pre-push
+# (local fail limit 0.30s). Assertions still run.
+tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate
 # 2026-10-18: runs the hermetic finalization worker and self-heal verifier end to end
 # to prove short real speech persists as a quiet terminal minimum without attention.
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.

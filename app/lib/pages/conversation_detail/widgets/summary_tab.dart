@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -110,6 +111,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       sliver: SliverMainAxisGroup(slivers: [
                         // Title and facts live in the page header, shared by every tab.
                         SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                        // Where the transcript and summary were made, when the phone made them.
+                        // Redo with Omi Cloud waits on a re-transcription endpoint.
+                        if (conversation != null && !discarded)
+                          SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(

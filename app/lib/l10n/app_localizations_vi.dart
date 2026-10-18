@@ -13116,22 +13116,22 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Đề xuất';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Xem tất cả các gói';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Xem các gói';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Gói của bạn';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Để sau';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13816,6 +13816,407 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.';
+
+  @override
+  String get noContentToDisplay => 'Không có nội dung để hiển thị';
+
+  @override
+  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Bạn đã đạt giới hạn của tháng này';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi vẫn đang ghi âm. Hãy chọn cách phiên âm cho thời gian còn lại của tháng.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Mức sử dụng của bạn được đặt lại vào $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Phiên âm trên điện thoại này';
+
+  @override
+  String get onDeviceIncluded => 'Đã bao gồm';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Chạy khi điện thoại đang sạc.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+
+  @override
+  String get onDeviceAtCapFooter => 'Chọn cách nào cũng không mất gì. Bạn có thể thay đổi trong Cài đặt › Phiên âm.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Bước $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi tải mô hình giọng nói một lần. Sau đó, bản ghi của bạn được chuyển thành chữ ngay tại đây, không tính vào mức sử dụng.';
+
+  @override
+  String get onDeviceSpeechModel => 'Mô hình giọng nói';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Đang tải qua Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Đang tải · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Còn khoảng $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Đang chờ Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Chưa tải xong';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Chưa tải xuống';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Đã cài đặt · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Chưa hỗ trợ trên điện thoại này';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Cứ tiếp tục ghi âm trong lúc tải. Không có gì phải chờ.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Âm thanh được giữ trên điện thoại cho đến khi phiên âm xong.';
+
+  @override
+  String get onDeviceWifiOnly => 'Chỉ tải qua Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Tải mô hình giọng nói';
+
+  @override
+  String get onDeviceScheduleTitle => 'Thời điểm phiên âm';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi nên phiên âm khi nào?';
+
+  @override
+  String get onDeviceScheduleBody => 'Bạn có thể thay đổi bất cứ lúc nào.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Khi đang sạc';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Bản ghi xuất hiện sau khi bạn cắm sạc, thường là qua đêm.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Pin: gần như không tốn';
+
+  @override
+  String get onDeviceScheduleHours => 'Vài giờ một lần';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Xử lý bù theo từng đợt ngắn khi dùng pin, nên bản ghi hiếm khi chậm quá vài giờ.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Pin: khoảng $percent% mỗi ngày';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Ngay khi bạn nói';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Chép lời định kỳ khi Omi đang mở.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Pin: khoảng $percent% mỗi giờ hội thoại';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration đang chờ phiên âm';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Sẽ sẵn sàng sau khi bạn cắm sạc điện thoại. Việc ghi âm vẫn diễn ra bình thường.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi xử lý bù vài giờ một lần. Việc ghi âm vẫn diễn ra bình thường.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Đang chờ sạc vì pin yếu. Việc ghi âm vẫn diễn ra bình thường.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Phiên âm ngay';
+
+  @override
+  String get onDeviceUsesBattery => 'Tốn pin';
+
+  @override
+  String get onDeviceTranscribing => 'Đang phiên âm…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Đang chờ sạc';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Đang chờ phiên âm';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Đã lưu, đang chờ thiết lập';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Đã phiên âm trên iPhone này';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Đã phiên âm trên điện thoại này';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Đã phiên âm và tóm tắt trên iPhone này';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Được tóm tắt bởi Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Vì sao việc này được làm trên điện thoại của bạn';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Bạn đã đạt giới hạn tháng này, nên Omi đã chuyển lời trên điện thoại của bạn.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Bạn đã chọn chuyển lời trên điện thoại này để tiết kiệm mức sử dụng.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Bản tóm tắt cũng được viết trên iPhone này.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Bạn giữ mọi thứ trên điện thoại này nên không có bản tóm tắt.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Vì sao Omi Cloud viết bản tóm tắt này';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'iPhone này không thể tự tóm tắt (cần iPhone 15 Pro trở lên). Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không tính vào mức sử dụng của bạn.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Điện thoại này không thể tự tóm tắt. Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không tính vào mức sử dụng của bạn.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+
+  @override
+  String get onDeviceKeepEverything => 'Giữ mọi thứ trên điện thoại này';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Chỉ bản ghi, không có tóm tắt';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Khi bạn đạt giới hạn';
+
+  @override
+  String get onDeviceWhen => 'Khi nào';
+
+  @override
+  String get onDeviceSummaries => 'Tóm tắt';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Trên iPhone này';
+
+  @override
+  String get onDeviceSummariesCloud => 'Bởi Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Luôn chuyển lời trên điện thoại này';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Tiết kiệm mức sử dụng. Không có nhãn người nói.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String get onDeviceAudioWaiting => 'Âm thanh đang chờ trên điện thoại';
+
+  @override
+  String get onDeviceRemoveModel => 'Xóa mô hình giọng nói';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Xóa mô hình giọng nói?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Bản ghi sẽ chờ trên điện thoại này cho đến khi bạn tải lại hoặc mức sử dụng được đặt lại.';
+
+  @override
+  String get onDeviceRemove => 'Xóa';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Hoàn tất thiết lập để xem bản ghi';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Bạn đã đạt giới hạn tháng này. Omi vẫn đang ghi và lưu âm thanh trên điện thoại của bạn. Tải mô hình giọng nói và nó sẽ bắt kịp.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Tải xuống $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh được giữ cho đến khi mức sử dụng được đặt lại hoặc bạn nâng cấp.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Khi đạt giới hạn, chuyển lời trên điện thoại này';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return 'Đã dùng $percent% · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return 'Đã dùng $percent% · còn khoảng $hours giờ ghi âm · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Nhận thêm mức sử dụng';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Đang chuẩn bị giọng nói · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Bạn đã đạt giới hạn tháng này. Bản ghi của bạn được lưu và sẽ được chuyển thành chữ sau khi giới hạn đặt lại vào $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Bản ghi mới sẽ được chuyển thành chữ trên điện thoại này. Bản ghi đang chờ sẽ được chuyển thành chữ sau khi giới hạn đặt lại vào $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Bản ghi, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Đang chờ chuyển thành chữ';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Tạm dừng chuyển giọng nói trên đám mây';
+
+  @override
+  String get heldAudioLiveBody => 'Bạn đã đạt giới hạn tháng này. Omi vẫn tiếp tục ghi.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes phút đã ghi kể từ khi đạt giới hạn';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Chuyển thành chữ sau khi giới hạn đặt lại vào $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration đang chờ';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Chuyển thành chữ sau khi giới hạn đặt lại vào $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration đang chờ phiên âm';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'và $count bản nữa',
+      one: 'và 1 bản nữa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Đang chuyển các bản ghi đang chờ của bạn thành văn bản';
+
+  @override
+  String get processingPaused => 'Đã tạm dừng xử lý. Bạn đã đạt giới hạn tháng này.';
+
+  @override
+  String get processingStored =>
+      'Bản ghi âm và bản chép lời của bạn đã được lưu. Các bản ghi đang chờ sẽ tiếp tục chờ cho đến khi bạn chọn xử lý.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration đang chờ · Xử lý ngay dùng khoảng $percent% hạn mức tháng này';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Khoảng $hours giờ xử lý · $percent% hạn mức tháng này.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Chúng tôi sẽ xử lý các bản ghi mới nhất trước, trong hạn mức còn lại. Phần còn lại sẽ tiếp tục chờ.';
+
+  @override
+  String get processingAction => 'Xử lý bản ghi đang chờ';
+
+  @override
+  String get processingProgress => 'Đang xử lý các bản ghi đang chờ của bạn…';
+
+  @override
+  String get processingDeferred => 'Đang chờ xử lý';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuộc trò chuyện đang chờ',
+      one: '1 cuộc trò chuyện đang chờ',
+    );
+    return '$_temp0';
+  }
 
   @override
   String playbackPartialAudioSaved(String saved, String total) {

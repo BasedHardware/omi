@@ -117,6 +117,8 @@ final class FloatingBarUsageLimiter: ObservableObject {
   }
 
   var isLimitReached: Bool {
+    if let pause = serverQuota?.chatAtCap { return pause.active }
+    if serverQuota?.usesSharedBudget == true { return serverQuota?.allowed == false }
     // BYOK users pay their own LLM bill and are never limited. Honor local
     // BYOK state so a heartbeat-lagged server quota (allowed=false right
     // after activation) can't block chat for a fully-configured BYOK user.

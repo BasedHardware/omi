@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, List, Optional
 
 from pydantic import ValidationError
@@ -37,6 +38,20 @@ def read_developer_memories(
     if allowed is None:
         try:
             memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True, budget=budget)
+        except ListReadBudgetExhausted as exc:
+            budget.mark_exhausted(exc.reason)
+            memories = []
+        return _validated_memories(memories, response_model, logger)
+    if os.getenv('OMI_DEV_MEMORY_ADAPTIVE_CATEGORY_SCAN_ENABLED', '').strip().lower() != 'false':
+        try:
+            memories = service.read(
+                uid,
+                limit=limit,
+                offset=offset,
+                category_filter=allowed,
+                include_pending_processing=True,
+                budget=budget,
+            )
         except ListReadBudgetExhausted as exc:
             budget.mark_exhausted(exc.reason)
             memories = []
