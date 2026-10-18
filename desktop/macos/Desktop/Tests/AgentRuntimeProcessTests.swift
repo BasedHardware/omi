@@ -862,6 +862,14 @@ final class AgentRuntimeProcessTests: XCTestCase {
         authUrl: url))
   }
 
+  func testClaudeSignInMessagePointsAtClearChatNotAMissingNewChat() {
+    // The chat-first shell has no "new chat"; Clear Chat is what moves a pinned chat
+    // onto the selected provider, so the message must not send people looking for one.
+    let message = ChatProvider.providerAuthRequiredUserMessage(isUserClaudeMode: false)
+    XCTAssertFalse(message.contains("new chat"))
+    XCTAssertTrue(message.contains("Clear the chat"))
+  }
+
   func testRuntimeRefreshTokenWireRequiresCapturedOwnerToRemainCurrent() {
     let authorized = AgentRuntimeProcess.modelCredentialsReadyWireMessage(
       expectedOwnerId: "owner-a",

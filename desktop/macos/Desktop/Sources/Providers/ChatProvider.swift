@@ -2312,11 +2312,13 @@ class ChatProvider: ObservableObject {
     return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
   }
 
-  private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
+  nonisolated static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
     if isUserClaudeMode {
       return "Claude sign-in is required. Reconnect Claude, then try again."
     }
-    return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
+    // The chat-first shell has no "new chat": clearing is what moves this chat to the selected provider.
+    return "This chat uses Claude and needs sign-in. Clear the chat to switch to your selected AI provider, "
+      + "or reconnect Claude in Settings."
   }
 
   private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
