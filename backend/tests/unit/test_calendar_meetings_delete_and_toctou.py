@@ -38,9 +38,7 @@ def test_update_meeting_success(monkeypatch):
     mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = True
-    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        mock_doc
-    )
+    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
     monkeypatch.setattr(calendar_db, "db", mock_client)
 
     res = calendar_db.update_meeting("uid-1", "meet-1", {"title": "Updated Meeting"})
@@ -52,9 +50,7 @@ def test_update_meeting_missing():
     mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = False
-    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        mock_doc
-    )
+    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(calendar_db, "db", mock_client)
@@ -67,9 +63,7 @@ def test_update_meeting_toctou_not_found():
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = True
     mock_doc.update.side_effect = _NotFound("Meeting deleted concurrently")
-    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        mock_doc
-    )
+    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(calendar_db, "db", mock_client)
@@ -81,9 +75,7 @@ def test_delete_meeting_success():
     mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = True
-    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        mock_doc
-    )
+    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(calendar_db, "db", mock_client)
@@ -96,9 +88,7 @@ def test_delete_meeting_missing():
     mock_client = MagicMock()
     mock_doc = MagicMock()
     mock_doc.get.return_value.exists = False
-    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-        mock_doc
-    )
+    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_doc
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(calendar_db, "db", mock_client)
