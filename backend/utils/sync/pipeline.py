@@ -3242,8 +3242,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             failure_phase, failure_class, failure_subtype = (
                 first_segment_failure[0] if first_segment_failure else ('none', 'none', 'none')
             )
-            job_provider = 'unknown' if failure_phase == 'persistence' else sync_provider
-            job_model = 'unknown' if failure_phase == 'persistence' else sync_model
+            job_provider = 'unknown' if failure_phase in ('persistence', 'finalize') else sync_provider
+            job_model = 'unknown' if failure_phase in ('persistence', 'finalize') else sync_model
             final_result = {
                 'new_memories': result['new_memories'],
                 'updated_memories': result['updated_memories'],
