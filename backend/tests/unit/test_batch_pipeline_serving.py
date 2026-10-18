@@ -1,6 +1,8 @@
 """Private pull/complete RPC enforces identity and stage while admission is off."""
 
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from dataclasses import asdict
 import json
 import logging
@@ -202,11 +204,21 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status,code', [('busy', 409), ('completed', 200)])
-async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(monkeypatch, caplog, status, code):
+@pytest.mark.parametrize('deadline', ['false', 'true'])
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
+    monkeypatch, caplog, status, code, deadline
+):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
+
+    async def run(executor, func, *args):
+        assert executor is (module.postprocess_executor if deadline == 'true' else module.sync_executor)
+        return func(*args)
+
+    monkeypatch.setattr(module, 'run_blocking', run)
     monkeypatch.setattr(module, 'run_enrichment', Mock(return_value=status))
     caplog.set_level(logging.INFO, logger=module.__name__)
     response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
@@ -215,6 +227,29 @@ async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_
     if status == 'busy':
         messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
         assert messages == ['event=batch_enrichment_sync_reprocess outcome=busy']
+
+
+@pytest.mark.asyncio
+async def test_summary_runs_while_transcription_executor_is_full(monkeypatch):
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(module, 'run_enrichment', lambda *_: 'processed')
+    release = threading.Event()
+    # Run the real adapter and executors; a route-level mock hides this wait.
+    with ThreadPoolExecutor(max_workers=1) as transcription:
+        transcription.submit(release.wait)
+        monkeypatch.setattr(module, 'sync_executor', transcription)
+        try:
+            response = await asyncio.wait_for(
+                module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+                timeout=2,
+            )
+            assert response.status_code == 200
+            assert json.loads(response.body) == {'status': 'processed'}
+        finally:
+            release.set()
 
 
 def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api, monkeypatch):

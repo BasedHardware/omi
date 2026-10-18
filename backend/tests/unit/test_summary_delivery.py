@@ -73,7 +73,7 @@ def test_deadline_metadata_survives_appends(enabled):
 def test_current_finalizer_finishes_completed_minimum_but_background_repair_cannot(enabled, monkeypatch):
     row = {**debt(), 'finalization_job_id': 'current-job', 'finalization_status': 'queued'}
     assert delivery.refusal(row) == 'generation_owned'
-    assert delivery.finalization_pending(row, 'u')
+    assert delivery.finalization_pending(row, 'u', 'current-job')
     for changes in (
         {'structured': {'overview': 'Already delivered'}},
         {'user_title': 'Manual title'},
@@ -84,10 +84,12 @@ def test_current_finalizer_finishes_completed_minimum_but_background_repair_cann
         {'summary_title_provenance': None},
         {'summary_blocked_reason': 'empty_output_exhausted'},
         {'finalization_status': 'blocked_byok'},
+        {'finalization_job_id': 'replacement-job'},
+        {'finalization_job_id': None},
     ):
-        assert not delivery.finalization_pending({**row, **changes}, 'u')
+        assert not delivery.finalization_pending({**row, **changes}, 'u', 'current-job')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
-    assert not delivery.finalization_pending(row, 'u')
+    assert not delivery.finalization_pending(row, 'u', 'current-job')
 
 
 @pytest.mark.parametrize('finish,expected', [(50, 1900), (1800, 200), (2100, None), (None, None)])

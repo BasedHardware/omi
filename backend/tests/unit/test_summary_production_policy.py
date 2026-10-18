@@ -6,7 +6,7 @@ import yaml
 
 
 def test_production_producers_and_workers_share_the_first_summary_deadline():
-    manifest = yaml.safe_load((Path(__file__).parents[2] / 'deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((Path(__file__).parents[2] / 'deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     prod = manifest['environments']['prod']
     hosts = {**prod['gke'], **prod['cloud_run']['services']}
     for name in ('backend-listen', 'pusher', 'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):

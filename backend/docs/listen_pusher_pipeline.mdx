@@ -5545,6 +5545,12 @@ an admission projection, not current job state: inspect its durable job and
 actual output presence before diagnosing missing summaries.
 
 The 120-second budget is dispatch, not model completion.
+With the same master flag on, both sync and finalization enrichment adapters
+use the existing `postprocess_executor`, matching ordinary conversation
+finalization. Long transcription work occupies `sync_executor`; sharing that
+pool made an on-time summary task wait behind STT after HTTP dispatch. No pool
+size, Cloud Tasks queue capacity or instance count is increased. The master
+flag off restores the prior sync-pool adapter on both routes.
 `omi_accept_to_summary_seconds` can include speech arriving after acceptance.
 `omi_closed_to_summary_seconds` measures from the later of acceptance and the
 persisted `finished_at` (last speech), excluding that overlap. It includes the

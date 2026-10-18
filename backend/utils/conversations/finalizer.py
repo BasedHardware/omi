@@ -235,7 +235,9 @@ async def finalize_persisted_conversation(
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
-        if conversation.status != ConversationStatus.completed or finalization_pending(conversation_data, uid):
+        if conversation.status != ConversationStatus.completed or finalization_pending(
+            conversation_data, uid, finalization_job_id
+        ):
             conversation = await run_blocking(
                 postprocess_executor,
                 process_with_episode_budget,

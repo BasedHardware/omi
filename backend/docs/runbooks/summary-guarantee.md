@@ -124,6 +124,14 @@ backend-integration use `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
 owner also uses `SUMMARY_DEBT_REPAIR_ENABLED=true`. The bounded repair cost
 above is unchanged. No new index, scheduler, provider or capacity is required.
 
+The master flag also routes summary enrichment on both HTTP adapters through
+the existing `postprocess_executor` rather than the STT `sync_executor`.
+The sync pool has sixteen workers; an on-time Cloud Tasks delivery can still
+wait behind long transcription there. The post-processing pool already hosts
+ordinary finalization; this separates work classes without resizing a pool or
+adding instances. Flag off restores the original adapter pool. A real-executor
+regression fills a transcription pool and verifies a summary can finish.
+
 Rollback the sweep with `SUMMARY_DEBT_REPAIR_ENABLED=false`; rollback deadline
 processing with `FIRST_SUMMARY_DEADLINE_ENABLED=false` on every host. Existing
 durable work remains retryable. A percentage rollback retains the explicit

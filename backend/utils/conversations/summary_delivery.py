@@ -137,14 +137,14 @@ def refusal(row: Row) -> str | None:
     return None
 
 
-def finalization_pending(row: Row, uid: str) -> bool:
+def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
     """The current finalization lease may finish its own completed minimum.
 
     Completed is a lifecycle state, not proof of summary delivery. Never bypass
     another generation through the background repair path; the finalizer has
     already checked its job/revision/lease before calling this predicate.
     """
-    if not enabled(uid) or present(row.get('structured')):
+    if not enabled(uid) or row.get('finalization_job_id') != job_id or present(row.get('structured')):
         return False
     return refusal({**row, 'finalization_job_id': None}) is None
 
