@@ -621,18 +621,25 @@ def test_finalization_queue_rules_read_the_replicated_series_correctly():
         assert dead_expr == "sum(increase(listen_finalization_dead_letter_total[1h]))", export_name
 
 
-def test_finalization_summary_freshness_rule_detects_missing_or_stale_samples():
-    expected = (
-        "absent(listen_finalization_summary_last_success_timestamp_seconds) or "
-        "max(listen_finalization_summary_last_success_timestamp_seconds) < bool time() - 600"
-    )
+def test_finalization_summary_freshness_separates_stale_from_never_published():
+    stale_expr = "time() - max(max_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])) > 900"
+    absent_expr = "absent_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])"
     for export_name, rules in _all_rule_exports().items():
-        rule = rules["omi-capture-summary-stale"]
-        assert rule["data"][0]["model"]["expr"] == expected, export_name
-        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [0]
-        assert rule["for"] == "2m", export_name
-        assert rule["labels"]["severity"] == "critical", export_name
-        assert rule["noDataState"] == "Alerting", export_name
+        stale = rules["omi-capture-summary-stale"]
+        assert stale["data"][0]["model"]["expr"] == stale_expr, export_name
+        assert stale["data"][0]["relativeTimeRange"]["from"] == 1800, export_name
+        assert stale["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [0]
+        assert stale["for"] == "5m", export_name
+        assert stale["labels"]["severity"] == "critical", export_name
+        assert stale["noDataState"] == "OK", export_name
+
+        never_published = rules["omi-capture-summary-never-published"]
+        assert never_published["data"][0]["model"]["expr"] == absent_expr, export_name
+        assert never_published["data"][0]["relativeTimeRange"]["from"] == 1800, export_name
+        assert never_published["for"] == "30m", export_name
+        assert never_published["labels"]["severity"] == "warning", export_name
+        assert never_published["noDataState"] == "OK", export_name
+        assert "not a page" in never_published["annotations"]["threshold"], export_name
 
 
 def test_live_stt_evidence_loss_rules_are_volume_gated_settlement_proxies():
