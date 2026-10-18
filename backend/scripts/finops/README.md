@@ -404,12 +404,22 @@ note, attachment or raw counterparty strings are persisted. Redirects are refuse
 and HTTP/shape failures use bounded messages. Fixtures are synthetic API-shape
 examples containing privacy canaries; no bank API was called to record them.
 
-`mercury_vendor_map.json` uses normalized token-boundary aliases, with the longest
-matching alias winning. It seeds Soniox/Deepgram/Modulate, OpenAI/Anthropic/OpenRouter/
-Perplexity/Groq, Upstash/Vercel/PostHog/Grafana/Sentry/Redis/Pinecone/GitHub and others.
-Google Workspace has a separate alias from Google Cloud; ambiguous `Google` is
-unmapped. Annual cadence is deliberately not inferred from the merchant name:
-set `annual: true` only after confirming a vendor's actual billing cadence.
+`mercury_vendor_map.json` schema v2 uses normalized token-boundary aliases, with
+the longest matching alias winning, followed by `mercuryCategory` rules and then
+`categoryData.name` rules, and finally `uncategorized_kind_rules` by transaction
+kind: an unlabelled `outgoingPayment` (wire/ACH) is `other_opex` under the
+synthetic vendor `uncategorized_payment`, because those are suppliers and
+contractors (Sept–Oct 2026 had $4K–$67K wires every few weeks that would
+otherwise block the line). A SaaS paid by wire/ACH must therefore have a vendor
+alias or a Mercury category. Excluded kinds/categories always win. The map keeps
+schema v1 readable with no category rules and the default `$2,500` uncategorized
+threshold. It seeds explicit known vendor aliases and generic category rules;
+rule-classified aggregates use the synthetic vendor labels `mercury_category`
+and `category_data`, never raw counterparty names. Google Workspace has a separate
+alias from Google Cloud, while `Google Payment Corp` maps to GCP; ambiguous
+`Google` remains uncategorized. Annual cadence is deliberately not inferred from
+the merchant name: set `annual: true` only after confirming a vendor's actual
+billing cadence.
 
 | Category | Treatment |
 | --- | --- |
@@ -417,12 +427,22 @@ set `annual: true` only after confirming a vendor's actual billing cadence.
 | `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs |
 | `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
 | `gcp` | Excluded from TV addition; already covered by GCP billing |
-| `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and hardware COGS; collapsed to vendor `excluded` |
-| `unmapped` | All other outgoing spend, one total and count per UTC date, no counterparty detail |
+| `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
+| `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and explicitly excluded hardware categories; collapsed to vendor `excluded` |
+| `unmapped` | Uncategorized outgoing spend, one total and count per UTC date, no counterparty detail |
+
+Category rules reconcile common advertising, shipping, travel, meal, hardware,
+professional-service and office spend without claiming those expenses are SaaS.
+`Software` / `Software & Subscriptions` map to `saas` after vendor aliases and
+Mercury categories have been checked. Thus an Advertising transaction remains
+marketing even if its accounting category says Software & Subscriptions. Vendor
+aliases remain the most specific source: `Google Payment Corp` stays GCP and
+Shopify stays SaaS even when the category fields disagree.
 
 Incoming credits/refunds are outside this outgoing-spend feed and are not netted
 against bills. External ACH/wire transfers are **not** blanket-excluded: they may
-be vendor payments. Unknown recipients remain unmapped. Generic `Stripe`/`Stripe Inc` descriptors
+be vendor payments. Transactions without an alias or recognized category remain
+uncategorized. Generic `Stripe`/`Stripe Inc` descriptors
 also remain unmapped; only explicit `Stripe Fee`/`Stripe Fees` aliases classify
 as outgoing fees. Stripe fees withheld from
 incoming payouts cannot be measured as outgoing transactions here; do not invent
@@ -453,10 +473,19 @@ anniversary (Feb 29 clamps to Feb 28). Known annual aggregates continue contribu
 after they age out of the 90-day API refresh. NUMERIC outputs round to nine decimal
 places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
 
-`inputs_complete` requires all 30 posted days, no unmapped transactions in that
-window, and a full preceding year's coverage with no unmapped payments if any
-annual vendor is configured.
-This prevents an initial 90-day pull from claiming to know older annual bills.
+`inputs_complete` requires all 30 posted days, annual-history coverage when an
+annual vendor is configured, and no more than `max_uncategorized_usd` of
+uncategorized spend in the rolling 30-day window. The map defaults that threshold
+to `$2,500`. The existing BigQuery fields `unmapped_usd` and `unmapped_count`
+retain their names for loader/admin compatibility; they now mean uncategorized
+USD and transaction count. Unlabelled wires/ACH are `other_opex`, so the
+residual is mostly unlabelled card spend; anything above the threshold (for
+example a kind with no rule) blocks completeness while it remains in the 30-day
+window, then ages out; it is never added to SaaS. Add a category or vendor map rule when its nature is known.
+When annual vendors are configured, a full preceding year of coverage is still
+required, but annual uncategorized spend blocks only when its total exceeds the
+same threshold. This prevents an initial 90-day pull from claiming to know older
+annual bills while allowing small residuals to reconcile.
 The reader should require `inputs_complete=true` and fresh `computed_at` (for
 example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`, and
 use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
