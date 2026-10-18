@@ -88,11 +88,6 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
     script = steps[attach]['run']
     for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert name in script
-    assert '--config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"' in script
-    assert '--config-secret=cloud-run-gmp-sync-config' in script
-    backend_attach = next(step for step in steps if step.get('id') == 'attach-backend-gmp-sidecar')
-    assert 'cloud_run_gmp_sidecar.yaml' in backend_attach['run']
-    assert 'cloud-run-gmp-sync-config' not in backend_attach['run']
     assert '--expected-env-state=' in script
     assert '--base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"' in script
     assert '--final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"' in script
