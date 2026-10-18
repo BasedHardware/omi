@@ -11575,6 +11575,8 @@
     "activityNeedsAttention": "శ్రద్ధ అవసరం",
     "activityRetryAll": "అన్నింటినీ మళ్లీ ప్రయత్నించండి",
     "activityAttentionStorageTitle": "నిల్వ నిండింది — రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి",
+    "activityAttentionManage": "నిర్వహించండి",
+    "activityAttentionRetry": "మళ్లీ ప్రయత్నించండి",
     "activityAttentionStorageSubtitle": "స్థలాన్ని ఖాళీ చేయండి లేదా ఆటో-సింక్ సర్దుబాటు చేయండి",
     "activityAttentionUploadKept": "ఈ ఫోన్‌లో {duration} ఆడియో సేవ్ చేయబడింది",
     "activityAttentionUploadWaiting": "రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, వీలైనప్పుడు అప్‌లోడ్ అవుతాయి",

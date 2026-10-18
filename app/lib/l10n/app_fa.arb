@@ -11575,6 +11575,8 @@
     "activityNeedsAttention": "نیاز به توجه",
     "activityRetryAll": "تلاش دوباره برای همه",
     "activityAttentionStorageTitle": "حافظه پر شده — ضبط‌ها متوقف شده‌اند",
+    "activityAttentionManage": "مدیریت",
+    "activityAttentionRetry": "تلاش مجدد",
     "activityAttentionStorageSubtitle": "فضا آزاد کنید یا همگام‌سازی خودکار را تنظیم کنید",
     "activityAttentionUploadKept": "{duration} صدا در این گوشی ذخیره شده",
     "activityAttentionUploadWaiting": "ضبط‌ها در امان هستند و به محض امکان بارگذاری می‌شوند",

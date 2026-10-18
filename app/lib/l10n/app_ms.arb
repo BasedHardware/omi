@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Perlu perhatian",
     "activityRetryAll": "Cuba semua semula",
     "activityAttentionStorageTitle": "Storan penuh — rakaman dijedakan",
+    "activityAttentionManage": "Urus",
+    "activityAttentionRetry": "Cuba Lagi",
     "activityAttentionStorageSubtitle": "Kosongkan ruang atau laraskan segerak automatik",
     "activityAttentionUploadKept": "{duration} audio disimpan pada telefon ini",
     "activityAttentionUploadWaiting": "Rakaman selamat dan akan dimuat naik apabila boleh",

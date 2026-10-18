@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/pending_work.dart';
@@ -78,7 +80,7 @@ ConversationProvider _conversations() => ConversationProvider(
       isSignedIn: () => true,
     );
 
-Widget _app(Widget child, {CaptureWedgeMonitor? monitor}) => MultiProvider(
+Widget _app(Widget child, {CaptureWedgeMonitor? monitor, NavigatorObserver? observer}) => MultiProvider(
       providers: [
         ChangeNotifierProvider<SyncProvider>.value(value: _IdleSync()),
         ChangeNotifierProvider<ConversationProvider>.value(value: _conversations()),
@@ -86,6 +88,7 @@ Widget _app(Widget child, {CaptureWedgeMonitor? monitor}) => MultiProvider(
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
+        navigatorObservers: observer == null ? const [] : [observer],
         home: Scaffold(
           body: SingleChildScrollView(
             child: NeedsAttentionSection(store: _emptyStore(), captureMonitor: monitor),
@@ -94,7 +97,24 @@ Widget _app(Widget child, {CaptureWedgeMonitor? monitor}) => MultiProvider(
       ),
     );
 
+/// Counts pushes so a tap can be proven to open exactly one page without depending on the
+/// destination page's own provider needs.
+class _PushCounter extends NavigatorObserver {
+  int count = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    count++;
+  }
+}
+
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
+
   final yesterday = DateTime.now().subtract(const Duration(days: 1));
 
   Widget pageApp(Widget home) => MaterialApp(
@@ -113,6 +133,8 @@ void main() {
       expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
       expect(find.text('Storage full — 3 recordings paused'), findsOneWidget);
       expect(find.text('Free space or adjust auto-sync'), findsOneWidget);
+      expect(find.text('Manage'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
     });
 
@@ -134,7 +156,28 @@ void main() {
       expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
       expect(find.text('Upload stalled — 5 recordings waiting'), findsOneWidget);
       expect(find.text('47m of audio saved on this phone'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget, reason: 'the row carries its action pill, not a bare chevron');
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
       expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
+    });
+
+    testWidgets('the Manage pill opens Offline Sync once, without the row gesture double-firing', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor);
+      final pushes = _PushCounter();
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor, observer: pushes));
+      final baseline = pushes.count; // the MaterialApp's own initial route
+
+      await tester.tap(find.text('Manage'));
+      expect(pushes.count - baseline, 1, reason: 'the pill opens the Offline Sync entry exactly once');
+
+      // Pop back so the row body is hittable again, then tap it away from the pill.
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pump();
+      await tester.tap(find.text('Storage full — 3 recordings paused'));
+      expect(pushes.count - baseline, 2, reason: 'the row body still opens the same Offline Sync entry');
     });
 
     testWidgets('an upload stall without known seconds falls back to the safe copy', (tester) async {

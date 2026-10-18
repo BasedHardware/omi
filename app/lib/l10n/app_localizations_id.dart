@@ -13574,6 +13574,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Penyimpanan penuh — rekaman dijeda';
 
   @override
+  String get activityAttentionManage => 'Kelola';
+
+  @override
+  String get activityAttentionRetry => 'Coba Lagi';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Kosongkan ruang atau sesuaikan sinkronisasi otomatis';
 
   @override

@@ -13600,6 +13600,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Opslag vol — opnames gepauzeerd';
 
   @override
+  String get activityAttentionManage => 'Beheren';
+
+  @override
+  String get activityAttentionRetry => 'Opnieuw';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Maak ruimte vrij of pas autosync aan';
 
   @override

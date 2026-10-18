@@ -13633,6 +13633,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Emmagatzematge ple — enregistraments en pausa';
 
   @override
+  String get activityAttentionManage => 'Gestiona';
+
+  @override
+  String get activityAttentionRetry => 'Reintenta';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Allibera espai o ajusta la sincronització automàtica';
 
   @override

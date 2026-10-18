@@ -13551,6 +13551,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Lageret er fuldt — optagelser sat på pause';
 
   @override
+  String get activityAttentionManage => 'Administrer';
+
+  @override
+  String get activityAttentionRetry => 'Prøv igen';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Frigør plads eller juster autosynkronisering';
 
   @override

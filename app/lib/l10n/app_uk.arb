@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Потребує уваги",
     "activityRetryAll": "Повторити все",
     "activityAttentionStorageTitle": "Памʼять заповнена — записи призупинено",
+    "activityAttentionManage": "Керувати",
+    "activityAttentionRetry": "Повторити",
     "activityAttentionStorageSubtitle": "Звільніть місце або налаштуйте автосинхронізацію",
     "activityAttentionUploadKept": "{duration} аудіо збережено на цьому телефоні",
     "activityAttentionUploadWaiting": "Записи в безпеці та буде завантажено, щойно зʼявиться можливість",

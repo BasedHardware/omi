@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Vajab tähelepanu",
     "activityRetryAll": "Proovi kõiki uuesti",
     "activityAttentionStorageTitle": "Salvestusruum on täis — salvestised peatatud",
+    "activityAttentionManage": "Halda",
+    "activityAttentionRetry": "Proovi uuesti",
     "activityAttentionStorageSubtitle": "Vabastage ruumi või kohandage automaatset sünkroonimist",
     "activityAttentionUploadKept": "{duration} heli on sellesse telefoni salvestatud",
     "activityAttentionUploadWaiting": "Salvestised on turvalised ja laaditakse üles niipea kui võimalik",

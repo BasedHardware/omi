@@ -13593,6 +13593,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Atmiņa pilna — ieraksti apturēti';
 
   @override
+  String get activityAttentionManage => 'Pārvaldīt';
+
+  @override
+  String get activityAttentionRetry => 'Mēģināt vēlreiz';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Atbrīvojiet vietu vai pielāgojiet automātisko sinhronizāciju';
 
   @override

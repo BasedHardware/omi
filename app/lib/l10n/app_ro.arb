@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Necesită atenție",
     "activityRetryAll": "Reîncearcă tot",
     "activityAttentionStorageTitle": "Stocarea este plină — înregistrările sunt pauzate",
+    "activityAttentionManage": "Gestionează",
+    "activityAttentionRetry": "Reîncearcă",
     "activityAttentionStorageSubtitle": "Eliberează spațiu sau ajustează sincronizarea automată",
     "activityAttentionUploadKept": "{duration} de audio salvat pe acest telefon",
     "activityAttentionUploadWaiting": "Înregistrările sunt în siguranță și vor fi încărcate când va fi posibil",

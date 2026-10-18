@@ -13612,6 +13612,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Хранилището е пълно — записите са спрени';
 
   @override
+  String get activityAttentionManage => 'Управление';
+
+  @override
+  String get activityAttentionRetry => 'Опитай отново';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Освободете място или променете автосинхронизацията';
 
   @override

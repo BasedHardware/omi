@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Vaatii huomiota",
     "activityRetryAll": "Yritä kaikkia uudelleen",
     "activityAttentionStorageTitle": "Tallennustila täynnä — tallenteet keskeytetty",
+    "activityAttentionManage": "Hallitse",
+    "activityAttentionRetry": "Yritä uudelleen",
     "activityAttentionStorageSubtitle": "Vapauta tilaa tai muuta automaattista synkronointia",
     "activityAttentionUploadKept": "{duration} ääntä tallennettu tähän puhelimeen",
     "activityAttentionUploadWaiting": "Tallenteet ovat turvassa ja ladataan, kun se on mahdollista",

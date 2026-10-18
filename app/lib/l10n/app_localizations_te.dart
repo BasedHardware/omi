@@ -13616,6 +13616,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityAttentionStorageTitle => 'నిల్వ నిండింది — రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
 
   @override
+  String get activityAttentionManage => 'నిర్వహించండి';
+
+  @override
+  String get activityAttentionRetry => 'మళ్లీ ప్రయత్నించండి';
+
+  @override
   String get activityAttentionStorageSubtitle => 'స్థలాన్ని ఖాళీ చేయండి లేదా ఆటో-సింక్ సర్దుబాటు చేయండి';
 
   @override

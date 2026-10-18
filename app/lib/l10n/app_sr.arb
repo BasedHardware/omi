@@ -11575,6 +11575,8 @@
     "activityNeedsAttention": "Потребна пажња",
     "activityRetryAll": "Покушај све поново",
     "activityAttentionStorageTitle": "Складиште је пуно — снимке су паузиране",
+    "activityAttentionManage": "Управљај",
+    "activityAttentionRetry": "Покушај поново",
     "activityAttentionStorageSubtitle": "Ослободите простор или прилагодите аутоматску синхронизацију",
     "activityAttentionUploadKept": "{duration} звука сачувано на овом телефону",
     "activityAttentionUploadWaiting": "Снимке су безбедне и биће отпремљене чим буде могуће",

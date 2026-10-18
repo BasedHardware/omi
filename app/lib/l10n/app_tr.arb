@@ -4187,6 +4187,8 @@
     "activityNeedsAttention": "İlgi gerekiyor",
     "activityRetryAll": "Tümünü yeniden dene",
     "activityAttentionStorageTitle": "Depolama alanı dolu — kayıtlar duraklatıldı",
+    "activityAttentionManage": "Yönet",
+    "activityAttentionRetry": "Yeniden Dene",
     "activityAttentionStorageSubtitle": "Yer açın veya otomatik eşitlemeyi ayarlayın",
     "activityAttentionUploadKept": "Bu telefona kaydedilmiş {duration} ses",
     "activityAttentionUploadWaiting": "Kayıtlar güvende ve olduğunda yüklenecek",

@@ -13498,6 +13498,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityAttentionStorageTitle => 'พื้นที่เก็บข้อมูลเต็ม — การบันทึกหยุดชั่วคราว';
 
   @override
+  String get activityAttentionManage => 'จัดการ';
+
+  @override
+  String get activityAttentionRetry => 'ลองใหม่';
+
+  @override
   String get activityAttentionStorageSubtitle => 'ล้างพื้นที่หรือปรับการซิงก์อัตโนมัติ';
 
   @override

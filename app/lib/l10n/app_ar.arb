@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "يحتاج إلى انتباه",
     "activityRetryAll": "إعادة محاولة الكل",
     "activityAttentionStorageTitle": "مساحة التخزين ممتلئة — تم إيقاف التسجيلات مؤقتًا",
+    "activityAttentionManage": "إدارة",
+    "activityAttentionRetry": "إعادة المحاولة",
     "activityAttentionStorageSubtitle": "حرّر مساحة أو عدّل المزامنة التلقائية",
     "activityAttentionUploadKept": "{duration} من الصوت محفوظة على هذا الهاتف",
     "activityAttentionUploadWaiting": "التسجيلات آمنة وسيتم رفعها عندما يصبح ذلك ممكنًا",

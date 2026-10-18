@@ -16362,6 +16362,14 @@
     "@activityAttentionStorageTitle": {
         "description": "Needs attention row: phone disk is full, so recordings cannot be written"
     },
+    "activityAttentionManage": "Manage",
+    "@activityAttentionManage": {
+        "description": "Action pill on the Activity storage-full row; opens Offline Sync"
+    },
+    "activityAttentionRetry": "Retry",
+    "@activityAttentionRetry": {
+        "description": "Action pill on the Activity upload-stalled row; opens Offline Sync"
+    },
     "activityAttentionStorageSubtitle": "Free space or adjust auto-sync",
     "@activityAttentionStorageSubtitle": {
         "description": "Needs attention row subtitle: how to fix a full phone disk"

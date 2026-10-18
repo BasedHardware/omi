@@ -13376,6 +13376,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityAttentionStorageTitle => 'ストレージがいっぱいです — 録音を一時停止中';
 
   @override
+  String get activityAttentionManage => '管理';
+
+  @override
+  String get activityAttentionRetry => '再試行';
+
+  @override
   String get activityAttentionStorageSubtitle => '空き容量を確保するか、自動同期を調整してください';
 
   @override

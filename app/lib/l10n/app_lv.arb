@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Nepieciešama uzmanība",
     "activityRetryAll": "Mēģināt visu vēlreiz",
     "activityAttentionStorageTitle": "Atmiņa pilna — ieraksti apturēti",
+    "activityAttentionManage": "Pārvaldīt",
+    "activityAttentionRetry": "Mēģināt vēlreiz",
     "activityAttentionStorageSubtitle": "Atbrīvojiet vietu vai pielāgojiet automātisko sinhronizāciju",
     "activityAttentionUploadKept": "{duration} audio saglabāts šajā tālrunī",
     "activityAttentionUploadWaiting": "Ieraksti ir drošībā un tiks augšupielādēti, tiklīdz tas būs iespējams",

@@ -13594,6 +13594,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Skladište je puno — snimke su pauzirane';
 
   @override
+  String get activityAttentionManage => 'Upravljaj';
+
+  @override
+  String get activityAttentionRetry => 'Ponovi';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Oslobodite prostor ili prilagodite automatsku sinhronizaciju';
 
   @override

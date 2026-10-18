@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Richiede attenzione",
     "activityRetryAll": "Riprova tutto",
     "activityAttentionStorageTitle": "Spazio esaurito — registrazioni in pausa",
+    "activityAttentionManage": "Gestisci",
+    "activityAttentionRetry": "Riprova",
     "activityAttentionStorageSubtitle": "Libera spazio o modifica la sincronizzazione automatica",
     "activityAttentionUploadKept": "{duration} di audio salvato su questo telefono",
     "activityAttentionUploadWaiting": "Le registrazioni sono al sicuro e verranno caricate appena possibile",

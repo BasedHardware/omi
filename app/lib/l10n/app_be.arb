@@ -11575,6 +11575,8 @@
     "activityNeedsAttention": "Патрабуе ўвагі",
     "activityRetryAll": "Паўтарыць усё",
     "activityAttentionStorageTitle": "Памяць запоўнена — запісы прыпынены",
+    "activityAttentionManage": "Кіраваць",
+    "activityAttentionRetry": "Паўтарыць",
     "activityAttentionStorageSubtitle": "Вызваліце месца або наладзьце аўтасінхранізацыю",
     "activityAttentionUploadKept": "{duration} аўдыё захавана на гэтым тэлефоне",
     "activityAttentionUploadWaiting": "Запісы ў бяспецы і будуць загружаны, як толькі з'явіцца магчымасць",

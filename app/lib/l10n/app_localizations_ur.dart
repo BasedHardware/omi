@@ -13578,6 +13578,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'اسٹوریج بھر چکا ہے — ریکارڈنگز روک دی گئی ہیں';
 
   @override
+  String get activityAttentionManage => 'منظم کریں';
+
+  @override
+  String get activityAttentionRetry => 'دوبارہ کوشش کریں';
+
+  @override
   String get activityAttentionStorageSubtitle => 'جگہ خالی کریں یا آٹو-سنک تبدیل کریں';
 
   @override

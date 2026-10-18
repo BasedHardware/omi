@@ -13619,6 +13619,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Stocarea este plină — înregistrările sunt pauzate';
 
   @override
+  String get activityAttentionManage => 'Gestionează';
+
+  @override
+  String get activityAttentionRetry => 'Reîncearcă';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Eliberează spațiu sau ajustează sincronizarea automată';
 
   @override

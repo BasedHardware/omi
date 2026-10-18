@@ -13598,6 +13598,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Pohrana je puna — snimke su pauzirane';
 
   @override
+  String get activityAttentionManage => 'Upravljaj';
+
+  @override
+  String get activityAttentionRetry => 'Pokušaj ponovno';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Oslobodite prostor ili prilagodite automatsku sinkronizaciju';
 
   @override

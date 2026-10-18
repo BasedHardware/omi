@@ -13656,6 +13656,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get activityAttentionStorageTitle => 'சேமிப்பு நிரம்பியது — பதிவுகள் இடைநிறுத்தப்பட்டன';
 
   @override
+  String get activityAttentionManage => 'நிர்வகிக்கவும்';
+
+  @override
+  String get activityAttentionRetry => 'மீண்டும் முயற்சி';
+
+  @override
   String get activityAttentionStorageSubtitle => 'இடத்தை காலியாக்கவும் அல்லது ஆட்டோ-சிங்கை மாற்றவும்';
 
   @override

@@ -13595,6 +13595,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Shramba je polna — posnetki so pavzirani';
 
   @override
+  String get activityAttentionManage => 'Upravljaj';
+
+  @override
+  String get activityAttentionRetry => 'Poskusi znova';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Sprostite prostor ali prilagodite samodejno sinhronizacijo';
 
   @override

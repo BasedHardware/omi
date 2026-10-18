@@ -13471,6 +13471,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get activityAttentionStorageTitle => 'האחסון מלא — ההקלטות מושהות';
 
   @override
+  String get activityAttentionManage => 'נהל';
+
+  @override
+  String get activityAttentionRetry => 'נסה שוב';
+
+  @override
   String get activityAttentionStorageSubtitle => 'פנו מקום או שנו את הסנכרון האוטומטי';
 
   @override

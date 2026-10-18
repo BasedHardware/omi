@@ -4248,6 +4248,8 @@
     "activityNeedsAttention": "Figyelmet igényel",
     "activityRetryAll": "Összes újrapróbálása",
     "activityAttentionStorageTitle": "A tárhely megtelt — a felvételek szünetelnek",
+    "activityAttentionManage": "Kezelés",
+    "activityAttentionRetry": "Újra",
     "activityAttentionStorageSubtitle": "Szabadítson fel helyet, vagy módosítsa az automatikus szinkronizálást",
     "activityAttentionUploadKept": "{duration} hang mentve ezen a telefonon",
     "activityAttentionUploadWaiting": "A felvételek biztonságban vannak, és feltöltésre kerülnek, amint lehetséges",

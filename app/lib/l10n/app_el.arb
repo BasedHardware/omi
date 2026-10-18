@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Χρειάζεται προσοχή",
     "activityRetryAll": "Επανάληψη όλων",
     "activityAttentionStorageTitle": "Ο αποθηκευτικός χώρος γέμισε — οι ηχογραφήσεις τέθηκαν σε παύση",
+    "activityAttentionManage": "Διαχείριση",
+    "activityAttentionRetry": "Επανάληψη",
     "activityAttentionStorageSubtitle": "Απελευθερώστε χώρο ή προσαρμόστε τον αυτόματο συγχρονισμό",
     "activityAttentionUploadKept": "{duration} ήχου αποθηκεύτηκαν σε αυτό το τηλέφωνο",
     "activityAttentionUploadWaiting": "Οι ηχογραφήσεις είναι ασφαλείς και θα αποσταλούν μόλις είναι δυνατόν",

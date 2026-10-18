@@ -13577,6 +13577,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Depolama alanı dolu — kayıtlar duraklatıldı';
 
   @override
+  String get activityAttentionManage => 'Yönet';
+
+  @override
+  String get activityAttentionRetry => 'Yeniden Dene';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Yer açın veya otomatik eşitlemeyi ayarlayın';
 
   @override

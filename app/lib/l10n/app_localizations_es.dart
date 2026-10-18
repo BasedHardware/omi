@@ -13604,6 +13604,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Almacenamiento lleno — grabaciones en pausa';
 
   @override
+  String get activityAttentionManage => 'Gestionar';
+
+  @override
+  String get activityAttentionRetry => 'Reintentar';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Libera espacio o ajusta la sincronización automática';
 
   @override

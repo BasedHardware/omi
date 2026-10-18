@@ -126,28 +126,26 @@ class NeedsAttentionSection extends StatelessWidget {
                   if (storage != null) ...[
                     if (store.attention.isNotEmpty || recordings > 0)
                       Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
-                    _AttentionRow(
+                    _CaptureAttentionRow(
                       key: const Key('activity_attention_storage'),
                       title: storage.blockedCount > 0
                           ? l.activityAttentionStorageBlocked(storage.blockedCount)
                           : l.activityAttentionStorageTitle,
                       subtitle: l.activityAttentionStorageSubtitle,
-                      busy: false,
-                      onRetry: null,
+                      actionLabel: l.activityAttentionManage,
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
                     ),
                   ],
                   if (upload != null) ...[
                     if (store.attention.isNotEmpty || recordings > 0 || storage != null)
                       Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
-                    _AttentionRow(
+                    _CaptureAttentionRow(
                       key: const Key('activity_attention_upload_stalled'),
                       title: l.activityAttentionUploadStalled(upload.pendingCount),
                       subtitle: upload.pendingSeconds > 0
                           ? l.activityAttentionUploadKept(OmiDuration.compact(upload.pendingSeconds, l))
                           : l.activityAttentionUploadWaiting,
-                      busy: false,
-                      onRetry: null,
+                      actionLabel: l.activityAttentionRetry,
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
                     ),
                   ],
@@ -222,6 +220,80 @@ class _AttentionRow extends StatelessWidget {
               )
             else if (onTap != null)
               Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A slow-burn capture problem (full phone disk, stalled upload). Unlike the server's summary
+/// failures above, these carry a warning tint and a named action — the reader should not have
+/// to guess that tapping anywhere manages storage or retries the upload, and both the pill and
+/// the row open the same Offline Sync entry that owns those jobs.
+class _CaptureAttentionRow extends StatelessWidget {
+  const _CaptureAttentionRow({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+
+  /// Label of the trailing action pill ("Manage", "Retry").
+  final String actionLabel;
+
+  /// Where both the row and its pill go: Offline Sync.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 10, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              alignment: Alignment.center,
+              child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                  ],
+                ],
+              ),
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: OmiSpacing.xs),
+              OmiButton(
+                label: actionLabel,
+                onPressed: onTap,
+                size: OmiButtonSize.compact,
+                // The destructive button's tint idiom, in warning: amber label on an amber
+                // wash, so the pill names the row's action without shouting.
+                colors: OmiButtonColors(
+                  background: Color.alphaBlend(OmiColors.warning.withValues(alpha: 0.15), OmiColors.surface1),
+                  foreground: OmiColors.warning,
+                ),
+              ),
+            ],
           ],
         ),
       ),

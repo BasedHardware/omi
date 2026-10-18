@@ -13549,6 +13549,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Storage full — recordings paused';
 
   @override
+  String get activityAttentionManage => 'Manage';
+
+  @override
+  String get activityAttentionRetry => 'Retry';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Free space or adjust auto-sync';
 
   @override

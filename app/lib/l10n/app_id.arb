@@ -4187,6 +4187,8 @@
     "activityNeedsAttention": "Perlu perhatian",
     "activityRetryAll": "Coba lagi semua",
     "activityAttentionStorageTitle": "Penyimpanan penuh — rekaman dijeda",
+    "activityAttentionManage": "Kelola",
+    "activityAttentionRetry": "Coba Lagi",
     "activityAttentionStorageSubtitle": "Kosongkan ruang atau sesuaikan sinkronisasi otomatis",
     "activityAttentionUploadKept": "{duration} audio tersimpan di telepon ini",
     "activityAttentionUploadWaiting": "Rekaman aman dan akan diunggah saat memungkinkan",

@@ -4194,6 +4194,8 @@
     "activityNeedsAttention": "Kræver opmærksomhed",
     "activityRetryAll": "Prøv alle igen",
     "activityAttentionStorageTitle": "Lageret er fuldt — optagelser sat på pause",
+    "activityAttentionManage": "Administrer",
+    "activityAttentionRetry": "Prøv igen",
     "activityAttentionStorageSubtitle": "Frigør plads eller juster autosynkronisering",
     "activityAttentionUploadKept": "{duration} lyd gemt på denne telefon",
     "activityAttentionUploadWaiting": "Optagelserne er i sikkerhed og uploades, så snart det er muligt",

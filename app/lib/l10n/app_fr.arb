@@ -4187,6 +4187,8 @@
     "activityNeedsAttention": "Nécessite votre attention",
     "activityRetryAll": "Tout réessayer",
     "activityAttentionStorageTitle": "Stockage plein — enregistrements en pause",
+    "activityAttentionManage": "Gérer",
+    "activityAttentionRetry": "Réessayer",
     "activityAttentionStorageSubtitle": "Libérez de l'espace ou ajustez la synchro auto",
     "activityAttentionUploadKept": "{duration} d'audio enregistré sur ce téléphone",
     "activityAttentionUploadWaiting": "Les enregistrements sont en sécurité et seront envoyés dès que possible",

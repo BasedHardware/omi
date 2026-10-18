@@ -13569,6 +13569,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Lagringen är full — inspelningar pausade';
 
   @override
+  String get activityAttentionManage => 'Hantera';
+
+  @override
+  String get activityAttentionRetry => 'Försök igen';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Frigör utrymme eller justera autosynkronisering';
 
   @override

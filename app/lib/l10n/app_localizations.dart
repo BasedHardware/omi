@@ -24099,6 +24099,18 @@ abstract class AppLocalizations {
   /// **'Storage full — recordings paused'**
   String get activityAttentionStorageTitle;
 
+  /// Action pill on the Activity storage-full row; opens Offline Sync
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get activityAttentionManage;
+
+  /// Action pill on the Activity upload-stalled row; opens Offline Sync
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get activityAttentionRetry;
+
   /// Needs attention row subtitle: how to fix a full phone disk
   ///
   /// In en, this message translates to:

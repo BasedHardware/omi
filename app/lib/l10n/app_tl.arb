@@ -11575,6 +11575,8 @@
     "activityNeedsAttention": "Kailangang tingnan",
     "activityRetryAll": "Subukan muli lahat",
     "activityAttentionStorageTitle": "Puno ang storage — naka-pause ang mga recording",
+    "activityAttentionManage": "Pamahalaan",
+    "activityAttentionRetry": "Subukan Muli",
     "activityAttentionStorageSubtitle": "Mag-free ng space o i-adjust ang auto-sync",
     "activityAttentionUploadKept": "{duration} ng audio naka-save sa phone na ito",
     "activityAttentionUploadWaiting": "Ligtas ang mga recording at ia-upload kapag nagawa",

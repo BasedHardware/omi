@@ -4152,6 +4152,8 @@
     "activityNeedsAttention": "Reikia dėmesio",
     "activityRetryAll": "Bandyti visus iš naujo",
     "activityAttentionStorageTitle": "Atmintis pilna — įrašai pristabdyti",
+    "activityAttentionManage": "Tvarkyti",
+    "activityAttentionRetry": "Bandyti dar kartą",
     "activityAttentionStorageSubtitle": "Atlaisvinkite vietos arba pakoreguokite automatinį sinchronizavimą",
     "activityAttentionUploadKept": "{duration} garso įrašyta šiame telefone",
     "activityAttentionUploadWaiting": "Įrašai saugūs ir bus įkelti, kai tik bus galima",

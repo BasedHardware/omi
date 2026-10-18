@@ -13616,6 +13616,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityAttentionStorageTitle => 'A tárhely megtelt — a felvételek szünetelnek';
 
   @override
+  String get activityAttentionManage => 'Kezelés';
+
+  @override
+  String get activityAttentionRetry => 'Újra';
+
+  @override
   String get activityAttentionStorageSubtitle =>
       'Szabadítson fel helyet, vagy módosítsa az automatikus szinkronizálást';
 

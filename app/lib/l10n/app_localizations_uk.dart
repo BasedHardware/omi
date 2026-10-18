@@ -13594,6 +13594,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Памʼять заповнена — записи призупинено';
 
   @override
+  String get activityAttentionManage => 'Керувати';
+
+  @override
+  String get activityAttentionRetry => 'Повторити';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Звільніть місце або налаштуйте автосинхронізацію';
 
   @override

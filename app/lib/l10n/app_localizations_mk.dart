@@ -13625,6 +13625,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Складиштето е полно — снимките се паузирани';
 
   @override
+  String get activityAttentionManage => 'Управувај';
+
+  @override
+  String get activityAttentionRetry => 'Обиди се повторно';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Ослободете простор или прилагодете автосинхронизација';
 
   @override

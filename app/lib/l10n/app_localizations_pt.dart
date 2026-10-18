@@ -13588,6 +13588,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get activityAttentionStorageTitle => 'Armazenamento cheio — gravações pausadas';
 
   @override
+  String get activityAttentionManage => 'Gerenciar';
+
+  @override
+  String get activityAttentionRetry => 'Tentar novamente';
+
+  @override
   String get activityAttentionStorageSubtitle => 'Libere espaço ou ajuste a sincronização automática';
 
   @override
