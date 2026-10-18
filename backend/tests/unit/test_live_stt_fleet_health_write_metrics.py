@@ -169,6 +169,30 @@ async def test_transcript_post_commit_cleanup_error_stays_written_only(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_cost_result_backoff_does_not_slide_or_mark_local_state_unreconciled(monkeypatch):
+    from utils.stt.live_gate import GateState
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    health = FleetHealth(clock=lambda: 1000.0)
+    health._redis_retry_at = 1005.0
+    health._cost_local[('soniox', 'all')] = GateState(stage=0)
+    labels = {'write_path': 'cost_routing_result', 'kind': 'result'}
+    backoff_labels = {**labels, 'reason': 'redis_backoff'}
+    redis_error_labels = {**labels, 'reason': 'redis_error'}
+    backoff_before = _value(FLEET_HEALTH_WRITE_DROPPED, **backoff_labels)
+    redis_error_before = _value(FLEET_HEALTH_WRITE_DROPPED, **redis_error_labels)
+    written_before = _value(FLEET_HEALTH_WRITE_WRITTEN, **labels)
+
+    await health._write_cost_result('soniox', 'en', True, None, 'a' * 16)
+
+    assert _value(FLEET_HEALTH_WRITE_DROPPED, **backoff_labels) == backoff_before + 1
+    assert _value(FLEET_HEALTH_WRITE_DROPPED, **redis_error_labels) == redis_error_before
+    assert _value(FLEET_HEALTH_WRITE_WRITTEN, **labels) == written_before
+    assert health._redis_retry_at == 1005.0
+    assert not health._cost_unreconciled
+
+
+@pytest.mark.asyncio
 async def test_transcript_redis_backoff_uses_reason_label(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     health = FleetHealth(clock=lambda: 1000.0)

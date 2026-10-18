@@ -614,11 +614,11 @@ class CostHealthMixin(ABC):
                             self._cost_local.pop(evicted)
                             self._cost_unreconciled.discard(evicted)
 
-        failure_reason = 'redis_error'
+        if self._clock() < self._redis_retry_at:
+            record_drop('redis_backoff')
+            return
+
         try:
-            if self._clock() < self._redis_retry_at:
-                failure_reason = 'redis_backoff'
-                raise RuntimeError('Redis backoff')
             await self._bounded(write())
         except _IdentityChanged:
             record_drop('identity_changed_after_commit' if write_committed else 'identity_changed')
@@ -636,26 +636,10 @@ class CostHealthMixin(ABC):
                                 logger.debug('Cost-routing failure metric update failed', exc_info=True)
                         self._cost_unreconciled.add(key)
             if not write_committed:
-                record_drop(failure_reason)
+                record_drop('redis_error')
             self._redis_retry_at = self._clock() + 10
             logger.debug('STT cost-routing Redis write failed', exc_info=True)
         except Exception:
-            if failure_reason == 'redis_backoff':
-                with self._lock:
-                    for lang in ('all', language):
-                        key = (target, lang)
-                        local = self._cost_local.get(key, GateState())
-                        if local.stage == 0:
-                            if key not in self._cost_unreconciled:
-                                try:
-                                    self._cost_event(target, lang, GateState(), local, local=True)
-                                except Exception:
-                                    logger.debug('Cost-routing backoff metric update failed', exc_info=True)
-                            self._cost_unreconciled.add(key)
-                record_drop('redis_backoff')
-                self._redis_retry_at = self._clock() + 10
-                logger.debug('STT cost-routing write skipped during Redis backoff')
-                return
             if not write_committed:
                 record_drop('redis_error')
             logger.debug('STT cost-routing write bookkeeping failed', exc_info=True)
