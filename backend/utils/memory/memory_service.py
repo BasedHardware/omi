@@ -335,9 +335,11 @@ class LedgerHistoryPage:
     memories: Tuple[MemoryDB, ...]
     truncated: bool
     scanned_count: int
-    # Raw provider keyset after the bounded window.  The router signs this
-    # value into its continuation token; it is deliberately separate from the
-    # filtered row offset so rejected/non-history rows cannot stall paging.
+    # Raw provider keyset to resume after: the last row before the sentinel,
+    # or the last returned row when ``limit`` stopped the page inside the
+    # window.  The router signs this value into its continuation token; it is
+    # deliberately separate from the filtered row offset so rejected/non-history
+    # rows cannot stall paging.
     next_start_after: Optional[Tuple[datetime, str]] = None
 
 
@@ -3397,11 +3399,20 @@ class MemoryService:
         # partial even when it happens to contain exactly 501 rows.
         truncated = truncated or scanned_count >= scan_limit
         projected_items.sort(key=lambda pair: (-pair[0].updated_at.timestamp(), pair[0].memory_id))
+        page_items = projected_items[bounded_offset:window]
+        next_start_after = last_scanned if truncated else None
+        if len(projected_items) > window:
+            # ``limit`` stopped this page inside the provider window, so more
+            # history follows it. Resume after the last returned row; resuming
+            # after the window would skip the window's remaining history rows.
+            last_item = page_items[-1][0]
+            next_start_after = (last_item.updated_at, last_item.memory_id)
+            truncated = True
         return LedgerHistoryPage(
-            memories=tuple(row for _, row in projected_items[bounded_offset : bounded_offset + bounded_limit]),
+            memories=tuple(row for _, row in page_items),
             truncated=truncated,
             scanned_count=scanned_count,
-            next_start_after=last_scanned if truncated else None,
+            next_start_after=next_start_after,
         )
 
     def read_ledger_history(
