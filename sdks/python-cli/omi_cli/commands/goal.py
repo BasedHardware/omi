@@ -122,11 +122,18 @@ def create_goal(
         body["unit"] = unit
     if has_metrics:
         # Metric goal: keep the historical defaults for options the caller did not set.
+        effective_min = min_value if min_value is not None else 0
+        effective_max = max_value if max_value is not None else 10
+        if effective_min > effective_max:
+            raise UsageError(
+                message="--min cannot exceed --max",
+                detail=f"Got --min {effective_min} > --max {effective_max}.",
+            )
         body["goal_type"] = (goal_type if goal_type is not None else GoalType.scale).value
         body["target_value"] = target_value
         body["current_value"] = current_value if current_value is not None else 0
-        body["min_value"] = min_value if min_value is not None else 0
-        body["max_value"] = max_value if max_value is not None else 10
+        body["min_value"] = effective_min
+        body["max_value"] = effective_max
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
@@ -149,6 +156,11 @@ def update_goal(
     ctx = _ctx(typer_ctx)
     if clear_unit and unit is not None:
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
+    if min_value is not None and max_value is not None and min_value > max_value:
+        raise UsageError(
+            message="--min cannot exceed --max",
+            detail=f"Got --min {min_value} > --max {max_value}.",
+        )
     body: dict[str, object] = {}
     if title is not None:
         body["title"] = title

@@ -50,6 +50,11 @@ def list_conversations(
 ) -> None:
     server_page_size = 200
     ctx = _ctx(typer_ctx)
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise UsageError(
+            message="--start-date must not be after --end-date",
+            detail=f"Got --start-date {start_date.isoformat()} > --end-date {end_date.isoformat()}.",
+        )
     with ctx.make_client() as client:
         if limit <= server_page_size:
             items = client.get(
@@ -138,6 +143,11 @@ def create_conversation(
     language: str = typer.Option("en", "--language", help="ISO 639-1 code."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if started_at is not None and finished_at is not None and started_at > finished_at:
+        raise UsageError(
+            message="--started-at must not be after --finished-at",
+            detail=f"Got --started-at {started_at.isoformat()} > --finished-at {finished_at.isoformat()}.",
+        )
 
     if text is None or text == "-":
         if sys.stdin.isatty():
@@ -191,6 +201,11 @@ def from_segments(
     language: str = typer.Option("en", "--language"),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    if started_at is not None and finished_at is not None and started_at > finished_at:
+        raise UsageError(
+            message="--started-at must not be after --finished-at",
+            detail=f"Got --started-at {started_at.isoformat()} > --finished-at {finished_at.isoformat()}.",
+        )
     cleaned_lang = language.strip()
     if not cleaned_lang:
         raise UsageError(

@@ -207,3 +207,17 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+def test_goal_create_rejects_inverted_scale_bounds(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "create", "run", "--target", "5", "--min", "20", "--max", "10"])
+    assert result.exit_code == 1
+    assert not route.called
+
+
+def test_goal_update_rejects_inverted_scale_bounds(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/goals/g1").respond(json={"id": "g1"})
+    result = cli_runner.invoke(app, ["--json", "goal", "update", "g1", "--min", "20", "--max", "10"])
+    assert result.exit_code == 1
+    assert not route.called

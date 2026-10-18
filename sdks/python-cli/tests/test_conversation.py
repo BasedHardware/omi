@@ -195,3 +195,64 @@ def test_conversation_update_rejects_empty_title(authed_profile, respx_mock, cli
     result = cli_runner.invoke(app, ["conversation", "update", "c1", "--title", bad_title])
     assert result.exit_code == 1
     assert "Invalid title" in result.stderr
+
+
+def test_conversation_list_rejects_inverted_dates(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.get("/v1/dev/user/conversations").respond(json=[])
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "list",
+            "--start-date",
+            "2026-01-02T00:00:00",
+            "--end-date",
+            "2026-01-01T00:00:00",
+        ],
+    )
+    assert result.exit_code == 1
+    assert not route.called
+
+
+def test_conversation_create_rejects_inverted_timestamps(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/conversations").respond(json={"id": "c1"})
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "create",
+            "--text",
+            "hello",
+            "--started-at",
+            "2026-01-02T00:00:00",
+            "--finished-at",
+            "2026-01-01T00:00:00",
+        ],
+    )
+    assert result.exit_code == 1
+    assert not route.called
+
+
+def test_conversation_from_segments_rejects_inverted_timestamps(
+    authed_profile, respx_mock, cli_runner, tmp_path
+) -> None:
+    source = tmp_path / "segments.json"
+    source.write_text('[{"text": "hi", "start": 0, "end": 1}]', encoding="utf-8")
+    route = respx_mock.post("/v1/dev/user/conversations/from-segments").respond(json={"id": "c1"})
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "from-segments",
+            str(source),
+            "--started-at",
+            "2026-01-02T00:00:00",
+            "--finished-at",
+            "2026-01-01T00:00:00",
+        ],
+    )
+    assert result.exit_code == 1
+    assert not route.called
