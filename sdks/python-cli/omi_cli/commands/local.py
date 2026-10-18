@@ -10,6 +10,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional
+from urllib.parse import urlsplit
 
 import typer
 from rich.markup import escape
@@ -52,10 +53,23 @@ def configure(
     token: str = typer.Option(..., "--token", help="Bearer token for the local Omi Desktop API."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    cleaned_url = url.strip().rstrip("/")
+    parsed = urlsplit(cleaned_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise UsageError(
+            message="Invalid local API URL",
+            detail=f"Local API URL must be an http:// or https:// URL with a valid host (got '{url}').",
+        )
+    cleaned_token = token.strip()
+    if not cleaned_token:
+        raise UsageError(
+            message="Invalid local token",
+            detail="Token cannot be empty or whitespace.",
+        )
     config = ctx.load_config()
     profile = config.get_profile(ctx.profile_name)
-    profile.local_api_url = url.rstrip("/")
-    profile.local_token = token
+    profile.local_api_url = cleaned_url
+    profile.local_token = cleaned_token
     config.set_profile(profile)
     cfg.save(config)
     ctx.reload_config()
