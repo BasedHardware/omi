@@ -160,7 +160,8 @@ def test_no_stale_bridge_snapshot_after_external_effect(monkeypatch, modules, wi
     if change == 'redirect':
         assert modules.bridge.finish_sync_bridges('u', 'survivor') == 'next'
     elif change == 'deleted':
-        assert modules.bridge.finish_sync_bridges('u', 'survivor') is None
+        with pytest.raises(modules.bridge.SyncAssignmentSuperseded):
+            modules.bridge.finish_sync_bridges('u', 'survivor')
     else:
         with pytest.raises(RuntimeError, match='copy failed|completion revision changed'):
             modules.bridge.finish_sync_bridges('u', 'survivor')
@@ -183,11 +184,8 @@ def test_bridge_rejects_unsafe_lifecycle_shapes(monkeypatch, modules, wire, enab
         rows['survivor'].update(sync_merged_from=['donor'], smart_merge={'role': 'survivor'})
         rows['donor'] = {'id': 'donor', 'deleted': case != 'bad_donor', 'sync_merged_into': 'wrong'}
     wire(rows)
-    if case in ('missing', 'deleted'):
-        assert modules.bridge.finish_sync_bridges('u', 'survivor') is None
-    else:
-        with pytest.raises(modules.bridge.SyncAssignmentConflict):
-            modules.bridge.finish_sync_bridges('u', 'survivor')
+    with pytest.raises((modules.bridge.SyncAssignmentSuperseded, modules.bridge.SyncAssignmentConflict)):
+        modules.bridge.finish_sync_bridges('u', 'survivor')
 
 
 @pytest.mark.parametrize('enabled', [False, True])

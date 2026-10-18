@@ -353,17 +353,3 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
         assert 'exception_type=ValueError' in text
     else:
         assert 'event=batch_projection_phase' not in text
-
-
-def test_deleted_bridge_target_completes_without_playback_or_enrichment(binding, monkeypatch):
-    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: None)
-    playback = Mock()
-    projector = projection.Projector(Mock(), Mock(), playback=playback)
-    projector.store = Mock()
-    projector.clock = lambda: 123
-    item = Mock(segment_id='segment')
-    receipt = {'state': 'persisted', 'conversation_id': 'gone', 'audio_required': True, 'enrichment_required': True}
-    projector.finish_part(item, binding, receipt, 0)
-    projector.store.ready.assert_called_once_with('segment', binding, 123, part_index=0)
-    playback.assert_not_called()
-    projector.store.mark_enrichment.assert_not_called()

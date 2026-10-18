@@ -51,7 +51,11 @@ def system(monkeypatch):
         row.update(status='completed', data_protection_level='enhanced', private_cloud_sync_enabled=True)
         result = lifecycle.ingest_sync_conversation('u', row)
         if result[0].get('sync_merged_from'):
-            bridge.finish_sync_bridges('u', result[0]['id'])
+            import threading
+
+            bridge.finish_sync_segment(
+                'u', result[0], {'new_memories': set(), 'updated_memories': set()}, threading.Lock(), 'en'
+            )
         return result
 
     return store, ingest, retract, copy
@@ -491,3 +495,32 @@ def test_refresh_guard_diagnostic_identifies_site_without_message(system):
     with pytest.raises(action_item_refresh.RefreshConversationUnavailable) as caught:
         action_item_refresh.reconcile('u', 'missing', [], expected_revision=None)
     assert finalize_exception_site(caught.value) == 'action_item_refresh'
+
+
+@pytest.mark.parametrize('flatten', ['true', 'off'])
+def test_redirect_during_refresh_retains_transitive_sync_donors(system, monkeypatch, flatten):
+    from utils.sync import bridge
+
+    monkeypatch.setenv('CONVERSATION_SMART_MERGE_FLATTEN_ENABLED', flatten)
+    store, ingest, retract, copy = system
+    ingest(4)
+    ingest(8)
+    ingest(0)
+    transfer = bridge.transfer_donor
+    fired = False
+
+    def absorb_before_refresh(uid, donor_id, target_id):
+        nonlocal fired
+        if not fired:
+            fired = True
+            ingest(2)  # real atomic sync assignment absorbs the current target
+        transfer(uid, donor_id, target_id)
+
+    monkeypatch.setattr(bridge, 'transfer_donor', absorb_before_refresh)
+    ingest(6)
+    target = store.rows[('users', 'u', 'conversations', 'chunk-000')]
+    assert set(target['sync_merged_from']) == {'chunk-004', 'chunk-008'}
+    for source in ('chunk-004', 'chunk-008'):
+        donor = store.rows[('users', 'u', 'conversations', source)]
+        assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+    assert ('u', [{'id': 'chunk-008'}], 'chunk-000') in [c.args for c in copy.call_args_list]

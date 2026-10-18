@@ -84,7 +84,7 @@ def _record_refresh_deferred(reason: str, error: BaseException | None = None) ->
     )
 
 
-def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str | None:
+def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
     recovery = sync_finalize_target_recovery_enabled()
     visited: set[str] = set()
     while True:
@@ -93,9 +93,6 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
         visited.add(conversation_id)
         row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
-            if recovery:
-                _record_refresh_deferred('target_unavailable')
-                return None
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         if row.get('sync_merged_into'):
             conversation_id = row['sync_merged_into']
@@ -127,11 +124,9 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                     except RefreshConversationUnavailable as error:
                         if not recovery:
                             raise
-                        _record_refresh_deferred(
-                            'target_redirected' if error.successor_id else 'target_unavailable', error
-                        )
                         if not error.successor_id:
-                            return None
+                            raise SyncAssignmentSuperseded('sync refresh target deleted') from error
+                        _record_refresh_deferred('target_redirected', error)
                         conversation_id = error.successor_id
                         redirected = True
                         break
@@ -145,6 +140,8 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                         cleanup_deferred = True
                     if not cleanup_deferred:
                         retract_sync_bridge_source(uid, source_id)
+                except SyncAssignmentSuperseded:
+                    raise
                 except Exception as error:
                     reason = _deferred_retraction_reason(error)
                     if reason is None:
@@ -197,9 +194,6 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             conversation_id = current['sync_merged_into']
             continue
         if not current or current.get('deleted'):
-            if recovery:
-                _record_refresh_deferred('target_unavailable')
-                return None
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         return conversation_id
 
@@ -217,7 +211,16 @@ def finish_sync_segment(
     if not assigned.get('sync_merged_from') and not assigned.get('private_cloud_sync_enabled'):
         return
     conversation_id = assigned['id']
-    canonical_id = finish_sync_bridges(uid, conversation_id, audio_source_id=audio_source_id)
+    try:
+        canonical_id = finish_sync_bridges(uid, conversation_id, audio_source_id=audio_source_id)
+    except SyncAssignmentSuperseded as error:
+        if not sync_finalize_target_recovery_enabled():
+            raise
+        # This callback alone runs after intake audio/transcript persistence.
+        # Shared batch callers retain the helper's existing supersession signal
+        # and their own privacy/receipt settlement contract.
+        _record_refresh_deferred('target_unavailable', error)
+        canonical_id = None
     if canonical_id != conversation_id:
         with lock:
             response['new_memories'].discard(conversation_id)
