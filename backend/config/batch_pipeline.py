@@ -174,3 +174,13 @@ def projection_timing_enabled() -> bool:
 def worker_silence_disposition_enabled() -> bool:
     """Dark worker-side use of integration's strict local silence evidence."""
     return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def head_priority_enabled() -> bool:
+    """Prefer a queued capture-order head without changing lease/merge authority."""
+    return os.getenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false').strip().lower() == 'true'
+
+
+def async_projection_enabled() -> bool:
+    """Persist in order, then drain durable follow-ups outside the owner claim."""
+    return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'

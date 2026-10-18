@@ -83,6 +83,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
         {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_HEAD_PRIORITY_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED", "value": "false"},
         {"name": "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED", "value": "false"},

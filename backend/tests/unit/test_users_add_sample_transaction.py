@@ -13,6 +13,7 @@ from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
+from google.api_core import retry as api_retry
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
@@ -58,6 +59,7 @@ def users_db():
     fakes = {
         "database._client": client_stub,
         "google": google_pkg,
+        "google.api_core.retry": api_retry,
         "google.cloud": google_cloud_pkg,
         "google.cloud.firestore": firestore_stub,
         "google.cloud.exceptions": google_exceptions_stub,

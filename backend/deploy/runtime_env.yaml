@@ -327,6 +327,8 @@ environments:
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -942,6 +944,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -1235,6 +1239,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -1508,6 +1514,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -1727,6 +1735,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -2552,6 +2562,8 @@ environments:
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
@@ -3199,6 +3211,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
@@ -3578,6 +3592,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
@@ -3928,6 +3944,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
@@ -4223,6 +4241,8 @@ environments:
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}

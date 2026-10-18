@@ -265,10 +265,10 @@ def test_cached_input_and_cache_storage_use_gateway_accounting():
             {'dream_usage': {'attempts': 1, 'attempt_usage': [row]}}, provider='gemini', model=row['model']
         )[0]
 
-    assert cost_for(receipt) == pytest.approx(0.054)
-    assert cost_for({**receipt, 'cached_tokens': 0}) == pytest.approx(0.54)
+    assert cost_for(receipt) == pytest.approx(0.03)
+    assert cost_for({**receipt, 'cached_tokens': 0}) == pytest.approx(0.30)
     # One token-hour of explicit cache storage is $1 per million token-hours.
-    assert cost_for({**receipt, 'cache_storage_token_seconds': 3600}) == pytest.approx(0.054001)
+    assert cost_for({**receipt, 'cache_storage_token_seconds': 3600}) == pytest.approx(0.030001)
 
 
 def test_regeneration_cannot_erase_completed_label_review(tmp_path):

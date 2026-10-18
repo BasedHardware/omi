@@ -150,6 +150,8 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
         ('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'authoritative_labels_enabled'),
         ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'empty_asr_recovery_enabled'),
         ('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'require_live_target_enabled'),
+        ('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'head_priority_enabled'),
+        ('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'async_projection_enabled'),
     ],
 )
 def test_record_controls_default_off_and_read_at_call_time(monkeypatch, name, reader):
