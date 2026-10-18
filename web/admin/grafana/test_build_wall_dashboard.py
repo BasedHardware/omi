@@ -115,7 +115,10 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "Cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
-        for line in ["gcp", "vertexLlm", "openai", "anthropic", "stt", "saas", "revenuePerDay"]:
+        for line in [
+            "gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttEstimateUsd",
+            "saasMeasuredUsd", "saasEstimateUsd", "revenuePerDay",
+        ]:
             self.assertIn(line, fields)
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
                   for o in cost["fieldConfig"]["overrides"]}
