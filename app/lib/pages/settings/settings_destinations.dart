@@ -15,6 +15,7 @@ import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/pages/settings/connect_agent/connect_agent_page.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
@@ -116,7 +117,7 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
     case SettingsDestination.developer:
       await routeToPage(context, const DeveloperSettingsPage());
     case SettingsDestination.connectAgent:
-      await openDeveloperHome();
+      await openConnectAgent(context);
     case SettingsDestination.feedback:
       final url = Uri.parse('https://feedback.omi.me/');
       if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -132,14 +133,16 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
   }
 }
 
-/// The web developer home: copy-paste agent setup prompts plus MCP and Developer API keys. Every
-/// client sends people here rather than keeping its own copy of agent setup.
-final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
-
-Future<void> openDeveloperHome() async {
+/// Connect an Agent: ChatGPT in one tap, and agents with their own computer through a prompt that
+/// carries a one-time key link.
+Future<void> openConnectAgent(BuildContext context) async {
   PlatformManager.instance.analytics.settingsPageOpened(pageName: 'connect_agent');
-  await launchUrl(developerHomeUrl, mode: LaunchMode.externalApplication);
+  await routeToPage(context, const ConnectAgentPage());
 }
+
+/// The web developer home: MCP and Developer API keys and their setup prompts, linked from the
+/// bottom of Connect an Agent.
+final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
 
 /// The one voice-profile flow: the guided introduction (#14514), where sentence starters become
 /// the voice sample, memories and a goal. Every entry point opens it, with or without an existing

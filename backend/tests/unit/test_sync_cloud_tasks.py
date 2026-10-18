@@ -31,9 +31,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
 import pytest
+from starlette.datastructures import UploadFile
 
 # Keep additive batch imports real before legacy fixtures replace package roots.
 from utils.batch_pipeline import intake as _batch_intake  # noqa: F401
+from utils.batch_pipeline import live_projection as _batch_live_projection  # noqa: F401
+from utils.batch_pipeline import live_upload as _batch_live_upload  # noqa: F401
 from routers import batch_pipeline as _batch_router  # noqa: F401
 from models import sync_job_status as _sync_job_status  # noqa: F401
 
@@ -1186,6 +1189,8 @@ class TestSyncRouterStructure:
 
 def _load_sync_router_for_fast_path():
     """Load routers/sync.py with heavy deps stubbed for fast-path behavioral tests."""
+    from services import summary_debt_repair  # noqa: F401 - load before flat database stubs
+
     import contextvars
     import importlib.util
     from io import BytesIO
@@ -1214,6 +1219,7 @@ def _load_sync_router_for_fast_path():
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.sync_empty_recovery',
         'database.sync_backfill_sequencer',
         'database.firestore_read_metrics',
         'firebase_admin',
@@ -1479,6 +1485,13 @@ def _load_sync_router_for_fast_path():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.sync_redrive = types.SimpleNamespace(
+        enabled=lambda: os.getenv('SYNC_DURABLE_REDRIVE_GUARD') == 'true',
+        legacy_convergence_enabled=lambda: os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE') == 'true',
+        preserve_missing_job=MagicMock(return_value='redrive_required'),
+        converge_legacy_completion=MagicMock(return_value=None),
+    )
+    module.redrive_policy = module.sync_redrive
     module.uid_sequencer.enabled = MagicMock(return_value=False)
     module.uid_sequencer.production_fence_mode = MagicMock(
         side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None
@@ -1844,6 +1857,51 @@ def test_polling_active_terminal_retries_claim_cleanup_before_exposing_result():
             ]
         )
         module.delete_sync_job_run_lock_epoch.assert_called_once_with('job-1')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('switch', ['on', 'off'])
+async def test_sequenced_task_prepares_only_after_run_lock_and_kill_switch_skips(monkeypatch, switch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(module, pipeline_error=None, latest_job={'status': 'completed'})
+    request.json.return_value.update(lane='backfill', sequencer_epoch=7)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', switch)
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '4')
+    calls = []
+    tasks = []
+
+    def acquire(_job):
+        calls.append('locked')
+        return '1:lock-token'
+
+    def warm(*args):
+        assert calls[0] == 'locked'
+        calls.append(args)
+
+    def start(coro, *, name):
+        task = asyncio.create_task(coro)
+        tasks.append(task)
+        return task
+
+    module.try_acquire_sync_job_run_lock = MagicMock(side_effect=acquire)
+    module.warm_owner = warm
+    module.start_background_task = start
+    try:
+        # Enter the production body with a previously validated sequencer
+        # identity; the public wrapper's lease behavior has separate coverage.
+        response = await module._run_sync_job_body(request, task_retry_count=0)
+        await asyncio.gather(*tasks)
+        assert response.status_code == 200
+        assert calls == (['locked', ('test-uid', 'job-1', 7)] if switch == 'on' else ['locked'])
+        module._run_full_pipeline_background_async.assert_awaited_once()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -3679,6 +3737,46 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
 
 
 @pytest.mark.asyncio
+async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'test-uid')
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    transaction, store = MagicMock(), MagicMock()
+    transaction.get.return_value = {}
+    store.run.side_effect = lambda body: body(transaction)
+    monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
+    module.has_byok_keys = MagicMock(return_value=True)
+    accepted = AsyncMock(wraps=_batch_intake.accept_upload)
+    module.accept_batch_upload = accepted
+    try:
+        response = await module.sync_local_files_v2(
+            files=[UploadFile(filename='test.opus', file=BytesIO(b'synthetic-audio'))],
+            uid='test-uid',
+            conversation_id='unowned-record',
+        )
+        assert response.status_code == 503
+        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
+        assert response.headers['Retry-After'] == '30'
+        accepted.assert_awaited_once()
+        assert accepted.call_args.kwargs['byok_enabled'] is True
+        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        transaction.put.assert_not_called()
+        module.create_sync_job.assert_not_called()
+        module.claim_sync_content.assert_not_called()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('batch_status', [202, 503])
 async def test_batch_cohort_upload_never_dispatches_or_claims_legacy(monkeypatch, batch_status):
     """Even ambiguous batch admission owns the route; it must never fall through."""
@@ -3750,6 +3848,62 @@ async def test_cohort_prior_legacy_receipt_retains_original_claim_and_dispatch(m
         module.accept_batch_upload.assert_awaited_once()
         module.claim_sync_content.assert_called_once()
         module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_legacy_completion_convergence_before_provider_under_lock(monkeypatch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('provider must not run'),
+        latest_job={'job_id': 'job-1', 'status': 'processing'},
+    )
+    try:
+        monkeypatch.setenv('SYNC_LEGACY_COMPLETION_CONVERGENCE', 'true')
+        module.sync_job_uses_ledger_fence = MagicMock(return_value=False)
+        module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.LEGACY)
+        module.sync_redrive.converge_legacy_completion = MagicMock(return_value={'status': 'completed'})
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert json.loads(response.body)['reconciled'] is True
+        module.sync_redrive.converge_legacy_completion.assert_called_once_with(
+            job_id='job-1', uid='test-uid', content_id='content-1', run_lock_token='legacy-lock-token'
+        )
+        module._download_staged_files.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_awaited()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_missing_job_guard_retains_payload_before_ack_and_keeps_staged_bytes(monkeypatch):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(module, pipeline_error=RuntimeError('unused'), latest_job={})
+    try:
+        monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'true')
+        module.get_sync_job = MagicMock(return_value=None)
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'redrive_required'}
+        module.sync_redrive.preserve_missing_job.assert_called_once()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module.release_sync_content_claim.assert_not_called()
+        module.release_sync_content_claim_after_job_retired.assert_not_called()
+        module._run_full_pipeline_background_async.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

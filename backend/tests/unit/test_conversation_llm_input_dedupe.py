@@ -290,3 +290,38 @@ def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, 
             assert dedupe.fingerprint(feature, 'same input') != old
     finally:
         dedupe.implementation_digest.cache_clear()
+
+
+@pytest.mark.parametrize('summary_gate', [False, True])
+def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summary_gate):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from models.structured import Structured
+    from utils.conversations import llm_input_dedupe as target
+
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    empty = Structured(title='Server transcript title', overview='')
+    rich = Structured(title='Generated title', overview='A supported synthetic summary')
+    monkeypatch.setattr(target, 'fingerprint', lambda *_: 'same-input')
+    monkeypatch.setattr(
+        target,
+        '_stored',
+        lambda *_: {
+            target.NOTES_HASH: 'same-input',
+            target.NOTES_OUTPUT_HASH: target.output_fingerprint(empty),
+            'structured': empty.model_dump(),
+            'discarded': False,
+        },
+    )
+    monkeypatch.setattr(target, 'record_feature', lambda *_: None)
+    generate = Mock(return_value=rich)
+    output = target.notes('u', SimpleNamespace(id='c'), [], generate, {})
+    if summary_gate:
+        generate.assert_called_once()
+        assert output.overview == rich.overview
+    else:
+        generate.assert_not_called()
+        assert output.overview == ''

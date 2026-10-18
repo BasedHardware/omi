@@ -277,3 +277,16 @@ async def test_store_initialization_leaves_event_loop_and_fails_closed(monkeypat
     )
     assert initialization_threads and initialization_threads[0] != request_thread
     assert response is not None and response.status_code == 503
+
+
+def test_admitted_duration_emits_only_after_new_committed_ownership(cohort, monkeypatch):
+    from database import batch_pipeline_intake as module
+    from unittest.mock import Mock
+
+    metric = Mock()
+    monkeypatch.setattr(module, 'record_correctness', metric)
+    store = MemoryStore()
+    works, binding = proposal()
+    submit(store, works, binding)
+    submit(store, works, binding)
+    metric.assert_called_once_with('admitted', seconds=works[0].duration_seconds)

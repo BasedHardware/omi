@@ -167,14 +167,48 @@ words whose midpoint is in synthetic padding are excluded. Original VAD speech
 accounting, diarization input, privacy checks and persistence are unchanged.
 `event=batch_asr_recovery` contains only segment ID, original closed empty reason,
 sample count, original ASR count, recovered word count, original window count,
-minimum/maximum window sample lengths, speech sample count and recovered/empty
-outcome. It and the shared
+minimum/maximum window sample lengths, speech sample count and
+`recovered|empty|skipped_oversize` outcome. It and the shared
 fallback metric emit outside exception handlers; observability failure never
 discards healthy results. A retry exception is labeled `stage=asr_recovery` and
 fatal CUDA still fences the entire chain. Remaining empties never become silence
 or bypass accepted content claims. The scheduler's attempt ceiling and the
 separate default-off, owner-allowlisted legacy path are documented in
 [serving settings](../docs/batch-pipeline-serving.md).
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` ships **true** (Helm
+`worker.workerValidationDispositionEnabled`). A closed `BatchValidationError`
+ends this GPU chain on the first attempt. `ValidationFailureWork` carries only
+its stage and reason; the scheduler retains them in `worker_failure`, removes
+the ordered pending span and creates the existing held recovery obligation.
+This is terminal for GPU retries, not a success or permission to delete audio.
+The old lease cannot publish a late result. Empty-ASR handoffs also preserve
+`empty_asr` versus `no_owned_words` along with their padded-retry evidence.
+Unclassified provider/transport faults retain exponential backoff and the
+existing bounded attempt policy; fatal CUDA retains the restart protocol.
+
+If Pyannote rejects a frame wholly beyond EOF, the worker first checks the
+canonical real buffer with independent strict local VAD, including its partial
+final window. A valid empty strict-VAD result commits a truthful `silence`
+payload through ordinary persistence and projection. This fixes tiny captures
+(observed: 320 samples / 20ms) without treating invalid VAD as silence. Positive,
+malformed, unavailable or noncanonical evidence takes the held recovery route.
+The worker never calls an external provider for this silence check. Rollback:
+set the worker validation disposition flag to `false`, restoring bounded GPU
+retries; existing held intents and receipts remain authoritative.
+
+Quarantine events are cumulative transitions, not current debt. For read-only
+Firestore aggregation, count `batch_pipeline_prod_jobs` with `state ==
+quarantined` AND `quarantine_reason == worker_failed`, then partition by
+`recovery_state`, `worker_failure.stage/reason` and `recovery.failure.stage/reason`.
+Use `count()` only. A `quarantined_at >= cutoff` count includes jobs subsequently
+recovered, committed or terminally disposed; never label it "held". Legacy jobs
+without `worker_failure` need an aggregate join to content-free worker logs;
+absence of a code is not evidence of corrupt audio. An `abandoned_running`
+recovery is an uncertain paid intent: do not automatically reset it or classify
+it as silence. Reconcile its durable result or obtain a separately authorized,
+idempotent recovery decision.
+
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak
@@ -222,3 +256,49 @@ work; it never reports successful silence. Successful siblings retain their
 assignment receipts, while later uploads may advance. Legacy recovery is held,
 not dispatched: see [terminal quarantine and the visible gap](../docs/batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap)
 for client status, retained audio/usage obligations and the fenced recovery design.
+
+Worker strict-silence disposition is separately dark behind
+`BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED=false`, rendered from Helm
+`worker.workerSilenceDispositionEnabled: false`. It reuses integration's local
+Silero inspection after empty ASR, before quarantine; ONNX and the VAD asset
+are packaged in this image. Enable only with an approved worker image rollout
+and worker flag change; setting it back to false restores empty-ASR quarantine.
+See `docs/listen_pusher_pipeline.mdx` for payload and recovery semantics.
+
+
+### Paid quarantine recovery request lifetime
+
+`BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
+serving reconciliation loop prepares the existing fenced recovery intent and
+queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
+origin, declared separately from the worker audience in dev and prod) plus
+`/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
+The handler awaits the sole provider call and result persistence before replying,
+so ordinary Cloud Run revision draining sees an active request. Background sweeps
+enqueue prepared work or reconcile running artifacts. Any dispatch failure
+(including missing configuration or a lost enqueue acknowledgement) falls back
+to inline recovery with the same token. The task and inline path race through
+the same transactional start fence, so at most one can invoke paid STT. The
+shared fallback metric records this degraded inline execution. A disabled
+handler host or owner cohort returns retryable HTTP 503, never a successful ack.
+A two-minute wake-name generation repairs exhausted tasks without authorizing a
+second provider call. Existing privacy, lease, content ownership and intent-token
+fences apply to every delivery, including duplicates and admission rollback.
+
+Integration declares a 3,600-second Cloud Run request timeout in both manifests,
+above the 1,500-second task dispatch deadline and application path timeout.
+Modulate has a 300-second client budget. If the application returns 504,
+cancelling the ASGI await does not stop its executor thread: that thread may
+still persist the result while its instance survives. A retry adopts the same
+`running` token and only reconciles artifacts; it never starts a second paid
+call. Ordinary drain protection ends with the request; a timeout followed by
+instance death can still leave uncertain work held (including the existing
+900-second abandonment fence). This is not permission to reset the token.
+
+Kill switch: set `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false` to restore inline
+sweeping. Already enqueued tasks still use the same intent fence. No historical
+`failed_held` intent is reset. An exceptional instance kill can still leave an
+uncertain paid call held; this requires provider result reconciliation or an
+explicit new epoch, never blind retry. Do not weaken the quarantine-to-completion
+gate or exclude censored held work to hide this residual obligation.

@@ -149,8 +149,7 @@ jobs:
 
       - name: Verify live finalization alert route before publishing
         env:
-          # Dest ops Grafana (monitor.omiapi.com). Do not use GRAFANA_TOKEN; that
-          # token belongs to the TV Cloud Run instance.
+          # Dest ops Grafana (monitor.omiapi.com). Use the monitor token above.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail

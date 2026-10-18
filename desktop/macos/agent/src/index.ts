@@ -94,6 +94,7 @@ import {
   AcpError,
   AcpRuntimeAdapter,
   beginProviderAuthWithoutBlocking,
+  requestProviderAuthFromHost,
   isAcpProviderAuthFailure,
 } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -3946,6 +3947,16 @@ async function main(): Promise<void> {
         const invalidate = msg as InvalidateSessionMessage;
         invalidate.ownerId = resolveActiveOwner(invalidate.ownerId);
         transport.handleInvalidateSession(invalidate);
+        break;
+      }
+
+      case "start_provider_auth": {
+        requestProviderAuthFromHost({
+          activeAuthUrl: () => activeOAuthFlow?.authUrl,
+          announceAuthUrl: (authUrl) => send({ type: "auth_required", methods: authMethods, authUrl }),
+          startAuthFlow,
+          logErr,
+        });
         break;
       }
 

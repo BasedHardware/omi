@@ -203,7 +203,8 @@ Future<void> retryConversationSummary(BuildContext context, ServerConversation c
     {Future<ServerConversation?> Function(String conversationId)? reprocess}) async {
   if (conversation.id == '0') return;
   try {
-    final updated = await (reprocess ?? reProcessConversationServer)(conversation.id);
+    final updated =
+        await (reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation)(conversation.id);
     if (!context.mounted) return;
     final provider = context.read<ConversationProvider>();
     if (updated == null) {

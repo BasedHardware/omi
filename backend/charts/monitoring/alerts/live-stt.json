@@ -3210,14 +3210,14 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live STT - health evidence persistence gaps",
+    "title": "Live STT - health evidence persistence gaps (settlement-normalized proxy)",
     "condition": "D",
     "data": [
       {
         "refId": "A",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -3226,7 +3226,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[5m]))",
+          "expr": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -3237,7 +3237,7 @@
         "refId": "B",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -3246,7 +3246,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[5m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[5m])) + sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[5m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "expr": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -3266,7 +3266,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0",
+          "expression": "$A >= 100 && $B > 0.01",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -3316,22 +3316,22 @@
         }
       }
     ],
-    "updated": "2026-10-04T00:00:00Z",
+    "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "1m",
+    "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT - health evidence persistence gaps",
+      "summary": "Live STT - settlement-normalized health evidence persistence proxy elevated",
       "user_impact": "Routing evidence is incomplete; stages cannot qualify a rollout.",
-      "scope": "omi_stt_cost_routing_settlements_total requires the configured chain; health persistence metrics are diagnostic.",
+      "scope": "Settlement-normalized proxy from cost-routing settlements and evidence errors; this is not a true Redis write-loss rate.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0",
-      "evaluated_bad": "At least one cost-routing settlement in 5m with a dropped or ack-failed evidence record.",
-      "evaluated_good": "Settlements with zero dropped evidence records and zero emission ack errors."
+      "threshold": "Settlement-normalized proxy >1% with at least 100 cost-routing settlements in 15m, sustained for 15m. Switch to dropped/attempted after the new counters have a day of data.",
+      "evaluated_bad": "At least 100 cost-routing settlements in 15m and the settlement-normalized proxy is >1% for 15m.",
+      "evaluated_good": "Fewer than 100 cost-routing settlements in 15m or the settlement-normalized proxy is at most 1%."
     },
     "labels": {
       "alert_identity": "omi-stt-evidence-loss",
@@ -3343,7 +3343,159 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-evidence-loss-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - health evidence persistence gaps (critical proxy)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 100 && $B > 0.03",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "Live STT - settlement-normalized health evidence persistence proxy critical",
+      "user_impact": "Routing evidence is incomplete; stages cannot qualify a rollout.",
+      "scope": "Settlement-normalized proxy from cost-routing settlements and evidence errors; this is not a true Redis write-loss rate.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "Settlement-normalized proxy >3% with at least 100 cost-routing settlements in 15m, sustained for 10m. Switch to dropped/attempted after the new counters have a day of data.",
+      "evaluated_bad": "At least 100 cost-routing settlements in 15m and the settlement-normalized proxy is >3% for 10m.",
+      "evaluated_good": "Fewer than 100 cost-routing settlements in 15m or the settlement-normalized proxy is at most 3%."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-evidence-loss-critical",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   },
@@ -3352,7 +3504,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live STT - managed leg lifecycle gap",
+    "title": "Live STT - managed leg duplicate settlement",
     "condition": "D",
     "data": [
       {
@@ -3388,7 +3540,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "abs(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}) / clamp_min(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}, 1)",
+          "expr": "omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -3408,7 +3560,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0.25",
+          "expression": "$A >= 0 && $B > 0",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -3458,22 +3610,22 @@
         }
       }
     ],
-    "updated": "2026-10-04T00:00:00Z",
+    "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "30m",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT - managed leg lifecycle gap",
-      "user_impact": "Managed transports lack a matching open or settlement; routing evidence is incomplete.",
-      "scope": "omi_stt_managed_legs_opened_total, omi_stt_managed_legs_settled_total and omi_stt_managed_legs_open require the configured chain; per instance and target, never pooled.",
+      "summary": "Live STT - managed leg duplicate settlement",
+      "user_impact": "Duplicate settlement accounting may corrupt routing evidence; inspect serving outcome metrics separately.",
+      "scope": "Per instance and target, settled must not exceed handed-off opened legs. Transport release and settlement are independent; opened-minus-settled-minus-open is diagnostic only.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
-      "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
+      "safe_next_action": "HOLD routing qualification and investigate duplicate settlement. Do not roll back serving solely for opened-minus-settled-minus-open; compare transcript, terminal-after-text and exhausted-chain outcomes with baseline.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0.25 for 30m, per instance and target. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: per-pod maximum B p50 1.1% / p90 16.7% / max 100% at pod start. A nonzero steady-state gap (p50 1.1%) is an accounting defect to investigate, not healthy; the sustained threshold filters pod-start transients.",
-      "evaluated_bad": "Managed legs opened on an instance/target with unexplained opened-minus-settled-minus-open ratio above 25%, sustained for 30m, fires.",
-      "evaluated_good": "No opened legs or per-instance/target gap at most 25% does not fire this alert. A nonzero steady-state gap remains an accounting defect to investigate, not healthy."
+      "threshold": "Settled minus opened >0 for 2m per instance and target. Grafana pending time supplies elapsed persistence; missing series are not proof of healthy accounting.",
+      "evaluated_bad": "More managed settlements than handed-off legs on the same instance/target, sustained for 2m.",
+      "evaluated_good": "Settled at most opened. This does not prove complete settlement: released-but-unsettled state and oldest age require direct instrumentation before omission alerts can qualify a rollout."
     },
     "labels": {
       "alert_identity": "omi-stt-leg-lifecycle-gap",
@@ -3486,6 +3638,153 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-leg-settlement-omission",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - sustained new managed leg settlement gap",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_min((omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"} offset 1h) or (0 * omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}), 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $A > $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-18T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "Live STT - sustained new managed leg settlement gap",
+      "user_impact": "A sustained new settlement accounting gap may omit routing evidence; compare serving outcomes before any rollback.",
+      "scope": "Per instance and target: opened minus settled minus currently open, above the nonnegative same-series carry-in one hour earlier. Live legs are subtracted; unchanged control debt does not page.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "HOLD routing qualification and investigate pending settlement ownership. Record both arms and their carry-in; compare transcript, terminal-after-text and exhausted-chain outcomes. Do not roll back serving for this accounting proxy alone.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "Positive accounting gap above its nonnegative one-hour carry-in for 15m of Grafana pending time. Missing historical series uses a label-matched zero baseline for new instances; missing current components remain no data.",
+      "evaluated_bad": "Run 5b shape: 29 opened, 24 settled, 4 open gives a new +1 above zero carry-in, sustained for at least 15m.",
+      "evaluated_good": "Balanced in-flight legs, negative gaps, unchanged positive control carry-in and transients shorter than 15m stay clear. The rolling one-hour baseline ages out old debt; this warning is not a complete released-but-unsettled inventory."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-leg-settlement-omission",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
     },
     "record": null
   },

@@ -321,3 +321,52 @@ def test_idle_shard_rejoins_at_persistent_frontier_in_transaction(store):
     queue.enqueue(work('rejoin', owner='a'), 3)
     key = scheduler_control_key(owner_key('a'))
     assert store.run(lambda tx: tx.get('control', key))['p2_service'] == 60
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_head_priority_splice_uses_real_queries_and_survives_flag_rollback(store, monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', str(enabled).lower())
+    queue = Scheduler(store)
+    for sid, capture in [('newer', 20), ('head', 10)]:
+        queue.enqueue(work(sid, capture), 0)
+    first = queue.pull(1)[0]
+    assert first.item.segment_id == ('head' if enabled else 'newer')
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false')
+    queue.enqueue(work('tail', 30), 2)
+    rest = queue.pull(3, 2)
+    assert [v.item.segment_id for v in rest] == (['newer', 'tail'] if enabled else ['head', 'tail'])
+    for lease in [first, *rest]:
+        assert queue.complete(WorkResult(lease.item.segment_id, 'gs://synthetic/result'), lease.token, 4)
+    merge = OrderedMerge(store)
+    assert [merge.commit_next('synthetic-owner', 5)['segment_id'] for _ in range(3)] == ['head', 'newer', 'tail']
+
+
+def test_head_priority_does_not_flush_privacy_fenced_link_mutations(store, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    queue = Scheduler(store)
+    queue.enqueue(work('newer', 20), 0)
+    queue.enqueue(replace(work('head', 10), conversation_id='removed'), 0)
+    store.client.collection('users').document('synthetic-owner').collection('deleted_conversations').document(
+        'removed'
+    ).set({'deleted': True})
+    assert queue.pull(1)[0].item.segment_id == 'newer'
+    assert queue.pull(2) == []
+    assert store.run(lambda tx: tx.get('jobs', 'head'))['state'] == 'ready'
+
+
+def test_projection_cursor_handles_timestamp_ties_deleted_anchor_wrap_and_restart(store):
+    from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+
+    collection = store.client.collection(f'{store.namespace}_results')
+    for sid in ('a', 'b', 'c'):
+        collection.document(sid).set({'projection_state': 'ready', 'committed_at': 2.0})
+    scan = ProjectionDiscovery(store)
+    assert scan.next(1) == ['a']
+    collection.document('a').delete()
+    assert scan.next(1) == ['b']
+    assert scan.next(1) == ['c']
+    assert scan.next(1) == []
+    assert scan.next(1) == ['b']
+    assert ProjectionDiscovery(store).next(1) == ['b']

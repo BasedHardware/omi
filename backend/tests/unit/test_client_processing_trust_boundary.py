@@ -612,6 +612,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'source',
         'language',
         'uses_custom_stt',
+        # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
+        'record_lane_owner',
         'structured',
         'client_processing',
         # Authenticated owner-confirmed edits, not device-authored display projections.

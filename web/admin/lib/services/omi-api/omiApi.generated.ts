@@ -4832,6 +4832,7 @@ export interface SharedSection {
   body_markdown: string;
   heading: string;
   kind?: "main" | "side_notes";
+  source_segment_ids?: Array<string>;
 }
 
 export interface SharedStructured {
@@ -8312,6 +8313,7 @@ export interface OmiApiPaths {
         "404": void;
         "409": void;
         "422": HTTPValidationError;
+        "502": void;
       };
     };
   };

@@ -220,27 +220,50 @@ failures and strikes; it does not migrate or backfill those samples. The
 sequential 8% gate and healthy vote budgets stay unchanged; trial vote budgets
 are tightened to admitted outcomes only.
 
-Independent lifecycle oracle: the chain counts `opened` when handing off a
-connected managed leg (including same-provider replacement), transport release
-decrements `open`, and terminal settlement separately counts `settled`. Rejected
-connects that never hand off are excluded from all three. The per-pod/target
-difference must return to zero; allow the existing 30-second deferred hop
-settlement and scrape races, but **no nonzero gap persisting two minutes**. A
-missing settlement after transport release grows this gap even if acknowledgement
-errors stay zero. This detects lifecycle coverage, not wrong reason attribution;
-retain real-object tests and provider-reason/session-SLI inspection for that.
+Lifecycle accounting (2026-10-18 correction): `opened` counts handed-off
+managed legs, `open` counts transports not yet released, and `settled` counts
+terminal serving decisions. Transport release and settlement are independent.
+A settled-but-open leg contributes -1 to `opened-settled-open`; a released but
+unsettled leg contributes +1, and pooling can cancel them. The old absolute-gap
+abort is invalid as a serving-loss oracle. Run 5b and routing-on control both
+exhibited it; control included discrepancies already present for over eight hours.
+
+Retain the difference per pod/target as an **accounting HOLD/investigation**
+signal, recording both arms' carry-in baseline. It must not delete a canary or
+roll back the fleet by itself. Retain all real outcome, latency, readiness and
+telemetry-coverage safety gates. An unexplained accounting HOLD prevents automatic
+qualification and needs an explicit recorded operator decision, not a silent pass.
+The fleet rule with stable UID `omi-stt-leg-lifecycle-gap` now checks the valid
+exactly-once invariant `settled > opened`, with Grafana `for: 2m`; it no longer
+uses transport liveness to infer missing settlements. A separate warning,
+`omi-stt-leg-settlement-omission`, catches a positive per-instance/target
+`opened-settled-open` above its nonnegative carry-in one hour earlier,
+sustained for **15 minutes** of Grafana pending time. Live legs are subtracted;
+unchanged positive control carry-in and negative gaps do not trigger it. A
+new instance without hour-old samples uses a label-matched zero baseline;
+missing current components remain no data and require a coverage HOLD.
+The rolling baseline detects new debt and ages it out after an hour; retain
+the recorded discrepancy until investigated even after the warning resolves.
+This warning requests investigation and HOLD, never a serving abort by itself.
 
 ```promql
-sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
-- sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
-- sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+# Accounting diagnostic only; never a serving abort or missing-settlement proof.
+sum by (pod, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+- sum by (pod, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+- sum by (pod, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
 
-min_over_time((abs(
-  sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
-  - sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
-  - sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
-))[2m:15s]) > 0
+# Duplicate-settlement invariant, evaluated per process/target (not fleet pooled).
+omi_stt_managed_legs_settled_total{job="backend-listen-metrics"}
+- omi_stt_managed_legs_opened_total{job="backend-listen-metrics"} > 0
 ```
+
+Complete omission detection needs direct low-cardinality released-AND-unsettled
+counts and oldest age, with claimed/pending ownership and the enforced
+recovery/teardown deadline plus scrape grace. The current counters cannot provide
+that state. Do not infer it from a longer gap subquery. A `[1m:15s]` subquery can
+contain only four samples spanning 45 seconds. Canary diagnostic timers must use
+actual elapsed time with complete scrapes, resetting on gaps, absent targets or
+counter resets; baseline old discrepancies separately from new incidents.
 
 Coverage, admitted votes and health evidence:
 
@@ -345,7 +368,8 @@ serving-owned disruption remain separate uninstrumented cohort gates.
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
 
-Abort to shadow/zero for a persistent lifecycle gap, any emission acknowledgement error or evidence exception; any
+HOLD for an unexplained lifecycle accounting diagnostic. Abort to shadow/zero for
+any emission acknowledgement error or evidence exception; any
 unavailable/all-degraded proposal; sustained Redis/write/cap errors; or a
 Parakeet/Soniox bench unexplained by actual provider failures. Abort for a >2
 percentage-point drop in transcript success from the pre-ramp baseline over
@@ -367,6 +391,44 @@ normal deployment; this is not an instant process-local env mutation.
 Keep chart + prod overlay aligned, then regenerate `backend/deploy/runtime_env.yaml`
 with `python3 backend/deploy/compose_runtime_env.py`. Do not write routing state
 through dev: dev shares production Redis/Firestore.
+
+## Production routing-off rollout (2026-10-18)
+
+Prod backend-listen uses `STT_ROUTING_MODE=off`, the independent canary's only
+routing override. Dev keeps its existing configuration. Static provider order,
+recovery, capacity rescue, account quarantine and the routing kill switch stay
+available; off does not disable fallback. No account cohort is added by this
+rollout. Manage private cohorts outside this repository.
+
+Rollback: **set `STT_ROUTING_MODE=on` in the prod listen values and prod runtime
+overlay, run `python3 backend/deploy/compose_runtime_env.py`, then deploy through
+the normal prod listen Helm workflow with the same image.** This rolls/drains
+WebSockets. Do not roll back an entire old Helm revision and undo unrelated
+capacity fixes. The routing-only config commit can also be reverted and deployed.
+
+Before deployment, pin the serving image/release SHA, exact main pod set and a
+30-minute pre-deploy baseline. After rollout, verify the reported release identity,
+`STT_ROUTING_MODE=off` on every main pod, Ready pods, public NEG membership and
+complete scrapes. Compare matched 15- and 30-minute windows with the baseline;
+record numerators, denominators, language/provider mix and histogram counts:
+
+| Watch | Baseline and post-deploy measure |
+|---|---|
+| Exhausted chains | `sum(increase(omi_stt_chain_exhausted_total[15m])) / sum(increase(omi_listen_accepted_total[15m]))` (repeat with `[30m]`) |
+| Terminal after text | `increase(omi_live_session_terminal_after_text_total)` / accepted sessions |
+| Transcript success | transcribed / (transcribed + no_transcript) from `omi_live_session_transcript_outcome_total`; exclude too_short |
+| First-text p95 | `histogram_quantile(0.95, sum by(le)(rate(omi_stt_window_first_text_seconds_bucket[15m])))` plus its count |
+
+Use `job="backend-listen-metrics"`, the prod namespace and exact escaped pod
+sets for all watches, as in `listen-stt-canary-queries.promql`. First-text timing
+covers Parakeet-window only; it does not measure Modulate/Soniox end-to-end
+latency. Missing metrics are HOLD, never zero. Outcome completion lags accepts;
+exhaustion and terminal events are not deduplicated session failure rates.
+Watch through at least 60 minutes and 150 classified post-rollout outcomes.
+Investigate any outcome-rate regression against the baseline immediately; use
+the retained sampled latency and outcome safety gates, and routing-on rollback
+for a sustained serving regression. Earlier single-run aborts remain historical;
+the lead accepted pooled same-image/config runs 4b+5b (173 classified outcomes).
 
 ## Soniox runway
 

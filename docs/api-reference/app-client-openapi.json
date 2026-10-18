@@ -29526,7 +29526,7 @@
         "type": "object"
       },
       "SharedSection": {
-        "description": "Public note content, without internal transcript evidence IDs.",
+        "description": "Public note content linked to the transcript segments on the same share payload.",
         "properties": {
           "body_markdown": {
             "title": "Body Markdown",
@@ -29544,6 +29544,13 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "source_segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
           }
         },
         "required": [
@@ -49861,7 +49868,7 @@
             "description": "The conversation or selected app does not exist"
           },
           "409": {
-            "description": "The selected app is disabled or not enabled by this user"
+            "description": "The selected app is disabled or not enabled by this user, or the conversation is already being processed (detail code conversation_processing_in_progress)"
           },
           "422": {
             "content": {
@@ -49872,6 +49879,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "description": "The selected app produced no summary (detail code app_result_failed)"
           }
         },
         "security": [

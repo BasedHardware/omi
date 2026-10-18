@@ -1,6 +1,7 @@
 """Private OIDC batch worker RPC. Rollback closes intake, never accepted leases."""
 
 from dataclasses import asdict
+import logging
 import os
 import time
 from typing import Literal
@@ -10,23 +11,32 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response, JSONResponse
 
+from config.batch_pipeline import read_only_metrics_enabled, async_projection_enabled
+from config.summary_guarantee import enabled as summary_deadline_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
-from utils.executors import db_executor, run_blocking, sync_executor
+from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
 from utils.sync.stage import current_stage, require_http_stage
+
+logger = logging.getLogger(__name__)
 
 
 def verify_worker(request: Request) -> int:
     # Keep worker-only authentication out of legacy sync import paths.
     from utils.cloud_tasks import verify_configured_cloud_tasks_oidc
 
+    audience = os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip()
+    invoker = os.getenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', '').strip()
+    if request.url.path == '/v2/batch-pipeline/recover-quarantine':
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
+        invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
     return verify_configured_cloud_tasks_oidc(
         request,
-        audience=os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip(),
-        invoker_sa=os.getenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', '').strip(),
+        audience=audience,
+        invoker_sa=invoker,
         log_failure=False,
     )
 
@@ -122,6 +132,27 @@ async def fail(body: FailRequest):
     return {'accepted': accepted}
 
 
+@router.post('/recover-quarantine', include_in_schema=False)
+async def recover_quarantine(body: RedriveRequest):
+    """Keep paid STT inside an active request across ordinary revision draining.
+
+    Retried/duplicate tasks can reconcile the original intent; start() never
+    authorizes a second provider invocation. The payload carries no owner ID.
+    """
+    service = body.service()
+    if not service.recovery or os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+        raise HTTPException(status_code=503, detail='Recovery disabled on this host')
+    job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
+    if not job:
+        return {'status': 'held'}
+    outcome = await run_blocking(sync_executor, service.recovery.recover, body.segment_id, job['owner_id'])
+    if outcome == 'disabled':
+        raise HTTPException(status_code=503, detail='Recovery disabled for this owner')
+    if outcome in {'recovered', 'reconciled'}:
+        await service.reconcile_async()
+    return {'status': outcome}
+
+
 @router.post('/redrive-dead', include_in_schema=False)
 async def redrive_dead(body: RedriveRequest):
     try:
@@ -139,14 +170,22 @@ async def gpu_idle(body: IdleRequest):
 
 @router.post('/reconcile', include_in_schema=False)
 async def reconcile(body: WorkerRequest):
-    await run_blocking(sync_executor, body.service().reconcile, recover_quarantine=True)
+    if async_projection_enabled():
+        await body.service().reconcile_async(recover_quarantine=True)
+    else:
+        await run_blocking(sync_executor, body.service().reconcile, recover_quarantine=True)
     return {'status': 'reconciled'}
 
 
 @router.get('/metrics', include_in_schema=False)
 async def metrics():
     service = serving_for_stage(current_stage())
-    await run_blocking(sync_executor, service.reconcile)
+    if read_only_metrics_enabled() and service.metrics is not None:
+        await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
+    elif async_projection_enabled():
+        await service.reconcile_async()
+    else:
+        await run_blocking(sync_executor, service.reconcile)
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 
@@ -169,8 +208,14 @@ async def enrichment_response(payload: dict):
     if not reprocess.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     try:
-        status = await run_blocking(sync_executor, run_enrichment, document_id, token)
-        return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
+        # Summaries must not queue behind long transcription jobs. Reuse the
+        # conversation-processing bulkhead; the master flag restores the old pool.
+        executor = postprocess_executor if summary_deadline_enabled() else sync_executor
+        status = await run_blocking(executor, run_enrichment, document_id, token)
+        if status == 'busy':
+            logger.info('event=batch_enrichment_sync_reprocess outcome=busy')
+            return JSONResponse(status_code=409, content={'status': status})
+        return JSONResponse(status_code=200, content={'status': status})
     except (ValueError, TypeError):
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     except Exception:

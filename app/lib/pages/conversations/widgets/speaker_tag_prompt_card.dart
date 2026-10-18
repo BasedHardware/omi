@@ -9,6 +9,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversations/widgets/speaker_review_native.dart';
@@ -19,6 +20,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/speaker_picker.dart';
+
+export 'package:omi/widgets/speaker_picker.dart' show SpeakerPickerCandidate, SpeakerPickerChoice, showSpeakerPicker;
 
 // Home's library (home/page.dart, whose native presentation part opens the review sheet and projects
 // the For You feed) reaches both through its existing import of this file.
@@ -241,9 +245,8 @@ Future<void> answerSpeakerTagWithPicker(
   List<Person> people,
   SpeakerTagGive give,
 ) async {
-  final choice = await showSpeakerPicker(
+  final choice = await _showSpeakerTagPicker(
     context,
-    prompt: prompt,
     candidates: candidates,
     people: people,
     excludePersonId: prompt.suggestedPersonId,
@@ -743,81 +746,70 @@ class _Answered extends StatelessWidget {
   }
 }
 
-/// What the No… / Someone Else… picker returned: an existing person, a new name, "someone I don't
-/// know", the owner ("That's Me") or not a person at all (a TV, a voice assistant).
-class SpeakerPickerChoice {
-  const SpeakerPickerChoice.person(String this.personId, this.displayName)
-      : name = null,
-        unknown = false,
-        me = false,
-        notAPerson = false;
-  const SpeakerPickerChoice.newPerson(String this.name)
-      : personId = null,
-        displayName = null,
-        unknown = false,
-        me = false,
-        notAPerson = false;
-  const SpeakerPickerChoice.unknown()
-      : personId = null,
-        name = null,
-        displayName = null,
-        unknown = true,
-        me = false,
-        notAPerson = false;
-  const SpeakerPickerChoice.me()
-      : personId = null,
-        name = null,
-        displayName = null,
-        unknown = false,
-        me = true,
-        notAPerson = false;
-  const SpeakerPickerChoice.notAPerson()
-      : personId = null,
-        name = null,
-        displayName = null,
-        unknown = false,
-        me = false,
-        notAPerson = true;
-
-  final String? personId;
-  final String? name;
-  final String? displayName;
-  final bool unknown;
-  final bool me;
-  final bool notAPerson;
-}
-
-/// "Who Is It?": search; That's Me and Not a Person when [offerMeAndNotAPerson]; a new person; the
-/// closest voices (without the person just ruled out), then everyone A to Z.
-Future<SpeakerPickerChoice?> showSpeakerPicker(
+/// The prompt's "Who Is It?": the native sheet while the SwiftUI presentation is active, otherwise
+/// the shared Flutter picker ([showSpeakerPicker]). A native sheet Swift refuses hands back to the
+/// shared picker rather than keeping a second Flutter copy of it.
+Future<SpeakerPickerChoice?> _showSpeakerTagPicker(
   BuildContext context, {
-  required GeneratedSpeakerTagPrompt prompt,
   required List<GeneratedSpeakerTagCandidate> candidates,
   required List<Person> people,
   String? excludePersonId,
-  bool allowUnknown = true,
-  bool offerMeAndNotAPerson = false,
-}) {
-  final title = context.l10n.whoIsItTitle;
-  Widget picker() => _SpeakerPicker(
-        candidates: speakerPickerCandidates(candidates, excludePersonId),
-        people: speakerPickerPeople(people, excludePersonId),
+  required bool allowUnknown,
+  required bool offerMeAndNotAPerson,
+}) async {
+  if (iosSwiftUiEnabled && await supportsIosSwiftUi() && context.mounted) {
+    final native = await showOmiSheet<Object>(
+      context: context,
+      title: context.l10n.whoIsItTitle,
+      builder: (_) => const _ClassicSpeakerPickerHandoff(),
+      nativeBuilder: (_) => NativeSpeakerPicker(
+        candidates: candidates,
+        people: people,
+        excludePersonId: excludePersonId,
         allowUnknown: allowUnknown,
         offerMeAndNotAPerson: offerMeAndNotAPerson,
-      );
-  return showOmiSheet<SpeakerPickerChoice>(
-    context: context,
-    title: title,
-    builder: (sheetContext) => picker(),
-    nativeBuilder: (_) => NativeSpeakerPicker(
-      candidates: candidates,
-      people: people,
-      excludePersonId: excludePersonId,
-      allowUnknown: allowUnknown,
-      offerMeAndNotAPerson: offerMeAndNotAPerson,
-      fallback: OmiSheetScaffold(title: title, child: picker()),
-    ),
+        fallback: const _ClassicSpeakerPickerHandoff(),
+      ),
+    );
+    if (!identical(native, _classicSpeakerPicker)) return native is SpeakerPickerChoice ? native : null;
+    if (!context.mounted) return null;
+  }
+  return showSpeakerPicker(
+    context,
+    candidates: [
+      for (final c in candidates)
+        SpeakerPickerCandidate(personId: c.personId, name: c.name, matchLevel: c.matchLevel, pinned: c.pinned),
+    ],
+    people: people.where((p) => !p.id.startsWith('optimistic-person:')).toList(),
+    excludePersonId: excludePersonId,
+    allowUnknown: allowUnknown,
+    offerMeAndNotAPerson: offerMeAndNotAPerson,
   );
+}
+
+/// Popped by [_ClassicSpeakerPickerHandoff]: open the shared Flutter picker instead.
+const Object _classicSpeakerPicker = Object();
+
+/// The native picker sheet's fallback: closes that sheet so [_showSpeakerTagPicker] can open the
+/// shared Flutter picker in its own route.
+class _ClassicSpeakerPickerHandoff extends StatefulWidget {
+  const _ClassicSpeakerPickerHandoff();
+
+  @override
+  State<_ClassicSpeakerPickerHandoff> createState() => _ClassicSpeakerPickerHandoffState();
+}
+
+class _ClassicSpeakerPickerHandoffState extends State<_ClassicSpeakerPickerHandoff> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(_classicSpeakerPicker);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 /// The picker's closest voices: never the person just ruled out.
@@ -856,138 +848,6 @@ Future<String?> showSpeakerTagNameDialog(BuildContext context) async {
   }
   if (!context.mounted) return null;
   return showDialog<String>(context: context, builder: (_) => const _NameDialog());
-}
-
-class _SpeakerPicker extends StatefulWidget {
-  const _SpeakerPicker({
-    required this.candidates,
-    required this.people,
-    required this.allowUnknown,
-    required this.offerMeAndNotAPerson,
-  });
-
-  final List<GeneratedSpeakerTagCandidate> candidates;
-  final List<Person> people;
-  final bool allowUnknown;
-  final bool offerMeAndNotAPerson;
-
-  @override
-  State<_SpeakerPicker> createState() => _SpeakerPickerState();
-}
-
-class _SpeakerPickerState extends State<_SpeakerPicker> {
-  final _search = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  void _pick(SpeakerPickerChoice choice) => Navigator.of(context).pop(choice);
-
-  Future<void> _newPerson() async {
-    final name = await showDialog<String>(context: context, builder: (_) => const _NameDialog());
-    if (name != null && mounted) _pick(SpeakerPickerChoice.newPerson(name));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final q = _query.trim();
-    final lower = q.toLowerCase();
-    bool matches(String name) => lower.isEmpty || name.toLowerCase().contains(lower);
-    final closest = widget.candidates.where((c) => matches(c.name)).toList();
-    final closestIds = {for (final c in closest) c.personId};
-    final everyone = widget.people.where((p) => matches(p.name) && !closestIds.contains(p.id)).toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    final exact = widget.people.any((p) => p.name.toLowerCase() == lower);
-    final canAdd = q.length >= 2 && q.length <= 40 && !exact;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
-      child: ListView(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
-        children: [
-          OmiSearchField(
-            placeholder: l10n.peopleSearchPlaceholder,
-            controller: _search,
-            onChanged: (value) => setState(() => _query = value),
-            onCleared: () => setState(() => _query = ''),
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          if (widget.offerMeAndNotAPerson && q.isEmpty) ...[
-            OmiSettingsGroup(
-              children: [
-                OmiSettingsRow(
-                  key: const Key('speaker_picker_me'),
-                  leading: const Icon(Icons.person_outline),
-                  title: l10n.speakerTagPromptThatsMeAction,
-                  onTap: () => _pick(const SpeakerPickerChoice.me()),
-                ),
-                OmiSettingsRow(
-                  key: const Key('speaker_picker_not_a_person'),
-                  leading: const Icon(Icons.tv_outlined),
-                  title: l10n.speakerTagPromptNotAPerson,
-                  onTap: () => _pick(const SpeakerPickerChoice.notAPerson()),
-                ),
-              ],
-            ),
-            const SizedBox(height: OmiSpacing.md),
-          ],
-          OmiSettingsGroup(
-            children: [
-              OmiSettingsRow(
-                key: const Key('speaker_picker_new_person'),
-                leading: const Icon(Icons.person_add_alt_outlined),
-                title: canAdd ? l10n.addNamedPersonAction(q) : l10n.newPersonEllipsis,
-                onTap: canAdd ? () => _pick(SpeakerPickerChoice.newPerson(q)) : _newPerson,
-              ),
-              if (widget.allowUnknown)
-                OmiSettingsRow(
-                  key: const Key('speaker_picker_unknown'),
-                  leading: const Icon(Icons.help_outline),
-                  title: l10n.speakerTagPromptDontKnow,
-                  onTap: () => _pick(const SpeakerPickerChoice.unknown()),
-                ),
-            ],
-          ),
-          if (closest.isNotEmpty) ...[
-            const SizedBox(height: OmiSpacing.md),
-            OmiSettingsGroup(
-              header: l10n.speakerTagPromptClosestVoices,
-              children: [
-                for (final c in closest)
-                  OmiSettingsRow(
-                    key: Key('speaker_picker_person_${c.personId}'),
-                    title: c.name,
-                    leading: c.pinned ? const Icon(Icons.push_pin) : const Icon(Icons.person_outline),
-                    trailing: c.matchLevel == null ? null : VoiceMatchMeter(level: c.matchLevel!),
-                    onTap: () => _pick(SpeakerPickerChoice.person(c.personId, c.name)),
-                  ),
-              ],
-            ),
-          ],
-          if (everyone.isNotEmpty) ...[
-            const SizedBox(height: OmiSpacing.md),
-            OmiSettingsGroup(
-              header: l10n.everyoneHeader,
-              children: [
-                for (final p in everyone)
-                  OmiSettingsRow(
-                    key: Key('speaker_picker_person_${p.id}'),
-                    title: p.name,
-                    leading: PersonAvatar(person: p, size: 32, showVoiceBadge: false),
-                    onTap: () => _pick(SpeakerPickerChoice.person(p.id, p.name)),
-                  ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 class _NameDialog extends StatefulWidget {

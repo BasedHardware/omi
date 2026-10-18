@@ -132,6 +132,8 @@ async def smart_merge_step(
     ``initial_row`` is the finalizer's pre-processing read, used only for the
     free donor check, so ``off`` stays I/O-free.
     """
+    if initial_row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        return False
     if is_donor(initial_row):
         await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True

@@ -138,3 +138,38 @@ def test_token_registration_delegates_defaults_instead_of_reusing_its_migration_
     )
     schedule.assert_called_once_with('uid1', {'time_zone': time_zone} if time_zone else {}, firestore_client=store)
     user.set.assert_not_called()
+
+
+@pytest.mark.parametrize('time_zone', ['America/Coyhaique', 'Invalid/Timezone', '', '   '])
+def test_save_token_unschedulable_timezone_omits_schedule_time_zone(monkeypatch, time_zone):
+    store = MagicMock()
+    user = store.collection.return_value.document.return_value
+    user.get.return_value.exists = False
+    user.collection.return_value.document.return_value.get.return_value.exists = False
+    schedule = MagicMock()
+    monkeypatch.setattr(notifications_module, '_update_summary_schedule', schedule)
+    notifications_module.save_token(
+        'uid1',
+        {'device_key': 'synthetic', 'fcm_token': 'not-a-real-token', 'time_zone': time_zone},
+        firestore_client=store,
+    )
+    schedule.assert_called_once_with('uid1', {}, firestore_client=store)
+    user.set.assert_not_called()
+
+
+@pytest.mark.parametrize('time_zone', ['America/Coyhaique', 'Invalid/Timezone', '', '   '])
+def test_set_user_time_zone_unschedulable_timezone_omits_schedule_time_zone(monkeypatch, time_zone):
+    store = MagicMock()
+    schedule = MagicMock()
+    monkeypatch.setattr(notifications_module, '_update_summary_schedule', schedule)
+    notifications_module.set_user_time_zone('uid1', time_zone, firestore_client=store)
+    schedule.assert_called_once_with('uid1', {}, firestore_client=store)
+
+
+@pytest.mark.parametrize('time_zone', ['America/Coyhaique', 'Invalid/Timezone', '', '   '])
+def test_set_user_time_zone_if_missing_rejects_unschedulable_timezone(monkeypatch, time_zone):
+    store = MagicMock()
+    schedule = MagicMock()
+    monkeypatch.setattr(notifications_module, '_update_summary_schedule', schedule)
+    assert notifications_module.set_user_time_zone_if_missing('uid1', time_zone, firestore_client=store) is False
+    schedule.assert_not_called()

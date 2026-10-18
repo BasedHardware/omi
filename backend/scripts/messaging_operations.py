@@ -106,6 +106,16 @@ def normalize_log_metric(value):
     return value
 
 
+def normalize_policy(value):
+    # Proto JSON omits a zero thresholdValue (e.g. "any failed execution > 0").
+    for condition in value.get('conditions', []):
+        threshold = condition.get('conditionThreshold')
+        if isinstance(threshold, dict):
+            threshold.setdefault('thresholdValue', 0)
+    value['notificationChannels'] = sorted(value.get('notificationChannels', []))
+    return value
+
+
 def reconcile_log_metrics(session, mode):
     if mode == 'validate':
         raise ValueError('Logging has no validateOnly API; use --check to review the diff')
@@ -178,7 +188,7 @@ def reconcile_alerts(session, channels, mode, group='all'):
             raise RuntimeError('Duplicate managed policy name; refusing writes')
         current = copy.deepcopy(matches[0]) if matches else None
         if current is not None:
-            current['notificationChannels'] = sorted(current.get('notificationChannels', []))
+            normalize_policy(current)
         if current is not None and contains(current, desired):
             print('MATCH ' + desired['displayName'])
             continue
@@ -209,7 +219,7 @@ def reconcile_alerts(session, channels, mode, group='all'):
         verified = request(session, 'GET', target)
         if verified is None:
             raise RuntimeError('Created policy missing during verification')
-        verified['notificationChannels'] = sorted(verified.get('notificationChannels', []))
+        normalize_policy(verified)
         if not contains(verified, desired):
             raise RuntimeError('Policy verification failed')
         print('VERIFIED ' + desired['displayName'])

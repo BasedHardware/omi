@@ -16,8 +16,11 @@ import 'package:omi/utils/other/temp.dart';
 import 'widgets/conversation_list_item.dart' show conversationRowTitle;
 import 'widgets/synced_conversation_list_item.dart';
 
+Future<ServerConversation?> _reprocessOnServer(String conversationId) async =>
+    (await reProcessConversationServer(conversationId)).conversation;
+
 class SyncedConversationsPage extends StatefulWidget {
-  const SyncedConversationsPage({super.key, this.reprocessConversation = reProcessConversationServer});
+  const SyncedConversationsPage({super.key, this.reprocessConversation = _reprocessOnServer});
 
   /// The existing server reprocess call; replaceable in tests only.
   final Future<ServerConversation?> Function(String conversationId) reprocessConversation;

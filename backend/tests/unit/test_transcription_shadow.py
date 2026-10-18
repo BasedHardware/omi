@@ -268,7 +268,11 @@ def test_comparison_prometheus_metrics_use_only_closed_outcome_and_safety_labels
 
 def test_duplicate_reservation_never_writes_or_counts_result(monkeypatch):
     conversation = SimpleNamespace(audio_files=[SimpleNamespace(duration=10, chunk_timestamps=[100])])
-    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', lambda *_args: {'synthetic': True})
+    monkeypatch.setattr(
+        shadow.conversations_db,
+        'get_conversation',
+        lambda *_args: {'synthetic': True, 'record_lane_owner': 'legacy_final_pass_v1'},
+    )
     monkeypatch.setattr(shadow, 'deserialize_conversation', lambda _raw: conversation)
     monkeypatch.setattr(shadow, '_enabled', lambda *_args: True)
     monkeypatch.setattr(shadow, '_reserve_budget', lambda *_args: 'duplicate')

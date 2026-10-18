@@ -34,7 +34,7 @@ from utils.metrics import (
 from utils.observability.fallback import record_fallback
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.socket import STTSocket
-from utils.stt.vad import (
+from utils.stt.local_vad import (
     VAD_WINDOW_SAMPLES,
     _get_ort_session,  # type: ignore[reportPrivateUsage]  # internal helper, same package
     make_fresh_state,

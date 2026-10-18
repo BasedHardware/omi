@@ -14,11 +14,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 
 /// Recordings on their way to becoming conversations, opened from Home's
-/// pending row. It lists conversations-to-be by how close they are to done;
-/// device storage, retries and past syncs stay on the Offline Sync page behind
-/// Sync Details.
-class OnTheWayPage extends StatelessWidget {
-  const OnTheWayPage({super.key, this.syncProvider, this.multiFileSync});
+/// pending row. A summary line, then one pinned header per local day with that
+/// day's totals: Today opens by default and older days fold to their totals.
+/// Each row shows how close it is to done; device storage, retries and past
+/// syncs stay on the Offline Sync page behind Sync Details.
+class OnTheWayPage extends StatefulWidget {
+  const OnTheWayPage({super.key, this.syncProvider, this.multiFileSync, this.clock});
 
   /// Injectable for tests and the visual audit; defaults to the app provider.
   final SyncProvider? syncProvider;
@@ -26,15 +27,32 @@ class OnTheWayPage extends StatelessWidget {
   /// Injectable Sync Details routing for tests and the visual audit.
   final bool? multiFileSync;
 
+  /// Injectable "now" for tests and the visual audit: which day is Today.
+  final DateTime Function()? clock;
+
+  /// Days opened or closed this app session, by local midnight. A day not here is open only when it
+  /// is today. Memory only: after a restart the page opens on Today again.
+  static final Map<DateTime, bool> _folds = {};
+
+  @visibleForTesting
+  static void resetFolds() => _folds.clear();
+
+  @override
+  State<OnTheWayPage> createState() => _OnTheWayPageState();
+}
+
+class _OnTheWayPageState extends State<OnTheWayPage> {
+  bool _isOpen(DateTime day, DateTime today) => OnTheWayPage._folds[day] ?? day == today;
+
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
     return Consumer<SyncProvider>(
       builder: (context, sync, child) {
-        final p = syncProvider ?? sync;
+        final p = widget.syncProvider ?? sync;
         final processing = context.watch<ConversationProvider?>()?.processingConversations ?? const [];
         final processingIds = {for (final c in processing) c.id};
-        final almostReady = <_PendingItem>[
+        final items = <_PendingItem>[
           for (final c in processing)
             _PendingItem(
               start: (c.startedAt ?? c.createdAt).toLocal(),
@@ -43,7 +61,6 @@ class OnTheWayPage extends StatelessWidget {
               step: 3,
             ),
         ];
-        final syncing = <_PendingItem>[];
         // One recording's fragments can straddle stages (an upload batch done, the next still
         // syncing): group every pending fragment first, then a block is only as far along as its
         // least advanced part. A live capture's uploaded audio carries the id of the conversation
@@ -54,17 +71,21 @@ class OnTheWayPage extends StatelessWidget {
         ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
         for (final block in groupRecordingBlocks(pending, joinDeviceCopies: true)) {
           if (block.wals.every((w) => w.status == WalStatus.uploaded)) {
-            almostReady.add(_PendingItem.block(block, label: l.transcribing, step: 2));
+            items.add(_PendingItem.block(block, label: l.transcribing, step: 2));
           } else {
-            syncing.add(_PendingItem.block(block, label: _syncingLabel(block, l), step: 1));
+            items.add(_PendingItem.block(block, label: _syncingLabel(block, l), step: 1));
           }
         }
+        // Refused recordings stay on the day they were made, in the Offline Sync page's words.
+        final attention = groupRecordingBlocks(SyncPendingWork.attention(p));
+        for (final block in attention) {
+          items.add(_PendingItem.block(block, label: _attentionLabel(block.state, l), step: 0));
+        }
 
-        final attentionCount = groupRecordingBlocks(SyncPendingWork.attention(p)).length;
-        final Widget body;
+        final undated = <_PendingItem>[];
         // A sync can be mid-run with no recording listed yet (WAL-less processing), and refused
         // recordings are not pending: neither is "all synced".
-        if (almostReady.isEmpty && syncing.isEmpty && SyncPendingWork.hasServerJobs(p)) {
+        if (items.every((i) => i.needsAttention) && SyncPendingWork.hasServerJobs(p)) {
           final status = SyncPendingWork.stageLabel(p, l);
           final phase = p.syncState.phase;
           final transferring = p.syncState.isSyncing &&
@@ -72,52 +93,96 @@ class OnTheWayPage extends StatelessWidget {
               (phase == SyncPhase.downloadingFromDevice ||
                   phase == SyncPhase.waitingForInternet ||
                   phase == SyncPhase.uploadingToCloud);
-          (transferring ? syncing : almostReady).add(_PendingItem.status(label: status, step: transferring ? 1 : 2));
+          undated.add(_PendingItem.status(label: status, step: transferring ? 1 : 2));
         }
-        if (almostReady.isEmpty && syncing.isEmpty && attentionCount == 0) {
+
+        final Widget body;
+        if (items.isEmpty && undated.isEmpty) {
           body = OmiEmptyState(icon: Icons.check_circle_outline, title: l.allRecordingsSynced);
         } else {
-          body = ListView(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
-            children: [
-              if (almostReady.isNotEmpty) ...[
-                _SectionHeader(label: l.onTheWayAlmostReady),
-                _Group(items: almostReady),
-              ],
-              if (syncing.isNotEmpty) ...[
-                _SectionHeader(label: l.syncingStatus),
-                _Group(items: syncing),
-              ],
-              const SizedBox(height: OmiSpacing.lg),
-              Material(
-                key: const Key('on_the_way_sync_details'),
-                color: OmiColors.surface1,
-                borderRadius: OmiRadius.xlAll,
-                child: InkWell(
-                  borderRadius: OmiRadius.xlAll,
-                  onTap: () => openOfflineSyncDetails(context, p, multiFileSync: multiFileSync),
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.md, 14, 10, 14),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(l.syncDetailsTitle, style: OmiType.body),
-                              // Refused recordings stay one tap away, never on Home.
-                              if (attentionCount > 0) ...[
-                                const SizedBox(height: 3),
-                                Text(
-                                  l.syncCardNeedsAttention(attentionCount),
-                                  style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                                ),
-                              ],
-                            ],
+          final now = (widget.clock ?? DateTime.now)();
+          final today = DateTime(now.year, now.month, now.day);
+          final days = _groupByDay(items);
+          final dates = OmiDateFormat(
+            locale: Localizations.localeOf(context),
+            use24HourFormat: MediaQuery.maybeAlwaysUse24HourFormatOf(context) ?? false,
+            l10n: l,
+            clock: widget.clock,
+          );
+          void openDetails() => openOfflineSyncDetails(context, p, multiFileSync: widget.multiFileSync);
+          const gutter = EdgeInsets.symmetric(horizontal: OmiSpacing.md);
+          body = CustomScrollView(
+            slivers: [
+              if (items.isNotEmpty)
+                SliverPadding(padding: gutter, sliver: SliverToBoxAdapter(child: _Summary(items: items))),
+              if (undated.isNotEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+                  sliver: SliverToBoxAdapter(child: _Group(items: undated, dates: dates)),
+                ),
+              for (var i = 0; i < days.length; i++)
+                SliverPadding(
+                  padding: gutter,
+                  sliver: SliverMainAxisGroup(
+                    slivers: [
+                      // Sizes to its content, so the header grows with the text size instead of
+                      // clipping.
+                      PinnedHeaderSliver(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: i == 0 ? 4 : 0),
+                          child: _DayHeader(
+                            key: Key('on_the_way_day_${_dayKey(days[i].day)}'),
+                            title: dates.dayHeader(days[i].day),
+                            items: days[i].items,
+                            expanded: _isOpen(days[i].day, today),
+                            onTap: () =>
+                                setState(() => OnTheWayPage._folds[days[i].day] = !_isOpen(days[i].day, today)),
                           ),
                         ),
-                        Icon(Icons.chevron_right, color: OmiColors.textTertiary),
-                      ],
+                      ),
+                      if (_isOpen(days[i].day, today))
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+                            child: _Group(items: days[i].items, dates: dates, onAttentionTap: openDetails),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.xxl),
+                sliver: SliverToBoxAdapter(
+                  child: Material(
+                    key: const Key('on_the_way_sync_details'),
+                    color: OmiColors.surface1,
+                    borderRadius: OmiRadius.xlAll,
+                    child: InkWell(
+                      borderRadius: OmiRadius.xlAll,
+                      onTap: openDetails,
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.md, 14, 10, 14),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(l.syncDetailsTitle, style: OmiType.body),
+                                  if (attention.isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      l.syncCardNeedsAttention(attention.length),
+                                      style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -132,6 +197,18 @@ class OnTheWayPage extends StatelessWidget {
       },
     );
   }
+
+  static String _dayKey(DateTime day) =>
+      '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+
+  /// The Offline Sync page's own reason for each refused state.
+  static String _attentionLabel(WalSyncDisplayState state, AppLocalizations l) => switch (state) {
+        WalSyncDisplayState.corrupted => l.syncStatusFileUnavailable,
+        WalSyncDisplayState.outsideRecoveryWindow => l.syncStatusTooOld,
+        WalSyncDisplayState.unsupportedAudio => l.syncStatusUnsupportedAudio,
+        WalSyncDisplayState.uploadRejected => l.failedStatus,
+        _ => l.syncStatusFailed,
+      };
 
   static String _syncingLabel(RecordingBlock block, AppLocalizations l) {
     final onDevice = walIsOnDevice(block.representative);
@@ -157,25 +234,123 @@ class _PendingItem {
   final int seconds;
   final String label;
 
-  /// 1: still syncing, 2: transcribing, 3: writing the conversation.
+  /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: refused, needs attention.
   final int step;
+
+  bool get needsAttention => step == 0;
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label});
+/// One local day of recordings, newest first.
+class _Day {
+  _Day(this.day, this.items);
 
-  final String label;
+  /// Local midnight.
+  final DateTime day;
+  final List<_PendingItem> items;
+}
+
+/// Groups dated items by the local day they started on, newest day and newest row first. A
+/// recording that runs past midnight stays on the day it started.
+List<_Day> _groupByDay(List<_PendingItem> items) {
+  final byDay = <DateTime, List<_PendingItem>>{};
+  for (final item in [...items.where((i) => i.start != null)]..sort((a, b) => b.start!.compareTo(a.start!))) {
+    final s = item.start!;
+    byDay.putIfAbsent(DateTime(s.year, s.month, s.day), () => []).add(item);
+  }
+  return [for (final e in byDay.entries) _Day(e.key, e.value)];
+}
+
+/// "9 recordings · 1h 12m".
+String _totals(List<_PendingItem> items, AppLocalizations l) =>
+    '${l.onTheWayRecordingCount(items.length)} · ${OmiDuration.compact(items.fold(0, (s, i) => s + i.seconds), l)}';
+
+/// Only the states worth a glance ("2 uploading · 1 needs attention"), never "36 transcribing".
+(String?, String?) _exceptions(List<_PendingItem> items, AppLocalizations l) {
+  final uploading = items.where((i) => i.step == 1).length;
+  final almostReady = items.where((i) => i.step == 3).length;
+  final attention = items.where((i) => i.needsAttention).length;
+  final moving = [
+    if (uploading > 0) l.onTheWayUploadingCount(uploading),
+    if (almostReady > 0) l.onTheWayAlmostReadyCount(almostReady),
+  ];
+  return (moving.isEmpty ? null : moving.join(' · '), attention > 0 ? l.onTheWayNeedsAttentionCount(attention) : null);
+}
+
+/// "45 recordings · 8h 54m on the way" over its exceptions.
+class _Summary extends StatelessWidget {
+  const _Summary({required this.items});
+
+  final List<_PendingItem> items;
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
+    final (moving, attention) = _exceptions(items, l);
+    final extra = [if (moving != null) moving, if (attention != null) attention];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.xs),
-      child: Semantics(
-        header: true,
-        child: Text(
-          label.toUpperCase(),
-          style: OmiType.footnote
-              .copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary, letterSpacing: 0.4),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.xs, OmiSpacing.xxs, OmiSpacing.xxs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l.onTheWaySummary(_totals(items, l)), style: OmiType.headline),
+          if (extra.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(extra.join(' · '), style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A day's pinned header: its name, totals and exceptions, with needs attention in warning colour.
+/// Tapping it opens or folds the day.
+class _DayHeader extends StatelessWidget {
+  const _DayHeader({super.key, required this.title, required this.items, required this.expanded, required this.onTap});
+
+  final String title;
+  final List<_PendingItem> items;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final (moving, attention) = _exceptions(items, l);
+    return Semantics(
+      header: true,
+      expanded: expanded,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          color: OmiColors.surface0,
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.xxs, 12, 0, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: OmiType.body.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: _totals(items, l)),
+                          if (moving != null) TextSpan(text: ' · $moving'),
+                          if (attention != null)
+                            TextSpan(text: ' · $attention', style: TextStyle(color: OmiColors.warning)),
+                        ],
+                      ),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(expanded ? Icons.expand_less : Icons.expand_more, color: OmiColors.textTertiary),
+            ],
+          ),
         ),
       ),
     );
@@ -183,52 +358,69 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _Group extends StatelessWidget {
-  const _Group({required this.items});
+  const _Group({required this.items, required this.dates, this.onAttentionTap});
 
   final List<_PendingItem> items;
+  final OmiDateFormat dates;
+
+  /// A refused row is not progressing: it opens Sync Details instead of showing the bars.
+  final VoidCallback? onAttentionTap;
 
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final dates = OmiDateFormat.of(context);
-    return Container(
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+    return Material(
+      color: OmiColors.surface1,
+      borderRadius: OmiRadius.xlAll,
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           for (var i = 0; i < items.length; i++) ...[
             if (i > 0) Divider(height: 1, thickness: 1, indent: OmiSpacing.md, color: OmiColors.surface2),
             Semantics(
               liveRegion: true,
+              button: items[i].needsAttention,
               label: [
                 if (items[i].start != null) dates.time(items[i].start!),
                 if (items[i].seconds > 0) OmiDuration.compact(items[i].seconds, l),
                 items[i].label,
               ].join(', '),
               excludeSemantics: true,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (items[i].start != null) ...[
-                            Text(
-                              items[i].seconds > 0
-                                  ? '${dates.time(items[i].start!)} · ${OmiDuration.compact(items[i].seconds, l)}'
-                                  : dates.time(items[i].start!),
-                              style: OmiType.body,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(items[i].label, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
-                          ] else
-                            Text(items[i].label, style: OmiType.body),
-                        ],
+              child: InkWell(
+                onTap: items[i].needsAttention ? onAttentionTap : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (items[i].start != null) ...[
+                              Text(
+                                items[i].seconds > 0
+                                    ? '${dates.time(items[i].start!)} · ${OmiDuration.compact(items[i].seconds, l)}'
+                                    : dates.time(items[i].start!),
+                                style: OmiType.body,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                items[i].label,
+                                style: OmiType.subhead.copyWith(
+                                  color: items[i].needsAttention ? OmiColors.warning : OmiColors.textTertiary,
+                                ),
+                              ),
+                            ] else
+                              Text(items[i].label, style: OmiType.body),
+                          ],
+                        ),
                       ),
-                    ),
-                    _Steps(step: items[i].step),
-                  ],
+                      if (items[i].needsAttention)
+                        Icon(Icons.chevron_right, color: OmiColors.textTertiary)
+                      else
+                        _Steps(step: items[i].step),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -71,7 +71,24 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
+        {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
+        {"name": "BATCH_LIVE_STT_RETIRE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
+        {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_HEAD_PRIORITY_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED", "value": "true"},
+        {"name": "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED", "value": "false"},
+        {"name": "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
         {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_WORKER_ENABLED", "value": "false"},
@@ -110,6 +127,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
+        {"name": "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED", "value": "false"},
         {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
@@ -217,24 +235,11 @@ def with_jev_flags_env(payload: str) -> str:
     )
 
 
-def with_capture_jev_shadow_env(payload: str) -> str:
-    """EXP-003 shadow bindings belong on every Cloud Run capture-shadow host.
-
-    backend runs reprocess and merge inline. backend-sync writes Cloud Tasks
-    finalization and fresh sync. backend-sync-backfill replays historical sync.
-    Capture percentage stays 0; only the allowlisted UID is shadowed. The
-    EXP-004 population shadows stay 100 only on `backend`: the sync services
-    have no GMP sidecar/exporter entry, so their shadow metrics would be
-    invisible (EXP-004 doc, Admission and privacy).
-    """
-
+def with_jev_decision_config_env(payload: str) -> str:
     def service_flags(service: str) -> str:
         shadow_percent = '100' if service == 'backend' else '0'
         return (
-            r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
-            r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
-            r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
-            rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"}},'
+            r'\1\n        {"name": "CONVERSATION_RELEVANCE_JEV_PERCENT", "value": "0"},'
             r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_PERCENT", "value": "0"},'
             rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
             rf'\n        {{"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
@@ -349,6 +354,7 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "SYNC_ASSIGNMENT_RECOVERY_ENABLED", "value": "true"},\n'
+        '        {"name": "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED", "value": "true"},\n'
         '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
     )
 
@@ -442,6 +448,14 @@ def with_backend_storage_env(payload: str) -> str:
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
+    # Keep integration snapshots complete while tests remove unrelated fields.
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"flags":\s*\{)',
+        r'\1"--timeout": "3600s", ',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     payload = with_account_cutover_enforcement(payload)
     payload = with_sync_ledger_fence_mode(payload)
     payload = with_memory_env(payload)
@@ -450,7 +464,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_parity_pack_env(payload)
     payload = with_backend_pusher_env(payload)
     payload = with_conversation_notes_v2_env(payload)
-    payload = with_capture_jev_shadow_env(payload)
+    payload = with_jev_decision_config_env(payload)
     payload = with_jev_flags_env(payload)
     payload = with_wake_word_adjudication_env(payload)
     payload = with_backend_public_shared_chat_auth_env(payload)
@@ -596,13 +610,11 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'DREAM_AGENT_ELIGIBILITY',
-                'DREAM_AGENT_UID_ALLOWLIST',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
                 'DEMAND_PROCESSING_LAZY_ENABLED',
                 'DEMAND_PROCESSING_TOOL_ENABLED',
                 'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
-                'DEMAND_PROCESSING_UID_ALLOWLIST',
                 'DEMAND_PROCESSING_PERCENT',
             )
         )
@@ -614,6 +626,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             flags=re.DOTALL,
         )
     payload = with_backend_integration_events_secret(payload)
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"env":\s*\[)',
+        r'\1{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
+        r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     return with_firestore_read_runtime_env(payload)
 
 
@@ -1368,7 +1388,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
         ('DREAM_AGENT_FEEDBACK_SALT', '1'),
         ('DREAM_AGENT_PASSES_PER_DAY', '4'),
         ('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '4'),
-        ('DREAM_AGENT_DAILY_USD', '20'),
+        ('DREAM_AGENT_DAILY_USD', '10'),
     ],
 )
 def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, service, setting, stale):
@@ -1830,6 +1850,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -2158,6 +2179,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -2242,6 +2264,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE", "value": "shadow"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -3331,14 +3354,12 @@ def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
     controls = {
         'TRANSCRIPTION_SHADOW_ENABLED': 'true',
         'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
-        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'omi-release-probe',
         'TRANSCRIPTION_SHADOW_PERCENT': '0',
         'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
     }
     dark = {
         **controls,
         'TRANSCRIPTION_SHADOW_ENABLED': 'false',
-        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': '',
         'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '0',
     }
     validator = load_validator()
@@ -3381,7 +3402,14 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
                 'cloud_run/backend-sync',
                 'cloud_run/backend-sync-backfill',
             ):
-                assert {key: env[key]['value'] for key in controls} == selected, scope
+                expected = {
+                    key: value
+                    for key, value in selected.items()
+                    if not (scope.startswith('cloud_run/') and key.endswith('_UID_ALLOWLIST'))
+                }
+                assert {key: env[key]['value'] for key in expected} == expected, scope
+                if scope.startswith('cloud_run/'):
+                    assert all(key not in env for key in controls if key.endswith('_UID_ALLOWLIST')), scope
             else:
                 assert all(key not in env for key in controls), scope
 

@@ -15,7 +15,17 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from provision_monitoring_alerts import API, ROOT, RULES, Grafana, NoRedirect, definition, index_rules, load_rules
+from provision_monitoring_alerts import (
+    API,
+    ROOT,
+    RULES,
+    Grafana,
+    NoRedirect,
+    comparable,
+    definition,
+    index_rules,
+    load_rules,
+)
 
 MANIFEST = ROOT / 'backend/charts/monitoring/retired-loki-alerts.json'
 UIDS = frozenset({'afd0krbk1bugwf', 'fewwk2goqfklcf', 'devzd05c0bocgc', 'df2a40h2fbjswe'})
@@ -44,7 +54,8 @@ def validate(uid: str, live: dict, expected: dict) -> None:
         raise ValueError(uid)
     if live.get('missingSeriesEvalsToResolve') != expected.get('missingSeriesEvalsToResolve'):
         raise ValueError(uid)
-    if definition(live) != definition(expected):
+    # Grafana 13 rewrites durations on save ('24h' reads back as '1d').
+    if comparable(live) != comparable(expected):
         raise ValueError(uid)
     if live.get('labels', {}).get('alert_identity') != uid or live.get('provenance', '') not in ('', 'api'):
         raise ValueError(uid)

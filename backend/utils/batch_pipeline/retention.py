@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
+from config.batch_pipeline import speech_empty_multilingual_enabled, terminal_empty_disposition_enabled
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 
@@ -104,7 +105,47 @@ def register_batch_artifact(
             and bool(recovery.get('token'))
             and uri.endswith(f"/{recovery['token']}.enc")
         )
-        if kind != 'audio' and job.get('state') != 'leased' and not recovery_write:
+        disposition = job.get('silence_disposition') or {}
+        from config.batch_pipeline import empty_asr_disposition_enabled
+
+        disposition_write = (
+            empty_asr_disposition_enabled()
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') == 'failed_held'
+            and disposition.get('state') == 'prepared'
+            and disposition.get('privacy_generation') == expected_generation
+            and bool(disposition.get('token'))
+            and uri.endswith(f"/{disposition['token']}.enc")
+        )
+        terminal = job.get('terminal_disposition') or {}
+        terminal_write = (
+            terminal_empty_disposition_enabled()
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') in {'held', 'failed_held'}
+            and terminal.get('state') == 'prepared'
+            and terminal.get('privacy_generation') == expected_generation
+            and bool(terminal.get('token'))
+            and uri.endswith(f"/{terminal['token']}.enc")
+        )
+        redrive = job.get('speech_redrive') or {}
+        redrive_write = (
+            speech_empty_multilingual_enabled()
+            and job.get('state') == 'quarantined'
+            and job.get('recovery_state') in {'held', 'failed_held'}
+            and redrive.get('state') == 'running'
+            and redrive.get('paid_epoch') == 2
+            and redrive.get('privacy_generation') == expected_generation
+            and bool(redrive.get('token'))
+            and uri.endswith(f"/{redrive['token']}.enc")
+        )
+        if (
+            kind != 'audio'
+            and job.get('state') != 'leased'
+            and not recovery_write
+            and not disposition_write
+            and not redrive_write
+            and not terminal_write
+        ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')
@@ -157,7 +198,17 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         if intake_ref is not None and intake is not None and intake.exists:
             transaction.update(intake_ref, {'expires_at': expires})
         for artifact in artifacts:
-            transaction.update(artifact.reference, {'cleanup_after': completed_at + ARTIFACT_RETENTION})
+            metadata = artifact.to_dict() or {}
+            # The native audio artifact is a small reference manifest. Keep its
+            # proof through the receipt window so a first late WAL can prove
+            # coverage without reprocessing retained audio. GPU results keep
+            # their existing 24h retention; privacy erasure remains immediate.
+            retention = (
+                RECEIPT_RETENTION
+                if (job.get('projection_binding') or {}).get('native_record') and metadata.get('kind') == 'audio'
+                else ARTIFACT_RETENTION
+            )
+            transaction.update(artifact.reference, {'cleanup_after': completed_at + retention})
         return True
 
     return expire(client.transaction())
@@ -194,20 +245,25 @@ def cleanup_completed_artifacts(
     return cleaned
 
 
-def batch_artifact_authorize(store: Any, item: Any):
+def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None):
     """B's required authorize(item) callback, using uncached transactional reads."""
     from utils.batch_pipeline.artifacts import ProtectionContext
 
     @firestore.transactional
     def authorize(transaction):
+        loaded = {}
         generation = assert_batch_write_allowed(
             store.client,
             transaction,
             item.owner_id,
             conversation_ids=(item.conversation_id,) if item.conversation_id else (),
             expected_generation=item.privacy_generation,
+            snapshots=loaded,
         )
-        user = store.client.collection('users').document(item.owner_id).get(transaction=transaction).to_dict() or {}
+        if snapshots is not None:
+            snapshots.clear()
+            snapshots.update(loaded)
+        user = loaded['user']
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
     return authorize(store.client.transaction())

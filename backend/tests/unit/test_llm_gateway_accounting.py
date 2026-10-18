@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from typing import Any
@@ -10,7 +11,7 @@ from google.cloud import firestore
 import pytest
 
 from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, USER_DAYS_COLLECTION, record_llm_gateway_attempt
-from llm_gateway.gateway import accounting_sink
+from llm_gateway.gateway import accounting, accounting_sink
 from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.accounting import (
     AccountingContext,
@@ -24,9 +25,11 @@ from llm_gateway.gateway.accounting import (
     build_accounting_event,
     cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
+    estimated_provider_cost_micro_usd,
     image_usage,
     jit_gateway_receipt_for_trace,
     openai_usage_from_response,
+    rate_card_for,
     vertex_usage_from_response,
 )
 
@@ -1084,3 +1087,146 @@ def test_unknown_app_platform_is_persisted_as_unattributed() -> None:
 
     assert event.app_platform is None
     assert event.as_dict()['app_platform'] is None
+
+
+def test_vertex_2_5_flash_card_is_the_standard_tier() -> None:
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=date(2026, 10, 18))
+    assert card is not None
+    assert card.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+    assert card.effective_from == date(2026, 10, 18)
+    assert (
+        card.input_micro_usd_per_million,
+        card.cached_input_micro_usd_per_million,
+        card.output_micro_usd_per_million,
+        card.cache_write_micro_usd_per_million,
+        card.cache_storage_micro_usd_per_million_token_hours,
+    ) == (300000, 30000, 2500000, 300000, 1000000)
+
+
+@pytest.mark.parametrize(
+    'at, expected_card_id, expected_input_micro',
+    [
+        (date(2026, 10, 17), 'vertex.gemini-2.5-flash.2026-10-15', 540000),
+        (date(2026, 10, 18), 'vertex.gemini-2.5-flash.2026-10-18', 300000),
+    ],
+)
+def test_vertex_2_5_flash_card_boundary(at: date, expected_card_id: str, expected_input_micro: int) -> None:
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=at)
+    assert card is not None
+    assert card.rate_card_id == expected_card_id
+    assert card.input_micro_usd_per_million == expected_input_micro
+
+
+def test_vertex_2_5_flash_ledger_keeps_recorded_card_identity_across_reprice(monkeypatch) -> None:
+    """A ledger attempt prices under the card in effect at write time, and the
+    stored event keeps that card's identity forever."""
+
+    class FrozenDateTime(datetime):
+        _now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls._now.astimezone(tz) if tz else cls._now.replace(tzinfo=None)
+
+    monkeypatch.setattr(accounting, 'datetime', FrozenDateTime)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    trace = AttemptTrace()
+
+    def _record_one() -> Any:
+        attempt = trace.record(
+            provider='gemini',
+            configured_model='gemini-2.5-flash',
+            route_artifact_id='route.test.001',
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='success',
+            error_class='none',
+            metadata=ProviderResponseMetadata(
+                traffic_type='ON_DEMAND',
+                usage=ProviderUsage(
+                    prompt_tokens=1_000_000,
+                    uncached_input_tokens=1_000_000,
+                    output_tokens=1_000_000,
+                    total_tokens=2_000_000,
+                ),
+            ),
+        )
+        event = build_accounting_event(_context(), attempt)
+        assert record_llm_gateway_attempt(event.as_dict(), firestore_client=client)
+        return event
+
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    old_event = _record_one()
+    assert old_event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    # 1M uncached input at $0.54 + 1M output at $4.50 (Priority tier).
+    assert old_event.estimated_cost_micro_usd == 5_040_000
+    stored_old = dict(client.collections[ATTEMPTS_COLLECTION]['invocation-1:1'])
+
+    FrozenDateTime._now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    new_event = _record_one()
+    assert new_event.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+    # 1M uncached input at $0.30 + 1M output at $2.50 (Standard tier).
+    assert new_event.estimated_cost_micro_usd == 2_800_000
+    current = rate_card_for('gemini', 'gemini-2.5-flash')
+    assert current is not None
+    assert current.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-18'
+
+    historical = rate_card_for(
+        stored_old['provider'],
+        stored_old['configured_model'],
+        at=date(2026, 10, 18),
+        rate_card_id=stored_old['rate_card_id'],
+    )
+    assert historical is not None
+    assert historical.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    assert (
+        historical.input_micro_usd_per_million,
+        historical.cached_input_micro_usd_per_million,
+        historical.output_micro_usd_per_million,
+        historical.cache_write_micro_usd_per_million,
+        historical.cache_storage_micro_usd_per_million_token_hours,
+    ) == (540000, 54000, 4500000, 540000, 1000000)
+
+    stored_after_new_write = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
+    assert stored_after_new_write == stored_old
+    assert stored_after_new_write['rate_card_id'] == 'vertex.gemini-2.5-flash.2026-10-15'
+
+
+def test_vertex_2_5_flash_unknown_or_foreign_card_id_never_falls_through() -> None:
+    """A recorded card ID is authoritative: unknown IDs, or an ID that belongs
+    to a different model, return None rather than repricing at the current
+    Standard card."""
+    assert rate_card_for('gemini', 'gemini-2.5-flash', rate_card_id='vertex.gemini-2.5-flash.2099-01-01') is None
+    assert rate_card_for('gemini', 'gemini-3.8-flash', rate_card_id='vertex.gemini-2.5-flash.2026-10-15') is None
+    pinned = rate_card_for(
+        'gemini', 'gemini-2.5-flash', at=date(2030, 1, 1), rate_card_id='vertex.gemini-2.5-flash.2026-10-15'
+    )
+    assert pinned is not None
+    assert pinned.rate_card_id == 'vertex.gemini-2.5-flash.2026-10-15'
+    assert pinned.input_micro_usd_per_million == 540000
+
+
+@pytest.mark.parametrize(
+    'usage, expected_micro_usd',
+    [
+        # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+        # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+        (ProviderUsage(prompt_tokens=1_000_000, uncached_input_tokens=1_000_000), 300000),
+        (ProviderUsage(prompt_tokens=1_000_000, cached_input_tokens=1_000_000), 30000),
+        (ProviderUsage(output_tokens=1_000_000), 2500000),
+        (ProviderUsage(prompt_tokens=1_000_000, cache_write_tokens=1_000_000), 300000),
+    ],
+    ids=['uncached-input', 'cached-input', 'output', 'cache-write'],
+)
+def test_vertex_2_5_flash_one_million_token_estimates(usage: ProviderUsage, expected_micro_usd: int) -> None:
+    status, cost = estimated_provider_cost_micro_usd(
+        payer='omi',
+        provider='gemini',
+        model='gemini-2.5-flash',
+        metadata=ProviderResponseMetadata(usage=usage),
+    )
+    assert status == CostStatus.ESTIMATED
+    assert cost == expected_micro_usd

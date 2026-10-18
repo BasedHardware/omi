@@ -303,7 +303,7 @@ class DeviceDiscoveryController {
     // Critical firmware warnings (e.g. unsupported encrypted firmware) always show,
     // regardless of prior acknowledgment. Only skip for non-critical compatibility notes.
     final isCritical = device.type == DeviceType.bee && device.isBeeFirmwareUnsupported;
-    final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+    final prefKey = device.firmwareWarningAcknowledgedKey;
 
     if (!isCritical) {
       final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey);

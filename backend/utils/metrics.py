@@ -11,6 +11,7 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
+    REGISTRY,
     disable_created_metrics,
     generate_latest,
     start_http_server,
@@ -603,33 +604,6 @@ JEV_DECISION_LATENCY_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5),
 )
 
-# Static labels only. The durable, per-pair evidence lives in structured logs.
-CAPTURE_JEV_SHADOW_CALLS = Counter(
-    'omi_capture_jev_shadow_calls_total', 'Completed capture shadow questions.', ['decision', 'outcome']
-)
-CAPTURE_JEV_SHADOW_SKIPS = Counter(
-    'omi_capture_jev_shadow_skips_total',
-    'Capture shadow questions skipped before a model answer.',
-    ['decision', 'reason'],
-)
-CAPTURE_JEV_SHADOW_LATENCY = Histogram(
-    'omi_capture_jev_shadow_latency_seconds',
-    'End-to-end shadow question latency.',
-    ['decision'],
-    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5),
-)
-CAPTURE_JEV_SHADOW_SCORE = Histogram(
-    'omi_capture_jev_shadow_score',
-    'Jev noul score for capture questions.',
-    ['decision'],
-    buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.675, 0.7, 0.725, 0.8, 0.9, 1),
-)
-CAPTURE_JEV_SHADOW_AGREEMENT = Counter(
-    'omi_capture_jev_shadow_agreement_total',
-    'Shipped rule versus Jev same-scene matrix.',
-    ['category', 'agreement'],
-)
-
 # EXP-004: no identifiers or arbitrary strings may become labels.
 JEV_SHADOW_OUTCOMES = frozenset(
     {'ok', 'jev_failed', 'http_429', 'timeout', 'deduped', 'cap', 'cohort', 'dropped', 'redis_unavailable'}
@@ -802,13 +776,40 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
     'Global age of the oldest queued or leased listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+    registry=None,
 )
 
 LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_blocked_byok_age_seconds',
     'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
     'replicated per process, aggregate with max() not sum(); informational only',
+    registry=None,
 )
+
+LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS = Gauge(
+    'listen_finalization_summary_last_success_timestamp_seconds',
+    'Unix timestamp of the last successful Firestore finalization summary in this process',
+    registry=None,
+)
+
+_LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK = threading.Lock()
+_listen_finalization_summary_metrics_registered = False
+
+
+def register_listen_finalization_summary_metrics() -> None:
+    """Expose Firestore-derived gauges only after a successful summary is ready."""
+    global _listen_finalization_summary_metrics_registered
+    with _LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK:
+        if _listen_finalization_summary_metrics_registered:
+            return
+        for metric in (
+            LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
+            LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+            LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
+        ):
+            REGISTRY.register(metric)
+        _listen_finalization_summary_metrics_registered = True
+
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived
 # value for a given queue name; aggregate with max(), never sum(). Do not

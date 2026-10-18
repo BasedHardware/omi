@@ -183,6 +183,140 @@ class HeldStore implements LocalSegmentStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('pendant keepalive re-arms when deviceRecord follows an early socket close', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-early-close-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final transports = <ScriptedPureSocket>[];
+      final p = composeCaptureProvider(_deps(
+          world: world,
+          open: ({
+            required codec,
+            required sampleRate,
+            required language,
+            required force,
+            source,
+            clientConversationId,
+            customSttConfig,
+            geolocation,
+          }) async {
+            final transport = ScriptedPureSocket();
+            transports.add(transport);
+            final socket = TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport);
+            await socket.start();
+            return socket;
+          }));
+      await p.streamDeviceRecording(device: BtDevice(id: 'omi-race', name: 'Omi', type: DeviceType.omi, rssi: -50));
+      await pumpEventQueue();
+      // BLE recovery has not yet restored the legacy recording-state mirror.
+      p.updateRecordingState(RecordingState.stop);
+      p.onMessageEventReceived(MessageServiceStatusEvent.fromJson({
+        'status': 'stt_failed',
+        'status_text': 'STT unavailable',
+      }));
+      transports.single.emitClose(1011);
+      await p.pendingSourceSwitch;
+      expect(p.keepAliveScheduledForTesting, isFalse);
+      p.updateRecordingState(RecordingState.deviceRecord);
+      expect(p.keepAliveScheduledForTesting, isTrue);
+      world.scheduler.elapse(const Duration(seconds: 15));
+      await pumpEventQueue();
+      expect(transports, hasLength(2));
+      expect(p.terminalTranscriptionFailure, isNotNull);
+      transports.last.emitServerMessage(jsonEncode({'type': 'service_status', 'status': 'ready'}));
+      await pumpEventQueue();
+      expect(p.terminalTranscriptionFailure, isNull);
+      p.dispose();
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('pendant commit arms keepalive after socket setup fails before BLE starts', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-start-retry-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      var opens = 0;
+      final p = composeCaptureProvider(_deps(
+          world: world,
+          open: ({
+            required codec,
+            required sampleRate,
+            required language,
+            required force,
+            source,
+            clientConversationId,
+            customSttConfig,
+            geolocation,
+          }) async {
+            opens++;
+            return null;
+          }));
+      await p.streamDeviceRecording(device: BtDevice(id: 'omi-start', name: 'Omi', type: DeviceType.omi, rssi: -50));
+      expect(p.recordingState, RecordingState.deviceRecord);
+      expect(opens, 1);
+      world.scheduler.elapse(const Duration(seconds: 15));
+      await pumpEventQueue();
+      expect(opens, 2);
+      p.dispose();
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('hung pendant keepalive codec read expires and a later tick retries', () async {
+    final dir = await Directory.systemTemp.createTemp('capture-codec-timeout-');
+    final world = await CaptureReplayWorld.boot(tempDir: dir);
+    try {
+      world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
+      final held = Completer<BleAudioCodec>();
+      var hang = false;
+      var opens = 0;
+      final p = composeCaptureProvider(_deps(
+        world: world,
+        codec: (_) => hang ? held.future : Future.value(BleAudioCodec.pcm16),
+        open: (
+            {required codec,
+            required sampleRate,
+            required language,
+            required force,
+            source,
+            clientConversationId,
+            customSttConfig,
+            geolocation}) async {
+          opens++;
+          return null;
+        },
+      ));
+      await p.streamDeviceRecording(device: BtDevice(id: 'omi-hung', name: 'Omi', type: DeviceType.omi, rssi: -50));
+      p.onClosed(1011);
+      await pumpEventQueue();
+      hang = true;
+      world.scheduler.elapse(const Duration(seconds: 15));
+      await pumpEventQueue();
+      world.scheduler.elapse(const Duration(seconds: 10));
+      await pumpEventQueue();
+      hang = false;
+      world.scheduler.elapse(const Duration(seconds: 5));
+      await pumpEventQueue();
+      expect(opens, 2, reason: 'expired codec I/O must release the coordinator and reconnect guard');
+      held.complete(BleAudioCodec.pcm16);
+      await pumpEventQueue();
+      expect(opens, 2, reason: 'late codec completion must not open an extra socket');
+      p.dispose();
+    } finally {
+      await world.dispose();
+      await dir.delete(recursive: true);
+    }
+  });
+
   test('Android CCCD recovery preserves intent, hides listening and only exhaustion shows a banner', () async {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.android;

@@ -12,6 +12,8 @@ from typing import Any
 from enum import Enum
 
 from fastapi import HTTPException
+from config.batch_pipeline import RecordOwnerContention
+from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
@@ -37,6 +39,7 @@ from utils.conversations.process_conversation import (
     save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.jit_rollout import JITDecisionStage
@@ -50,6 +53,7 @@ from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
 from utils.observability.fallback import record_fallback
+from utils.batch_pipeline.live import register_recording, reserve_recording
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +110,7 @@ class ConversationFinalizationError(RuntimeError):
 class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
+    deferred = 'deferred'
 
 
 async def finalize_persisted_conversation(
@@ -227,11 +232,14 @@ async def finalize_persisted_conversation(
         # STT or metric persistence and cannot alter this processing input.
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
+            await warm_rollout_cohorts(uid)
             _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
-        if conversation.status != ConversationStatus.completed:
+        if conversation.status != ConversationStatus.completed or finalization_pending(
+            conversation_data, uid, finalization_job_id
+        ):
             conversation = await run_blocking(
                 postprocess_executor,
                 process_with_episode_budget,
@@ -265,6 +273,11 @@ async def finalize_persisted_conversation(
                 conversation_id,
             )
             return ConversationFinalizationDisposition.fenced
+
+        # Producer rollback never abandons an already reserved retained recording.
+        # Persist its obligation before the finalization job can complete.
+        if conversation_data.get('record_lane_owner') == 'batch_live_v1':
+            await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
 
         # Ownership fence before any canonical side effect.  The lifecycle
         # transaction re-reads the durable conversation together with the job
@@ -545,7 +558,39 @@ async def _load_admitted_conversation(
         )
         return ConversationFinalizationDisposition.fenced, None, None
 
+    for _ in range(3):
+        try:
+            owner = await run_blocking(db_executor, reserve_recording, uid, conversation_data)
+            break
+        except RecordOwnerContention:
+            # Listen may append between the existing read and CAS. Refresh in
+            # this attempt, rather than spending a processing-failure slot.
+            conversation_data = await run_blocking(
+                db_executor,
+                conversations_db.get_conversation,
+                uid,
+                conversation_id,
+                read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+                include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
+            )
+            if not conversation_data:
+                return ConversationFinalizationDisposition.fenced, None, None
+    else:
+        deferred = await run_blocking(
+            db_executor,
+            finalization_jobs_db.mark_finalization_retryable,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+            'record_owner_contention',
+            count_attempt=False,
+        )
+        if not deferred:
+            return ConversationFinalizationDisposition.fenced, None, None
+        return ConversationFinalizationDisposition.deferred, None, None
     conversation = deserialize_conversation(conversation_data)
+    if owner:
+        conversation.record_lane_owner = owner
     if conversation.status != ConversationStatus.completed and conversation.status != ConversationStatus.processing:
         admitted = await run_blocking(db_executor, lifecycle_service.ensure_processing, uid, conversation.id)
         if not admitted:

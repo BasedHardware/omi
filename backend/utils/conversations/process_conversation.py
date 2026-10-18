@@ -75,9 +75,12 @@ from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
+    RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
+    recovery_transcript_below_content_floor,
+    recovery_transcript_word_count,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -96,6 +99,7 @@ from utils.conversations.jev_shadow import (
     submit_owner_shadow,
     submit_relevance_shadow,
 )
+from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
 from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
@@ -315,6 +319,13 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     """
 
 
+APP_RESULT_FAILED_CODE = 'app_result_failed'
+APP_RESULT_FAILED_ERROR_DETAIL = {
+    'code': APP_RESULT_FAILED_CODE,
+    'message': 'The selected app could not finish this summary. Please try again.',
+}
+
+
 def conversation_apps_opt_in_only() -> bool:
     """Summarization apps require explicit selection on the notes v2 path."""
     return True
@@ -358,6 +369,7 @@ def _get_structured(
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
     recovery_transcript_decoded: bool = True,
+    recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
 ) -> Tuple[Structured, bool]:
     try:
@@ -522,6 +534,34 @@ def _get_structured(
                         RelevanceDecision('discard', 'rule', ordinary.reason, ProcessingTrigger.SERVER_RECOVERY)
                     )
                 return Structured(), True
+            stored_structured = getattr(main_conv, 'structured', None)
+            stored_title = getattr(stored_structured, 'title', '') or ''
+            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
+            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
+                not stored_title.strip() or stored_title_provenance == 'server_minimum'
+            )
+            if (
+                recovery_transcript_decoded
+                and stored_content_is_replaceable
+                and not getattr(main_conv, 'user_title', None)
+                and not is_release_probe_uid(uid)
+                and not user_kept
+                and not getattr(main_conv, 'photos', None)
+                and recovery_transcript_below_content_floor(main_conv)
+            ):
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
+                    )
+                if recovery_minimum_fallback_observer is not None:
+                    recovery_minimum_fallback_observer()
+                return (
+                    build_deterministic_minimum_structured(
+                        main_conv,
+                        tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+                    ),
+                    False,
+                )
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
@@ -749,6 +789,7 @@ def trigger_conversation_apps(
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
     preserve_existing_results: bool = False,
+    replace_selected_result: bool = False,
     resumable_result_commit: Optional[Callable[[str, Mapping[str, Any]], bool]] = None,
     resumable_usage_commit: Optional[Callable[[str, UsageHistoryType], bool]] = None,
     resumable_effect_authorizer: Optional[Callable[[], None]] = None,
@@ -831,8 +872,16 @@ def trigger_conversation_apps(
     if not filtered_apps:
         logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
-    if not preserve_existing_results:
+    # ``replace_selected_result`` (user reprocess under the result contract):
+    # the run replaces only its own app's result and keeps every other app's
+    # result. Released clients display the first non-empty entry, so the fresh
+    # result is placed first. When no app runs (a plain "regenerate" with no
+    # preferred app) the user asked for the Omi summary; clearing keeps that
+    # summary on screen for released clients, exactly as before.
+    replace_mode = replace_selected_result and not preserve_existing_results
+    if not preserve_existing_results and not (replace_mode and filtered_apps):
         conversation.apps_results = []
+    produced_results: Dict[str, str] = {}
 
     def execute_app(app: App) -> None:
         if resumable_effect_authorizer is not None:
@@ -869,7 +918,15 @@ def trigger_conversation_apps(
                 language_code=language_code,
                 prompt_prefix=prompt_prefix,
             ).strip()
-        conversation.apps_results.append(AppResult(app_id=app.id, content=result))
+        if replace_mode:
+            # An empty answer must not evict the app's previous result.
+            if result:
+                produced_results[app.id] = result
+                conversation.apps_results = [AppResult(app_id=app.id, content=result)] + [
+                    item for item in conversation.apps_results if item.app_id != app.id
+                ]
+        else:
+            conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if preserve_existing_results:
             # Persist the generated app result before any later telemetry or
             # aggregate effect receipt. A process crash can then resume from
@@ -912,8 +969,14 @@ def trigger_conversation_apps(
         # Explicit selection is fail-closed: the client asked for THIS app's summary, so a
         # missing result (execution failed above) or empty content must not masquerade as
         # success while first-party notes shadow the selection the user made (SCA-359).
-        selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
-        if selected_result is None or not selected_result.content.strip():
+        # In replace mode an older result for this app may still be present
+        # (kept on failure), so only a result produced by this run counts.
+        if replace_mode:
+            selected_content = produced_results.get(app_id, '')
+        else:
+            selected_result = next((r for r in conversation.apps_results if r.app_id == app_id), None)
+            selected_content = selected_result.content if selected_result is not None else ''
+        if not selected_content.strip():
             raise ExplicitAppSelectionFailedError(f'Selected app {app_id} produced no summary content')
 
     return succeeded
@@ -3066,6 +3129,12 @@ def process_conversation(
     bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
+    recovery_minimum_fallback = False
+
+    def _mark_recovery_minimum_fallback() -> None:
+        nonlocal recovery_minimum_fallback
+        recovery_minimum_fallback = True
+
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -3076,8 +3145,23 @@ def process_conversation(
         user_kept=user_kept,
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
+        recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
     )
+    if recovery_minimum_fallback:
+        sys.stdout.write(
+            json.dumps(
+                {
+                    'event': 'selfheal_guard',
+                    'outcome': 'kept_minimum',
+                    'reason': 'content_below_floor',
+                    'transcript_words': recovery_transcript_word_count(conversation),
+                    'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
+                }
+            )
+            + '\n'
+        )
+        sys.stdout.flush()
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -3094,6 +3178,7 @@ def process_conversation(
         trigger is ProcessingTrigger.SERVER_RECOVERY
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
+        and not recovery_minimum_fallback
     ):
         sys.stdout.write(
             json.dumps(
@@ -3143,6 +3228,8 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
+    if recovery_minimum_fallback:
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
         # minimum's local_pending); the object the caller returns must agree,
@@ -3157,7 +3244,14 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    report_persistence(persisted, completed=conversation)
+    if recovery_minimum_fallback:
+        report_persistence(
+            persisted,
+            completed=conversation,
+            derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS,
+        )
+    else:
+        report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
             'processing result fenced before canonical completion side effects uid=%s conversation=%s',
@@ -3219,6 +3313,7 @@ def process_conversation(
     # instead of stranding it mid-way. Only reachable when `app_id` was set; automatic
     # app selection stays fail-open (SCA-359).
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
+    result_contract = trigger is ProcessingTrigger.USER_REPROCESS and reprocess_result_contract_enabled()
 
     def _emit_derived_effects() -> None:
         # AI-based folder assignment
@@ -3288,6 +3383,7 @@ def process_conversation(
                         usage_attribution=app_usage_attribution,
                         language_code=language_code,
                         people=people,
+                        replace_selected_result=result_contract,
                     )
                 except ExplicitAppSelectionFailedError as error:
                     # Fail closed without stranding the bundle: the write-back below still
@@ -3372,6 +3468,11 @@ def process_conversation(
         # processing step is a real error, never a 200 whose payload quietly
         # substitutes first-party notes for the selected app's summary (SCA-359).
         failure = explicit_selection_failures[0]
+        if result_contract:
+            # Distinguishable from a notes/structure failure so clients can say
+            # "<App> couldn't finish" while the regenerated notes stay persisted.
+            logger.error('Conversation processing failed: %s', type(failure).__name__)
+            raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
         raise conversation_processing_http_exception(failure) from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation

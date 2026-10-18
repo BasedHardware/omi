@@ -31,7 +31,7 @@ class FakeDeviceTransport extends DeviceTransport {
   String get deviceId => 'fake-limitless';
 
   @override
-  Future<void> connect() async {}
+  Future<void> connect() async => emitState(DeviceTransportState.connected);
 
   @override
   Future<void> disconnect() async {}
@@ -880,6 +880,7 @@ void main() {
     transport.onWrite = () {
       if (transport.writes.length == 4 && !reconnected.isCompleted) reconnected.complete();
     };
+    transport.emitState(DeviceTransportState.disconnected);
     transport.emitState(DeviceTransportState.connected);
     await reconnected.future.timeout(const Duration(seconds: 5));
 

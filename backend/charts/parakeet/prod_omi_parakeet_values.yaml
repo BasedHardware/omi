@@ -190,6 +190,9 @@ prometheus-adapter:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
+  # Dark: one-line activation after mixed-load live-latency qualification.
+  # Roll back to false to restore the existing External Value latency guard.
+  workloadOnly: false
   # The ratified 2 active requests / 35% GPU targets trigger scale-out;
   # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
   # Floor 3 controls idle cost; cap 12 gives the demand-routing ramp headroom.

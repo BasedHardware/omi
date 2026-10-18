@@ -10,6 +10,8 @@ from starlette.websockets import WebSocket
 from firebase_admin import auth
 from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
+
+from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
@@ -263,6 +265,7 @@ def get_current_user_uid(
 
     _recover_locked_content_if_request(uid, request)
 
+    load_rollout_cohorts(uid)
     return uid
 
 

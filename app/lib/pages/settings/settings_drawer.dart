@@ -94,6 +94,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         deviceConnected: context.read<DeviceProvider>().isConnected,
         supportLinks: PlatformService.isIntercomSupported,
         android: PlatformService.isAndroid,
+        rememberedDevice: context.read<DeviceProvider>().hasRememberedDevice,
       );
 
   // ---------------------------------------------------------------------------------------------
