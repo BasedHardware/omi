@@ -565,6 +565,7 @@ environment_shared:
         BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
         BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
           value: 'false'
           category: rollout
@@ -1384,6 +1385,7 @@ environment_shared:
           BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'false'
             category: rollout
@@ -1814,6 +1816,7 @@ environment_shared:
           BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'false'
             category: rollout
@@ -2212,6 +2215,7 @@ environment_shared:
           BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'false'
             category: rollout
@@ -2543,6 +2547,7 @@ environment_shared:
           BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'false'
             category: rollout

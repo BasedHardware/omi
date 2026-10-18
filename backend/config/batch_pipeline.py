@@ -196,3 +196,8 @@ def async_projection_enabled() -> bool:
 def recovery_tasks_enabled() -> bool:
     """Ship-on request-backed paid recovery; false restores inline sweeping."""
     return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'
+
+
+def projection_pagination_enabled() -> bool:
+    """Ship-on fair discovery; false restores the legacy oldest-page scan."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'

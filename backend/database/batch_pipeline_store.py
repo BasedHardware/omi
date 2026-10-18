@@ -175,16 +175,34 @@ class FirestoreStore:
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
+    def projection_page(self, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
+        return projection_page(self.client, self.namespace, limit, after=after)
+
 
 def projection_pending(client: Any, namespace: str, limit: int = 100) -> list[str]:
-    docs = (
-        client.collection(f'{namespace}_results')
-        .where('projection_state', 'in', ['pending', 'persisted', 'ready'])
+    return projection_page(client, namespace, limit)[0]
+
+
+def projection_page(client: Any, namespace: str, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
+    """Stable keyset page; the cursor survives removal of its source row.
+
+    __name__ breaks committed_at ties (including siblings committed together).
+    Cursor values are discovery hints, never authorization or ordering fences.
+    """
+    collection = client.collection(f'{namespace}_results')
+    query = (
+        collection.where('projection_state', 'in', ['pending', 'persisted', 'ready'])
         .order_by('committed_at')
-        .limit(max(1, min(limit, 100)))
-        .stream()
+        .order_by('__name__')
     )
-    return [doc.id for doc in docs]
+    if after is not None:
+        query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
+    size = max(1, min(limit, 100))
+    docs = list(query.limit(size).stream())
+    # Wrap even when blocked rows remain. Rows inserted behind the cursor are
+    # revisited on the next cycle; no durable obligation is skipped or mutated.
+    cursor = (docs[-1].to_dict()['committed_at'], docs[-1].id) if len(docs) == size else None
+    return [doc.id for doc in docs], cursor
 
 
 def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
