@@ -156,6 +156,22 @@ def get_context_executor() -> MonitoredThreadPoolExecutor:
         return _context_executor
 
 
+_rollout_executor: MonitoredThreadPoolExecutor | None = None
+_rollout_executor_lock = threading.Lock()
+
+
+def get_rollout_executor() -> MonitoredThreadPoolExecutor:
+    """Small isolated pool for optional cohort reads; bounded during Firestore outages."""
+    global _rollout_executor
+    with _rollout_executor_lock:
+        if _rollout_executor is None:
+            _rollout_executor = MonitoredThreadPoolExecutor(
+                name='rollout', max_workers=4, max_queue_size=64, thread_name_prefix='rollout'
+            )
+            _ALL_EXECUTORS.append(_rollout_executor)
+        return _rollout_executor
+
+
 def get_jev_shadow_executor() -> ThreadPoolExecutor:
     """Create the shadow bulkhead only when eligible work is first submitted."""
     global _jev_shadow_executor

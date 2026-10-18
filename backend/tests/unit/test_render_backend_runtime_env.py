@@ -282,7 +282,7 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
     approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
         for key, value in node.items():
-            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+            if key in approved_allowlists:
                 continue
             if _contains_uid_outside_approved_allowlists(value, uid):
                 return True
@@ -773,7 +773,7 @@ def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path,
     assert _MODULE['main']() == 0
     output = capsys.readouterr().out
     assert output.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
     )
     assert output.endswith(
         '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n'
@@ -838,7 +838,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
         text=True,
     )
     assert result.stdout.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
     )
     assert result.stdout.endswith(
         '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'

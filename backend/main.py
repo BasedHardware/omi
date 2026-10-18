@@ -25,6 +25,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
+from utils.rollout_cohorts import configure_rollout_runtime
 
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
@@ -194,6 +195,8 @@ elif os.environ.get("SERVICE_ACCOUNT_JSON"):
 else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
+# Bind private cohort resolution once at the serving composition root.
+configure_rollout_runtime()
 app = FastAPI()
 
 _local_storage_root = local_storage_root_from_env()

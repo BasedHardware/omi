@@ -1166,8 +1166,10 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     manifest = yaml.load((REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     env = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']['env']
     stages = json.loads((REPOSITORY_ROOT / 'config/diarization-cohort-stages.json').read_text())
-    expected = {key: env[key]['value'] for key in stages['A']}
-    assert expected in stages.values()
+    keys = [key for key in stages['A'] if not key.endswith('_UID_ALLOWLIST')]
+    expected = {key: env[key]['value'] for key in keys}
+    assert expected in [{key: values[key] for key in keys} for values in stages.values()]
+    assert all(key not in env for key in stages['A'] if key.endswith('_UID_ALLOWLIST'))
     action = yaml.load(
         (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
     )
@@ -1193,5 +1195,9 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     values, _ = clone_environment(source, _render_env_vars(cohort_env), '', clone_step['env']['REMOVE_ENV_VARS'])
     rendered = dict(line.split('=', 1) for line in values.splitlines())
     assert {key: rendered[key] for key in expected} == expected
+    # Omitted UID entries survive cloning and Cloud Run env merge unchanged.
+    for key in stages['A']:
+        if key.endswith('_UID_ALLOWLIST'):
+            assert rendered[key] == stages['A'][key]
     assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
     assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))

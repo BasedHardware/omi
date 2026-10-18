@@ -13,6 +13,7 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
@@ -38,6 +39,7 @@ from utils.conversations.process_conversation import (
     save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.jit_rollout import JITDecisionStage
@@ -230,11 +232,14 @@ async def finalize_persisted_conversation(
         # STT or metric persistence and cannot alter this processing input.
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
+            await warm_rollout_cohorts(uid)
             _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
-        if conversation.status != ConversationStatus.completed:
+        if conversation.status != ConversationStatus.completed or finalization_pending(
+            conversation_data, uid, finalization_job_id
+        ):
             conversation = await run_blocking(
                 postprocess_executor,
                 process_with_episode_budget,
