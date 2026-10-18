@@ -16,13 +16,16 @@ from database import sync_backfill_sequencer as registry
 from database import sync_redrive
 from database.sync_jobs import (
     TERMINAL_STATUSES,
+    FencedSyncJobMutationOutcome,
     SyncLedgerFenceMode,
     get_sync_job,
     get_sync_ledger_fence_mode,
-    mark_job_failed,
+    fenced_mark_job_failed,
     sync_job_run_lock_present,
     sync_job_key_exists,
+    sync_job_uses_ledger_fence,
     try_acquire_job_run_lock,
+    try_acquire_sync_job_run_lock,
     release_job_run_lock,
 )
 from utils.cloud_tasks import enqueue_sync_job, get_sync_tasks_max_attempts
@@ -206,6 +209,25 @@ def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _Cl
     return True
 
 
+def _converge_capped_ledger_completion(*, job_id: str, uid: Any, content_id: Any, run_lock_token: str) -> Any:
+    """Resolve a capped fenced job's durable content ledger before failure.
+
+    Budget cancellation can land after a detached pipeline leaf has durably
+    completed the content ledger but before the matching Redis terminal
+    write; failing such a job unconditionally would dead-letter transcription
+    whose side effects already committed. ``bind_or_converge_sync_ledger_completion``
+    converges exactly that ordering (it is the same helper the final-attempt
+    exception path uses). Imported lazily so the sequencer module stays
+    importable without the pipeline's heavy dependency graph; tests
+    monkeypatch this seam directly.
+    """
+    from utils.sync.pipeline import bind_or_converge_sync_ledger_completion
+
+    return bind_or_converge_sync_ledger_completion(
+        job_id=job_id, uid=uid, content_id=content_id, run_lock_token=run_lock_token
+    )
+
+
 def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     """Terminalize a capped budget-deferral chain's Redis job, conservatively.
 
@@ -214,21 +236,31 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     sequenced dispatch, so no status poll can ever finalize it — the client
     would see a nonterminal job until the 24h Redis TTL and the durable
     content claim could not recover through the normal terminal path. Marking
-    it failed here is the terminal handoff. Fenced by the run lock's absence:
-    a still-held lock means an attempt may be running under the old lease, and
-    its own terminal write must win. ``queued`` is accepted alongside
+    it failed here is the terminal handoff. ``queued`` is accepted alongside
     ``processing`` because the final whole-budget attempt can expire during
     staged-file download or another pre-pipeline step, before the attempt ever
     marked the job processing — that job is exactly as abandoned as the
     processing one, and nothing else will finalize it either.
 
+    The handoff is fenced by *acquiring* the run lock atomically rather than
+    checking it and writing later: a final replacement that acquires between
+    the check and the terminal write would be racing an unfenced
+    ``mark_job_failed``, and treating a live nonterminal writer as a
+    successful handoff releases the owner while the old attempt still runs —
+    if that attempt then times out it returns 409 without terminalizing and
+    no owner remains to recover the job. An unacquirable lock therefore
+    retains the owner (the next sweep re-checks); the lock's own holder keeps
+    the right to its terminal write or deferral.
+
     Returns whether the terminal state is assured: ``True`` once the job is
-    failed, was already terminal, vanished (its own expiry owns recovery), or
-    a live run lock names another writer that owns the terminal write;
-    ``False`` only for transient Redis read/write failures, which the caller
-    must retry before releasing the owner — after the release no sweep
-    retains an identity for this job, so a skipped handoff would strand the
-    accepted job and its durable claim until the TTL.
+    failed, converged to a durably completed result, was already terminal, or
+    vanished (its own expiry owns recovery); ``False`` when the owner must be
+    retained — a still-live deferred marker (the final scheduled replacement
+    has not run yet), a lock another writer holds, or a transient Redis
+    read/write failure — which the caller must retry before releasing the
+    owner, because after the release no sweep retains an identity for this
+    job and a skipped handoff would strand the accepted job and its durable
+    claim until the TTL.
     """
     try:
         job = get_sync_job(job_id)
@@ -251,9 +283,9 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     # paid-for final delivery a stale epoch the moment the lane advances.
     # Sequenced jobs are exempt from stale polling, so nothing else would ever
     # finalize the job: keep the owner and re-check after the marker horizon.
-    # This check precedes the run-lock fence on purpose — releasing the owner
-    # while the marker is live strands the job even if an attempt holds the
-    # lock, because a capped attempt can no longer defer to re-arm the chain.
+    # This check precedes the run-lock acquire on purpose — the marker's live
+    # replacement must be able to take the lock when it arrives, and a capped
+    # attempt can no longer defer to re-arm the chain.
     raw_marker = job.get('deferred_until')
     marker_until = (
         float(raw_marker) if isinstance(raw_marker, (int, float)) and not isinstance(raw_marker, bool) else None
@@ -263,49 +295,108 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
             'event=sync_uid_sequencer action=budget_chain_finalize outcome=replacement_pending job_id=%s', job_id
         )
         return False
-    if sync_job_run_lock_present(job_id):
-        # An attempt still holds the run lock under the released lease: its
-        # own terminal write (or its deferral) must win, never the sweep's.
-        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=lock_held job_id=%s', job_id)
-        return True
+    job_uses_fence = sync_job_uses_ledger_fence(job)
+    acquire_final_lock = try_acquire_sync_job_run_lock if job_uses_fence else try_acquire_job_run_lock
     try:
-        finalized = mark_job_failed(
-            job_id,
-            'sync budget deferral chain exhausted the attempt contract',
-            reason_code='sync_budget_chain_exhausted',
-        )
+        lock_token = acquire_final_lock(job_id)
     except Exception as error:
         logger.error(
-            'event=sync_uid_sequencer action=budget_chain_finalize outcome=write_failed ' 'job_id=%s exception_type=%s',
-            job_id,
-            type(error).__name__,
-        )
-        return False
-    if finalized is not None:
-        logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
-        return True
-    # CAS lost: the terminal write did not apply while the job read
-    # nonterminal. Accept only a re-read that proves terminality or absence —
-    # releasing the owner on a lost CAS would strand the accepted job (no
-    # sweep identity remains, polls never stale-finalize sequenced jobs)
-    # until the Redis TTL despite the claimed handoff.
-    try:
-        settled = get_sync_job(job_id)
-    except Exception as error:
-        logger.error(
-            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_verify_failed '
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=acquire_failed '
             'job_id=%s exception_type=%s',
             job_id,
             type(error).__name__,
         )
         return False
-    if isinstance(settled, dict) and settled.get('status') not in TERMINAL_STATUSES:
-        logger.warning(
-            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost_nonterminal job_id=%s', job_id
-        )
+    if lock_token is None:
+        # An attempt still holds the run lock under the released lease: its
+        # own terminal write (or its deferral) must win, never the sweep's —
+        # and if that attempt times out it ends through the queue while this
+        # owner keeps an identity on the job, so the chain cannot strand.
+        # Retain the owner; the next sweep re-checks after the lock's TTL.
+        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=lock_held job_id=%s', job_id)
         return False
-    logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
-    return True
+    try:
+        # A fence job may have durably completed its content ledger after
+        # budget cancellation cancelled the await but before the terminal
+        # write: converge that proven completion into the Redis result before
+        # publishing a failure, exactly like the handler's final-attempt
+        # exception path. Only a fence job carries a content ledger.
+        if job_uses_fence:
+            try:
+                converged = _converge_capped_ledger_completion(
+                    job_id=job_id,
+                    uid=job.get('uid'),
+                    content_id=job.get('content_id'),
+                    run_lock_token=lock_token,
+                )
+            except Exception as error:
+                logger.error(
+                    'event=sync_uid_sequencer action=budget_chain_finalize outcome=ledger_converge_failed '
+                    'job_id=%s exception_type=%s',
+                    job_id,
+                    type(error).__name__,
+                )
+                return False
+            if converged is not None:
+                logger.info(
+                    'event=sync_uid_sequencer action=budget_chain_finalize outcome=ledger_converged job_id=%s', job_id
+                )
+                return True
+        try:
+            mutation = fenced_mark_job_failed(
+                job_id,
+                lock_token,
+                'sync budget deferral chain exhausted the attempt contract',
+                reason_code='sync_budget_chain_exhausted',
+            )
+        except Exception as error:
+            logger.error(
+                'event=sync_uid_sequencer action=budget_chain_finalize outcome=write_failed '
+                'job_id=%s exception_type=%s',
+                job_id,
+                type(error).__name__,
+            )
+            return False
+        if mutation.applied:
+            logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
+            return True
+        if mutation.outcome in (
+            FencedSyncJobMutationOutcome.MISSING_JOB,
+            FencedSyncJobMutationOutcome.INVALID_JOB,
+        ):
+            # Vanished or corrupt: its own expiry owns recovery from here.
+            return True
+        # CAS lost: the terminal write did not apply while the job read
+        # nonterminal. Accept only a re-read that proves terminality or absence —
+        # releasing the owner on a lost CAS would strand the accepted job (no
+        # sweep identity remains, polls never stale-finalize sequenced jobs)
+        # until the Redis TTL despite the claimed handoff.
+        try:
+            settled = get_sync_job(job_id)
+        except Exception as error:
+            logger.error(
+                'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_verify_failed '
+                'job_id=%s exception_type=%s',
+                job_id,
+                type(error).__name__,
+            )
+            return False
+        if isinstance(settled, dict) and settled.get('status') not in TERMINAL_STATUSES:
+            logger.warning(
+                'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost_nonterminal job_id=%s', job_id
+            )
+            return False
+        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
+        return True
+    finally:
+        # The finalization lock protects nothing past this helper: the job is
+        # terminal (or the sweep retains the owner for a retry, and any racing
+        # capped replacement only 409-caps against the lock). Best-effort
+        # release; a lost release keeps the lock until its TTL.
+        try:
+            release_job_run_lock(job_id, lock_token)
+        except Exception:
+            pass
 
 
 def reconcile_uid(

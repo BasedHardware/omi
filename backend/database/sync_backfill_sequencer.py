@@ -596,15 +596,20 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
 
 def note_budget_deferral(
     uid: str, job_id: str, epoch: int, deferrals: int, *, firestore_client: Any = None, now: Optional[datetime] = None
-) -> None:
+) -> bool:
     """Persist the handler-budget chain count on the running owner.
 
     The count rides task payloads, but ``redrive_job`` re-dispatches the
     owner's original ``active_payload``; without this copy, a lease that
     expires before the delayed replacement begins would restart the chain at
-    zero and an over-budget job could defer forever. Best-effort on purpose:
-    the handler has already acked, and the write must not resurrect an owner
-    a completion has already released.
+    zero and an over-budget job could defer forever.
+
+    Returns ``True`` when the count was written and ``False`` when the owner
+    no longer names this job/epoch (completed or released elsewhere) — the
+    caller must treat ``False`` as "nothing left to protect", not as a
+    failure. Transient Firestore failures raise: the write precedes the
+    replacement enqueue precisely so a lost count can abort the deferral
+    before any replacement exists.
     """
     _require_production()
     client = firestore_client or get_firestore_client()
@@ -612,16 +617,17 @@ def note_budget_deferral(
     current = now or _now()
 
     @firestore.transactional
-    def commit(transaction: Any) -> None:
+    def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
         if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
-            return
+            return False
         transaction.update(root, {'active_budget_deferrals': deferrals, 'updated_at': current})
+        return True
 
     try:
-        commit(client.transaction())
+        return commit(client.transaction())
     except NotFound:
-        pass
+        return False
 
 
 def finish_expired_job(

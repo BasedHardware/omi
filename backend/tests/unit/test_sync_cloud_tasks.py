@@ -4859,10 +4859,12 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
 
 @pytest.mark.asyncio
 async def test_sequenced_budget_deferral_owner_write_failure_records_fallback():
-    """A lost owner-side chain count is a real degradation — the sweep's
-    lease-expiry redrive reloads the original payload and restarts the chain
-    at zero — so the best-effort fallback must be recorded, not just logged,
-    while the task still acks against its scheduled replacement."""
+    """The owner-side chain count is a prerequisite, not a post-ack nicety: the
+    sweep's lease-expiry redrive reloads the original payload and restarts the
+    chain at zero, and repeated lost counts would restore an unbounded
+    whole-budget sequence. A write that fails must therefore abort the
+    deferral BEFORE any marker or replacement exists — the queue-owned 409
+    keeps the task and no orphaned schedule survives the lost count."""
 
     module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
     request = _configure_task_handler(
@@ -4887,13 +4889,11 @@ async def test_sequenced_budget_deferral_owner_write_failure_records_fallback():
     async def _pipeline_that_never_finishes(*args, **kwargs):
         await asyncio.sleep(30)
 
+    call_order = []
+
     try:
         module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_that_never_finishes
-        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
-        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(
-            side_effect=RuntimeError('firestore unavailable')
-        )
         module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
         module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
         reads = {'n': 0}
@@ -4911,16 +4911,31 @@ async def test_sequenced_budget_deferral_owner_write_failure_records_fallback():
 
         module.get_sync_job = MagicMock(side_effect=_job_read)
 
+        def _track_update(job_id, updates):
+            call_order.append(('marker' if updates.get('deferred_until') is not None else 'update', job_id))
+            return {'job_id': job_id, 'status': 'processing'}
+
+        module.update_sync_job = MagicMock(side_effect=_track_update)  # type: ignore[attr-defined]
+
+        def _track_owner_write(uid, job_id, epoch, deferrals):
+            call_order.append(('owner_write', job_id))
+            raise RuntimeError('firestore unavailable')
+
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(side_effect=_track_owner_write)
+
         response = await module.run_sync_job(request, task_retry_count=0)
 
-        assert response.status_code == 200
-        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
-        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        # The queue keeps the task: no replacement, no marker, and the failed
+        # count never acks a schedule it cannot bound.
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_not_called()
+        assert call_order == [('owner_write', 'job-1')]
         assert fallback_calls == [
             {
                 'component': 'sync_dispatch',
                 'from_mode': 'budget_replacement',
-                'to_mode': 'lease_expiry_redrive',
+                'to_mode': 'queue_retry',
                 'reason': 'owner_write_failed',
                 'outcome': 'degraded',
             }
@@ -4937,12 +4952,13 @@ async def test_sequenced_budget_deferral_owner_write_failure_records_fallback():
 
 @pytest.mark.asyncio
 async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_deadline():
-    """The marker, replacement enqueue, and sequencer-owner count share one
-    absolute post-budget deadline: a second margin-sized timeout for the owner
-    write would sum with the first to the whole route margin, letting the
-    middleware 504 fire before the deferral response is returned. Here the
-    owner write would still fit a fresh timeout but aborts at the shared
-    deadline's remainder left by a slow enqueue."""
+    """The owner-count write, marker, and replacement enqueue share one absolute
+    post-budget deadline: each block getting its own margin-sized timeout would
+    sum to the whole route margin, letting the middleware 504 fire before the
+    deferral response is returned. Here the owner write spends 0.45s of the
+    0.9s shared deadline and the enqueue would still fit a fresh 0.9s timeout —
+    but only the ~0.45s remainder is left, so the whole deferral aborts at the
+    one deadline instead of running to the write's own 1.15s horizon."""
 
     module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
     request = _configure_task_handler(
@@ -4972,12 +4988,13 @@ async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_dead
     async def _run_blocking(executor, fn, *args, **kwargs):
         nonlocal owner_write_finished
         if fn is module.sync_backfill_sequencer.note_budget_deferral:
-            # 0.7s: fits a fresh 0.9s timeout, but not the ~0.45s the shared
-            # deadline still has after the enqueue below.
-            await asyncio.sleep(0.7)
+            # 0.45s: consumes half the shared 0.9s deadline and settles.
+            await asyncio.sleep(0.45)
             owner_write_finished = True
         if fn is module.enqueue_sync_job_budget_replacement:
-            await asyncio.sleep(0.45)
+            # 0.7s: fits a fresh 0.9s timeout, but not the ~0.45s the shared
+            # deadline still has after the owner write above.
+            await asyncio.sleep(0.7)
         return fn(*args, **kwargs)
 
     try:
@@ -4985,7 +5002,7 @@ async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_dead
         module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.9
         module._run_full_pipeline_background_async = _pipeline_that_never_finishes
         module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
-        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(return_value=None)
+        module.sync_backfill_sequencer.note_budget_deferral = MagicMock(return_value=True)
         module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
         module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
         module.run_blocking = _run_blocking
@@ -5008,15 +5025,15 @@ async def test_sequenced_budget_deferral_owner_write_shares_one_post_budget_dead
         response = await module.run_sync_job(request, task_retry_count=0)
         elapsed = time.monotonic() - started
 
-        assert response.status_code == 200
-        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
-        module.enqueue_sync_job_budget_replacement.assert_called_once()
-        assert owner_write_finished is False
-        # Aborts at the one shared deadline (0.9s), never at the owner write's
-        # own completion time (0.45 + 0.7 = 1.15s) that a fresh second
-        # timeout would have allowed.
+        # The deadline fired during the enqueue (its create may or may not
+        # have landed, so the uncertain class keeps the marker and returns
+        # the queue-owned 409) at the one shared wall, never at the summed
+        # 0.45 + 0.7 = 1.15s two fresh timeouts would have allowed.
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        assert owner_write_finished is True
         assert elapsed < 0.45 + 0.7
-        assert [call['reason'] for call in fallback_calls] == ['owner_write_failed']
+        assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

@@ -2554,22 +2554,25 @@ prior-job reads and rides the attempt state into the body's timeout as
 remaining time, so a stalled setup read cannot buy the attempt a fresh full
 budget after it.
 
-On expiry the handler defers instead of failing: it writes a
-`deferred_until` marker on the Redis job (replacement time +
+On expiry the handler defers instead of failing: it persists the chain count
+on the sequencer owner FIRST (`budget_deferrals` in the task payload,
+`active_budget_deferrals` on the owner) — required before anything schedules
+a replacement, because the sweep's lease-expiry redrive re-dispatches the
+owner's original payload and a write that fails first returns the
+queue-owned 409 (`owner_write_failed`) with no replacement left orphaned —
+then writes a `deferred_until` marker on the Redis job (replacement time +
 `QUEUED_DISPATCH_STALE_SECONDS`), enqueues one delayed replacement task past
-the preserved run lock's TTL (`RUN_LOCK_TTL_SECONDS + 60 s`), persists the
-chain count on the sequencer owner (`budget_deferrals` in the task payload,
-`active_budget_deferrals` on the owner), and acks 200 with status
-`deferred_handler_budget`. One absolute post-budget deadline bounds the
-run-lock acquire drain, marker write, enqueue, and owner-count write
-together; a mid-flight executor leaf (lock acquire or marker CAS) is drained
-or fenced rather than racing the cleanup clear, and an acquire that cannot
-be settled returns the queue-owned 409 (`acquire_unsettled`) because no
-replacement schedule can be proven past the lock. When the enqueue definitively
-failed, the compensating marker clear is best-effort: a clear that also fails
-or times out records its own fallback (`marker_clear_failed`) on top of the
-enqueue failure, because the surviving marker keeps suppressing stale recovery
-after the queue-owned retries exhaust.
+the preserved run lock's TTL (`RUN_LOCK_TTL_SECONDS + 60 s`), and acks 200
+with status `deferred_handler_budget`. One absolute post-budget deadline
+bounds the owner-count write, run-lock acquire drain, marker write, and
+enqueue together; a mid-flight executor leaf (lock acquire or marker CAS) is
+drained or fenced rather than racing the cleanup clear, and an acquire that
+cannot be settled returns the queue-owned 409 (`acquire_unsettled`) because
+no replacement schedule can be proven past the lock. When the enqueue
+definitively failed, the compensating marker clear is best-effort: a clear
+that also fails or times out records its own fallback (`marker_clear_failed`)
+on top of the enqueue failure, because the surviving marker keeps
+suppressing stale recovery after the queue-owned retries exhaust.
 
 Status polling honors the marker: a deferred job — `processing` or `queued`,
 direct or sequenced-excluded — is not stale until `deferred_until` passes
@@ -2584,11 +2587,14 @@ contract (`SYNC_TASKS_MAX_ATTEMPTS`), the handler returns the queue-owned
 persisted count denotes a successfully scheduled next attempt, not a
 completed one, and the replacement is deliberately delayed past the lease —
 so a still-future `deferred_until` marker keeps the owner until its horizon
-instead of terminalizing the final paid-for delivery as a stale epoch. The
-terminal handoff is required before the lane advances, retried on transient
-Redis failures and on a terminalization CAS whose re-read still shows a
-nonterminal job, and fenced by the run lock so a live attempt's own terminal
-write always wins.
+instead of terminalizing the final paid-for delivery as a stale epoch. A
+fence job whose content ledger durably completed before the terminal write
+converges that result instead of failing (`ledger_converged`). The terminal
+handoff is required before the lane advances, retried on transient Redis
+failures and on a terminalization CAS whose re-read still shows a nonterminal
+job, and fenced by an atomically acquired run lock (an unacquirable lock
+retains the owner — the holder's own terminal write always wins) so the
+finalization never races a live attempt.
 
 ### Conversation playback artifact
 

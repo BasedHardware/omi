@@ -2331,17 +2331,50 @@ async def _defer_sync_job_after_handler_budget_expiry(
             deferrals,
         )
         return _budget_deferral_fallback('deferrals_exhausted', 'exhausted')
-    # One absolute deadline for all post-budget work — run-lock acquire drain,
-    # marker, replacement enqueue, and the sequencer-owner count below: each
-    # block getting its own margin-sized timeout would sum to the whole route
-    # margin, letting the middleware 504 fire before the deferral response is
-    # returned. The same deadline object is carried into the post-attempt
-    # cleanup waits (marker drain and clear, heartbeat drain) through
-    # attempt_state, so a slow enqueue cannot buy each cleanup wait a fresh
-    # margin-sized timeout either.
+    # One absolute deadline for all post-budget work — the sequencer
+    # owner-count write, run-lock acquire drain, marker, and replacement
+    # enqueue: each block getting its own margin-sized timeout would sum to
+    # the whole route margin, letting the middleware 504 fire before the
+    # deferral response is returned. The same deadline object is carried into
+    # the post-attempt cleanup waits (marker drain and clear, heartbeat drain)
+    # through attempt_state, so a slow enqueue cannot buy each cleanup wait a
+    # fresh margin-sized timeout either.
     post_budget_deadline = time.monotonic() + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
     if attempt_state is not None:
         attempt_state['post_budget_deadline'] = post_budget_deadline
+    if payload.get('sequencer_epoch') is not None:
+        # Sequenced deliveries only, and REQUIRED BEFORE anything schedules a
+        # replacement: the sweep's lease-expiry redrive re-dispatches the
+        # owner's original payload, which carries no chain count — the
+        # owner-side copy is the only bound on that path. The replacement is
+        # scheduled past the lease (RUN_LOCK_TTL + 60s), so a redrive can
+        # always arrive before it; without the count persisted first, that
+        # redrive restarts the chain at zero and invalidates the
+        # already-scheduled epoch. A write that fails or cannot settle inside
+        # the shared deadline therefore aborts the deferral BEFORE the marker
+        # or enqueue exists — the queue-owned 409 keeps the task, and no
+        # unbounded whole-budget sequence can be restored behind a lost
+        # count. Only an owner that has moved on (completed/released, or a
+        # newer epoch) makes the write inert: nothing left can redrive this
+        # job from the owner, so the deferral may proceed.
+        try:
+            async with asyncio.timeout_at(post_budget_deadline):
+                owner_count_written = await run_blocking(
+                    db_executor,
+                    sync_backfill_sequencer.note_budget_deferral,
+                    uid,
+                    job_id,
+                    int(payload['sequencer_epoch']),
+                    deferrals + 1,
+                )
+        except Exception as error:
+            logger.warning(
+                'event=sync_transcription_job outcome=handler_budget_owner_deferral_write_failed exception_type=%s',
+                type(error).__name__,
+            )
+            return _budget_deferral_fallback('owner_write_failed', 'degraded')
+        if owner_count_written is False:
+            logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_inert')
     # The expiry that reached here may have cancelled only the await of the run
     # lock acquire: its executor leaf can still land the TTL'd SET minutes
     # later, so a schedule computed from now can come due while that lock is
@@ -2490,38 +2523,6 @@ async def _defer_sync_job_after_handler_budget_expiry(
                 outcome='degraded',
             )
         return _budget_deferral_fallback(fallback_reason, 'degraded')
-    if payload.get('sequencer_epoch') is not None:
-        # Sequenced deliveries only: a lease that expires before the delayed
-        # replacement begins makes the sweep redrive from the owner's original
-        # payload, which carries no chain count — persist this deferral on the
-        # owner so that redrive cannot restart the chain at zero. Best-effort:
-        # the task has been acknowledged, and a lost write degrades to the
-        # pre-fix behavior for that one chain, not a dropped job — recorded so
-        # the lost bound stays visible to operators. Shares the deadline above,
-        # so a slow enqueue leaves this write whatever margin remains instead
-        # of a fresh margin-sized timeout.
-        try:
-            async with asyncio.timeout_at(post_budget_deadline):
-                await run_blocking(
-                    db_executor,
-                    sync_backfill_sequencer.note_budget_deferral,
-                    uid,
-                    job_id,
-                    int(payload['sequencer_epoch']),
-                    deferrals + 1,
-                )
-        except Exception as error:
-            logger.warning(
-                'event=sync_transcription_job outcome=handler_budget_owner_deferral_write_failed exception_type=%s',
-                type(error).__name__,
-            )
-            record_fallback(
-                component='sync_dispatch',
-                from_mode='budget_replacement',
-                to_mode='lease_expiry_redrive',
-                reason='owner_write_failed',
-                outcome='degraded',
-            )
     logger.info(
         'event=sync_transcription_job outcome=handler_budget_deferred replacement_at=%d deferrals=%d',
         schedule_at,

@@ -1386,12 +1386,17 @@ def test_sweep_stops_redriving_at_the_budget_deferral_cap(db, monkeypatch):
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
     finalized_chains = []
-    monkeypatch.setattr(
-        uid_sequencer,
-        'mark_job_failed',
-        lambda job_id, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
-        or {'status': 'failed'},
-    )
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
     redrives = []
@@ -1455,12 +1460,17 @@ def test_sweep_finalizes_a_queued_budget_chain_job(db, monkeypatch):
     # The abandoned attempt expired before the processing transition.
     monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
     finalized_chains = []
-    monkeypatch.setattr(
-        uid_sequencer,
-        'mark_job_failed',
-        lambda job_id, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
-        or {'status': 'failed'},
-    )
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
 
@@ -1495,12 +1505,14 @@ def test_sweep_keeps_owner_when_budget_chain_finalize_fails_transiently(db, monk
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
 
-    def _redis_write_fails(job_id, error, **kwargs):
+    def _redis_write_fails(job_id, _lock_token, error, **kwargs):
         raise ConnectionError('redis unavailable')
 
     finalized_chains = []
-    monkeypatch.setattr(uid_sequencer, 'mark_job_failed', _redis_write_fails)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _redis_write_fails)
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
 
@@ -1519,9 +1531,12 @@ def test_sweep_keeps_owner_when_budget_chain_finalize_fails_transiently(db, monk
     monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
     monkeypatch.setattr(
         uid_sequencer,
-        'mark_job_failed',
-        lambda job_id, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
-        or {'status': 'failed'},
+        'fenced_mark_job_failed',
+        lambda job_id, _lock_token, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
+        or sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        ),
     )
     later = expired + timedelta(minutes=5)
     owner = registry.get_owner('a', firestore_client=db)
@@ -1553,12 +1568,17 @@ def test_sweep_waits_for_the_final_scheduled_replacement(db, monkeypatch):
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     finalized_chains = []
-    monkeypatch.setattr(
-        uid_sequencer,
-        'mark_job_failed',
-        lambda job_id, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
-        or {'status': 'failed'},
-    )
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
 
@@ -1586,6 +1606,127 @@ def test_sweep_waits_for_the_final_scheduled_replacement(db, monkeypatch):
     assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
 
 
+def test_sweep_retains_owner_while_a_live_writer_holds_the_run_lock(db, monkeypatch):
+    """Thread: the finalization must acquire the run lock atomically instead
+    of checking it and writing later. A final replacement (or a detached
+    executor leaf) that acquired the lock between the reconcile-level check
+    and this helper must not be treated as a successful terminal handoff:
+    releasing the owner then would advance the lane while the old attempt
+    still runs, and if that attempt times out it 409s without terminalizing
+    and no owner remains to recover the job. An unacquirable lock retains
+    the owner for the next sweep; the lock's holder keeps the right to its
+    own terminal write or deferral."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'processing'})
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    # The final replacement acquired the lock after the reconcile-level check.
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'finalize_deferred'
+
+    # The owner is retained: no terminal write raced the live writer, the lane
+    # did not advance, and the next capture stays queued.
+    assert finalized_chains == []
+    assert dispatched == []
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'job'
+
+    # Once the lock is free again the next sweep completes the handoff and
+    # advances the lane.
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    later = expired + timedelta(minutes=5)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=later) == 'budget_chain_exhausted'
+    assert finalized_chains == [('job', 'sync_budget_chain_exhausted')]
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
+def test_sweep_converges_a_durably_completed_ledger_before_failing_a_capped_job(db, monkeypatch):
+    """Thread: budget cancellation can land after a detached pipeline leaf
+    durably completed the content ledger but before the matching Redis
+    terminal write. Failing such a job unconditionally would dead-letter
+    transcription whose side effects already committed. A fence job whose
+    ledger proves completion must converge that result instead of publishing
+    sync_budget_chain_exhausted."""
+
+    monkeypatch.setenv('SYNC_TASKS_MAX_ATTEMPTS', '5')
+    _register('a', 'job', 0, db=db)
+    _register('a', 'next', 60, db=db)
+    first = registry.claim_next('a', firestore_client=db, now=NOW)
+    assert first is not None and first['job_id'] == 'job'
+    assert registry.begin_job('a', 'job', first['epoch'], firestore_client=db, now=NOW)
+    registry.note_budget_deferral('a', 'job', first['epoch'], 4, firestore_client=db, now=NOW)
+
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
+    # A fence-mode job whose durable ledger proves a completed result.
+    monkeypatch.setattr(
+        uid_sequencer,
+        'get_sync_job',
+        lambda _job_id: {'status': 'processing', 'ledger_fence_mode': sync_jobs.SyncLedgerFenceMode.ACTIVE.value},
+    )
+    monkeypatch.setattr(uid_sequencer, 'sync_job_uses_ledger_fence', lambda _job: True)
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_sync_job_run_lock', lambda _job_id: '1:final-lock')
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+
+    converged_calls = []
+    monkeypatch.setattr(
+        uid_sequencer,
+        '_converge_capped_ledger_completion',
+        lambda **kwargs: converged_calls.append(kwargs) or {'status': 'completed'},
+    )
+    finalized_chains = []
+
+    def _fenced_fail(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(
+            outcome=sync_jobs.FencedSyncJobMutationOutcome.APPLIED,
+            job={'status': 'failed'},
+        )
+
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _fenced_fail)
+    monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
+    monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
+
+    expired = NOW + timedelta(minutes=35)
+    owner = registry.get_owner('a', firestore_client=db)
+    assert uid_sequencer.reconcile_uid('a', owner, now=expired) == 'budget_chain_exhausted'
+
+    # The proven completion converged into the Redis result: no failure was
+    # published, the owner released, and the lane advanced to the next capture.
+    assert converged_calls and converged_calls[0]['job_id'] == 'job'
+    assert finalized_chains == []
+    assert [claim['job_id'] for claim in dispatched] == ['next']
+    assert registry.get_owner('a', firestore_client=db).get('active_job_id') == 'next'
+
+
 def test_sweep_retains_owner_when_terminal_cas_leaves_job_nonterminal(db, monkeypatch):
     """A lost CAS in mark_job_failed did not apply the terminal write; the
     finalizer must re-read and only accept a job that is now terminal or
@@ -1605,12 +1746,14 @@ def test_sweep_retains_owner_when_terminal_cas_leaves_job_nonterminal(db, monkey
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     finalized_chains = []
-    monkeypatch.setattr(
-        uid_sequencer,
-        'mark_job_failed',
-        lambda job_id, error, **kwargs: finalized_chains.append((job_id, kwargs.get('reason_code')))
-        or None,  # CAS lost on every call
-    )
+
+    def _cas_lost(job_id, _lock_token, _error, **kwargs):
+        finalized_chains.append((job_id, kwargs.get('reason_code')))
+        return sync_jobs.FencedSyncJobMutation(outcome=sync_jobs.FencedSyncJobMutationOutcome.CONFLICT)
+
+    monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda _job_id: 'final-lock-token')
+    monkeypatch.setattr(uid_sequencer, 'release_job_run_lock', lambda _job_id, _token: None)
+    monkeypatch.setattr(uid_sequencer, 'fenced_mark_job_failed', _cas_lost)
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     monkeypatch.setattr(backfill_cutover, 'direct_remaining_for_uid', lambda _uid: (0, ''))
 
