@@ -151,3 +151,62 @@ def test_duplicate_version_returns_newest_published_deterministically():
     # Raw list order older-first; the newest-published must win regardless.
     with patch.object(fw, "get_omi_github_releases", AsyncMock(return_value=[older, newer])):
         assert _call(version="3.0.15")["zip_url"] == "https://x/NEW.zip"
+
+
+def test_firmware_published_at_sort_key_types():
+    from datetime import datetime, timezone
+
+    assert fw._release_published_at_sort_key(None) == ""
+    assert fw._release_published_at_sort_key("not-a-dict") == ""
+    assert fw._release_published_at_sort_key({}) == ""
+    assert fw._release_published_at_sort_key({"published_at": None}) == ""
+    assert fw._release_published_at_sort_key({"published_at": "2026-03-01T00:00:00Z"}) == "2026-03-01T00:00:00Z"
+    dt = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+    assert fw._release_published_at_sort_key({"published_at": dt}) == dt.isoformat()
+
+
+def test_releases_with_none_published_at_do_not_crash_sorting():
+    unspecified = _release(
+        "Omi_CV1_v3.0.15",
+        "3.0.15",
+        [{"name": "Omi_CV1_OTA_v3.0.15.zip", "browser_download_url": "https://x/NONE.zip"}],
+        published_at=None,
+    )
+    published = _release(
+        "Omi_CV1_v3.0.15",
+        "3.0.15",
+        [{"name": "Omi_CV1_OTA_v3.0.15.zip", "browser_download_url": "https://x/PUB.zip"}],
+        published_at="2026-03-01T00:00:00Z",
+    )
+    # Sorting candidate releases containing both published_at=None and published_at="string"
+    # previously raised TypeError: '<' not supported between instances of 'str' and 'NoneType'.
+    with patch.object(fw, "get_omi_github_releases", AsyncMock(return_value=[unspecified, published])):
+        assert _call(version="3.0.15")["zip_url"] == "https://x/PUB.zip"
+
+
+def test_get_stable_and_latest_version_handle_none_published_at():
+    unspecified = _release(
+        "Omi_CV1_v3.0.14",
+        "3.0.14",
+        [{"name": "Omi_CV1_OTA_v3.0.14.zip", "browser_download_url": "https://x/UNSPEC.zip"}],
+        published_at=None,
+    )
+    published = _release(
+        "Omi_CV1_v3.0.15",
+        "3.0.15",
+        [{"name": "Omi_CV1_OTA_v3.0.15.zip", "browser_download_url": "https://x/PUB.zip"}],
+        published_at="2026-03-01T00:00:00Z",
+    )
+    with patch.object(fw, "get_omi_github_releases", AsyncMock(return_value=[unspecified, published])):
+        stable = asyncio.run(fw.get_stable_version(device_model="Omi CV 1"))
+        assert stable["version"] == "3.0.15"
+
+        latest = asyncio.run(
+            fw.get_latest_version(
+                device_model="Omi CV 1",
+                firmware_revision="3.0.0",
+                hardware_revision="1.0",
+                manufacturer_name="Omi",
+            )
+        )
+        assert latest["version"] == "3.0.15"
