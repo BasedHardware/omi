@@ -368,7 +368,15 @@ def test_config_cohorts_has_only_standard_library_dependencies():
 
 
 def test_serving_composition_roots_bind_private_cohort_runtime():
-    for relative in ('main.py', 'pusher/main.py', 'scripts/dream-agent.py', 'scripts/dream-replay.py'):
+    for relative in (
+        'main.py',
+        'pusher/main.py',
+        'scripts/dream-agent.py',
+        'scripts/dream-replay.py',
+        'scripts/batch_pipeline_held_disposition.py',
+        'scripts/batch_pipeline_speech_redrive.py',
+        'scripts/batch_pipeline_terminal_empty.py',
+    ):
         text = (Path(__file__).parents[2] / relative).read_text()
         assert 'from utils.rollout_cohorts import configure_rollout_runtime' in text
         assert 'configure_rollout_runtime()' in text

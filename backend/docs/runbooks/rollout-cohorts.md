@@ -35,7 +35,8 @@ across flags. Positive, missing-document, negative, malformed-document and error
 results have a 60-second TTL. Concurrent misses for one UID share one read.
 Firestore reads have a one-second RPC timeout and SDK retries disabled. The
 serving composition roots (`main.py` and `pusher/main.py`) inject the cached
-resolver into the pure `config.rollout_cohorts` boundary. Configuration imports
+resolver into the pure `config.rollout_cohorts` boundary. Existing Dream and
+batch-recovery operator CLIs bind the same resolver at their entrypoints. Configuration imports
 no database or serving utilities. `database.rollout_cohorts` owns only lazy
 Firestore transport; `utils.rollout_cohorts` owns caching and the bounded executor. Async misses enqueue a bounded, isolated
 read and deny until it completes; listen and pusher await their initial read for
