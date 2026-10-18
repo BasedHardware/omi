@@ -9,6 +9,7 @@ import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/memory_graph_identity.dart';
 
 Future<Map<String, dynamic>> _emptyGraph() async => {'nodes': [], 'edges': []};
 
@@ -285,5 +286,25 @@ void main() {
     expect(calls, 2);
     expect(find.text('Old revision'), findsNothing);
     expect(find.byKey(const ValueKey('mind_map_memory_catalog')), findsNothing);
+  });
+
+  testWidgets('a changed graph clears stale selection highlights after refresh', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async => {
+              'nodes': [
+                {'id': ++calls == 1 ? 'first' : 'second', 'label': 'A memory entity'}
+              ],
+              'edges': [],
+            })));
+    await tester.pumpAndSettle();
+    final canvas = find.byWidgetPredicate((widget) => widget is CustomPaint && widget.painter is GraphPainter3D);
+    await tester.tapAt(tester.getCenter(canvas));
+    await tester.pumpAndSettle();
+    expect((tester.widget<CustomPaint>(canvas).painter as GraphPainter3D).highlightedNodeIds, isNotEmpty);
+    await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
+    await tester.pumpAndSettle();
+    expect((tester.widget<CustomPaint>(canvas).painter as GraphPainter3D).highlightedNodeIds, isEmpty);
   });
 }

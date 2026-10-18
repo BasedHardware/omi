@@ -4,9 +4,11 @@ The mobile Mind Map preserves a nonempty compatibility/shared graph. Empty or
 owner-only results recover through `GET /v1/knowledge-graph/canonical`, a bounded,
 revision-fenced projection of eligible, processed Long-term memories. Entity
 nodes and relationships come only from server graph assertions. The separate
-`catalog_nodes` collection represents saved memories even when their text cannot
+`catalog_nodes` response list represents saved memories even when their text cannot
 support a relationship. Mobile displays those records as readable memories,
 without synthesizing graph nodes or edges from their existence.
+The read and renderer share the owner-node predicate, so duplicate owner labels
+cannot hide saved memories and a single real entity remains visible.
 
 Each page carries a signed cursor. Show More reads the next page and deduplicates
 server IDs. The canvas retains the existing 200-entity overview bound, avoiding

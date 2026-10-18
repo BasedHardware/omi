@@ -77,7 +77,7 @@ void main() {
         throwsA(isA<Exception>().having((e) => e.toString(), 'message', isNot(contains('private diagnostics')))));
   });
 
-  test('legacy-only accounts keep their nonempty graph on canonical 503', () async {
+  test('a single real legacy entity stays visible without canonical recovery', () async {
     final result = await KnowledgeGraphApi.getKnowledgeGraph(
         apiCaller: (url) async => url.contains('/canonical')
             ? http.Response('{}', 503)
@@ -88,21 +88,21 @@ void main() {
     expect((result['nodes'] as List).single['id'], 'legacy');
   });
 
-  for (final code in [401, 403, 429, 500]) {
+  for (final code in [401, 403, 429, 500, 503]) {
     test('canonical $code is not silently converted to legacy success', () async {
       await expectLater(
           KnowledgeGraphApi.getKnowledgeGraph(
               apiCaller: (url) async => url.contains('/canonical')
                   ? http.Response('{}', code)
                   : _ok({
-                      'nodes': [_node('legacy')],
+                      'nodes': [_node('user-node')],
                       'edges': []
                     })),
           throwsException);
     });
   }
 
-  test('a session change discards the in-flight canonical response', () async {
+  test('a session change discards the in-flight response', () async {
     var current = true;
     var requests = 0;
     await expectLater(
@@ -204,4 +204,24 @@ void main() {
             {..._page(), '_owner_generation': 'same:1', '_backend_origin': 'second'}),
         throwsA(isA<KnowledgeGraphSessionChanged>()));
   });
+
+  for (final owners in [
+    [
+      {'id': 'user-node', 'label': 'Me', 'node_type': 'user'}
+    ],
+    [
+      {'id': 'owner-a', 'label': 'John', 'node_type': 'person'},
+      {'id': 'owner-b', 'label': 'The User', 'node_type': 'person'}
+    ],
+  ]) {
+    test('owner-only view with ${owners.length} nodes recovers the canonical catalog', () async {
+      final result = await KnowledgeGraphApi.getKnowledgeGraph(
+          ownerGivenName: 'John',
+          apiCaller: (url) async => _ok(url.contains('/canonical')
+              ? _page(catalog: [_node('memory:1', 'Saved fact')])
+              : {'nodes': owners, 'edges': []}));
+      expect(result['nodes'], isEmpty);
+      expect((result['catalog_nodes'] as List).single['label'], 'Saved fact');
+    });
+  }
 }

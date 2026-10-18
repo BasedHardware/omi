@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/memory_graph_identity.dart';
 
 class KnowledgeGraphApi {
-  static String get _baseUrl => '${Env.apiBaseUrl}v1/knowledge-graph';
-
   /// Short user-facing copy for a knowledge-graph HTTP failure.
   ///
   /// [statusCode] and [body] are accepted so a regression that interpolates
@@ -35,11 +35,18 @@ class KnowledgeGraphApi {
     String? cursor,
     @visibleForTesting Future<http.Response?> Function(String url)? apiCaller,
     @visibleForTesting bool Function()? isCurrent,
+    @visibleForTesting String ownerGivenName = '',
   }) async {
-    final baseUrl = _baseUrl;
+    // Capture explicit endpoint URLs before awaiting: the request stays pinned
+    // and the app-client schema inventory can see each public contract.
+    final origin = Env.apiBaseUrl;
+    final baseUrl = '${Env.apiBaseUrl}v1/knowledge-graph';
+    final canonicalUrl = '${Env.apiBaseUrl}v1/knowledge-graph/canonical';
     final session = apiCaller == null ? AuthService.instance.captureSessionSnapshot() : null;
+    final ownerLabels =
+        memoryGraphKnownUserLabels(apiCaller == null ? SharedPreferencesUtil().givenName : ownerGivenName);
     bool current() =>
-        _baseUrl == baseUrl &&
+        Env.apiBaseUrl == origin &&
         (isCurrent?.call() ??
             (apiCaller != null || (session != null && AuthService.instance.isSessionSnapshotCurrent(session))));
     Future<http.Response?> read(String url) async {
@@ -65,7 +72,7 @@ class KnowledgeGraphApi {
       if (compatibility?.statusCode == 200) {
         legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility!.body) as Map<String, dynamic>)
             .toJson();
-        if ((legacy['nodes'] as List).length > 1) {
+        if ((legacy['nodes'] as List).any((node) => !memoryGraphIsUserNode(node as Map, ownerLabels))) {
           return {
             ...legacy,
             '_backend_origin': baseUrl,
@@ -74,7 +81,7 @@ class KnowledgeGraphApi {
         }
       }
     }
-    final uri = Uri.parse('$baseUrl/canonical').replace(queryParameters: {
+    final uri = Uri.parse(canonicalUrl).replace(queryParameters: {
       'limit': '100',
       if (cursor != null) 'cursor': cursor,
     });
@@ -107,9 +114,7 @@ class KnowledgeGraphApi {
     if (cursor == null &&
         legacy != null &&
         (response?.statusCode == 404 ||
-            (response?.statusCode == 503 &&
-                (response?.headers['x-omi-knowledge-graph-state'] == 'unestablished' ||
-                    (legacy['nodes'] as List).isNotEmpty)))) {
+            (response?.statusCode == 503 && response?.headers['x-omi-knowledge-graph-state'] == 'unestablished'))) {
       return {
         ...legacy,
         '_backend_origin': baseUrl,
@@ -137,7 +142,8 @@ class KnowledgeGraphApi {
     })? apiCaller,
   }) async {
     final makeCall = apiCaller ?? makeApiCall;
-    final response = await makeCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
+    final response =
+        await makeCall(url: '${Env.apiBaseUrl}v1/knowledge-graph/rebuild', headers: {}, body: '{}', method: 'POST');
 
     if (response != null && response.statusCode == 200) {
       return wire.GeneratedRebuildResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();

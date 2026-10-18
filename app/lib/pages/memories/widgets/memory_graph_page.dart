@@ -23,6 +23,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/memory_graph_identity.dart';
 
 class GraphNode3D {
   final String id;
@@ -229,15 +230,6 @@ class ForceDirectedSimulation3D {
 String memoryGraphUserLabel(String givenName, AppLocalizations l10n) {
   final name = givenName.trim();
   return name.isNotEmpty ? name : l10n.you;
-}
-
-/// Lowercased graph labels that identify the user's own node: the backend's English labels
-/// plus the given name. The localized display fallback is not one of them, so a concept
-/// node that happens to read "tú" or "you" stays a concept.
-@visibleForTesting
-Set<String> memoryGraphKnownUserLabels(String givenName) {
-  final name = givenName.trim().toLowerCase();
-  return {'me', 'the user', if (name.isNotEmpty) name};
 }
 
 class MemoryGraphPage extends StatefulWidget {
@@ -472,6 +464,8 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
   }
 
   void _populateGraph(Map<String, dynamic> data) {
+    _selectedNodeId = null;
+    _highlightedNodeIds.clear();
     simulation.nodes.clear();
     simulation.edges.clear();
     simulation.nodeMap.clear();
@@ -484,11 +478,7 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
     final givenName = SharedPreferencesUtil().givenName;
     final userLabel = memoryGraphUserLabel(givenName, context.l10n);
     final knownUserLabels = memoryGraphKnownUserLabels(givenName);
-    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
-      final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
-      final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
-      return knownUserLabels.contains(label) || nodeType == 'user';
-    }
+    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) => memoryGraphIsUserNode(nodeData, knownUserLabels);
 
     String? primaryUserId;
     for (final nodeData in nodes) {
