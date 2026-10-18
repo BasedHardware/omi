@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync non-cohort secret env-var bindings from the backend-secrets Helm chart values
+# Sync all secret env-var bindings from the backend-secrets Helm chart values
 # file into the Cloud Run backend service(s) for a given environment.
 #
 # Background: api.omi.me / api.omiapi.com route to Cloud Run services that
@@ -8,7 +8,7 @@
 # updates the K8s ExternalSecret (via helm), but Cloud Run won't see it until
 # someone runs `gcloud run services update --update-secrets …` for each service.
 # This script does that automatically from the chart's `externalSecret.secretKeys`
-# list. Private cohort bindings stay on the normal per-service manifest path.
+# list, so every chart change reliably propagates.
 #
 # Usage:
 #   sync_cloudrun_secrets_from_chart.sh <env> [--project <gcp-project-id>] [<service> …]
@@ -16,9 +16,7 @@
 #   env       one of: dev | prod
 #   services  defaults to: backend backend-sync backend-integration
 #
-# Requires: Python 3 with PyYAML, gcloud authed for the target project.
-# Private cohorts are deliberately excluded: the normal manifest deploy owns their
-# per-service scope and atomic literal-to-secret migration.
+# Requires: yq (mikefarah), gcloud authed for the target project.
 # Project must be supplied via --project or GCP_PROJECT_ID.
 
 set -euo pipefail
@@ -66,17 +64,15 @@ if [ -z "$PROJECT" ]; then
   exit 2
 fi
 
-# Keep private selectors out of this legacy all-services bulk path.
-SECRETS_FLAG=$(python3 - "$VALUES_FILE" <<'PYCODE'
-import sys
-import yaml
-sys.path.insert(0, 'backend')
-from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES
-with open(sys.argv[1]) as handle:
-    keys = yaml.safe_load(handle)['externalSecret']['secretKeys']
-print(','.join(f"{row['secretKey']}={row['remoteKey']}:latest" for row in keys
-               if row['secretKey'] not in PRIVATE_COHORT_ENV_NAMES and row['remoteKey'] not in PRIVATE_COHORT_ENV_NAMES))
-PYCODE
+if ! command -v yq >/dev/null 2>&1; then
+  echo "yq (mikefarah) is required: https://github.com/mikefarah/yq" >&2
+  exit 2
+fi
+
+# Build "K=GCP_KEY:latest,K2=GCP_KEY2:latest,…" from the chart's secretKeys list.
+SECRETS_FLAG=$(
+  yq -r '.externalSecret.secretKeys[] | "\(.secretKey)=\(.remoteKey):latest"' "$VALUES_FILE" \
+    | paste -sd "," -
 )
 
 if [ -z "$SECRETS_FLAG" ]; then

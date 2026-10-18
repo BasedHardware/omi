@@ -99,8 +99,6 @@ env:
     value: "false"
   - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
     value: "false"
-  - name: DEMAND_PROCESSING_UID_ALLOWLIST
-    value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_ENABLED
@@ -161,11 +159,6 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
-  - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -182,8 +175,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -325,11 +316,6 @@ env:
     value: "cohort"
   - name: SPEAKER_GROUPING_SHADOW_PERCENT
     value: "10"
-  - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
   - name: SPEAKER_GROUPING_MODE
     value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
@@ -340,11 +326,6 @@ env:
     value: 'true'
   - name: DREAM_AGENT_ELIGIBILITY
     value: 'allowlist'
-  - name: DREAM_AGENT_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DREAM_AGENT_UID_ALLOWLIST
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
   - name: REVIEW_SURFACE_MODE
@@ -383,11 +364,6 @@ env:
     value: "60000"
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
-  - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -581,22 +557,12 @@ env:
     value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
-  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: STT_LIVE_DEMAND_UID_ALLOWLIST
   - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
     value: "15"
   - name: MOBILE_STANDARD_BATCH_ENABLED
     value: "true"
   - name: MOBILE_STANDARD_BATCH_PERCENT
     value: "0"
-  - name: MOBILE_STANDARD_BATCH_UIDS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: MOBILE_STANDARD_BATCH_UIDS
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: SONIOX_IDLE_CLOSE_SECONDS
@@ -685,8 +651,6 @@ env:
     value: "true"
   - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
     value: "100"
-  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
-    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS
@@ -815,11 +779,6 @@ env:
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
 
-  - name: BATCH_PIPELINE_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: BATCH_PIPELINE_UID_ALLOWLIST
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little

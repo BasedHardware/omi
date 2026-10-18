@@ -6,14 +6,6 @@ set -euo pipefail
 : "${ENVIRONMENT:?ENVIRONMENT must be set to dev or prod}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-namespace="${ENVIRONMENT}-omi-backend"
-# The existing pusher workflow calls this before both canary and shared Helm installs.
-# Validate private values in memory before creating either proposed ConfigMap.
-if [[ "$ENVIRONMENT" == prod && "${SERVICE:-}" == pusher ]]; then
-  kubectl -n "$namespace" get secret prod-omi-backend-secrets -o json | \
-    python3 "$script_dir/verify_k8s_secret_keys.py" \
-      "$script_dir/../charts/backend-secrets/prod_omi_backend_secrets_values.yaml"
-fi
 env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT
 
@@ -29,6 +21,7 @@ if [[ ! "$config_map" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || [[ "${#config_map
 fi
 python3 "$script_dir/render_gke_backend_config.py" --env "$ENVIRONMENT" "${manifest_args[@]}" --format env >"$env_file"
 
+namespace="${ENVIRONMENT}-omi-backend"
 key_count="$(wc -l <"$env_file" | tr -d ' ')"
 
 kubectl -n "$namespace" create configmap "$config_map" \

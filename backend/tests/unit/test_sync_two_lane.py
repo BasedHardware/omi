@@ -11,7 +11,7 @@ from google.cloud import firestore
 from database import sync_ledger, user_usage
 from scripts import render_cloud_run_clone_env
 from scripts.render_cloud_run_clone_env import clone_environment
-from scripts.render_backend_runtime_env import _render_env_vars, _render_secrets
+from scripts.render_backend_runtime_env import _render_env_vars
 from utils.sync import backfill, capture_manifest, content_id, lanes
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -1164,17 +1164,10 @@ def test_redis_failure_does_not_authorize_owner_takeover(monkeypatch):
 
 def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     manifest = yaml.load((REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
-    config = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']
-    env = config['env']
+    env = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']['env']
     stages = json.loads((REPOSITORY_ROOT / 'config/diarization-cohort-stages.json').read_text())
-    secret_names = {'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'}
-    expected = {key: env[key]['value'] for key in stages['A'] if key not in secret_names}
-    assert expected in [
-        {key: value for key, value in stage.items() if key not in secret_names} for stage in stages.values()
-    ]
-    for key in secret_names:
-        assert key not in env
-        assert config['secrets'][key] == {'secret': key, 'version': '1'}
+    expected = {key: env[key]['value'] for key in stages['A']}
+    assert expected in stages.values()
     action = yaml.load(
         (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
     )
@@ -1191,31 +1184,14 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
         'spec': {
             'template': {
                 'spec': {
-                    'containers': [
-                        {
-                            'env': [
-                                {'name': name, 'value': 'synthetic-owner' if name in secret_names else value}
-                                for name, value in {
-                                    **stages['A'],
-                                    **{key: 'synthetic-owner' for key in secret_names},
-                                }.items()
-                            ]
-                        }
-                    ]
+                    'containers': [{'env': [{'name': name, 'value': value} for name, value in stages['A'].items()]}]
                 }
             }
         }
     }
     cohort_env = {key: env[key] for key in expected}
-    assert clone_step['env']['SECRET_OVERLAY'] == '${{ inputs.backfill_secrets }}'
-    assert deploy_step['with']['secrets'] == '${{ steps.backfill-runtime.outputs.secrets }}'
-    cohort_secrets = {key: config['secrets'][key] for key in secret_names}
-    values, secrets = clone_environment(
-        source, _render_env_vars(cohort_env), _render_secrets(cohort_secrets), clone_step['env']['REMOVE_ENV_VARS']
-    )
-    assert set(secrets.splitlines()) == {f'{key}={key}:1' for key in secret_names}
+    values, _ = clone_environment(source, _render_env_vars(cohort_env), '', clone_step['env']['REMOVE_ENV_VARS'])
     rendered = dict(line.split('=', 1) for line in values.splitlines())
     assert {key: rendered[key] for key in expected} == expected
-    assert not secret_names & rendered.keys()
     assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
     assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))

@@ -113,8 +113,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
           category: rollout
@@ -189,9 +187,6 @@ environment_shared:
           category: rollout
         TRANSLATION_ONDEMAND_COHORT_PERCENT:
           value: '100'
-          category: rollout
-        TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-          value: ''
           category: rollout
         TRANSLATION_ONDEMAND_MAX_SEGMENTS:
           value: '50'
@@ -279,7 +274,6 @@ environment_shared:
         DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         STT_RESILIENT_RECONNECT:
           value: 'false'
@@ -642,8 +636,6 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
           category: rollout
@@ -708,7 +700,6 @@ environment_shared:
         DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
         DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-        DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
         DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
@@ -849,7 +840,6 @@ environment_shared:
       DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
       DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
       DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-      DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
       DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       GCP_LOCATION:
         value: us-central1
@@ -1014,8 +1004,6 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
             category: rollout
@@ -1142,9 +1130,6 @@ environment_shared:
           TRANSLATION_ONDEMAND_COHORT_PERCENT:
             value: '100'
             category: rollout
-          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           TRANSLATION_ONDEMAND_MAX_SEGMENTS:
             value: '50'
             category: rollout
@@ -1243,7 +1228,6 @@ environment_shared:
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
@@ -1358,9 +1342,6 @@ environment_shared:
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: 'off'
             category: rollout
@@ -1450,8 +1431,6 @@ environment_shared:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
-            category: rollout
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
             category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
@@ -1630,7 +1609,6 @@ environment_shared:
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
@@ -1774,9 +1752,6 @@ environment_shared:
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: 'off'
             category: rollout
@@ -1856,8 +1831,6 @@ environment_shared:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
-            category: rollout
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
             category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
@@ -2032,7 +2005,6 @@ environment_shared:
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
@@ -2155,9 +2127,6 @@ environment_shared:
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: 'off'
             category: rollout
@@ -2239,8 +2208,6 @@ environment_shared:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
-            category: rollout
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
             category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
@@ -2388,7 +2355,6 @@ environment_shared:
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
@@ -2547,7 +2513,6 @@ environment_shared:
           DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
-          DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
       x-connector-sync-job:
         flags:
@@ -2949,8 +2914,6 @@ environment_shared:
             category: memory_rollout
           KNOWLEDGE_LEDGER_DRAIN_ENABLED:
             value: 'false'
-            category: memory_rollout
-          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             category: memory_rollout
       day3-reengagement-email-job:
         flags:

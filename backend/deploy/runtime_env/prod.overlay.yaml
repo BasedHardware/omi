@@ -41,8 +41,6 @@ overlay:
           value: based-hardware-batch-pipeline-staging
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: ''
         AUDIO_TIMELINE_SPANS:
           value: 'true'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -64,11 +62,6 @@ overlay:
           value: ''
         STT_LIVE_DEMAND_ENABLED:
           value: 'true'
-        STT_LIVE_DEMAND_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: STT_LIVE_DEMAND_UID_ALLOWLIST
-          category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
         STT_ROUTING_MODE:
@@ -102,11 +95,6 @@ overlay:
         DREAM_AGENT_ENABLED:
           value: 'true'
           category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: DREAM_AGENT_UID_ALLOWLIST
-          category: rollout
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: telemetry
@@ -133,11 +121,6 @@ overlay:
         SPEAKER_GROUPING_SHADOW_PERCENT:
           value: '10'
           category: rollout
-        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-          category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
           category: rollout
@@ -158,11 +141,6 @@ overlay:
           category: rollout
         MOBILE_STANDARD_BATCH_PERCENT:
           value: '0'
-          category: rollout
-        MOBILE_STANDARD_BATCH_UIDS:
-          secret:
-            name: prod-omi-backend-secrets
-            key: MOBILE_STANDARD_BATCH_UIDS
           category: rollout
         SONIOX_IDLE_CLOSE_SECONDS:
           value: '45'
@@ -235,27 +213,10 @@ overlay:
         NOTES_TIER_ESCALATION_ENABLED:
           value: 'true'
           category: rollout
-        SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-          category: rollout
-        BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
-          category: rollout
-        BATCH_PIPELINE_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: BATCH_PIPELINE_UID_ALLOWLIST
-          category: rollout
     pusher:
       env:
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: ''
         AUDIO_TIMELINE_SPANS:
           value: 'true'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -288,11 +249,6 @@ overlay:
         TRANSCRIPTION_FINAL_PASS_BACKEND:
           value: pyannote
           category: rollout
-        TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
-          category: rollout
         TRANSCRIPTION_FINAL_PASS_PERCENT:
           value: '5'
           category: rollout
@@ -308,11 +264,6 @@ overlay:
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
           category: rollout
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
-          category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '5'
           category: rollout
@@ -327,11 +278,6 @@ overlay:
           category: rollout
         DREAM_AGENT_ENABLED:
           value: 'true'
-          category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: DREAM_AGENT_UID_ALLOWLIST
           category: rollout
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
@@ -362,11 +308,6 @@ overlay:
           category: rollout
         SPEAKER_GROUPING_SHADOW_PERCENT:
           value: '10'
-          category: rollout
-        SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-          secret:
-            name: prod-omi-backend-secrets
-            key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
           category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
@@ -502,30 +443,6 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            secret: BATCH_PIPELINE_UID_ALLOWLIST
-            version: "1"
-          DREAM_AGENT_UID_ALLOWLIST:
-            secret: DREAM_AGENT_UID_ALLOWLIST
-            version: "1"
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-            version: "1"
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-            version: "1"
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
-            version: "1"
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
-            version: "1"
-          OMI_MESSAGING_CHANNELS_UIDS:
-            secret: OMI_MESSAGING_CHANNELS_UIDS
-            version: "1"
-          OMI_MESSAGING_CHANNEL_POLICY:
-            secret: OMI_MESSAGING_CHANNEL_POLICY
-            version: "1"
         env:
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -546,8 +463,6 @@ overlay:
             value: syncing-local
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -607,6 +522,9 @@ overlay:
             category: rollout
           OMI_MESSAGING_CHANNELS:
             value: 'on'
+            category: rollout
+          OMI_MESSAGING_CHANNEL_POLICY:
+            value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":[],"seat_cap":"off"}}'
             category: rollout
           OMI_TELEGRAM_STREAMING:
             value: none
@@ -831,30 +749,6 @@ overlay:
           DREAM_AGENT_FEEDBACK_SALT:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            secret: BATCH_PIPELINE_UID_ALLOWLIST
-            version: "1"
-          DREAM_AGENT_UID_ALLOWLIST:
-            secret: DREAM_AGENT_UID_ALLOWLIST
-            version: "1"
-          FIRST_SUMMARY_UID_ALLOWLIST:
-            secret: FIRST_SUMMARY_UID_ALLOWLIST
-            version: "1"
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-            version: "1"
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            secret: SYNC_LEGACY_FRESH_UID_ALLOWLIST
-            version: "1"
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-            version: "1"
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
-            version: "1"
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
-            version: "1"
         env:
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -879,8 +773,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -1222,8 +1114,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -1514,31 +1404,6 @@ overlay:
             value: '7200'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-        secrets:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            secret: BATCH_PIPELINE_UID_ALLOWLIST
-            version: "1"
-          DREAM_AGENT_UID_ALLOWLIST:
-            secret: DREAM_AGENT_UID_ALLOWLIST
-            version: "1"
-          FIRST_SUMMARY_UID_ALLOWLIST:
-            secret: FIRST_SUMMARY_UID_ALLOWLIST
-            version: "1"
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-            version: "1"
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            secret: SYNC_LEGACY_FRESH_UID_ALLOWLIST
-            version: "1"
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-            version: "1"
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
-            version: "1"
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
-            version: "1"
       backend-integration:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -1568,8 +1433,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -1715,25 +1578,6 @@ overlay:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-        secrets:
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            secret: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
-            version: "1"
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            secret: BATCH_PIPELINE_UID_ALLOWLIST
-            version: "1"
-          DREAM_AGENT_UID_ALLOWLIST:
-            secret: DREAM_AGENT_UID_ALLOWLIST
-            version: "1"
-          FIRST_SUMMARY_UID_ALLOWLIST:
-            secret: FIRST_SUMMARY_UID_ALLOWLIST
-            version: "1"
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-            version: "1"
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-            version: "1"
     jobs:
       notifications-job:
         flags:
@@ -1810,8 +1654,6 @@ overlay:
             secret: SERVICE_ACCOUNT_JSON
             version: latest
         env:
-          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
-            value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:

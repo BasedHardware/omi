@@ -134,8 +134,6 @@ env:
     value: "false"
   - name: DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
     value: "false"
-  - name: DEMAND_PROCESSING_UID_ALLOWLIST
-    value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
@@ -162,8 +160,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -175,11 +171,6 @@ env:
     value: 'true'
   - name: DREAM_AGENT_ELIGIBILITY
     value: 'allowlist'
-  - name: DREAM_AGENT_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DREAM_AGENT_UID_ALLOWLIST
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
@@ -334,11 +325,6 @@ env:
     value: "cohort"
   - name: SPEAKER_GROUPING_SHADOW_PERCENT
     value: "10"
-  - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
   - name: SPEAKER_GROUPING_MODE
     value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
@@ -364,11 +350,6 @@ env:
     value: "pyannote_shadow"
   - name: TRANSCRIPTION_FINAL_PASS_BACKEND
     value: "pyannote"
-  - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
     value: "5"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
@@ -384,11 +365,6 @@ env:
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
     value: "false"
-  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
   - name: TRANSCRIPTION_SHADOW_PERCENT
     value: "5"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS

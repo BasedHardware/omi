@@ -12,6 +12,8 @@ import asyncio
 import hashlib
 import logging
 import os
+
+from database.rollout_cohorts import in_rollout_cohort
 import re
 import threading
 import time
@@ -110,10 +112,7 @@ def _enabled(uid: str, conversation: Conversation) -> bool:
         return False
     if not conversation.private_cloud_sync_enabled or conversation.discarded or conversation.uses_custom_stt:
         return False
-    allowlist = {
-        item.strip() for item in os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', '').split(',') if item.strip()
-    }
-    if uid in allowlist:
+    if in_rollout_cohort(uid, 'transcription-shadow'):
         return True
     percent = max(0.0, min(100.0, float(os.getenv('TRANSCRIPTION_SHADOW_PERCENT', '0'))))
     bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100

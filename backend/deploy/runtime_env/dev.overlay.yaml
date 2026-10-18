@@ -8,16 +8,12 @@ overlay:
   gke:
     backend-listen:
       env:
-        BATCH_PIPELINE_UID_ALLOWLIST:
-          value: ''
         BATCH_PIPELINE_API_URL:
           value: ''
         BUCKET_BATCH_PIPELINE:
           value: ''
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         AUDIO_TIMELINE_SPANS:
           value: 'false'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -41,9 +37,6 @@ overlay:
             key: FREE_TIER_LOCAL_PROCESSING_COHORT
         STT_LIVE_DEMAND_ENABLED:
           value: 'false'
-        STT_LIVE_DEMAND_UID_ALLOWLIST:
-          category: rollout
-          value: ''
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'false'
         STT_ROUTING_MODE:
@@ -77,9 +70,6 @@ overlay:
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
-          category: rollout
-          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -87,9 +77,6 @@ overlay:
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
-          category: rollout
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: ''
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '0'
@@ -109,18 +96,10 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
-        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
-          category: rollout
-        BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-          value: ''
-          category: rollout
     pusher:
       env:
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         AUDIO_TIMELINE_SPANS:
           value: 'false'
         LIVE_SPEAKER_SPAN_RESOLUTION:
@@ -149,9 +128,6 @@ overlay:
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
-          category: rollout
-          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -159,9 +135,6 @@ overlay:
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
-          category: rollout
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: omi-release-probe
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '0'
@@ -199,9 +172,6 @@ overlay:
           category: rollout
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
-        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
-          category: rollout
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -375,8 +345,6 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
@@ -385,8 +353,6 @@ overlay:
             value: syncing-local-development
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -412,9 +378,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            category: rollout
-            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
@@ -449,9 +412,6 @@ overlay:
             category: rollout
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             value: '0'
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
       backend-sync:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -466,8 +426,6 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: ''
           BATCH_PIPELINE_WORKER_AUDIENCE:
@@ -478,8 +436,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -504,9 +460,6 @@ overlay:
             value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            category: rollout
-            value: ''
           SYNC_LEGACY_FRESH_PERCENT:
             value: '0'
           SYNC_LEGACY_FRESH_HOURLY_TOKENS:
@@ -522,9 +475,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            category: rollout
-            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:
@@ -532,9 +482,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: ''
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '0'
@@ -573,9 +520,6 @@ overlay:
             value: '0'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -590,16 +534,12 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -626,9 +566,6 @@ overlay:
             value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            category: rollout
-            value: ''
           SYNC_LEGACY_FRESH_PERCENT:
             value: '0'
           SYNC_LEGACY_FRESH_HOURLY_TOKENS:
@@ -642,9 +579,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            category: rollout
-            value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -668,9 +602,6 @@ overlay:
             value: '0'
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
             value: '0'
-          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
       backend-integration:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -685,8 +616,6 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
           BATCH_PIPELINE_API_URL:
@@ -695,8 +624,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
@@ -718,9 +645,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            category: rollout
-            value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -740,9 +664,6 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
     jobs:
       notifications-job:
         flags:
@@ -821,8 +742,6 @@ overlay:
         flags:
           --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
-          KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
-            value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:

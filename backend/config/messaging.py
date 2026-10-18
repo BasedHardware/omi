@@ -2,32 +2,9 @@
 
 import json
 import os
+
+from database.rollout_cohorts import in_rollout_cohort
 from urllib.parse import quote
-
-
-def validate_channel_policy(channel, row):
-    """Validate and normalize one policy row; deployment gates reuse runtime rules."""
-    cohort = row.get('cohort', [])
-    plans = row.get(
-        'plans',
-        None if row.get('seat_cap') == 'off' else ['operator', 'architect'] if channel == 'imessage' else None,
-    )
-    cap = row.get('seat_cap', 180 if channel == 'imessage' else None)
-    if cap == 'off':
-        cap = None
-    if channel == 'imessage' and (row.get('seat_cap') != 'off' and (plans is None or cap is None)):
-        raise ValueError('iMessage requires a plan set and seat cap')
-    if not isinstance(row.get('enabled'), bool) or not (
-        cohort == '*' or isinstance(cohort, list) and all(isinstance(v, str) for v in cohort)
-    ):
-        raise ValueError('Invalid policy')
-    if channel == 'imessage' and 'plans' in row and plans is None:
-        raise ValueError('Invalid plans')
-    if plans is not None and (not isinstance(plans, list) or not all(isinstance(v, str) for v in plans)):
-        raise ValueError('Invalid plans')
-    if cap is not None and (type(cap) is not int or cap < 0):
-        raise ValueError('Invalid cap')
-    return dict(row, cohort=cohort, plans=plans, seat_cap=cap)
 
 
 def channel_policy(channel):
@@ -41,7 +18,27 @@ def channel_policy(channel):
     try:
         policies = json.loads(raw)
         row = policies.get(channel, {})
-        return validate_channel_policy(channel, row)
+        cohort = row.get('cohort', [])
+        plans = row.get(
+            'plans',
+            None if row.get('seat_cap') == 'off' else ['operator', 'architect'] if channel == 'imessage' else None,
+        )
+        cap = row.get('seat_cap', 180 if channel == 'imessage' else None)
+        if cap == 'off':
+            cap = None
+        if channel == 'imessage' and (row.get('seat_cap') != 'off' and (plans is None or cap is None)):
+            raise ValueError('iMessage requires a plan set and seat cap')
+        if not isinstance(row.get('enabled'), bool) or not (
+            cohort == '*' or isinstance(cohort, list) and all(isinstance(v, str) for v in cohort)
+        ):
+            raise ValueError('Invalid policy')
+        if channel == 'imessage' and 'plans' in row and plans is None:
+            raise ValueError('Invalid plans')
+        if plans is not None and (not isinstance(plans, list) or not all(isinstance(v, str) for v in plans)):
+            raise ValueError('Invalid plans')
+        if cap is not None and (type(cap) is not int or cap < 0):
+            raise ValueError('Invalid cap')
+        return dict(row, cohort=cohort, plans=plans, seat_cap=cap)
     except (ValueError, TypeError, AttributeError):
         return {'enabled': False, 'cohort': []}
 
@@ -50,7 +47,10 @@ def cohort_enabled(uid, channel=None):
     if channel is None:
         return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
     policy = channel_policy(channel)
-    return policy['enabled'] and (policy['cohort'] == '*' or uid in policy['cohort'])
+    return policy['enabled'] and (
+        policy['cohort'] == '*'
+        or in_rollout_cohort(uid, 'messaging-' + channel, legacy_members=tuple(policy['cohort']))
+    )
 
 
 def channel_enabled(channel):

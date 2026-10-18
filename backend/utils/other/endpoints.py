@@ -263,6 +263,9 @@ def get_current_user_uid(
 
     _recover_locked_content_if_request(uid, request)
 
+    from database.rollout_cohorts import load_rollout_cohorts
+
+    load_rollout_cohorts(uid)
     return uid
 
 

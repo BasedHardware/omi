@@ -46,9 +46,7 @@ def test_desktop_cloud_run_receives_existing_gemini_secret_and_provider_switch()
 
 
 def test_runtime_manifest_tracks_gemini_tts_bindings():
-    manifest = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=yaml.CSafeLoader)[
-        'environments'
-    ]
+    manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))['environments']
     for environment in ('dev', 'prod'):
         backend_env = manifest[environment]['gke']['backend-listen']['env']
         assert backend_env['TTS_PROVIDER']['value'] == 'gemini'

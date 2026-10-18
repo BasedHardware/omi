@@ -189,6 +189,9 @@ async def _websocket_util_trigger(
         await websocket.close(code=1001)
         return
 
+    from database.rollout_cohorts import warm_rollout_cohorts
+
+    await warm_rollout_cohorts(uid)
     journey_attempt = JourneyAttempt('pusher_session')
     websocket_active = True
     shutdown_event = asyncio.Event()

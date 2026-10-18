@@ -17,26 +17,22 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
     ]['prod']
     binding = manifest['gke']['pusher']['env'] if host == 'pusher' else manifest['cloud_run']['services'][host]['env']
     stages = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())
-    keys = tuple(key for key in stages['A'] if not key.endswith('UID_ALLOWLIST'))
+    keys = tuple(stages['A'])
     selected = {key: binding[key]['value'] for key in keys}
-    assert selected == {key: value for key, value in stages['E'].items() if key in keys}
+    assert selected == stages['E']
     assert selected == {key: manifest['gke']['pusher']['env'][key]['value'] for key in keys}
     for key, value in selected.items():
         monkeypatch.setenv(key, value)
-    uid = 'synthetic-owner'
-    for key in ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'):
-        if host == 'pusher':
-            assert binding[key] == {'secret': {'name': 'prod-omi-backend-secrets', 'key': key}, 'category': 'rollout'}
-        else:
-            assert key not in binding
-            assert manifest['cloud_run']['services'][host]['secrets'][key] == {'secret': key, 'version': '1'}
-        monkeypatch.setenv(key, uid)
+    uid = 'synthetic-rollout-member'
+    monkeypatch.setattr(flags, 'in_rollout_cohort', lambda owner, name: owner == uid)
+    assert 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST' not in binding
     assert flags.enabled_for(uid)
     assert not flags.enabled_for('synthetic-outside-cohort')
     assert flags.authoritative_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == 'true')
     assert flags.sync_enabled_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == 'true')
     assert selected['TRANSCRIPTION_FINAL_PASS_BACKEND'] == 'pyannote'
     assert selected['HOSTED_DIARIZATION_API_URL'] == 'http://172.16.160.20/diarizer-batch'
+    assert 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST' not in binding
     assert binding['TRANSCRIPTION_SHADOW_PERCENT']['value'] == selected['TRANSCRIPTION_FINAL_PASS_PERCENT']
     if host == 'pusher':
         chart = yaml.load(
@@ -73,10 +69,6 @@ def test_prepared_cohort_does_not_enable_integration_or_dev():
 )
 def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, authoritative, cap):
     values = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())[stage]
-    assert not any(key.endswith('UID_ALLOWLIST') for key in values)
-    owner = 'synthetic-owner'
-    for key in ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'):
-        monkeypatch.setenv(key, owner)
     for key, value in values.items():
         monkeypatch.setenv(key, value)
     assert values['TRANSCRIPTION_FINAL_PASS_PERCENT'] == values['TRANSCRIPTION_SHADOW_PERCENT'] == percent
@@ -89,8 +81,11 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
     assert values['TRANSCRIPTION_SHADOW_ENABLED'] == 'true'
     assert values['TRANSCRIPTION_SHADOW_KILL_SWITCH'] == 'false'
     assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == ('false' if stage == 'A' else 'true')
-    assert flags.sync_enabled_for(owner) == (stage != 'A')
-    assert flags.enabled_for(owner)
+    uid = 'synthetic-rollout-member'
+    monkeypatch.setattr(flags, 'in_rollout_cohort', lambda owner, name: owner == uid)
+    assert flags.sync_enabled_for(uid) == (stage != 'A')
+    assert not any('UID_ALLOWLIST' in key for key in values)
+    assert flags.enabled_for(uid)
     if percent == '0':
         assert not flags.enabled_for('synthetic-outside-cohort')
     else:

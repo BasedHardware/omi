@@ -276,3 +276,22 @@ def isolated_dream_dynamic_control(monkeypatch):
     monkeypatch.setattr(dream_control, '_until', float('inf'))
     monkeypatch.setattr(dream_control, '_allowed', True)
     monkeypatch.setattr(dream_control, '_refreshing', False)
+
+
+@pytest.fixture(autouse=True)
+def empty_rollout_cohorts(monkeypatch):
+    """Unit fixtures have no cohort documents unless the test supplies a store/cache."""
+    from concurrent.futures import Future
+    import database.rollout_cohorts as cohorts
+
+    class EmptyCache:
+        def get(self, _key):
+            return {}
+
+        def request(self, _key, **_kwargs):
+            future = Future()
+            future.set_result({})
+            return future
+
+    monkeypatch.setattr(cohorts, '_cache', EmptyCache())
+    monkeypatch.setattr(cohorts, '_member_cache', type('EmptyMembers', (), {'get': lambda self, key: ()})())

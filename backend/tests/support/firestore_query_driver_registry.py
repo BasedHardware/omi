@@ -3018,3 +3018,12 @@ _add(
         domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
     )
 )
+
+# Background-only discovery. Each boolean field has its own automatic single-field
+# index; point reads of all memberships on serving requests need no query index.
+_add(
+    DriverEntry(
+        'database.rollout_cohorts._read_cohort_members',
+        domains={'name': ['batch-pipeline-recovery', 'dream-agent']},
+    )
+)

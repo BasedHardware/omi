@@ -13,6 +13,9 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     from database.batch_pipeline_purge import purge_batch_owner
 
     purge_batch_owner(uid)
+    # Membership is user data outside the recursive users/{uid} subtree. A
+    # failed delete must propagate so the account wipe retries it.
+    client.collection('rollout_cohorts').document(uid).delete()
     user_ref = client.collection('users').document(uid)
     root_exists = user_ref.get().exists
 

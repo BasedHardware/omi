@@ -147,13 +147,6 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
-Production UID cohorts are supplied by Secret Manager through the existing
-backend-secrets ExternalSecret and explicit pod `secretKeyRef` bindings. Cloud
-Run receives the corresponding secret refs in the same revision that removes
-its retained literals. Provisioning, ordering, verification and rollback:
-[private allowlists](runbooks/allowlist-secrets.md). This migration keeps live
-batch admission off and adds no batch-admission selector to pusher.
-
 Production backend-listen and pusher set `DREAM_AGENT_MODE=on` (owner dogfood since 2026-10-11) with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
 Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
@@ -5540,3 +5533,5 @@ not qualify. The flag does not change admission, integration recovery gates,
 or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
+
+Private user rollout membership on listen and pusher uses the shared [Firestore cohort cache](runbooks/rollout-cohorts.md). Membership changes do not require a Helm env override.

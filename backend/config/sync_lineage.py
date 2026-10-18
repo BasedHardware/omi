@@ -13,19 +13,22 @@ kill switch can never leave the feature running. Off restores the previous
 whole-batch ``recording_session_target`` resolution and writes no origin stamp.
 
 ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST`` stages the rollout: comma-separated uids,
-whitespace-trimmed; empty or unset admits every user. It gates every behavior
+whitespace-trimmed; explicitly empty retains legacy enable-all. An absent key
+uses the shared Firestore rollout cohort and denies nonmembers. It gates every behavior
 that changes a sync append into, or a live write onto, a user's rows (per-segment
 binding, the pinned live origin, the live revision fence, the open-live enrichment
 deferral), so a uid outside it behaves exactly as with the kill switch off. The
 metadata-only origin stamp stays under the kill switch alone: widening later
 needs lineage that was already stamped. The kill switch wins over the allowlist.
 
-Pure module: stdlib only, the flags are read at the call boundary, never at import.
+Flags are read at the call boundary; membership uses the bounded Firestore cache.
 """
 
 from __future__ import annotations
 
 import os
+
+from database.rollout_cohorts import in_rollout_cohort
 
 SYNC_LINEAGE_RESOLVE_ENV = 'SYNC_LINEAGE_RESOLVE_ENABLED'
 SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV = 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST'
@@ -40,10 +43,11 @@ def sync_lineage_resolve_enabled() -> bool:
 
 
 def sync_lineage_resolve_uid_allowed(uid: object) -> bool:
-    """An empty allowlist admits every user; a non-empty one admits only its members."""
+    """An absent key uses Firestore; explicit legacy empty still admits every user."""
     allowlist = {item.strip() for item in os.getenv(SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '').split(',')}
     allowlist.discard('')
-    return not allowlist or (isinstance(uid, str) and uid in allowlist)
+    legacy_all = SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV in os.environ and not allowlist
+    return isinstance(uid, str) and in_rollout_cohort(uid, 'sync-lineage-resolve', legacy_all=legacy_all)
 
 
 def sync_lineage_resolve_active_for(uid: object) -> bool:

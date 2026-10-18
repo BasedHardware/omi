@@ -13,8 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES
-
 _SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render_backend_runtime_env.py'
 _MODULE = runpy.run_path(str(_SCRIPT), run_name='render_backend_runtime_env')
 _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
@@ -281,10 +279,10 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
-    approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
+    approved_allowlists = set()
     if isinstance(node, dict):
         for key, value in node.items():
-            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+            if key in approved_allowlists:
                 continue
             if _contains_uid_outside_approved_allowlists(value, uid):
                 return True
@@ -919,29 +917,13 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
-    cohorts = {
-        'DREAM_AGENT_UID_ALLOWLIST',
-        'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST',
-        'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
-        'BATCH_PIPELINE_UID_ALLOWLIST',
-    }
-    for service in baseline:
-        baseline[service] |= cohorts
-        if service != 'backend-integration':
-            baseline[service] |= {'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'}
-        if service in {'backend-sync', 'backend-sync-backfill'}:
-            baseline[service].add('SYNC_LEGACY_FRESH_UID_ALLOWLIST')
-        if service != 'backend':
-            baseline[service].add('FIRST_SUMMARY_UID_ALLOWLIST')
-    baseline['backend-integration'].add('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST')
-    baseline['backend'] |= {'OMI_MESSAGING_CHANNELS_UIDS', 'OMI_MESSAGING_CHANNEL_POLICY'}
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
         refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])
         assert {
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
-        } == {(name, name, '1' if name in PRIVATE_COHORT_ENV_NAMES else 'latest') for name in names}, service
+        } == {(name, name, 'latest') for name in names}, service
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')

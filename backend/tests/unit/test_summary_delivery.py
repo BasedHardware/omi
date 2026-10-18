@@ -12,7 +12,7 @@ from utils.conversations.deterministic_minimum import build_deterministic_minimu
 @pytest.fixture
 def enabled(monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
 
 def minimum():

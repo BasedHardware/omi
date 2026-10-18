@@ -150,6 +150,7 @@ def _coverage_env(monkeypatch, coverage_flag=None):
         'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
     if coverage_flag is not None:
         monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', coverage_flag)
 
@@ -1059,7 +1060,7 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
     monkeypatch.delenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
     base_ts = 1_760_000_000 + skew
     stem = f'audio_pcm16_{int(base_ts)}'
@@ -1336,7 +1337,7 @@ def test_receipt_only_full_coverage_preserves_the_wal_untouched(real_pipeline, m
     monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
     monkeypatch.delenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
 
     wav_path = tmp_path / f'{WAV_STEM}.wav'
     _write_labeled_wav(wav_path, range(10))

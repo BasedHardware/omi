@@ -62,7 +62,6 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
         'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
         'TRANSLATION_ONOPEN_ENABLED',
         'TRANSLATION_ONDEMAND_COHORT_PERCENT',
-        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
         'TRANSLATION_ONDEMAND_MAX_CHARS',
         'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
@@ -85,7 +84,6 @@ _DEMAND_LISTEN_ONLY = frozenset(
     {
         'STT_LIVE_DEMAND_ENABLED',
         'STT_LIVE_DEMAND_PERCENT',
-        'STT_LIVE_DEMAND_UID_ALLOWLIST',
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
@@ -94,7 +92,6 @@ _DEMAND_LISTEN_ONLY = frozenset(
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
         'BATCH_PIPELINE_ENABLED',
-        'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_PERCENT',
         'BATCH_PIPELINE_SERVING_ENABLED',
         'BATCH_PIPELINE_API_URL',
@@ -112,7 +109,6 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',
         'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED',
         'BATCH_PIPELINE_RECOVERY_MODE',
-        'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
         'BUCKET_BATCH_PIPELINE',
     }
 )
@@ -222,7 +218,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
-            "MOBILE_STANDARD_BATCH_UIDS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -257,7 +252,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Staged sync-lineage rollout: the live revision fence runs in listen
             # transcript writes; pusher reaches no sync intake or live-write site.
-            "SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
             "STT_ROUTING_MODE",
@@ -333,8 +327,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
 # authoritative final pass from stage B. Backend-listen must stay excluded. Validate
 # exact literals below as well as names, rather than exempting arbitrary values.
-PROD_PRIVATE_COHORT_NAMES = frozenset({'TRANSCRIPTION_SHADOW_UID_ALLOWLIST', 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'})
-
 PROD_FINAL_PASS_SHADOW_VALUES = {
     "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
     "TRANSCRIPTION_FINAL_PASS_DIARIZER": ("pyannote_shadow", None),
@@ -359,13 +351,11 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Process-local final-pass shadow is admitted only on the prod pusher.
             "TRANSCRIPTION_SHADOW_ENABLED",
             "TRANSCRIPTION_SHADOW_KILL_SWITCH",
-            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
     )
-    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
-    | PROD_PRIVATE_COHORT_NAMES,
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the
@@ -384,7 +374,6 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
             "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
             "STT_SERVICE_MODELS",
             "TRANSCRIPTION_SHADOW_ENABLED",
-            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
             # Backend-listen publishes queue age; pusher stays explicitly disabled.
             "FSR_QUEUE_AGE_PUBLISHER",
@@ -399,7 +388,6 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
 DEV_SHADOW_VALUES = {
     "TRANSCRIPTION_SHADOW_ENABLED": ("true", "false"),
     "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", "false"),
-    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("omi-release-probe", ""),
     "TRANSCRIPTION_SHADOW_PERCENT": ("0", "0"),
     "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", "0"),
 }
@@ -422,7 +410,6 @@ class EnvEntry:
     value: str | None
     secret_key: str | None
     config_map_key: str | None
-    secret_name: str | None = None
 
 
 def _values_path(root: Path, service: str, env: str) -> Path:
@@ -476,7 +463,6 @@ def parse_env_entries(text: str) -> dict[str, EnvEntry]:
             name=current,
             value=value,
             secret_key=secret_match.group(2) if secret_match else None,
-            secret_name=secret_match.group(1) if secret_match else None,
             config_map_key=config_match.group(2) if config_match else None,
         )
         current = None
@@ -508,24 +494,6 @@ def _read_values(root: Path, service: str, env: str) -> tuple[dict[str, EnvEntry
     except OSError as exc:
         raise DiffError(f"could not read {path}: {exc}") from exc
     return parse_env_entries(text), parse_envfrom_configmaps(text)
-
-
-def _private_cohort_source_matches(name: str, entry: EnvEntry | None) -> bool:
-    return (
-        entry is not None
-        and entry.value is None
-        and entry.secret_name == 'prod-omi-backend-secrets'
-        and entry.secret_key == name
-    )
-
-
-def _prod_scope_matches(name: str, entry: EnvEntry | None, expected: str) -> bool:
-    if entry is None:
-        return False
-    if name in PROD_PRIVATE_COHORT_NAMES:
-        # Membership is private. Verify its exact source; the lead verifies payload equality.
-        return _private_cohort_source_matches(name, entry)
-    return entry.value == expected
 
 
 def validate_preflight(root: Path = ROOT) -> list[str]:
@@ -573,6 +541,10 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                     f"pusher={pusher_entry.value!r} listen={listen_entry.value!r}"
                 )
 
+        for name in set(listen_env) | set(pusher_env):
+            if name.endswith('_UID_ALLOWLIST') or name == 'MOBILE_STANDARD_BATCH_UIDS':
+                errors.append(f'[{env}] {name} must be absent; cohort membership lives in Firestore')
+
         listen_only = set(listen_env) - set(pusher_env)
         pusher_only = set(pusher_env) - set(listen_env)
         allowed_listen = LISTEN_ONLY_ALLOWED[env]
@@ -602,20 +574,12 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
         # Accept only a complete reviewed stage, never independently widened flags.
         prod_scope = {**PROD_SHADOW_VALUES, **PROD_FINAL_PASS_SHADOW_VALUES}
         if env == "prod":
-            for name in ('DREAM_AGENT_UID_ALLOWLIST', 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST'):
-                if not all(_private_cohort_source_matches(name, host.get(name)) for host in (pusher_env, listen_env)):
-                    errors.append(f'[{env}] shared private cohort {name} requires identical required secret sources')
-            for name in PROD_PRIVATE_COHORT_NAMES:
-                if not _prod_scope_matches(name, pusher_env.get(name), '') or name in listen_env:
-                    errors.append(
-                        f'[{env}] shadow scope {name} requires its private pusher secret and no listen binding'
-                    )
             stages = json.loads((root / "config/diarization-cohort-stages.json").read_text())
             selected = next(
                 (
                     values
                     for values in stages.values()
-                    if all(_prod_scope_matches(name, pusher_env.get(name), value) for name, value in values.items())
+                    if all(name in pusher_env and pusher_env[name].value == value for name, value in values.items())
                 ),
                 None,
             )

@@ -75,14 +75,11 @@ def test_shared_chat_frontend_auth_is_listen_only(gate: SimpleNamespace, env: st
 
 def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_fixture: Path) -> None:
     values = chart_fixture / "backend/charts/pusher/dev_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "omi-release-probe"\n',
-        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "other-user"\n',
+    text = values.read_text()
+    values.write_text(
+        text.replace('env:\n', 'env:\n  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "synthetic-owner"\n', 1)
     )
-    assert any(
-        'shadow scope TRANSCRIPTION_SHADOW_UID_ALLOWLIST' in error for error in gate.validate_preflight(chart_fixture)
-    )
+    assert any('must be absent' in error for error in gate.validate_preflight(chart_fixture))
 
 
 @pytest.mark.parametrize(
@@ -90,7 +87,6 @@ def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_f
     (
         ('ENABLED', 'true', 'false'),
         ('KILL_SWITCH', 'false', 'true'),
-        ('UID_ALLOWLIST', None, 'other-user'),
         ('PERCENT', '0', '1'),
         ('DAILY_AUDIO_HOURS', '1', '2'),
     ),
@@ -100,12 +96,7 @@ def test_prod_shadow_scope_rejects_value_drift(
 ) -> None:
     values = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
     flag = f'TRANSCRIPTION_SHADOW_{name}'
-    if name == 'UID_ALLOWLIST':
-        replace_once(values, f'key: {flag}\n', f'key: {changed}\n')
-    else:
-        replace_once(
-            values, f'  - name: {flag}\n    value: "{expected}"\n', f'  - name: {flag}\n    value: "{changed}"\n'
-        )
+    replace_once(values, f'  - name: {flag}\n    value: "{expected}"\n', f'  - name: {flag}\n    value: "{changed}"\n')
     assert any(f'[prod] shadow scope {flag}' in error for error in gate.validate_preflight(chart_fixture))
 
 
@@ -271,7 +262,6 @@ def test_deploy_workflows_invoke_the_gate() -> None:
 @pytest.mark.parametrize(
     'name,value',
     [
-        ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'synthetic-outsider'),
         ('TRANSCRIPTION_FINAL_PASS_PERCENT', '1'),
         ('TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'TRUE'),
         ('TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'true'),
@@ -281,11 +271,8 @@ def test_deploy_workflows_invoke_the_gate() -> None:
 def test_batch_cohort_rejects_scope_or_route_drift(gate, chart_fixture, name, value):
     path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
     stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
-    if name.endswith('UID_ALLOWLIST'):
-        replace_once(path, f'key: {name}\n', f'key: {value}\n')
-    else:
-        expected = stages['A'][name]
-        replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+    expected = stages['A'][name]
+    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
 
 
@@ -329,13 +316,13 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
 def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
     batch_listen_only = gate._BATCH_PIPELINE_LISTEN_ONLY
     assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
-    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in gate.LISTEN_ONLY_ALLOWED[env]
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
-    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_RECOVERY_MODE' in gate._BATCH_PIPELINE_LISTEN_ONLY
-    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert gate.validate_preflight(REPO_ROOT) == []
 
 
@@ -346,41 +333,3 @@ def test_copying_batch_admission_to_pusher_is_not_silently_allowed(gate: SimpleN
     assert any(
         'BATCH_PIPELINE_ENABLED is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture)
     )
-
-
-@pytest.mark.parametrize('name', ['TRANSCRIPTION_SHADOW_UID_ALLOWLIST', 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'])
-@pytest.mark.parametrize('defect', ['missing', 'literal', 'wrong_secret', 'wrong_key'])
-def test_prod_shadow_requires_exact_private_binding(gate, chart_fixture, name, defect):
-    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
-    before = (
-        f'  - name: {name}\n'
-        '    valueFrom:\n'
-        '      secretKeyRef:\n'
-        '        name: prod-omi-backend-secrets\n'
-        f'        key: {name}\n'
-    )
-    after = {
-        'missing': '',
-        'literal': f'  - name: {name}\n    value: "synthetic-owner"\n',
-        'wrong_secret': before.replace('prod-omi-backend-secrets', 'other-secret'),
-        'wrong_key': before.replace(f'key: {name}', 'key: OTHER_KEY'),
-    }[defect]
-    replace_once(path, before, after)
-    assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
-
-
-@pytest.mark.parametrize('host', ['pusher', 'backend-listen'])
-@pytest.mark.parametrize('name', ['DREAM_AGENT_UID_ALLOWLIST', 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST'])
-@pytest.mark.parametrize('field', ['name', 'key'])
-def test_shared_private_cohorts_reject_source_drift(gate, chart_fixture, host, name, field):
-    stem = 'pusher' if host == 'pusher' else 'backend_listen'
-    path = chart_fixture / f'backend/charts/{host}/prod_omi_{stem}_values.yaml'
-    text = path.read_text()
-    pattern = r'(  - name: ' + name + r'\n)(.*?)(?=  - name:|\Z)'
-    match = re.search(pattern, text, re.S)
-    assert match
-    previous = 'name: prod-omi-backend-secrets' if field == 'name' else f'key: {name}'
-    changed = match.group().replace(previous, f'{field}: wrong-source', 1)
-    assert changed != match.group()
-    path.write_text(text[: match.start()] + changed + text[match.end() :])
-    assert any(f'shared private cohort {name}' in error for error in gate.validate_preflight(chart_fixture))

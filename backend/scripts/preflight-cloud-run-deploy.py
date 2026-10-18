@@ -17,11 +17,6 @@ if str(BACKEND_ROOT) not in sys.path:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
-from private_cohort_secrets import (
-    PRIVATE_COHORT_ENV_NAMES,
-    pinned_secret_version,
-    valid_private_cohort_payload,
-)  # noqa: E402
 from attach_cloud_run_gmp_sidecar import SIDECAR_NAME  # noqa: E402
 from runtime_env_validation.common import compute_project  # noqa: E402
 from runtime_env_capability_contracts import validate_voice_transcription_storage  # noqa: E402
@@ -117,12 +112,7 @@ def main() -> int:
                     file=sys.stderr,
                 )
             exit_code = 1
-        invalid = check_private_cohort_payloads(env=args.env, manifest_path=args.manifest, project=args.project)
-        if invalid:
-            # A fixed diagnostic keeps even manifest-derived identifiers out of the payload error path.
-            print('ERROR: private cohort payload validation failed (empty, invalid or inaccessible)', file=sys.stderr)
-            exit_code = 1
-        if not missing and not invalid:
+        else:
             print(f'secret preflight passed for {args.env}')
 
     if args.check_traffic or args.repair_traffic:
@@ -446,32 +436,6 @@ def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> li
             if not _secret_exists(project=project, secret_name=binding.secret_name, version=binding.version):
                 missing.append(binding)
     return missing
-
-
-def check_private_cohort_payloads(*, env: str, manifest_path: Path, project: str) -> list[str]:
-    services = _cloud_run_service_configs(env=env, manifest_path=manifest_path)
-    invalid: list[str] = []
-    seen: set[tuple[str, str]] = set()
-    for config in services.values():
-        for name, entry in config.get('secrets', {}).items():
-            if name not in PRIVATE_COHORT_ENV_NAMES:
-                continue
-            secret, version = str(entry['secret']), str(entry.get('version', 'latest'))
-            if not pinned_secret_version(version):
-                invalid.append(name)
-                continue
-            if (secret, version) in seen:
-                continue
-            seen.add((secret, version))
-            result = subprocess.run(
-                ['gcloud', 'secrets', 'versions', 'access', version, f'--secret={secret}', f'--project={project}'],
-                check=False,
-                capture_output=True,
-            )
-            # Never print stdout/stderr or embed either in an exception; payloads stay in memory.
-            if result.returncode != 0 or not valid_private_cohort_payload(name, result.stdout):
-                invalid.append(name)
-    return invalid
 
 
 def wait_revision_ready(

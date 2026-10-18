@@ -301,7 +301,7 @@ def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summar
 
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
-    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')  # Explicit legacy global policy.
     empty = Structured(title='Server transcript title', overview='')
     rich = Structured(title='Generated title', overview='A supported synthetic summary')
     monkeypatch.setattr(target, 'fingerprint', lambda *_: 'same-input')

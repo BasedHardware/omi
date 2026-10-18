@@ -58,24 +58,11 @@ FIRESTORE_READ_RUNTIME_ENV_NAMES = (
 
 
 def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
-    """Retired literals and allowlist type migrations, each with a leading comma."""
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
     listed: set[str] = set(RETIRED_ENV_NAMES)
     if service not in PUSHER_CLIENT_SERVICES:
         listed.add('HOSTED_PUSHER_API_URL')
-    # gcloud must remove a literal before installing a secret of the same name.
-    # Both flags belong to ONE deploy call/revision; never issue a removal-only update.
-    removals = set(service_config.get('forbidden_env', [])) | {
-        name
-        for name in service_config.get('secrets', {})
-        if name.endswith('UID_ALLOWLIST')
-        or name
-        in {
-            'MOBILE_STANDARD_BATCH_UIDS',
-            'OMI_MESSAGING_CHANNELS_UIDS',
-            'OMI_MESSAGING_CHANNEL_POLICY',
-        }
-    }
-    return ''.join(f',{name}' for name in sorted(removals - listed))
+    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -86,98 +73,23 @@ _SYNC_LINEAGE_ALLOWLIST_KEY = 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST'
 _SYNC_LINEAGE_CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 
 
-def validate_private_cohort_versions(env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
-    from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES, pinned_secret_version
-
-    bindings: dict[str, set[tuple[str, str]]] = {}
-    errors = []
-    for host in env_config.get('cloud_run', {}).get('services', {}).values():
-        for name, entry in host.get('secrets', {}).items():
-            if name not in PRIVATE_COHORT_ENV_NAMES:
-                continue
-            if not isinstance(entry, dict):
-                errors.append('Private cohort requires an explicit secret binding')
-                continue
-            source = (str(entry.get('secret', '')), str(entry.get('version', '')))
-            bindings.setdefault(name, set()).add(source)
-            if source[0] != name or not pinned_secret_version(source[1]):
-                errors.append('Private cohort requires its same-name secret and an immutable numeric version')
-    for name, sources in bindings.items():
-        if len(sources) != 1:
-            errors.append('Private cohort must use an identical immutable version across Cloud Run hosts')
-    if check_chart and bindings:
-        chart = yaml.safe_load(
-            (ROOT / 'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml').read_text()
-        )
-        rows = chart['externalSecret']['secretKeys']
-        for name in PRIVATE_COHORT_ENV_NAMES:
-            refs = [row for row in rows if row.get('secretKey') == name]
-            if (
-                len(refs) != 1
-                or refs[0].get('remoteKey') != name
-                or not pinned_secret_version(str(refs[0].get('version', '')))
-            ):
-                errors.append(
-                    'Private cohort ExternalSecret requires its same-name secret and an immutable numeric version'
-                )
-            elif name in bindings and bindings[name] != {(name, str(refs[0]['version']))}:
-                errors.append('Private cohort ExternalSecret must match the immutable Cloud Run version')
-    return errors
-
-
 def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
-    if env != 'prod':
-        return []  # dev deliberately admits everyone
-    from scripts.private_cohort_secrets import pinned_secret_version
-
+    # Cohort membership is user data, shared by Cloud Run and listen. Absence is
+    # safe only because the runtime now resolves Firestore rather than enable-all.
     services = env_config.get('cloud_run', {}).get('services', {})
     listener = env_config.get('gke', {}).get('backend-listen', {})
     hosts = [(f'cloud_run/{name}', services.get(name, {})) for name in _SYNC_LINEAGE_CLOUD_RUN_HOSTS]
     hosts.append(('gke/backend-listen', listener))
-    errors = validate_private_cohort_versions(env_config, check_chart=check_chart)
-    bindings = []
-    versions = []
+    errors = []
     for scope, host in hosts:
-        entry = host.get('env', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
-        secret = host.get('secrets', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
-        if scope.startswith('cloud_run/') and isinstance(secret, dict) and not entry:
-            bindings.append(('secret', secret.get('secret')))
-            versions.append(str(secret.get('version', 'latest')))
-        elif isinstance(entry, dict) and isinstance(entry.get('secret'), dict) and 'value' not in entry:
-            ref = entry['secret']
-            if ref.get('name') != 'prod-omi-backend-secrets':
-                errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must use the backend secret')
-            bindings.append(('secret', ref.get('key')))
-        elif isinstance(entry, dict) and isinstance(entry.get('value'), str):
-            # Replay historical releases, including explicitly reviewed empty widening.
-            bindings.append(('literal', entry['value']))
-        else:
-            errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} requires an explicit literal or secret binding')
-    if len(set(bindings)) > 1:
-        errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must be identical on all five hosts')
-    if bindings and bindings[0][0] == 'secret':
-        if bindings[0][1:] != (_SYNC_LINEAGE_ALLOWLIST_KEY,):
-            errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must use its same-name Secret Manager secret')
-        if len(versions) != 4 or len(set(versions)) != 1 or not all(pinned_secret_version(v) for v in versions):
-            errors.append(
-                f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must use one immutable numeric version on all Cloud Run hosts'
-            )
-    if check_chart and not errors:
+        if _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('env', {}):
+            errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be absent; membership lives in Firestore')
+    if check_chart:
         values_file = listener.get('values_file')
-        if not isinstance(values_file, str):
-            errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} requires a checked-in listen values_file')
-        else:
+        if isinstance(values_file, str):
             chart = yaml.safe_load((ROOT / values_file).read_text())
-            entries = [entry for entry in chart.get('env', []) if entry.get('name') == _SYNC_LINEAGE_ALLOWLIST_KEY]
-            expected = listener['env'][_SYNC_LINEAGE_ALLOWLIST_KEY]
-            matches = len(entries) == 1
-            if matches and 'secret' in expected:
-                matches = entries[0].get('valueFrom', {}).get('secretKeyRef') == expected['secret']
-                matches = matches and 'value' not in entries[0]
-            elif matches:
-                matches = entries[0].get('value') == expected.get('value')
-            if not matches:
-                errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} listen chart must match the five-host manifest')
+            if any(entry.get('name') == _SYNC_LINEAGE_ALLOWLIST_KEY for entry in chart.get('env', [])):
+                errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} listen chart must be absent')
     return errors
 
 

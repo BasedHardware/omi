@@ -8,7 +8,7 @@ import yaml
 from config.batch_pipeline import recovery_owners
 
 ROOT = Path(__file__).resolve().parents[2]
-UID = 'synthetic-owner'
+UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
 SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 
 
@@ -45,13 +45,13 @@ def hosts(config):
     }
 
 
-def test_batch_pipeline_admission_uses_private_prod_allowlists(manifest, listen_chart_envs):
+def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():
             assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
             assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
             if stage == 'prod':
-                assert 'value' not in env.get('BATCH_PIPELINE_UID_ALLOWLIST', {})
+                assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
                 assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
             else:
                 allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
@@ -63,7 +63,7 @@ def test_batch_pipeline_admission_uses_private_prod_allowlists(manifest, listen_
                 assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
     assert listen_chart_envs[0].get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
-    assert listen_chart_envs[1]['BATCH_PIPELINE_UID_ALLOWLIST'] is None
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
     assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
     prod_hosts = hosts(manifest['prod'])
     assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
@@ -71,54 +71,21 @@ def test_batch_pipeline_admission_uses_private_prod_allowlists(manifest, listen_
     assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
-def test_quarantine_recovery_is_david_only_on_prod_integration(
+def test_quarantine_recovery_uses_private_membership_only_on_prod_integration(
     manifest,
     recovery_base_hosts,
     listen_chart_envs,
-    monkeypatch,
 ):
     for stage, config in manifest.items():
         for name, env in hosts(config).items():
-            recovery_mode = env['BATCH_PIPELINE_RECOVERY_MODE']
-            key = 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'
-            recovery_allowlist = env.get(key)
-            if stage == 'prod' and name == 'backend-integration':
-                assert config['cloud_run']['services'][name]['secrets'][key] == {'secret': key, 'version': '1'}
-                assert recovery_allowlist is None
-                recovery_allowlist = {'value': UID, 'category': 'rollout'}
-            elif stage == 'prod' and name == 'backend-listen':
-                assert recovery_allowlist == {
-                    'secret': {'name': 'prod-omi-backend-secrets', 'key': key},
-                    'category': 'rollout',
-                }
-                recovery_allowlist = {'value': UID, 'category': 'rollout'}
-            assert recovery_mode['category'] == 'rollout'
-            assert recovery_allowlist['category'] == 'rollout'
-
-            if stage == 'prod' and name == 'backend-integration':
-                assert recovery_mode['value'] == 'on'
-                assert recovery_allowlist['value'] == UID
-                expected = (UID,)
-            else:
-                assert recovery_mode['value'] == 'off'
-                assert recovery_allowlist['value'] == (UID if stage == 'prod' and name == 'backend-listen' else '')
-                expected = ()
-
-            monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', recovery_mode['value'])
-            monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', recovery_allowlist['value'])
-            assert recovery_owners() == expected
-
+            assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in env
+            expected = 'on' if stage == 'prod' and name == 'backend-integration' else 'off'
+            assert env['BATCH_PIPELINE_RECOVERY_MODE']['value'] == expected
     for host in recovery_base_hosts.values():
-        assert host['env']['BATCH_PIPELINE_RECOVERY_MODE'] == {'value': 'off', 'category': 'rollout'}
-        assert host['env'].get('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', {'value': '', 'category': 'rollout'}) == {
-            'value': '',
-            'category': 'rollout',
-        }
-
+        assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in host['env']
     for chart_env in listen_chart_envs:
         assert chart_env['BATCH_PIPELINE_RECOVERY_MODE'] == 'off'
-    assert listen_chart_envs[0]['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == ''
-    assert listen_chart_envs[1]['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] is None
+        assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in chart_env
 
 
 def test_only_always_cpu_integration_host_runs_projection_pump(manifest):
