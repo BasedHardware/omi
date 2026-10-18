@@ -76,7 +76,7 @@ def main() -> int:
         if missing:
             for item in missing:
                 print(
-                    f'ERROR [secret/{item.env_name}]: Secret Manager secret {item.secret_name!r} not found',
+                    f'ERROR [secret/{item.env_name}]: required Secret Manager entry not found; check deployment manifest',
                     file=sys.stderr,
                 )
             return 1

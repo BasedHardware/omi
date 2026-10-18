@@ -1404,6 +1404,22 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*'
 
 
+def test_legacy_config_preparation_does_not_log_secret_metadata(monkeypatch, tmp_path, capsys):
+    module = _load_module()
+    config = tmp_path / 'monitoring.yaml'
+    config.write_text('kind: RunMonitoring\n')
+    calls = []
+    monkeypatch.setattr(module, 'ensure_config_secret', lambda **kwargs: calls.append(kwargs) or '918273')
+    monkeypatch.setattr(
+        module.os.sys,
+        'argv',
+        [str(SCRIPT), '--project=test', '--prepare-config', f'--config={config}'],
+    )
+    assert module.main() == 0
+    assert len(calls) == 1
+    assert capsys.readouterr().out == ''
+
+
 @pytest.mark.parametrize('version', ['', 'latest', '0', '-1'])
 def test_prepared_config_rejects_aliases_before_cloud_calls(monkeypatch, version):
     module = _load_module()

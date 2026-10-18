@@ -1123,8 +1123,7 @@ def main() -> int:
         if args.config_env:
             read_run_monitoring_config(args.config)
         else:
-            version = ensure_config_secret(project=args.project, secret=args.config_secret, config_path=args.config)
-            print(f'version={version}')
+            ensure_config_secret(project=args.project, secret=args.config_secret, config_path=args.config)
         return 0
     if args.config_env and (args.job or args.repair_secret_annotations or args.config_secret_version):
         raise SystemExit('--config-env requires a service attachment without secret-version options')
