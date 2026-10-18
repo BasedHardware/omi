@@ -471,5 +471,9 @@ tests/unit/test_ladder_v1_cutover.py::test_live_batch_and_on_device_are_disjoint
 # call phase. 0.27s in a quiet 40-file run, 0.33s twice inside loaded pre-push
 # (local fail limit 0.30s). Assertions still run.
 tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate
+# 2026-10-18: runs the hermetic finalization worker and self-heal verifier end to end
+# to prove short real speech persists as a quiet terminal minimum without attention.
+# The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
+tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
 tests/unit/test_free_tier_basic_gates.py::test_dev_lights_each_gate_on_the_identities_that_run_its_code_path
