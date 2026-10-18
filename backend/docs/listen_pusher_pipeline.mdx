@@ -5549,6 +5549,34 @@ or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
 
+### Legacy sync double-empty recovery (dark)
+
+`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
+legacy sync keeps its bounded empty-result confirmation, then validates the
+local WAV and uses the same `recovery_disposition.inspect_audio` strict local
+VAD as batch recovery. Only an affirmative zero-span result is silence.
+Positive spans use one independent Modulate multilingual dispatch (`attempts=2`
+disables client retries), with funded sync admission rechecked before dispatch.
+The owner-scoped `sync_empty_recovery` intent is keyed by the existing stable
+segment identity; it has no application TTL. The sole paid call is claimed with
+atomic create and its encrypted response is persisted with a version precondition
+before parsing/assignment. A replay reuses the saved response; an unresolved
+intent fails closed without redispatch. Positive VAD after an already-multilingual
+double-empty stays retryable without a third call.
+Nonempty recovered words enter the existing ordered assignment and durable
+segment checkpoint path. VAD/decode errors, malformed responses, empty alternate
+recognition, or empty postprocessing remain retryable failures and preserve
+retry material. Existing cap-recovery intents retain their separate budget and
+reconciliation path. This flag does not route jobs into batch or change intake.
+Rollback: set the flag to `false`; no historical completion is rewritten.
+
+While enabled, `sync_empty_strict_vad` logs the acoustic verdict **before** funded
+admission or multilingual dispatch: `speech`, `silence`, or `inspection_error`.
+It includes lane, provider, a stable HMAC segment reference, full segment duration,
+strict span count and speech seconds; it never includes owner IDs or content.
+Deduplicate by lane/segment reference within one release window and retain unknown
+inspections separately. Speech / valid inspections measures strict-VAD-positive
+double-empty segments even when recovery later fails; it is not ASR accuracy.
 
 ### Dark batch projection follow-ups
 
