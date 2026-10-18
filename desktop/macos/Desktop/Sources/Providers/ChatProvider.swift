@@ -6646,9 +6646,36 @@ class ChatProvider: ObservableObject {
       return
     }
     log("Cleared default chat messages")
+    await moveClearedMainChatToSelectedProvider(surface: surface)
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
+  }
+
+  /// The main chat is one long-lived session pinned to the provider it was created on, and the
+  /// chat-first shell has no "new chat", so choosing another AI Provider in Settings never reached
+  /// it. Clearing is the explicit, idle point where that choice can apply: the emptied chat adopts
+  /// the selected provider. A refused migration (a revoked turn still finishing) keeps the old one.
+  private func moveClearedMainChatToSelectedProvider(surface: AgentSurfaceReference) async {
+    let harness = bridgeHarnessOverride?.rawValue ?? activeBridgeHarness
+    guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness),
+      await ensureBridgeStarted()
+    else { return }
+    do {
+      let session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+      guard session.profile.adapterId != adapterId else { return }
+      let migrated = try await resolvedAgentClient().migrateSessionExecutionProfile(
+        sessionId: session.sessionId,
+        expectedProfileGeneration: session.profile.profileGeneration,
+        adapterId: adapterId,
+        modelProfile: modelOverride
+          ?? AgentRuntimeRouting.defaultModelProfile(harnessMode: harness, chatBridgeMode: bridgeMode),
+        workingDirectory: effectiveAgentWorkingDirectory()
+      )
+      log("ChatProvider: cleared main chat moved from \(session.profile.adapterId) to \(migrated.profile.adapterId)")
+    } catch {
+      logError("ChatProvider: cleared main chat kept its pinned provider", error: error)
+    }
   }
 
   // MARK: - App Selection
