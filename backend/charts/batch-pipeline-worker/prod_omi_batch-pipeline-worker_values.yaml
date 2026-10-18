@@ -31,4 +31,5 @@ worker:
   audience: https://backend-sync-hhibjajaja-uc.a.run.app
   emptyAsrRecoveryEnabled: true
   emptyAsrDispositionEnabled: true
+  workerSilenceDispositionEnabled: true
   correctnessMetricsEnabled: true
