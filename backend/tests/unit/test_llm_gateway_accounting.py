@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 import hashlib
 import json
 from typing import Any
@@ -24,9 +25,11 @@ from llm_gateway.gateway.accounting import (
     build_accounting_event,
     cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
+    estimated_provider_cost_micro_usd,
     image_usage,
     jit_gateway_receipt_for_trace,
     openai_usage_from_response,
+    rate_card_for,
     vertex_usage_from_response,
 )
 
@@ -1084,3 +1087,40 @@ def test_unknown_app_platform_is_persisted_as_unattributed() -> None:
 
     assert event.app_platform is None
     assert event.as_dict()['app_platform'] is None
+
+
+def test_vertex_2_5_flash_card_is_the_standard_tier() -> None:
+    # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+    # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+    card = rate_card_for('gemini', 'gemini-2.5-flash', at=date(2026, 10, 18))
+    assert card is not None
+    assert (
+        card.input_micro_usd_per_million,
+        card.cached_input_micro_usd_per_million,
+        card.output_micro_usd_per_million,
+        card.cache_write_micro_usd_per_million,
+        card.cache_storage_micro_usd_per_million_token_hours,
+    ) == (300000, 30000, 2500000, 300000, 1000000)
+
+
+@pytest.mark.parametrize(
+    'usage, expected_micro_usd',
+    [
+        # Google Cloud Vertex AI pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing
+        # Gemini 2.5 section, Standard tab (verified 2026-10-18), not Priority.
+        (ProviderUsage(prompt_tokens=1_000_000, uncached_input_tokens=1_000_000), 300000),
+        (ProviderUsage(prompt_tokens=1_000_000, cached_input_tokens=1_000_000), 30000),
+        (ProviderUsage(output_tokens=1_000_000), 2500000),
+        (ProviderUsage(prompt_tokens=1_000_000, cache_write_tokens=1_000_000), 300000),
+    ],
+    ids=['uncached-input', 'cached-input', 'output', 'cache-write'],
+)
+def test_vertex_2_5_flash_one_million_token_estimates(usage: ProviderUsage, expected_micro_usd: int) -> None:
+    status, cost = estimated_provider_cost_micro_usd(
+        payer='omi',
+        provider='gemini',
+        model='gemini-2.5-flash',
+        metadata=ProviderResponseMetadata(usage=usage),
+    )
+    assert status == CostStatus.ESTIMATED
+    assert cost == expected_micro_usd

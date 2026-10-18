@@ -103,13 +103,18 @@ rate_cards:
   # Explicit cache storage is $1 per million token-hours for these three models.
   # gemini-3.8-flash introductory rates apply through 2026-12-31; the dated
   # card replaces them on 2027-01-01.
+  # gemini-2.5-flash re-verified 2026-10-18 at
+  # https://cloud.google.com/vertex-ai/generative-ai/pricing - Gemini 2.5
+  # section, Standard tab. The previous values were the Priority tier
+  # ($0.54 in / $0.054 cached / $4.50 out per 1M); the Standard rates below
+  # are $0.30 / $0.03 / $2.50.
   - rate_card_id: vertex.gemini-2.5-flash.2026-10-15
     provider: gemini
     model: gemini-2.5-flash
-    input_micro_usd_per_million: 540000
-    cached_input_micro_usd_per_million: 54000
-    output_micro_usd_per_million: 4500000
-    cache_write_micro_usd_per_million: 540000
+    input_micro_usd_per_million: 300000
+    cached_input_micro_usd_per_million: 30000
+    output_micro_usd_per_million: 2500000
+    cache_write_micro_usd_per_million: 300000
     cache_storage_micro_usd_per_million_token_hours: 1000000
 
   - rate_card_id: vertex.gemini-3.1-flash-lite.2026-10-15
