@@ -776,6 +776,9 @@ overlay:
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
+          SYNC_DURABLE_STATUS_RECONCILIATION:
+            value: 'true'
+            category: rollout
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
@@ -1081,6 +1084,9 @@ overlay:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_DEADLINE_ENABLED:
+            value: 'true'
+            category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
           REPEAT_WORK_LLM_VERSION:
@@ -1417,6 +1423,9 @@ overlay:
           FIRST_SUMMARY_DEADLINE_ENABLED:
             value: 'true'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
+            value: 'true'
+            category: rollout
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
             category: rollout
@@ -1507,6 +1516,12 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_API_URL:
@@ -1655,6 +1670,9 @@ overlay:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_DEADLINE_ENABLED:
+            value: 'true'
+            category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
           REPEAT_WORK_LLM_VERSION:

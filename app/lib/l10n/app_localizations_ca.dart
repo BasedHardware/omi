@@ -13569,6 +13569,43 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onTheWayAlmostReady => 'Gairebé a punt';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravacions',
+      one: '1 gravació',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals en camí';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count pujant';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Gairebé a punt: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count requereixen atenció',
+      one: '1 requereix atenció',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Encara no hi ha activitat';
 
   @override

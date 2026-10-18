@@ -13534,6 +13534,43 @@ class AppLocalizationsHr extends AppLocalizations {
   String get onTheWayAlmostReady => 'Gotovo spremno';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Snimaka: $count',
+      one: '1 snimka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals na putu';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Slanje: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Gotovo spremno: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zahtijeva pažnju: $count',
+      one: '1 zahtijeva pažnju',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Još nema aktivnosti';
 
   @override

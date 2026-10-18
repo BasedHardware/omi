@@ -13592,6 +13592,43 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onTheWayAlmostReady => 'கிட்டத்தட்ட தயார்';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள்',
+      one: '1 பதிவு',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals வழியில்';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'பதிவேற்றப்படுகிறது: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'கிட்டத்தட்ட தயார்: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகளுக்குக் கவனம் தேவை',
+      one: '1 பதிவுக்குக் கவனம் தேவை',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'இதுவரை எந்தச் செயல்பாடும் இல்லை';
 
   @override

@@ -13510,6 +13510,43 @@ class AppLocalizationsId extends AppLocalizations {
   String get onTheWayAlmostReady => 'Hampir siap';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman',
+      one: '1 rekaman',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals dalam perjalanan';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count sedang diunggah';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count hampir siap';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perlu perhatian',
+      one: '1 perlu perhatian',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Belum ada aktivitas';
 
   @override

@@ -13531,6 +13531,43 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onTheWayAlmostReady => 'Skoraj pripravljeno';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Posnetkov: $count',
+      one: '1 posnetek',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals na poti';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Nalaganje: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Skoraj pripravljeno: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potrebuje pozornost: $count',
+      one: '1 potrebuje pozornost',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Še ni dejavnosti';
 
   @override

@@ -13571,6 +13571,43 @@ class AppLocalizationsIt extends AppLocalizations {
   String get onTheWayAlmostReady => 'Quasi pronto';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registrazioni',
+      one: '1 registrazione',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals in arrivo';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count in caricamento';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Quasi pronte: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count richiedono attenzione',
+      one: '1 richiede attenzione',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Ancora nessuna attività';
 
   @override

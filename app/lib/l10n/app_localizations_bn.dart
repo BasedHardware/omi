@@ -13497,6 +13497,43 @@ class AppLocalizationsBn extends AppLocalizations {
   String get onTheWayAlmostReady => 'প্রায় প্রস্তুত';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি রেকর্ডিং',
+      one: '১টি রেকর্ডিং',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals আসছে';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$countটি আপলোড হচ্ছে';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$countটি প্রায় প্রস্তুত';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটিতে মনোযোগ প্রয়োজন',
+      one: '১টিতে মনোযোগ প্রয়োজন',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'এখনও কোনো কার্যকলাপ নেই';
 
   @override

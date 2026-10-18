@@ -13552,6 +13552,43 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onTheWayAlmostReady => 'Majdnem kész';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel',
+      one: '1 felvétel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals úton';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count feltöltés alatt';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count majdnem kész';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count figyelmet igényel',
+      one: '1 figyelmet igényel',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Még nincs tevékenység';
 
   @override

@@ -13514,6 +13514,43 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onTheWayAlmostReady => 'تقریباً تیار';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز',
+      one: '1 ریکارڈنگ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals راستے میں';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'اپ لوڈ ہو رہی ہیں: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'تقریباً تیار: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count پر توجہ درکار ہے',
+      one: '1 پر توجہ درکار ہے',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'ابھی تک کوئی سرگرمی نہیں';
 
   @override

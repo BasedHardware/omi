@@ -13502,6 +13502,43 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onTheWayAlmostReady => 'Nesten klar';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opptak',
+      one: '1 opptak',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals på vei';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count lastes opp';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count nesten klar';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count krever oppmerksomhet',
+      one: '1 krever oppmerksomhet',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Ingen aktivitet ennå';
 
   @override

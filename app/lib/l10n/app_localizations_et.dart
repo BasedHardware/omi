@@ -13494,6 +13494,43 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onTheWayAlmostReady => 'Peaaegu valmis';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist',
+      one: '1 salvestis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals teel';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Üleslaadimisel: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Peaaegu valmis: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vajab tähelepanu',
+      one: '1 vajab tähelepanu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Tegevusi veel pole';
 
   @override

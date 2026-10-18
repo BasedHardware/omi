@@ -13552,6 +13552,43 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onTheWayAlmostReady => 'దాదాపు సిద్ధం';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు',
+      one: '1 రికార్డింగ్',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals మార్గంలో ఉంది';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'అప్‌లోడ్ అవుతోంది: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'దాదాపు సిద్ధం: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లకు శ్రద్ధ అవసరం',
+      one: '1 రికార్డింగ్‌కు శ్రద్ధ అవసరం',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'ఇంకా కార్యాచరణ లేదు';
 
   @override

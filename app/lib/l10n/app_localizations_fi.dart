@@ -13505,6 +13505,43 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onTheWayAlmostReady => 'Melkein valmis';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta',
+      one: '1 tallenne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals tulossa';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Lähetetään: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Melkein valmiina: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vaatii huomiota',
+      one: '1 vaatii huomiota',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Ei vielä toimintaa';
 
   @override

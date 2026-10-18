@@ -26,6 +26,8 @@ class CaptureWedgeEpisode {
   bool promptVisible = false;
   bool promptShownEmitted = false;
   String? telemetryOperationId;
+  DateTime? ingressRecoveryStartedAt;
+  DateTime? lastRecoveryByteAt;
 }
 
 /// Phone-disk admission failures engaged: new recordings cannot be written until
@@ -106,6 +108,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// audio packets, so only a multi-minute gap with no BLE notifications is a
   /// stalled link.
   static const Duration connectedNoBytesWindow = Duration(minutes: 5);
+  static const Duration ingressRecoveryWindow = Duration(seconds: 5);
+  static const Duration ingressRecoveryMaxGap = Duration(seconds: 2);
 
   static const String triggerZeroByteStreak = 'zero_byte_streak';
   static const String triggerRapidReconnects = 'rapid_reconnects';
@@ -184,6 +188,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// projection, or let a transcript resolve an ingress failure.
   void observeIngressHealth(String deviceId, CaptureIngressHealth? health) {
     final state = _stateFor(deviceId);
+    final previousHealth = state.lastIngressHealth;
+    state.lastIngressHealth = health;
     if (health?.reason == CaptureIngressHealth.cccdRecoveryReason) {
       _cccdRecoveryDevices.add(deviceId);
       _nativeIngressDevices.add(deviceId);
@@ -235,6 +241,14 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     } else if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       state.episode = null;
     }
+    // A new, valid native ingress lease proves recovery independently of STT.
+    // Replaying the same cached lease must not resolve a later BLE episode.
+    if (health != null &&
+        health.verifiedAt(_now()) &&
+        (previousHealth?.generation != health.generation ||
+            health.validUntilMs > (previousHealth?.validUntilMs ?? 0))) {
+      _resolveIfActive(deviceId, state, bleIngressOnly: true);
+    }
     notifyListeners();
   }
 
@@ -278,6 +292,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       session.ingressBytes += byteCount;
       session.lastIngressByteAt = now;
       session.lastBleIngressAt = now;
+    }
+    final state = _devices[deviceId];
+    final episode = state?.episode;
+    if (state == null || episode == null || !_isBleIngressTrigger(episode.trigger)) return;
+    final lastByte = episode.lastRecoveryByteAt;
+    if (lastByte == null || now.difference(lastByte) > ingressRecoveryMaxGap) {
+      episode.ingressRecoveryStartedAt = now;
+    }
+    episode.lastRecoveryByteAt = now;
+    if (now.difference(episode.ingressRecoveryStartedAt!) >= ingressRecoveryWindow) {
+      _resolveIfActive(deviceId, state, bleIngressOnly: true);
     }
   }
 
@@ -684,6 +709,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   bool _isTelemetryOnlyTrigger(String trigger) =>
       trigger == triggerBytesSentNoTranscript || trigger == triggerUploadSilence;
 
+  bool _isBleIngressTrigger(String trigger) =>
+      trigger == triggerConnectedNoBytes || trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects;
+
   bool _canDeclare(_DeviceWedgeState state, String trigger) {
     return _isTelemetryOnlyTrigger(trigger) ? state.telemetryEpisode == null : state.episode == null;
   }
@@ -739,7 +767,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     return telemetryOnly ? state?.telemetryEpisode : state?.episode;
   }
 
-  void _resolveIfActive(String deviceId, _DeviceWedgeState state) {
+  void _resolveIfActive(String deviceId, _DeviceWedgeState state, {bool bleIngressOnly = false}) {
+    if (bleIngressOnly && !_isBleIngressTrigger(state.episode?.trigger ?? '')) return;
     if (deviceId == localWalDeviceId) _clearCaptureAttention();
     if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       // The ingress failure stays (native owns it), but a transcript during
@@ -751,7 +780,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       return;
     }
     if (state.episode == null && state.telemetryEpisode == null) return;
-    for (final episode in [state.episode, state.telemetryEpisode]) {
+    for (final episode in [state.episode, if (!bleIngressOnly) state.telemetryEpisode]) {
       if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {
         _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
         final operationId = episode.telemetryOperationId;
@@ -769,7 +798,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       }
     }
     state.episode = null;
-    state.telemetryEpisode = null;
+    if (bleIngressOnly) {
+      state.zeroByteSessionEnds.clear();
+      state.rapidDropEnds.clear();
+      for (final session in _openSessions.values) {
+        if (session.deviceId == deviceId && session.bytesSinceTranscript == 0) session.watchdogDeclared = false;
+      }
+    } else {
+      state.telemetryEpisode = null;
+    }
     notifyListeners();
   }
 
@@ -816,6 +853,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 }
 
 class _DeviceWedgeState {
+  CaptureIngressHealth? lastIngressHealth;
   final List<DateTime> zeroByteSessionEnds = [];
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];
