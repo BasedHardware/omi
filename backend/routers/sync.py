@@ -1968,12 +1968,21 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
+    # One absolute budget deadline for the whole request, captured before the
+    # first await (fence read, payload parse, begin_job, prior-job read): a
+    # stall in any of them is charged against the same single handler wall,
+    # so the budget granted to the attempt can never push the request past
+    # the Cloud Tasks dispatch deadline or the middleware cap this budget
+    # exists to stay under. The dict rides every path — direct deliveries
+    # pass it into the attempt body; sequenced deliveries also use it for
+    # the bounded completion drain after the response is produced.
+    entry_state: dict = {'budget_deadline_monotonic': time.monotonic() + SYNC_JOB_HANDLER_BUDGET_SECONDS}
     if await run_blocking(db_executor, uid_sequencer.production_fence_mode) is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     try:
         payload = await request.json()
     except Exception:
-        return await _run_sync_job_body(request, task_retry_count)
+        return await _run_sync_job_body(request, task_retry_count, entry_state)
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
@@ -2039,19 +2048,19 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
             if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
                 await run_blocking(db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id'])
-        return await _run_sync_job_body(request, task_retry_count)
+        return await _run_sync_job_body(request, task_retry_count, entry_state)
     uid = payload.get('uid')
     job_id = payload.get('job_id')
     if not isinstance(uid, str) or not isinstance(job_id, str) or not isinstance(epoch, int) or epoch <= 0:
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
     # One absolute budget deadline for the whole sequenced request, captured
-    # before begin_job/prior-job reads: the fence read and identity parsing
-    # above already consumed route-entry time this budget must account for,
-    # and a stall inside begin_job or the prior-job read would otherwise be
-    # invisible to SYNC_JOB_HANDLER_BUDGET_SECONDS — the full budget granted
-    # after it could then carry the request past the Cloud Tasks dispatch
-    # deadline or the middleware cap this change exists to stay under.
-    sequenced_attempt_state: dict = {'budget_deadline_monotonic': time.monotonic() + SYNC_JOB_HANDLER_BUDGET_SECONDS}
+    # at route entry (entry_state): the fence read and payload parsing above
+    # are charged against it, and a stall inside begin_job or the prior-job
+    # read stays visible to SYNC_JOB_HANDLER_BUDGET_SECONDS — the budget
+    # granted afterwards could otherwise carry the request past the Cloud
+    # Tasks dispatch deadline or the middleware cap this change exists to
+    # stay under.
+    sequenced_attempt_state: dict = entry_state
     if not await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch):
         logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
         return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
@@ -2108,14 +2117,37 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         # owns the job and the delayed replacement (or the sweep's lease-expiry
         # redrive) re-enters it, so the owner must not be finished here — and
         # the nonterminal check below must not turn it into a retry-burning 500.
-        job = await run_blocking(db_executor, get_sync_job, job_id)
-        if job is not None and job.get('status') not in TERMINAL_STATUSES:
-            logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
-            return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
-        outcome = job.get('status') if job else 'expired'
-        released = await run_blocking(db_executor, sync_backfill_sequencer.finish_job, uid, job_id, epoch, outcome)
-        if released:
-            await run_blocking(db_executor, uid_sequencer.kick, uid)
+        # The completion drain is bounded by the same absolute request
+        # deadline plus the post-attempt cleanup headroom the heartbeat drain
+        # uses: a slow Redis/Firestore call here must not consume the
+        # remaining response margin and let the middleware or Cloud Tasks
+        # deadline terminate the request before its response is returned.
+        # Fencing stays intact — finish_job's transaction re-checks the lease
+        # — so an expired bound only skips the release; the next sweep's
+        # lease-expiry path releases the owner instead.
+        completion_bound = sequenced_attempt_state.get('budget_deadline_monotonic')
+        completion_timeout = (
+            max(
+                0.0,
+                (completion_bound + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS) - time.monotonic(),
+            )
+            if isinstance(completion_bound, float)
+            else SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
+        )
+        try:
+            async with asyncio.timeout(completion_timeout):
+                job = await run_blocking(db_executor, get_sync_job, job_id)
+                if job is not None and job.get('status') not in TERMINAL_STATUSES:
+                    logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
+                    return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
+                outcome = job.get('status') if job else 'expired'
+                released = await run_blocking(
+                    db_executor, sync_backfill_sequencer.finish_job, uid, job_id, epoch, outcome
+                )
+                if released:
+                    await run_blocking(db_executor, uid_sequencer.kick, uid)
+        except TimeoutError:
+            logger.warning('event=sync_uid_sequencer action=delivery outcome=completion_drain_cancelled')
     return response
 
 
