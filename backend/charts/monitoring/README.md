@@ -1045,6 +1045,21 @@ must shrink as initialization is added. Exporter/GPU/other service registries an
 full selector coverage are outside this family-level contract; stream-close
 selector coverage has its own unit test.
 
+The backend-listen fleet-health write counters use closed labels:
+`omi_stt_fleet_health_write_attempted_total{write_path,kind}` counts each logical
+write passed to the scheduler, including writes dropped by its bounds;
+`omi_stt_fleet_health_write_written_total` counts only after Redis acknowledges
+a commit, and
+`omi_stt_fleet_health_write_dropped_total{write_path,kind,reason}` records bounded
+drop reasons. `write_path` is `transcript_result`, `cost_routing_result`, or
+`cost_bench`; `kind` is `result` or `bench`; `reason` is `redis_backoff`,
+`identity_changed`, `identity_changed_after_commit`, `redis_error`,
+`loop_unavailable`, `in_flight_limit`, `background_schedule_error`, or
+`cross_thread_schedule_error`. The finalization
+`listen_finalization_summary_last_success_timestamp_seconds` gauge is registered
+only after a successful Firestore summary, so absence means this process has not
+yet confirmed the summary.
+
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
 | Field | Example |
