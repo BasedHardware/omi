@@ -23,8 +23,8 @@ def get_assistant_voice(uid: str, *, firestore_client: Any = None) -> str:
     uid = _sanitize_uid(uid)
     if not uid:
         return DEFAULT_ASSISTANT_VOICE
-    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
     try:
+        client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
         snapshot = client.collection('users').document(uid).get()
         data = snapshot.to_dict() if snapshot.exists else None
     except (GoogleAPICallError, OSError, TimeoutError):
