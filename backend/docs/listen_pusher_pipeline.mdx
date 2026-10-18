@@ -4982,7 +4982,8 @@ control on integration and both sync task handlers. With the deadline master swi
 still on, an existing finite `summary_deadline_at` keeps its dispatch ceiling,
 demand bypass, short lease/heartbeat, repair cadence and output requirement after
 percent/allowlist rollback. A scoped owner context carries that policy through the
-synchronous processing/persistence callback and resets on every exit. A callback
+synchronous processing/persistence callback and resets on every exit. New outbox
+marks ignore that context, so nested marks cannot widen cohort admission. A callback
 returning no output retains the admitted obligation without consuming the existing
 three-empty-model-result budget. A confirmed persisted rule discard settles normally. Completed/effects-only rows and new out-of-cohort conversations
 retain their existing coalescing behavior. No read, new queue or paid-intent reset

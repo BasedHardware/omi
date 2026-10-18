@@ -11,10 +11,10 @@ from config.batch_pipeline import in_percent_cohort
 ADMITTED_OWNER: ContextVar[str | None] = ContextVar('admitted_first_summary_owner', default=None)
 
 
-def enabled(uid: str | None = None) -> bool:
+def enabled(uid: str | None = None, *, include_admitted_context: bool = True) -> bool:
     if os.getenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false').strip().lower() != 'true':
         return False
-    if uid is not None and ADMITTED_OWNER.get() == uid:
+    if include_admitted_context and uid is not None and ADMITTED_OWNER.get() == uid:
         return True
     owners = {v.strip() for v in os.getenv('FIRST_SUMMARY_UID_ALLOWLIST', '').split(',') if v.strip()}
     if uid is None or uid in owners:
@@ -64,5 +64,7 @@ def preserves_admitted(row: Mapping[str, Any]) -> bool:
 
 def first_summary_pending(row: Mapping[str, Any]) -> bool:
     return (
-        not row.get('effects_only') and not row.get('summary_seen') and (enabled(row['uid']) or preserves_admitted(row))
+        not row.get('effects_only')
+        and not row.get('summary_seen')
+        and (enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row))
     )

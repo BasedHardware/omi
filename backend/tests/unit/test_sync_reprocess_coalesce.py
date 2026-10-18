@@ -925,6 +925,9 @@ def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_ena
     def no_output(*_):
         assert summary_guarantee.enabled('u') == preserve
         assert not summary_guarantee.enabled('unrelated-owner')
+        reprocess.mark('u', 'nested-conversation', 'en', now=120)
+        nested = rows[reprocess.key('u', 'nested-conversation')]
+        assert nested['due_at'] == 720 and 'summary_deadline_at' not in nested
         return None
 
     if preserve:
