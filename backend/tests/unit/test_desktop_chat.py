@@ -30,6 +30,7 @@ def test_request_translates_openai_tool_history_and_alias():
             'max_completion_tokens': 20_000,
             'messages': [
                 {'role': 'developer', 'content': 'be concise'},
+                {'role': 'user', 'content': 'weather in NYC?'},
                 {
                     'role': 'assistant',
                     'tool_calls': [
@@ -53,7 +54,7 @@ def test_request_translates_openai_tool_history_and_alias():
     assert payload['model'] == 'claude-sonnet-4-6'
     assert payload['max_tokens'] == 16_384
     assert payload['system'] == 'be concise'
-    assert payload['messages'][1]['content'][0]['tool_use_id'] == 'call_1'
+    assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
     assert payload['tool_choice'] == {'type': 'auto'}
 
 
@@ -130,6 +131,132 @@ def test_request_keeps_image_when_empty_text_block_precedes_it():
 def test_request_rejects_user_only_history_left_empty():
     with pytest.raises(desktop_chat._RequestValidationError):
         _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': ''}]})
+
+
+def test_request_drops_leading_assistant_turn():
+    # OpenAI-format histories may open with an assistant turn; Anthropic
+    # rejects a first message that is not role user (400 invalid_request_error).
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'assistant', 'content': 'Hi, I am Omi.'},
+                {'role': 'user', 'content': 'hello'},
+            ],
+        }
+    )
+    assert payload['messages'] == [{'role': 'user', 'content': 'hello'}]
+
+
+def test_request_drops_leading_assistant_tool_round_with_its_results():
+    # A leading assistant tool round cannot be repaired by keeping the results:
+    # Anthropic would reject them as orphaned once their tool_use is gone.
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request(
+            {
+                'model': 'omi-sonnet',
+                'messages': [
+                    {
+                        'role': 'assistant',
+                        'tool_calls': [
+                            {'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}
+                        ],
+                    },
+                    {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                ],
+            }
+        )
+
+
+def test_request_drops_tool_result_without_preceding_tool_use():
+    # Anthropic rejects a tool_result that answers no tool_use in the
+    # immediately preceding assistant turn (400 invalid_request_error); a
+    # client-side history trim can start the window on a tool message.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'question'},
+                {'role': 'tool', 'tool_call_id': 'call_9', 'content': 'orphaned'},
+                {'role': 'assistant', 'content': 'answer'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'question'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'answer'}]},
+    ]
+
+
+def test_request_strips_tool_use_whose_result_never_arrived():
+    # A trim that keeps the assistant tool-call turn but cuts its tool result
+    # would leave an unanswered tool_use on the wire; the turn's text survives.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'check the weather'},
+                {
+                    'role': 'assistant',
+                    'content': 'Let me check.',
+                    'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}],
+                },
+                {'role': 'user', 'content': 'any luck?'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'check the weather'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'Let me check.'}]},
+        {'role': 'user', 'content': 'any luck?'},
+    ]
+
+
+def test_request_strips_only_unanswered_tool_use_in_partial_round():
+    # When one of two tool calls lost its result, the answered half of the
+    # round stays intact and the unanswered half is removed.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'weather and news'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}},
+                        {'id': 'call_2', 'type': 'function', 'function': {'name': 'n', 'arguments': '{}'}},
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'assistant', 'content': 'It is sunny.'},
+            ],
+        }
+    )
+    assert [message['role'] for message in payload['messages']] == ['user', 'assistant', 'user', 'assistant']
+    assert [block['id'] for block in payload['messages'][1]['content'] if block['type'] == 'tool_use'] == ['call_1']
+    assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
+    assert payload['messages'][3]['content'] == [{'type': 'text', 'text': 'It is sunny.'}]
+
+
+def test_request_drops_duplicate_tool_result():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'weather?'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': 'w', 'arguments': '{}'}}],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny again'},
+                {'role': 'assistant', 'content': 'It is sunny.'},
+            ],
+        }
+    )
+    tool_results = [message for message in payload['messages'] if message['role'] == 'user'][1:]
+    assert len(tool_results) == 1
+    assert tool_results[0]['content'][0]['content'] == 'sunny'
 
 
 def test_request_injects_web_search_for_desktop_opt_in():
