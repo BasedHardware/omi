@@ -561,6 +561,11 @@ def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(set
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
     assert enqueue.call_args_list[2].args[2] != enqueue.call_args_list[1].args[2]
     assert row(client)['recovery'] == intent  # New wake is never a new paid epoch.
+    # A delayed old-queue delivery can race the replacement queue's wake.
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', 'replacement-recovery')
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert enqueue.call_args.args[0] == 'replacement-recovery'
+    assert row(client)['recovery'] == intent
     artifacts.fetch_audio.assert_not_called()
     stt.assert_not_called()
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
