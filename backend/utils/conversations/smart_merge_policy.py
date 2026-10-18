@@ -268,6 +268,7 @@ def new_conversation_skip(
         row.get('status') != 'completed'
         or row.get('deleted')
         or row.get('discarded')
+        or row.get('processing_deferred')
         or smart_merge_state(row)
         or (row.get('sync_merged_from') and not smart_merge_flatten_enabled())
         or not segments
@@ -286,7 +287,7 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
     """Checks that need only the projected metadata row."""
     if row.get('deleted') or row.get('discarded') or is_donor(row):
         return SkipReason.PREDECESSOR_NOT_COMPLETED
-    if row.get('status') != 'completed':
+    if row.get('status') != 'completed' or row.get('processing_deferred'):
         return SkipReason.PREDECESSOR_NOT_COMPLETED
     if row.get('uses_custom_stt'):
         return SkipReason.REFRESH_UNAVAILABLE

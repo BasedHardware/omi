@@ -75,6 +75,9 @@ def _maybe_start_shadow(uid: str, conversation) -> None:
 
 def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
     """Provider errors are counted by the writer; never propagate to finalization."""
+    if getattr(conversation, 'processing_deferred', False) is True:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_processing_deferred').inc()
+        return
     try:
         if save_structured_vector(uid, conversation) is False:
             # The writer counts a missing index as error. Keep that bounded outcome.
@@ -256,7 +259,7 @@ async def finalize_persisted_conversation(
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
             )
         elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
-            # The coordinator already persisted a free-tier terminal minimum.
+            # The coordinator persisted a no-effects result (including budget waiting).
             # That write is durable; this request-scoped default is not. A
             # completed replay skips process_conversation, so restore the
             # disposition from the unmodeled marker before the empty-bundle

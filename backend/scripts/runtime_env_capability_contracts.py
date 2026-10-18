@@ -13,8 +13,6 @@ from typing import Any, cast
 
 from config.free_tier_rollout import (
     FREE_TIER_DEPLOY_KEYS,
-    LOCAL_PROCESSING_COHORT,
-    EMERGENCY_STOP,
     validate_free_tier_deploy_value,
 )
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
@@ -56,10 +54,8 @@ SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
-    # Same co-host rule: an omitted or disagreeing value on one
-    # process_conversation host would silently keep that host ungated (code
-    # default OFF) while the others deny identified-basic first-open.
-    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
+    # Summary acceptance must agree across every finalization host.
+    'CLIENT_SUMMARIES_AT_CAP_ENABLED',
 )
 
 # The runtime resolves these flags with strip().casefold() against the truthy
@@ -69,11 +65,8 @@ SUMMARY_PIPELINE_FLAGS = (
 # like the omitted/False case the contract exists to reject.
 _SUMMARY_FLAG_LITERALS = frozenset({'1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'})
 
-# utils.free_tier_basic_gates lights a gate only on an exact case-insensitive
-# ``true`` with no trimming (the FREE_TIER_* convention). Admission must not
-# accept a spelling the reader treats as off: ``on`` or `` true `` on every
-# host would pass co-host agreement and silently disable the gate.
-_EXACT_BOOLEAN_FLAGS = frozenset({'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'})
+# Deploys pin exact booleans; the runtime summary kill switch defaults on.
+_EXACT_BOOLEAN_FLAGS = frozenset({'CLIENT_SUMMARIES_AT_CAP_ENABLED'})
 _EXACT_BOOLEAN_LITERALS = frozenset({'true', 'false'})
 
 
@@ -252,8 +245,8 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
     return errors
 
 
-# main:app also runs integration and backfill; desktop_backend hosts the
-# shared emergency-stop reader through its basic-plan gates. Keep this roster
+# main:app also runs integration and backfill. Keep the surviving shared
+# memory-suppression emergency-stop declarations aligned across hosts. Keep this roster
 # independent of env-key presence, as in #14316's finalization contract.
 FREE_TIER_DEPLOY_HOSTS = (
     ('gke', 'backend-listen'),
@@ -278,32 +271,14 @@ def validate_free_tier_deploy_contract(env: str, env_config: ConfigDict) -> list
         scope = f'{env}/{platform}/{host}'
         for name in FREE_TIER_DEPLOY_KEYS:
             entry = entries.get(name, {})
-            if name == LOCAL_PROCESSING_COHORT and env == 'dev':
-                if platform == 'gke':
-                    expected = {'name': 'dev-omi-backend-config', 'key': name}
-                    config_entry = env_config.get('gke', {}).get('config_map', {}).get('entries', {}).get(name, {})
-                    if entry.get('config_map') != expected or config_entry != {'source': 'environment', 'default': ''}:
-                        errors.append(
-                            ValidationError(scope, f'{name} requires the shared ConfigMap variable with empty default')
-                        )
-                elif entry.get('env_var') != name or entry.get('default') != '' or 'value' in entry:
-                    errors.append(ValidationError(scope, f'{name} requires the Actions variable with empty default'))
-                value = os.getenv(name, '')
-            else:
-                value = entry.get('value')
-                if value is None:
-                    errors.append(ValidationError(scope, f'{name} requires an explicit literal'))
-                    continue
+            value = entry.get('value')
+            if value is None:
+                errors.append(ValidationError(scope, f'{name} requires an explicit literal'))
+                continue
             try:
                 validate_free_tier_deploy_value(name, str(value))
             except ValueError as exc:
                 errors.append(ValidationError(scope, str(exc)))
-            if (
-                env == 'prod'
-                and name != EMERGENCY_STOP
-                and value != ('' if name == LOCAL_PROCESSING_COHORT else 'false')
-            ):
-                errors.append(ValidationError(scope, f'{name} must remain dark in prod'))
     return errors
 
 

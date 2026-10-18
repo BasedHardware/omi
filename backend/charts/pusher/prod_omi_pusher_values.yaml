@@ -250,12 +250,10 @@ env:
     value: "shadow"
   - name: DESKTOP_PENDANT_CALL_LINK_PERCENT
     value: "100"
-  - name: FREE_TIER_LOCAL_PROCESSING
-    value: "false"
+  - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
+    value: "true"
   - name: FREE_TIER_EMERGENCY_STOP
     value: "false"
-  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
-    value: ""
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
   - name: GITHUB_TOKEN
@@ -353,8 +351,6 @@ env:
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
     value: "25"
-  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
-    value: "false"
   # Activate only after isolated batch install, metric and VPC route qualification.
   - name: HOSTED_DIARIZATION_API_URL
     value: "http://172.16.160.20/diarizer-batch"

@@ -20,7 +20,7 @@ BACKEND = Path(__file__).resolve().parents[2]
 ROLLOUT_FLAGS = (
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
-    'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
+    'CLIENT_SUMMARIES_AT_CAP_ENABLED',
 )
 
 # backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
@@ -85,11 +85,11 @@ def test_prod_enables_meeting_context_and_screen_evidence_flags_everywhere():
         assert _value(env_maps[scope], 'BUCKET_SCREEN_FRAMES') == 'based-hardware-prod-screen-frames', scope
 
 
-def test_prod_keeps_basic_plan_eager_extraction_gate_dark():
-    """PR #14165's identified-basic first-open deny stays prod-off until a separate ask."""
+def test_prod_accepts_client_summaries_by_default():
+    """DEC-FREE-005 folds local summaries into budget deferral by default."""
     env_maps = _env_maps(_composed()['environments']['prod'])
     for scope in SUMMARY_PIPELINE_SCOPES:
-        assert _value(env_maps[scope], 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED') == 'false', scope
+        assert _value(env_maps[scope], 'CLIENT_SUMMARIES_AT_CAP_ENABLED') == 'true', scope
 
 
 def test_reprocess_cannot_disagree_with_live_finalization():

@@ -55,6 +55,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
+from config.plan_catalog import resolve_subscription_entitlements
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import execution_admission_enabled as funded_processing_enabled
@@ -1246,6 +1247,12 @@ def get_user_subscription_endpoint(
         allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
         funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    # Resolve from the real subscription, never the synthetic BYOK response plan.
+    if 'subscription' not in already_read:
+        already_read['subscription'] = users_db.get_user_valid_subscription(uid, provision=False)
+    response.cloud_screen_vectors = resolve_subscription_entitlements(
+        already_read.get('subscription') or {'plan': 'basic'}
+    )['capabilities']['cloud_screen_vectors']
     # A closed result with no resolved total is not an unlimited allowance.
     # Keep the already-built finite snapshot instead of emitting the wire's
     # 0 == unlimited sentinel. Known totals (including exhaustion) still win.

@@ -267,12 +267,10 @@ env:
     value: "208440318997-compute@developer.gserviceaccount.com"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
-  - name: FREE_TIER_LOCAL_PROCESSING
-    value: "false"
+  - name: CLIENT_SUMMARIES_AT_CAP_ENABLED
+    value: "true"
   - name: FREE_TIER_EMERGENCY_STOP
     value: "false"
-  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
-    value: ""
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
@@ -362,8 +360,6 @@ env:
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
     value: "25"
-  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
-    value: "false"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
     value: "100"
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT

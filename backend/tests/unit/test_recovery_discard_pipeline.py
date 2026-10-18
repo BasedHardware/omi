@@ -67,7 +67,6 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(finalizer, '_maybe_start_shadow', lambda *args: None)
     monkeypatch.setattr(pc, 'is_release_probe_uid', lambda uid: False)
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda uid: False)
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args: None)
     monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')

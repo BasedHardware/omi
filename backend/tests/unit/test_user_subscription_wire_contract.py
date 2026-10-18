@@ -106,6 +106,7 @@ def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatc
 
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', flag)
     monkeypatch.setattr(route, '_user_subscription_response', lambda *a: _response(PlanType.basic))
+    monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
     allowance = SimpleNamespace(
         managed=True,
         remaining_seconds=None,
@@ -132,3 +133,48 @@ def test_actual_subscription_http_serialization_preserves_other_nulls(monkeypatc
         assert payload['processing_backlog']['state'] == 'waiting_choice'
     else:
         assert 'held_audio' not in payload
+
+
+@pytest.mark.parametrize(
+    'plan,price,expected',
+    [
+        ('basic', None, False),
+        ('plus', 'price_ladder_fixture', False),
+        ('operator', 'price_ladder_fixture', True),
+        ('plus', 'price_legacy_fixture', True),
+    ],
+)
+def test_subscription_capability_uses_real_price_version_not_byok_display_plan(
+    monkeypatch, subscription_http_route, plan, price, expected
+):
+    from contextlib import nullcontext
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    route = subscription_http_route
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    tier = 'PRO' if plan == 'operator' else 'PLUS'
+    monkeypatch.setenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', 'price_ladder_fixture')
+    raw = {'plan': plan, 'current_price_id': price, 'current_period_end': datetime.now(timezone.utc).timestamp() + 3600}
+    monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda *a, **k: raw)
+    # A BYOK response displays unlimited. Capability must still come from raw subscription.
+    monkeypatch.setattr(route, '_user_subscription_response', lambda *a: _response(PlanType.unlimited))
+    allowance = SimpleNamespace(
+        managed=False,
+        remaining_seconds=0,
+        limit_seconds=18000,
+        as_dict=lambda: {'mode': 'on_device', 'remaining_seconds': 0, 'reason': 'allowance_unavailable'},
+    )
+    monkeypatch.setattr(route, 'resolve_transcription_allowance', lambda *a, **kw: allowance)
+    monkeypatch.setattr(route, 'fresh_cache_reads', lambda *a: nullcontext())
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid_no_byok_validation] = lambda: 'synthetic'
+    with TestClient(app) as client:
+        response = client.get('/v1/users/me/subscription')
+    assert response.status_code == 200, response.text
+    assert response.json()['cloud_screen_vectors'] is expected
+    assert response.json()['transcription_allowance']['reason'] == 'allowance_unavailable'

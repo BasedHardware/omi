@@ -401,8 +401,6 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         # lights no one. The harness has exactly one local account per instance
         # against the Firebase emulator (project demo-omi-local), so pct:100 is
         # every account that can exist here, and none of them is a real user.
-        "FREE_TIER_LOCAL_PROCESSING": "true",
-        "FREE_TIER_LOCAL_PROCESSING_COHORT": "pct:100",
         **LOCAL_STORAGE_BUCKET_ENV,
     }
 

@@ -25,12 +25,11 @@ os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from utils import free_tier_cohort as cohort
 from utils import free_tier_memory_policy as memory_policy
-from utils import free_tier_processing_policy as processing_policy
 from utils.jit_rollout import TriState
 from utils.managed_compute import Decision
 
 _BACKEND = Path(__file__).resolve().parents[2]
-FLAG = 'FREE_TIER_LOCAL_PROCESSING'
+FLAG = 'COHORT_POLICY_FIXTURE'
 UID = 'cohort-uid-1'
 OTHER = 'cohort-uid-2'
 
@@ -381,19 +380,9 @@ def test_sweep_producer_skips_only_the_admitted_cohort(monkeypatch) -> None:
     assert seen == [UID, OTHER]
 
 
-def test_processing_flag_admits_only_the_cohort(monkeypatch) -> None:
-    monkeypatch.setattr(processing_policy, 'FREE_TIER_LOCAL_PROCESSING', True)
-    monkeypatch.setenv(cohort.cohort_env_name(FLAG), 'pct:100')
-    assert processing_policy.free_tier_local_processing_enabled(UID) is True
-    assert processing_policy.free_tier_local_processing_enabled() is False
-    monkeypatch.setattr(cohort, '_kill_switch_state', lambda _uid: TriState.ENABLED)
-    assert processing_policy.free_tier_local_processing_enabled(UID) is False
-
-
 @pytest.mark.parametrize(
     'relpath, needle',
     [
-        ('utils/free_tier_processing_policy.py', "cohort_admits('FREE_TIER_LOCAL_PROCESSING', uid)"),
         ('utils/free_tier_memory_policy.py', "cohort_admits('FREE_TIER_MEMORY_SUPPRESSION', uid)"),
         ('utils/free_tier_memory_policy.py', 'free_tier_memory_suppression_enabled(uid)'),
         ('utils/memory/daily_memory_sweep.py', 'free_tier_memory_suppression_enabled(uid)'),

@@ -274,10 +274,14 @@ class UserSubscriptionResponse(BaseModel):
     # Older clients ignore the field.
     held_audio: Optional[HeldAudioSummary] = None
     processing_backlog: Optional[ProcessingBacklog] = None
+    # Server catalog capability, independent of BYOK and usage-budget availability.
+    cloud_screen_vectors: Optional[bool] = None
 
     @model_serializer(mode='wrap')
     def serialize_optional_held_audio(self, handler):
         data = handler(self)
+        if data.get('cloud_screen_vectors') is None:
+            data.pop('cloud_screen_vectors', None)
         if data.get('held_audio') is None:
             data.pop('held_audio', None)
         if data.get('processing_backlog') is None:

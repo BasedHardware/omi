@@ -114,8 +114,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
         {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
         {"name": "REDIS_DB_PORT", "value": "13151"},
-        {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
-        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+        {"name": "CLIENT_SUMMARIES_AT_CAP_ENABLED", "value": "true"},
         {"name": "FREE_TIER_EMERGENCY_STOP", "value": "false"},
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
@@ -174,12 +173,12 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "MEETING_NOTES_EVIDENCE_WAIT_SECONDS", "value": "25"},'
-        r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
+        r'\n        {"name": "CLIENT_SUMMARIES_AT_CAP_ENABLED", "value": "true"},'
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
-        r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
+        r'\n        {"name": "CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -843,7 +842,7 @@ def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(lit
     # utils.free_tier_basic_gates lights a gate only on an untrimmed,
     # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
     # the loose summary-flag literal set while every host ran ungated.
-    flag = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'
+    flag = 'CLIENT_SUMMARIES_AT_CAP_ENABLED'
     env_config['gke']['backend-listen']['env'][flag]['value'] = literal
     env_config['gke']['pusher']['env'][flag]['value'] = literal
     env_config['cloud_run']['services']['backend']['env'][flag]['value'] = literal
@@ -3308,20 +3307,6 @@ def test_only_explicit_optional_empty_defaults_admit_empty_values(binding, actua
         strict_provisional=True,
     )
     assert (errors == []) is (binding.get('default') == '' and actual == {'value': ''})
-
-
-@pytest.mark.parametrize('cohort', ['uid:', 'pct:100', 'uid:fixture-a,'])
-def test_rendered_cloud_run_state_rejects_invalid_free_tier_cohort(monkeypatch, cohort):
-    validator = load_validator()
-    config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
-    state = render_cloud_run_state(config, monkeypatch)
-    for entry in state['services']['backend-sync-backfill']['env']:
-        if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT':
-            entry['value'] = cohort
-    errors = validator._validate_cloud_run(config, state, strict_provisional=False)
-    assert len(errors) == 1
-    assert errors[0].scope == 'cloud_run/backend-sync-backfill'
-    assert 'FREE_TIER_LOCAL_PROCESSING_COHORT' in errors[0].message
 
 
 _JEV_PROCESS_CONVERSATION_HOSTS = {

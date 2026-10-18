@@ -146,12 +146,6 @@ def main() -> int:
                 for name in FIRESTORE_READ_RUNTIME_ENV_NAMES
             )
             _emit_output('firestore_read_env_vars', firestore_read_env_vars)
-            cohort = next(
-                entry['value']
-                for entry in desktop_state['services']['desktop-backend']['env']
-                if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT'
-            )
-            print(f'free_tier_local_processing_cohort={_escape_deploy_cloud_run_env_value(cohort)}')
             return 0
 
     if not args.job:

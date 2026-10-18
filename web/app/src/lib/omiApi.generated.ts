@@ -3995,6 +3995,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   chat_quota_reset_at?: number | null;
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
+  cloud_screen_vectors?: boolean | null;
   desktop_grandfather_until?: number | null;
   held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
@@ -5996,6 +5997,7 @@ export interface UserSubscriptionResponse {
   chat_quota_reset_at?: number | null;
   chat_quota_unit?: ChatQuotaUnit | null;
   chat_quota_used?: number;
+  cloud_screen_vectors?: boolean | null;
   desktop_grandfather_until?: number | null;
   held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;

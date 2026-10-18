@@ -17,6 +17,7 @@ from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
+    resolve_subscription_entitlements,
     configured_ladder_prices,
     DESKTOP_ENTITLED_PLAN_TYPES,
     MOBILE_PLAN_TYPES,
@@ -140,18 +141,14 @@ _screen_vector_entitlement_cache: Dict[str, Tuple[bool, float]] = {}
 def grants_cloud_screen_vectors(uid: str) -> bool:
     """True when this user's synced screen rows should also be written to the vector store.
 
-    Uses the desktop access tier rather than `is_paid_plan`, because screen activity is a
-    desktop capability: a mobile-only paid plan did not buy it. BYOK does NOT grant it either
-    — BYOK means the user supplies their own LLM keys, but the vector store is ours and the
-    cost being avoided here is ours.
+    Reads the catalog's versioned cloud_screen_vectors capability. Every paid
+    legacy price retains it; ladder Free/Plus do not. BYOK does not grant
+    server vector storage. This predicate is independent of the Pro-gates rollout.
 
     Fails OPEN (writes the vector) on any lookup error, matching
     `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
     user's screen search. The failure mode is a small overspend, not a lost capability.
     """
-    ladder_allowed = ladder_v1.feature_allowed(uid, 'screen_context')
-    if ladder_allowed is not None:
-        return ladder_allowed
     cached = _screen_vector_entitlement_cache.get(uid)
     if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
         return cached[0]
@@ -159,8 +156,9 @@ def grants_cloud_screen_vectors(uid: str) -> bool:
         subscription = users_db.get_user_valid_subscription(
             uid, firestore_client=get_customer_firestore_client(), provision=False
         )
-        plan = subscription.plan if subscription else PlanType.basic
-        entitled = effective_desktop_access_tier(plan, subscription) != DESKTOP_ACCESS_TIER_FREE
+        entitled = resolve_subscription_entitlements(subscription or {'plan': 'basic'})['capabilities'][
+            'cloud_screen_vectors'
+        ]
     except Exception as e:
         logger.warning("grants_cloud_screen_vectors lookup failed for uid=%s: %s", uid, e)
         return True

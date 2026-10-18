@@ -40,8 +40,7 @@ REQUIRED_IDENTICAL_LITERALS = (
     "CONVERSATION_OCR_CONTEXT_ENABLED",
     "MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
-    "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
-    "FREE_TIER_LOCAL_PROCESSING",
+    "CLIENT_SUMMARIES_AT_CAP_ENABLED",
     "FREE_TIER_EMERGENCY_STOP",
     # Both process_conversation hosts must read the same managed-spend ledger
     # switch; a listen-only value would leave pusher-hosted direct-provider

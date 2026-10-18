@@ -217,9 +217,8 @@ environment_shared:
         TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
           value: '4'
           category: rollout
-        FREE_TIER_LOCAL_PROCESSING:
-          category: rollout
-        FREE_TIER_LOCAL_PROCESSING_COHORT:
+        CLIENT_SUMMARIES_AT_CAP_ENABLED:
+          value: 'true'
           category: rollout
         FREE_TIER_EMERGENCY_STOP:
           category: rollout
@@ -399,8 +398,6 @@ environment_shared:
           category: rollout
         MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
           value: '25'
-          category: rollout
-        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
           value: 'true'
@@ -710,9 +707,8 @@ environment_shared:
         DESKTOP_PENDANT_CALL_LINK_PERCENT:
           value: '100'
           category: rollout
-        FREE_TIER_LOCAL_PROCESSING:
-          category: rollout
-        FREE_TIER_LOCAL_PROCESSING_COHORT:
+        CLIENT_SUMMARIES_AT_CAP_ENABLED:
+          value: 'true'
           category: rollout
         FREE_TIER_EMERGENCY_STOP:
           category: rollout
@@ -742,8 +738,6 @@ environment_shared:
           category: rollout
         MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
           value: '25'
-          category: rollout
-        BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           category: service_discovery
@@ -845,16 +839,16 @@ environment_shared:
         env_var: OMI_VERTEX_LEGACY_TASK_MODE
         provisional: true
         category: rollout
-      FREE_TIER_LOCAL_PROCESSING:
-        category: rollout
-      FREE_TIER_LOCAL_PROCESSING_COHORT:
+      CLIENT_SUMMARIES_AT_CAP_ENABLED:
+        value: 'true'
         category: rollout
       FREE_TIER_EMERGENCY_STOP:
         category: rollout
         value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
         category: rollout
-      BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+      CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED:
+        value: 'true'
         category: rollout
       MEMORY_BELIEF_AUTOMATION_PAUSED:
         value: 'false'
@@ -1190,9 +1184,8 @@ environment_shared:
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
+          CLIENT_SUMMARIES_AT_CAP_ENABLED:
+            value: 'true'
             category: rollout
           FREE_TIER_EMERGENCY_STOP:
             category: rollout
@@ -1215,9 +1208,8 @@ environment_shared:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
             value: '25'
             category: rollout
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            category: rollout
-          BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
+          CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED:
+            value: 'true'
             category: rollout
           WAKE_WORD_ADJUDICATION_ENABLED:
             value: 'true'
@@ -1593,9 +1585,8 @@ environment_shared:
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
+          CLIENT_SUMMARIES_AT_CAP_ENABLED:
+            value: 'true'
             category: rollout
           FREE_TIER_EMERGENCY_STOP:
             category: rollout
@@ -1720,8 +1711,6 @@ environment_shared:
             category: rollout
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
             value: '25'
-            category: rollout
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
@@ -2001,15 +1990,12 @@ environment_shared:
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
+          CLIENT_SUMMARIES_AT_CAP_ENABLED:
+            value: 'true'
             category: rollout
           FREE_TIER_EMERGENCY_STOP:
             category: rollout
             value: 'false'
-          BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
-            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -2391,9 +2377,8 @@ environment_shared:
           SYNC_WAL_AUDIO_COVERAGE_ENABLED:
             value: 'true'
             category: rollout
-          FREE_TIER_LOCAL_PROCESSING:
-            category: rollout
-          FREE_TIER_LOCAL_PROCESSING_COHORT:
+          CLIENT_SUMMARIES_AT_CAP_ENABLED:
+            value: 'true'
             category: rollout
           FREE_TIER_EMERGENCY_STOP:
             category: rollout

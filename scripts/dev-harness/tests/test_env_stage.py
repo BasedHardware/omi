@@ -80,8 +80,8 @@ def test_child_env_for_real_mode() -> None:
     # cohort and treats unset/empty/malformed as admitting no one. Both halves must be
     # present or the harness silently processes every conversation normally and the
     # on-device path it exists to exercise never runs.
-    assert child["FREE_TIER_LOCAL_PROCESSING"] == "true"
-    assert child["FREE_TIER_LOCAL_PROCESSING_COHORT"] == "pct:100"
+    assert "FREE_TIER_LOCAL_PROCESSING" not in child
+    assert "FREE_TIER_LOCAL_PROCESSING_COHORT" not in child
 
 
 def test_offline_mode_still_supplies_the_screen_frame_signing_secret() -> None:

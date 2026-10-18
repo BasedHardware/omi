@@ -30,6 +30,7 @@ from utils.other.storage import (
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
+from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -378,10 +379,10 @@ def _accepted_client_projection(raw: Any, segments: Any) -> Optional[ClientProce
     """Bind a client projection to the persisted transcript, or drop it.
 
     Schema failures and hash mismatch are not request errors: the conversation
-    still finalizes on the deterministic minimum. Warnings are content-free
+    still finalizes under the funded processing policy. Warnings are content-free
     (reason plus provenance only — never transcript or body).
     """
-    if raw is None:
+    if raw is None or not client_summaries_at_cap_enabled():
         return None
     try:
         projection = ClientProcessing.model_validate(raw)

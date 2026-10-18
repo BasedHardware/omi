@@ -1,47 +1,8 @@
-"""Cohort admission and emergency stop for the free-tier rollout flags.
+"""Cohort admission and emergency stops for free-tier memory suppression.
 
-Before this module, ``FREE_TIER_LOCAL_PROCESSING`` and
-``FREE_TIER_MEMORY_SUPPRESSION`` were global booleans: lighting one lit it for
-100% of basic users on that environment, with no remote stop (direction review
-2026-09-07 §7 item 3; flip review F-5). This module makes a lit flag mean
-"lit for the configured cohort", fail-closed, and adds two stops that need no
-cohort edit.
-
-Admission (per flag, from the environment, read at call time):
-
-    <FLAG>_COHORT = "uid:<uid>[,uid:<uid>...][,pct:<0-100>]"
-
-* ``uid:<uid>`` admits that account.
-* ``pct:<n>`` admits accounts whose stable hash bucket is below ``n``. The
-  bucket is ``sha256("free-tier-cohort:" + uid)`` so both flags select the
-  same accounts at the same percentage (one coherent product per user), and
-  so the selection is independent of process, host, and time.
-* Unset, empty, or malformed admits **nobody**. Malformed is logged once per
-  process so a typo is discoverable without lighting anyone.
-
-Stops (both revoke admission for everyone, including listed uids):
-
-* ``FREE_TIER_EMERGENCY_STOP=true`` — environment; needs a redeploy.
-* PostHog flag ``free-tier-kill-switch-v1`` — remote, honoured without a
-  redeploy, read with the same client configuration and tri-state mapping
-  as the JIT rollout (``utils.jit_rollout``) but on this module's own small
-  executor, so a stall here cannot occupy the JIT admission bulkhead and vice
-  versa. Only a **definitively enabled** kill switch stops; unknown / absent
-  / PostHog down never blocks by itself, matching the JIT precedent, so an
-  outage cannot re-light or un-light a cohort. The remote read happens only
-  after the environment cohort admits the account, so a dark fleet makes no
-  provider calls; after a genuine provider failure (timeout, unconfigured,
-  malformed, unexpected exception) the reader backs off for
-  ``_PROVIDER_BACKOFF_SECONDS`` process-wide, so a sweep over hundreds of
-  admitted accounts pays one timeout, not one per account. Hitting the
-  in-flight cap is **not** a failure and never arms that backoff, so ordinary
-  concurrency cannot blind the stop fleet-wide. Failures are logged once per
-  class.
-
-Callers that cannot name the account are never admitted: the policy modules
-answer ``False`` for a lit flag when given no uid and log once. That is the
-fail-closed default the direction review asked for — a boolean alone lights
-nobody.
+Admission is controlled by the memory-suppression flag and its UID/percentage
+cohort. FREE_TIER_EMERGENCY_STOP and free-tier-kill-switch-v1 revoke admission.
+The summary-at-cap path uses funded admission and its own default-on kill switch.
 """
 
 # LIFECYCLE: permanent

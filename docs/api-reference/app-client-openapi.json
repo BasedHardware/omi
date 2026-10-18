@@ -24728,6 +24728,17 @@
             "title": "Chat Quota Used",
             "type": "number"
           },
+          "cloud_screen_vectors": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cloud Screen Vectors"
+          },
           "desktop_grandfather_until": {
             "anyOf": [
               {
@@ -36743,6 +36754,17 @@
             "default": 0.0,
             "title": "Chat Quota Used",
             "type": "number"
+          },
+          "cloud_screen_vectors": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cloud Screen Vectors"
           },
           "desktop_grandfather_until": {
             "anyOf": [

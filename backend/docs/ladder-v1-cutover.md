@@ -37,7 +37,7 @@ ramping. Keep every existing price and legacy env binding intact.
 | `STOREFRONT_LADDER_V1_ENABLED` | Existing v2 presentation endpoint; admits bound ladder checkout IDs |
 | `LADDER_V1_LANE_METERING_ENABLED` | Adds live/batch/on-device/unknown shadow attribution to existing hourly writes |
 | `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` | Shared monthly ledger admission for Free and ladder-price accounts; legacy bypass |
-| `LADDER_V1_PRO_GATES_ENABLED` | Pro/Architect proactive producers, managed screen context and cloud screen vectors; Plus core desktop |
+| `LADDER_V1_PRO_GATES_ENABLED` | Pro/Architect proactive producers, managed screen context; Plus core desktop |
 | `LADDER_V1_MCP_DAILY_CAPS_ENABLED` | Atomic shared daily request cap across MCP and developer keys: 100/500/5,000/5,000 |
 | `LADDER_V1_WIRE_IDENTITY_ENABLED` | Uses approved `LADDER_V1_MIN_MOBILE_VERSION` and `LADDER_V1_MIN_WINDOWS_VERSION` floors |
 | `LADDER_V1_RETIRE_PRO_ALIAS_ENABLED` | Rejects retired `pro` alias; enable only after old-client retirement and stored-row audit |
@@ -224,3 +224,10 @@ closed-bucket sums. Hour/day rollover closes old buckets once. A bounded 1,024-u
 process cache shares closed-bucket totals; every later funded dispatch rereads open
 usage so an earlier admission cannot hide a newly exhausted allowance. These are
 admission snapshots, not distributed spend reservations; already dispatched work can drain.
+
+
+Cloud-screen-vector eligibility is now an independent versioned catalog
+capability, shipped on with a header-conjoined proxy refusal kill switch. At-cap
+client summaries follow the funded deferral/backlog policy rather than the retired
+basic-plan terminal policy. See [the lifecycle contract](listen_pusher_pipeline.mdx#default-on-free-tier-capability-fold-2026-10-18-ruling).
+These two default-on controls do not enable the budget/storefront switches above.

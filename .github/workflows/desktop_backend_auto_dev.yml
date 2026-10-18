@@ -233,8 +233,6 @@ jobs:
       # manifest so it cannot drift from the values actually deployed.
       - name: Render desktop backend expected env state
         id: desktop-expected-env
-        env:
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
         run: |
           set -euo pipefail
           python3 backend/scripts/render_backend_runtime_env.py \
@@ -290,10 +288,9 @@ jobs:
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
             MEMORY_BELIEF_MODEL_ENABLED=true
-            FREE_TIER_LOCAL_PROCESSING=true
+            CLIENT_SUMMARIES_AT_CAP_ENABLED=true
             FREE_TIER_EMERGENCY_STOP=false
-            FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}
-            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=true
+            CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED=true
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |

@@ -738,51 +738,6 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
         assert f'{name}={value}' in workflow, f'{env_name}: {name}={value} is not what the workflow deploys'
 
 
-@pytest.mark.parametrize('cohort', [None, '', 'uid:fixture-a,uid:fixture-b'])
-def test_free_tier_cohort_renders_empty_or_escaped_on_every_cloud_run_host(monkeypatch, cohort):
-    key = 'FREE_TIER_LOCAL_PROCESSING_COHORT'
-    if cohort is None:
-        monkeypatch.delenv(key, raising=False)
-    else:
-        monkeypatch.setenv(key, cohort)
-    for environment in ('dev', 'prod'):
-        config = _MANIFEST['environments'][environment]
-        hosts = [config['desktop_backend'], *config['cloud_run']['services'].values()]
-        expected = (cohort or '') if environment == 'dev' else ''
-        for host in hosts:
-            binding = {key: host['env'][key]}
-            assert _MODULE['_render_env_entries'](binding) == [{'name': key, 'value': expected}]
-            assert _MODULE['_render_env_vars'](binding) == f'{key}=' + expected.replace(',', r'\,')
-
-
-def test_free_tier_malformed_cohort_fails_before_desktop_output(monkeypatch, tmp_path, capsys):
-    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', 'uid:')
-    state = tmp_path / 'state.json'
-    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
-    with pytest.raises(ValueError, match='uid:<non-empty>'):
-        _MODULE['main']()
-    assert not state.exists()
-    assert capsys.readouterr().out == ''
-
-
-def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path, capsys):
-    cohort = 'uid:fixture-a,uid:fixture-b'
-    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', cohort)
-    state = tmp_path / 'state.json'
-    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
-    assert _MODULE['main']() == 0
-    output = capsys.readouterr().out
-    assert output.startswith(
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
-    )
-    assert output.endswith(
-        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n'
-        'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
-    )
-    entries = json.loads(state.read_text())['services']['desktop-backend']['env']
-    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
-
-
 def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiters(monkeypatch, tmp_path, capsys):
     env_config = deepcopy(_MANIFEST['environments']['dev'])
     env_config['desktop_backend']['env']['FIRESTORE_READ_LEVERS']['value'] = '{"queue_age":true,"subscription":true}'
@@ -794,7 +749,7 @@ def test_desktop_lever_output_tracks_manifest_value_and_escapes_deploy_delimiter
 
     output = capsys.readouterr().out
     assert 'FIRESTORE_READ_LEVERS={"queue_age":true\\,"subscription":true}\n' in output
-    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n')
+    assert output.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
 
 
 def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
@@ -840,12 +795,9 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout.startswith(
         'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
     )
-    assert result.stdout.endswith(
-        '__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n' 'free_tier_local_processing_cohort=\n'
-    )
+    assert result.stdout.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
-    assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
-    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries
+    assert {'name': 'CLIENT_SUMMARIES_AT_CAP_ENABLED', 'value': 'true'} in entries
 
 
 def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():

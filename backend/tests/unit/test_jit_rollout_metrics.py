@@ -97,7 +97,7 @@ def test_lazy_desktop_deferral_metric_is_bounded_and_uid_free():
     assert 'sum by (event)' in help_line  # stored is emitted by backend AND pusher
     assert 'pusher' in help_line
     assert 'attempt/persist ratio' in help_line  # not per-conversation
-    assert 'FREE_TIER_LOCAL_PROCESSING' in help_line  # ratio undefined while on
+    assert 'funded cap deferral' in help_line  # ratio undefined while on
 
     # Assert on a rendered sample after a real increment, not just the HELP line.
     before = _rendered_lazy_sample(payload, 'fenced')
