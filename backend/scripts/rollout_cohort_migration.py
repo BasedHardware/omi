@@ -145,6 +145,22 @@ def inventory(sources):
     return desired, conflicts
 
 
+def validate_stored_documents(client):
+    # Verify the same whole-document shape the serving adapter requires. A
+    # malformed unrelated field can deny every cohort, including legacy all.
+    rows = list(client.collection(COLLECTION).limit(LIMIT + 1).stream(timeout=10.0, retry=None))
+    if len(rows) > LIMIT:
+        raise ValueError('stored cohort inventory exceeds migration bound')
+    for row in rows:
+        data = row.to_dict()
+        cohorts = data.get('cohorts') if isinstance(data, dict) else None
+        if not isinstance(cohorts, dict) or any(
+            not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())
+            for flags in cohorts.values()
+        ):
+            raise ValueError('malformed stored cohort document')
+
+
 def read_stored(client, environment, name, enabled):
     field = f'cohorts.{environment}.`{name}`'
     rows = list(
@@ -175,6 +191,7 @@ def migrate(args, *, client_factory, live_reader=read_live):
             print(f'{name}: live_members={len(row.members)} legacy_all={int(row.all_users)} writes=0')
         return 0
     client = client_factory(project=args.project)
+    validate_stored_documents(client)
     stored = {
         name: (read_stored(client, args.environment, name, True), read_stored(client, args.environment, name, False))
         for name in desired

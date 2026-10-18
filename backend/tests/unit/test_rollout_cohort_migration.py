@@ -194,3 +194,13 @@ def test_missing_host_binding_is_not_silently_omitted_from_seed():
     factory = MagicMock()
     assert migration.migrate(args(apply=True), client_factory=factory, live_reader=lambda *_: live) == 1
     factory.assert_not_called()
+
+
+@pytest.mark.parametrize('payload', [None, {}, {'cohorts': {'dev': {'unrelated': 'invalid'}}}])
+def test_malformed_unrelated_fields_block_seed_and_verification(payload):
+    factory = MagicMock()
+    row = SimpleNamespace(to_dict=lambda: payload)
+    factory.return_value.collection.return_value.limit.return_value.stream.return_value = [row]
+    with pytest.raises(ValueError, match='malformed stored'):
+        migration.migrate(args(apply=True), client_factory=factory, live_reader=lambda *_: sources())
+    factory.return_value.batch.assert_not_called()
