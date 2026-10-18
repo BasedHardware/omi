@@ -1,24 +1,47 @@
-"""Each named scenario reproduces its production phenomenon on the simulated pipeline (seeded)."""
+"""Each named scenario reproduces its production phenomenon on the simulated pipeline (seeded).
+
+Every variant runs once in the module fixture (setup phase); tests only assert on the samples, so the
+fast-unit CPU guard measures assertions, not simulations.
+"""
+
+import pytest
 
 from testing.pipeline_sim.scenarios import run
 from testing.pipeline_sim.workload import NORMAL, PRIVACY_AT_ADMISSION
 
+VARIANTS = {
+    'serial': ('burst_owner_serial_sequencer', {}),
+    'widened': ('burst_owner_serial_sequencer', {'per_owner_concurrency': 32}),
+    'steady': ('mixed_fleet_steady', {}),
+    'exhaustion': ('provider_exhaustion_window', {}),
+    'stale': ('stale_finalize_targets', {}),
+    'stale_no_purge': ('stale_finalize_targets', {'overrides': {'purge_on_fence': False}}),
+    'privacy': ('privacy_blocked_users', {}),
+    'summary_shared': ('summary_behind_transcription', {}),
+    'summary_isolated': ('summary_behind_transcription', {'summary_pool': 'isolated'}),
+}
 
-def test_burst_owner_drains_serially_and_breaches_the_15_minute_obligation():
-    serial = run('burst_owner_serial_sequencer', 1)
+
+@pytest.fixture(scope='module')
+def samples() -> dict[str, dict]:
+    return {key: run(name, 1, **kwargs) for key, (name, kwargs) in VARIANTS.items()}
+
+
+def test_burst_owner_drains_serially_and_breaches_the_15_minute_obligation(samples):
+    serial = samples['serial']
     assert serial['verdict'] == 'GATE_FAIL obligation_over_15m'
     assert serial['sim']['sequencer']['max_active_per_owner'] == 1
     assert serial['sim']['sequencer']['max_pending_per_owner'] >= 360
     # ~365 sequential jobs: the last capture waits hours, not minutes.
     assert serial['sim']['accept_to_projection_max_seconds'] > 2 * 3600
 
-    widened = run('burst_owner_serial_sequencer', 1, per_owner_concurrency=32)
+    widened = samples['widened']
     assert widened['verdict'] == 'GATE_PASS'
     assert widened['sim']['accept_to_projection_max_seconds'] < 15 * 60
 
 
-def test_mixed_fleet_steady_passes_every_gate():
-    sample = run('mixed_fleet_steady', 1)
+def test_mixed_fleet_steady_passes_every_gate(samples):
+    sample = samples['steady']
     assert sample['verdict'] == 'GATE_PASS'
     assert sample['sim']['completion_rate'] == 1.0
     assert sample['sim']['job_states'] == {'committed': sample['admissions']}
@@ -26,8 +49,8 @@ def test_mixed_fleet_steady_passes_every_gate():
     assert sample['sim']['max_paid_calls_per_segment'] <= 1
 
 
-def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_and_a_quarantine_tail():
-    sample = run('provider_exhaustion_window', 1)
+def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_and_a_quarantine_tail(samples):
+    sample = samples['exhaustion']
     sim = sample['sim']
     assert sample['quarantine_projection_cohort_count'] >= 20  # above the gate's low-sample floor
     assert sample['quarantine_projection_p95_seconds'] > 300
@@ -40,8 +63,8 @@ def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_and_a_quarantine
     assert sim['recovery_states']['recovered'] >= 0.95 * sim['paid_fallback_calls']
 
 
-def test_stale_finalize_targets_are_neither_failures_nor_paid():
-    sample = run('stale_finalize_targets', 1)
+def test_stale_finalize_targets_are_neither_failures_nor_paid(samples):
+    sample = samples['stale']
     sim = sample['sim']
     assert sample['verdict'] == 'GATE_PASS'
     assert sim['excluded_uploads'].get('deleted_target', 0) > 0
@@ -53,15 +76,15 @@ def test_stale_finalize_targets_are_neither_failures_nor_paid():
     assert sample['errors'] == 0 and sim['completion_rate'] == 1.0
 
 
-def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge():
-    sample = run('stale_finalize_targets', 1, overrides={'purge_on_fence': False})
+def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge(samples):
+    sample = samples['stale_no_purge']
     states = sample['sim']['job_states']
     assert states.get('privacy_blocked', 0) > 0 and states.get('result_ready', 0) > 0
     assert sample['projection_obligations_over_15m'] > 0
 
 
-def test_privacy_blocked_users_get_no_paid_calls_or_projection_and_are_reported_distinctly():
-    sample = run('privacy_blocked_users', 1)
+def test_privacy_blocked_users_get_no_paid_calls_or_projection_and_are_reported_distinctly(samples):
+    sample = samples['privacy']
     sim = sample['sim']
     assert sim['upload_status']['rejected_privacy'] > 0
     assert sim['paid_fallback_calls_by_owner_kind'].get(PRIVACY_AT_ADMISSION, 0) == 0
@@ -72,9 +95,9 @@ def test_privacy_blocked_users_get_no_paid_calls_or_projection_and_are_reported_
     assert sample['verdict'] == 'GATE_PASS'
 
 
-def test_first_summaries_queue_behind_transcription_on_the_shared_executor():
-    shared = run('summary_behind_transcription', 1)
-    isolated = run('summary_behind_transcription', 1, summary_pool='isolated')
+def test_first_summaries_queue_behind_transcription_on_the_shared_executor(samples):
+    shared = samples['summary_shared']
+    isolated = samples['summary_isolated']
     assert shared['verdict'] == 'GATE_FAIL first_summary_deadline'
     assert shared['first_summary_breach_rate'] > 0.05
     assert isolated['verdict'] == 'GATE_PASS'

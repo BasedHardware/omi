@@ -1,10 +1,21 @@
 """Revision replacement mid-run: un-awaited work is lost, awaited and durable work survives."""
 
+import pytest
+
 from testing.pipeline_sim.scenarios import run
 
 
-def test_background_first_summaries_are_lost_at_revision_replacement():
-    sample = run('revision_replacement_mid_run', 1)
+@pytest.fixture(scope='module')
+def samples() -> dict[str, dict]:
+    # Simulate once in setup; the fast-unit CPU guard measures only the assertions below.
+    return {
+        'background': run('revision_replacement_mid_run', 1),
+        'task': run('revision_replacement_mid_run', 1, summary_dispatch='task'),
+    }
+
+
+def test_background_first_summaries_are_lost_at_revision_replacement(samples):
+    sample = samples['background']
     sim = sample['sim']
     assert sim['lost_fire_and_forget_units'] > 0
     assert sim['summaries_never_completed'] > 0
@@ -16,8 +27,8 @@ def test_background_first_summaries_are_lost_at_revision_replacement():
     assert sim['drain'].get('request_scoped:killed', 0) == 0
 
 
-def test_request_scoped_summaries_survive_the_same_replacement():
-    sample = run('revision_replacement_mid_run', 1, summary_dispatch='task')
+def test_request_scoped_summaries_survive_the_same_replacement(samples):
+    sample = samples['task']
     sim = sample['sim']
     assert sim['summaries_never_completed'] == 0
     assert sim['drain'].get('request_scoped:killed', 0) == 0
