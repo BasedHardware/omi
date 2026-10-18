@@ -13,10 +13,10 @@ kill switch can never leave the feature running. Off restores the previous
 whole-batch ``recording_session_target`` resolution and writes no origin stamp.
 
 ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST`` stages the rollout: comma-separated uids,
-whitespace-trimmed; empty or unset admits every user. It gates every behavior
-that changes a sync append into, or a live write onto, a user's rows (per-segment
-binding, the pinned live origin, the live revision fence, the open-live enrichment
-deferral), so a uid outside it behaves exactly as with the kill switch off. The
+whitespace-trimmed; empty or unset admits every user. It gates per-segment
+binding. Live-target revision fencing and origin stability on sync appends are unconditional:
+once sync and live share a row, late speech must fence older processors and keep
+the listener's cached origin regardless of rollout membership. The
 metadata-only origin stamp stays under the kill switch alone: widening later
 needs lineage that was already stamped. The kill switch wins over the allowlist.
 

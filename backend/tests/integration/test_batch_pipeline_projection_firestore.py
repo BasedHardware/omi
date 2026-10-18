@@ -1118,6 +1118,7 @@ def test_authoritative_gap_ids_do_not_inherit_speaker_zero_manual_owner(lane, mo
 
 
 def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
     from unittest.mock import Mock
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
     from utils.batch_pipeline import quarantine_recovery as module

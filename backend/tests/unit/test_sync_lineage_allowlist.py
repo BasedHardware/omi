@@ -1,11 +1,10 @@
 """Staged rollout of sync lineage binding: ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST``.
 
-Every sync-side behavior the kill switch turns on is gated by uid, and a uid
-outside a non-empty allowlist must be indistinguishable from the kill switch
-being off at each site: the per-segment binding request, the pinned live
-origin on a sync append, the live revision fence, and the open-live enrichment
-deferral. Each site test compares the non-admitted outcome against the OFF
-outcome itself, not merely against "not the new behavior". All ids are
+Lineage binding is gated by uid. A uid outside a non-empty allowlist must match
+the kill switch being off at that site. Adopted live targets always pin their
+origin and fence late speech, and open-live enrichment is always deferred.
+Each site test compares the non-admitted outcome against the OFF outcome itself,
+not merely against "not the new behavior". All ids are
 synthetic; ``u`` and ``uid`` are the owners the shared harnesses write under.
 """
 
@@ -333,9 +332,9 @@ def test_admitted_owner_keeps_the_pinned_live_origin(monkeypatch, name):
 
 
 @pytest.mark.parametrize('name', sorted(INACTIVE))
-def test_refused_owner_appends_exactly_as_the_kill_switch(monkeypatch, name):
+def test_live_origin_pin_is_independent_of_lineage_rollout(monkeypatch, name):
     off = _pinned_append(monkeypatch, OFF)
-    assert off[0][0]['started_at'] == at(gen_start(L) - 1)  # OFF rebases on the early WAL
+    assert off[0][0]['started_at'] == at(gen_start(L))
     assert _pinned_append(monkeypatch, INACTIVE[name]) == off
 
 
@@ -400,9 +399,9 @@ def test_admitted_owner_fences_older_processors_on_fresh_live_speech(monkeypatch
 
 
 @pytest.mark.parametrize('name', sorted(INACTIVE))
-def test_refused_owner_live_write_is_the_kill_switch_write(monkeypatch, name):
+def test_live_target_fence_is_independent_of_lineage_rollout(monkeypatch, name):
     off = _live_write(monkeypatch, OFF)
-    assert off['sync_content_revision'] == 1
+    assert off['sync_content_revision'] == 2
     assert _live_write(monkeypatch, INACTIVE[name]) == off
 
 
