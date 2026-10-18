@@ -29,8 +29,7 @@ void main() {
     return p;
   }
 
-  ActionItemsFetcher fetchRows(List<ActionItemWithMetadata> Function() rows) =>
-      ({
+  ActionItemsFetcher fetchRows(List<ActionItemWithMetadata> Function() rows) => ({
         int limit = 100,
         int offset = 0,
         bool? completed,
@@ -39,12 +38,13 @@ void main() {
         DateTime? endDate,
         DateTime? dueStartDate,
         DateTime? dueEndDate,
-      }) async => ActionItemsResponse(actionItems: rows());
+      }) async =>
+          ActionItemsResponse(actionItems: rows());
 
   for (final deletedIds in <List<String>?>[
     null,
     ['a'],
-    ['a', 'b'],
+    ['a', 'b']
   ]) {
     test('refresh during bulk delete cannot duplicate or resurrect rows after receipt $deletedIds', () async {
       final a = _item('a', description: 'Same text, separate task');
@@ -79,32 +79,30 @@ void main() {
   }
 
   for (final staged in [false, true]) {
-    test(
-      'missing refresh while ${staged ? 'staged' : 'direct'} delete is in flight cannot retire its tombstone',
-      () async {
-        final victim = _item('deleted');
-        final retained = _item('retained');
-        var rows = [victim, retained];
-        final receipt = Completer<bool>();
-        final p = await provider(fetcher: fetchRows(() => rows), deleter: (_) => receipt.future);
+    test('missing refresh while ${staged ? 'staged' : 'direct'} delete is in flight cannot retire its tombstone',
+        () async {
+      final victim = _item('deleted');
+      final retained = _item('retained');
+      var rows = [victim, retained];
+      final receipt = Completer<bool>();
+      final p = await provider(fetcher: fetchRows(() => rows), deleter: (_) => receipt.future);
 
-        late Future<bool> deletion;
-        if (staged) {
-          p.stageDeleteActionItem(victim);
-          deletion = p.commitStagedDelete(victim.id);
-        } else {
-          deletion = p.deleteActionItem(victim);
-        }
+      late Future<bool> deletion;
+      if (staged) {
+        p.stageDeleteActionItem(victim);
+        deletion = p.commitStagedDelete(victim.id);
+      } else {
+        deletion = p.deleteActionItem(victim);
+      }
 
-        rows = [retained];
-        await p.fetchActionItems();
-        rows = [victim, retained];
-        await p.fetchActionItems();
-        receipt.complete(true);
-        expect(await deletion, isTrue);
-        expect(p.actionItems.map((item) => item.id), ['retained']);
-      },
-    );
+      rows = [retained];
+      await p.fetchActionItems();
+      rows = [victim, retained];
+      await p.fetchActionItems();
+      receipt.complete(true);
+      expect(await deletion, isTrue);
+      expect(p.actionItems.map((item) => item.id), ['retained']);
+    });
   }
 
   test('a refresh started before delete acknowledgement cannot retire its tombstone after acknowledgement', () async {
@@ -114,21 +112,20 @@ void main() {
     final oldRead = Completer<ActionItemsResponse?>();
     var calls = 0;
     final p = await provider(
-      fetcher:
-          ({
-            int limit = 100,
-            int offset = 0,
-            bool? completed,
-            String? conversationId,
-            DateTime? startDate,
-            DateTime? endDate,
-            DateTime? dueStartDate,
-            DateTime? dueEndDate,
-          }) async {
-            calls++;
-            if (calls == 2) return oldRead.future;
-            return ActionItemsResponse(actionItems: [victim, retained]);
-          },
+      fetcher: ({
+        int limit = 100,
+        int offset = 0,
+        bool? completed,
+        String? conversationId,
+        DateTime? startDate,
+        DateTime? endDate,
+        DateTime? dueStartDate,
+        DateTime? dueEndDate,
+      }) async {
+        calls++;
+        if (calls == 2) return oldRead.future;
+        return ActionItemsResponse(actionItems: [victim, retained]);
+      },
       deleter: (_) => receipt.future,
     );
 
@@ -151,22 +148,21 @@ void main() {
       final oldRead = Completer<ActionItemsResponse?>();
       var calls = 0;
       final p = await provider(
-        fetcher:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-              DateTime? dueStartDate,
-              DateTime? dueEndDate,
-            }) async {
-              calls++;
-              if (calls == 1) return ActionItemsResponse(actionItems: [victim, retained], hasMore: true);
-              if (calls == 2) return oldRead.future;
-              return ActionItemsResponse(actionItems: [retained]);
-            },
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async {
+          calls++;
+          if (calls == 1) return ActionItemsResponse(actionItems: [victim, retained], hasMore: true);
+          if (calls == 2) return oldRead.future;
+          return ActionItemsResponse(actionItems: [retained]);
+        },
         deleter: (_) async => true,
       );
 
@@ -195,20 +191,19 @@ void main() {
       final filteredRead = Completer<ActionItemsResponse?>();
       var rows = [victim, retained];
       final p = await provider(
-        fetcher:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-              DateTime? dueStartDate,
-              DateTime? dueEndDate,
-            }) async {
-              if (completed == false || startDate != null) return filteredRead.future;
-              return ActionItemsResponse(actionItems: rows);
-            },
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async {
+          if (completed == false || startDate != null) return filteredRead.future;
+          return ActionItemsResponse(actionItems: rows);
+        },
         deleter: (_) async => true,
       );
       expect(await p.deleteActionItem(victim), isTrue);
@@ -233,7 +228,7 @@ void main() {
 
   for (final deletedIds in <List<String>?>[
     null,
-    ['a'],
+    ['a']
   ]) {
     test('bulk rollback keeps an already restored task once after receipt $deletedIds', () async {
       final a = _item('a');
@@ -292,21 +287,20 @@ void main() {
       var rows = [victim, retained];
       var calls = 0;
       final p = await provider(
-        fetcher:
-            ({
-              int limit = 100,
-              int offset = 0,
-              bool? completed,
-              String? conversationId,
-              DateTime? startDate,
-              DateTime? endDate,
-              DateTime? dueStartDate,
-              DateTime? dueEndDate,
-            }) async {
-              calls++;
-              if (calls == 2) return oldRead.future;
-              return ActionItemsResponse(actionItems: rows);
-            },
+        fetcher: ({
+          int limit = 100,
+          int offset = 0,
+          bool? completed,
+          String? conversationId,
+          DateTime? startDate,
+          DateTime? endDate,
+          DateTime? dueStartDate,
+          DateTime? dueEndDate,
+        }) async {
+          calls++;
+          if (calls == 2) return oldRead.future;
+          return ActionItemsResponse(actionItems: rows);
+        },
         deleter: (_) async => true,
       );
 
