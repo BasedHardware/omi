@@ -913,6 +913,36 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
     service._canonical.write.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("query", "expected_ids"),
+    [
+        ("AI", ["ai"]),
+        ("ux", ["ux"]),
+        ("中文", ["chinese"]),
+        ("...", []),
+        ("", ["ai", "ux", "chinese"]),
+    ],
+)
+def test_default_product_search_filters_queries_made_only_of_short_words(service_mod, query, expected_ids):
+    from models.product_memory import MemoryAccessPolicy
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service.read = MagicMock(
+        return_value=[
+            _memory(service_mod, "ai", content="Works on AI agents"),
+            _memory(service_mod, "ux", content="Reviews UX copy every Friday"),
+            _memory(service_mod, "chinese", content="正在学习中文"),
+        ]
+    )
+
+    result = service.default_product_search("uid-test", query, policy=MemoryAccessPolicy.for_omi_chat())
+
+    # Only a blank query lists every memory; short words still filter and a query
+    # with no searchable word matches nothing.
+    assert [item["memory_id"] for item in result["items"]] == expected_ids
+    assert result["total_count"] == len(expected_ids)
+
+
 def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)

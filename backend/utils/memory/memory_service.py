@@ -3550,9 +3550,9 @@ class MemoryService:
         # path that must not stream ``memory_items``.
         rows = self.read(uid, authoritative=True, **read_kwargs)
 
-        query_tokens = {
-            token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2
-        }
+        query_words = {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split()}
+        # Words of two characters or fewer drop only beside a longer word; a non-blank query always filters.
+        query_tokens = {token for token in query_words if len(token) > 2} or query_words
         items: List[Dict[str, Any]] = []
         for memory in rows:
             # archive_requires_explicit_query: this default product search never
@@ -3565,7 +3565,7 @@ class MemoryService:
                 continue
             content = memory.content or ""
             content_lower = content.lower()
-            if query_tokens and not any(token in content_lower for token in query_tokens):
+            if (query or "").strip() and not any(token in content_lower for token in query_tokens):
                 continue
             tier = memory.memory_tier or MemoryTier.long_term
             source = memory.evidence[0].source_id if memory.evidence else None
