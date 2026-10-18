@@ -982,6 +982,28 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
     assert [item['memory_id'] for item in response['items']] == ['live']
 
 
+def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
+    calls = []
+
+    class _Index:
+        def delete(self, *, ids=None, filter=None, namespace):
+            calls.append({'ids': ids, 'filter': filter, 'namespace': namespace})
+
+    monkeypatch.setattr('database.vector_db.index', _Index())
+    from database.vector_db import delete_canonical_memory_vectors_by_ids
+
+    deleted = delete_canonical_memory_vectors_by_ids('u1', ['stale-a', 'stale-b', 'stale-a', ''])
+
+    assert deleted == 2
+    assert calls == [
+        {
+            'ids': None,
+            'filter': {'$and': [{'uid': {'$eq': 'u1'}}, {'memory_id': {'$in': ['stale-a', 'stale-b']}}]},
+            'namespace': 'ns2',
+        }
+    ]
+
+
 def test_hydration_bounds_stale_index_deletes_and_ignores_deleter_failures():
     now = datetime.now(timezone.utc)
     missing_items = [_memory_item(f'missing-{index}', tier=MemoryTier.long_term, now=now) for index in range(51)]
