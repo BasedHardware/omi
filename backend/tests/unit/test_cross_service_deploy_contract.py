@@ -104,8 +104,54 @@ def _unparseable_boolean(manifest: dict) -> None:
     _integration_env(manifest)['BATCH_PIPELINE_SERVING_ENABLED']['value'] = 'enabled'
 
 
+def _unparseable_named_set_boolean(manifest: dict) -> None:
+    # LIVE_SPEAKER_SPAN_RESOLUTION is compared against a named module-level frozenset (_TRUTHY), not a
+    # literal tuple; a scanner that skips named sets never sees its tokens.
+    for services in (_prod(manifest)['cloud_run']['services'],):
+        for svc in services.values():
+            if 'LIVE_SPEAKER_SPAN_RESOLUTION' in svc.get('env', {}):
+                svc['env']['LIVE_SPEAKER_SPAN_RESOLUTION']['value'] = 'enabled'
+
+
+def _sync_handler_wrong_route(manifest: dict) -> None:
+    # Route check on a full-URL edge: the sync edge is inert while SYNC_DISPATCH_MODE is live-only
+    # inline, so use the prod-active account-deletion edge with a literal URL on the wrong path.
+    env = _prod(manifest)['cloud_run']['services']['backend-sync']['env']
+    env['ACCOUNT_DELETION_HANDLER_URL'] = {
+        'value': 'https://backend-sync-hhibjajaja-uc.a.run.app/v1/users/wrong-route/run',
+        'category': 'reliability',
+    }
+
+
+def _recovery_audience_with_path(manifest: dict) -> None:
+    _integration_env(manifest)['BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE'][
+        'value'
+    ] += '/v2/batch-pipeline/recover-quarantine'
+
+
+def _backfill_audience_mismatch(manifest: dict) -> None:
+    # Dispatcher mints one audience while the target verifies another: enable the live-only sync dispatch
+    # on backend (its handler URL targets backend-sync) and point the dispatcher's minted audience at the
+    # integration host. The target still verifies the backend-sync URL; every task would be rejected 403.
+    env = _prod(manifest)['cloud_run']['services']['backend']['env']
+    env['SYNC_DISPATCH_MODE'] = {'value': 'cloud_tasks', 'category': 'reliability'}
+    env['SYNC_TASKS_OIDC_AUDIENCE']['default'] = 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/sync-jobs/run'
+
+
+def _typoed_sync_host(manifest: dict) -> None:
+    env = _prod(manifest)['cloud_run']['services']['backend-sync']['env']
+    env['SYNC_TASKS_HANDLER_URL']['default'] = 'https://backend-sync-hhibjajaja-ud.a.run.app/v2/sync-jobs/run'
+
+
 def _uid_literal(manifest: dict) -> None:
     _integration_env(manifest)['SYNTHETIC_UID_ALLOWLIST'] = {'value': SYNTHETIC_UID, 'category': 'rollout'}
+
+
+def _uid_allowlist_appended(manifest: dict) -> None:
+    # Appending to an existing accepted cohort: same env key, one more UID-shaped literal. The prod
+    # backend-listen STT cohort is accepted at uids=1 in the ratchet; appending must not stay "known".
+    listen = _prod(manifest)['gke']['backend-listen']['env']['STT_LIVE_DEMAND_UID_ALLOWLIST']
+    listen['value'] = f"{listen['value']},{SYNTHETIC_UID}"
 
 
 def _prod_url_in_dev(manifest: dict) -> None:
@@ -126,7 +172,13 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'recovery_to_sync': _manifest_mutation(_recovery_to_sync),
     'integration_timeout_300': _manifest_mutation(_integration_timeout_300),
     'unparseable_boolean': _manifest_mutation(_unparseable_boolean),
+    'unparseable_named_set_boolean': _manifest_mutation(_unparseable_named_set_boolean),
+    'sync_handler_wrong_route': _manifest_mutation(_sync_handler_wrong_route),
+    'recovery_audience_with_path': _manifest_mutation(_recovery_audience_with_path),
+    'backfill_audience_mismatch': _manifest_mutation(_backfill_audience_mismatch),
+    'typoed_sync_host': _manifest_mutation(_typoed_sync_host),
     'uid_literal': _manifest_mutation(_uid_literal),
+    'uid_allowlist_appended': _manifest_mutation(_uid_allowlist_appended),
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
 }
@@ -229,6 +281,53 @@ def test_unparseable_boolean_value_fails(results: Results) -> None:
         and v.scope.endswith('backend-integration/BATCH_PIPELINE_SERVING_ENABLED')  # pragma: allowlist secret
         for v in results.mutations['unparseable_boolean']
     )
+
+
+def test_unparseable_named_set_boolean_fails(results: Results) -> None:
+    # LIVE_SPEAKER_SPAN_RESOLUTION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
+    # resolve named collections or this deployed flag is invisible to boolean-token.
+    assert any(
+        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_SPEAKER_SPAN_RESOLUTION')
+        for v in results.mutations['unparseable_named_set_boolean']
+    ), results.mutations['unparseable_named_set_boolean']
+
+
+def test_wrong_handler_route_fails(results: Results) -> None:
+    # Correct host, wrong path: every sync task would 404.
+    assert any(
+        v.invariant == 'task-edge' and 'not the handler route' in v.message
+        for v in results.mutations['sync_handler_wrong_route']
+    ), results.mutations['sync_handler_wrong_route']
+
+
+def test_append_route_edge_with_path_fails(results: Results) -> None:
+    # Recovery/worker edges join their RPC path onto the URL; a configured path would double it.
+    assert any(
+        v.invariant == 'task-edge' and 'bare origin' in v.message
+        for v in results.mutations['recovery_audience_with_path']
+    ), results.mutations['recovery_audience_with_path']
+
+
+def test_audience_pair_mismatch_fails(results: Results) -> None:
+    # Dispatcher mints one audience, target verifies another: every task rejected 403.
+    assert any(
+        v.invariant == 'task-edge' and 'dispatcher mints' in v.message
+        for v in results.mutations['backfill_audience_mismatch']
+    ), results.mutations['backfill_audience_mismatch']
+
+
+def test_typoed_service_host_fails(results: Results) -> None:
+    # Service-name prefix matches but the hash is wrong: the manifest itself disagrees on the service's
+    # canonical host, and no task edge may silently adopt the typo'd alias.
+    invariants = {v.invariant for v in results.mutations['typoed_sync_host']}
+    assert 'canonical-host' in invariants, invariants
+
+
+def test_uid_appended_to_accepted_cohort_fails(results: Results) -> None:
+    # The ratchet's gap identity carries a non-sensitive count: appending a UID must not stay "known".
+    hits = [v for v in results.mutations['uid_allowlist_appended'] if v.invariant == 'no-uid-literals']
+    assert hits, results.mutations['uid_allowlist_appended']
+    assert all('uids=2' in v.key for v in hits), [v.key for v in hits]
 
 
 def test_new_uid_literal_fails_without_echoing_it(results: Results) -> None:

@@ -921,6 +921,12 @@
         "backend/scripts/cross_service_contract.py",
         "backend/scripts/render_backend_runtime_env.py",
         "backend/scripts/render_gke_backend_config.py",
+        "backend/main.py",
+        "backend/utils/cloud_tasks.py",
+        "backend/diarizer/batch_pipeline_runtime.py",
+        "backend/utils/batch_pipeline/**",
+        "backend/routers/batch_pipeline.py",
+        "backend/config/batch_pipeline.py",
         "backend/charts/batch-pipeline-worker/**"
       ],
       "tests": [

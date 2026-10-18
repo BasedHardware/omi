@@ -33,6 +33,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, cast
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -62,8 +63,10 @@ class TaskEdge:
 
     ``dispatch_when`` are effective env values (code defaults applied) that make a host enqueue.
     ``target_env`` names the env var holding the target URL/audience on the dispatcher.
-    ``handler_requires`` are effective env values the *target* service needs for the handler to do the work
-    (rather than ack a no-op). ``handler_audience_env`` is what the target verifies the OIDC token against.
+    ``dispatch_audience_env`` is what the dispatcher mints; ``verify_audience_env`` (with its
+    ``verify_audience_fallback_env``) is what the *target* verifies, per production's
+    ``AUDIENCE or handler_url`` fallbacks. ``handler_requires`` are effective env values the target
+    needs for the handler to do the work (rather than ack a no-op).
     """
 
     id: str
@@ -71,10 +74,14 @@ class TaskEdge:
     dispatch_when: dict[str, str]
     target_env: str
     handler_requires: dict[str, str] = field(default_factory=dict)
-    handler_audience_env: str | None = None
+    dispatch_audience_env: str | None = None
+    verify_audience_env: str | None = None
+    verify_audience_fallback_env: str | None = None  # verify-side ``AUDIENCE or URL`` fallback; default target_env
+    audience_fallback: bool = False  # production mints ``AUDIENCE or handler_url`` (sync family)
     deadline_seconds: int | None = None
     dispatchers: tuple[str, ...] = ()  # restrict to these deployment ids; empty = every deployment
     empty_target_ok: bool = False  # an empty target selects a documented non-HTTP mode (e.g. direct Firestore)
+    append_route: bool = False  # production joins its RPC path onto a bare origin; the URL must carry no path
 
 
 TASK_EDGES: tuple[TaskEdge, ...] = (
@@ -88,23 +95,31 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         },
         target_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
         handler_requires={'BATCH_PIPELINE_RECOVERY_MODE': 'on'},
-        handler_audience_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
+        dispatch_audience_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
+        verify_audience_env='BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE',
         deadline_seconds=1500,  # utils/cloud_tasks.DISPATCH_DEADLINE_SECONDS
+        append_route=True,  # quarantine_recovery appends the route to the serving origin at dispatch
     ),
     TaskEdge(
         id='batch-worker-pull',
         route='/v2/batch-pipeline/pull',
         dispatch_when={'BATCH_PIPELINE_WORKER_ENABLED': 'true'},
         target_env='BATCH_PIPELINE_API_URL',
-        handler_audience_env='BATCH_PIPELINE_WORKER_AUDIENCE',
+        dispatch_audience_env='BATCH_PIPELINE_WORKER_AUDIENCE',
+        verify_audience_env='BATCH_PIPELINE_WORKER_AUDIENCE',
         dispatchers=('helm/batch-pipeline-worker',),
         empty_target_ok=True,  # dev worker runs against Firestore directly; the chart forbids empty in prod
+        append_route=True,  # compute_client appends its RPC path to the bare serving origin
     ),
     TaskEdge(
         id='sync-jobs',
         route='/v2/sync-jobs/run',
         dispatch_when={'SYNC_DISPATCH_MODE': 'cloud_tasks'},
         target_env='SYNC_TASKS_HANDLER_URL',
+        dispatch_audience_env='SYNC_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='SYNC_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='SYNC_TASKS_HANDLER_URL',
+        audience_fallback=True,  # _oidc_audience(): SYNC_TASKS_OIDC_AUDIENCE or handler URL
         deadline_seconds=1500,
     ),
     TaskEdge(
@@ -112,6 +127,10 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         route='/v2/sync-jobs/run',
         dispatch_when={'SYNC_DISPATCH_MODE': 'cloud_tasks', 'SYNC_BACKFILL_ROUTING_ENABLED': 'true'},
         target_env='SYNC_BACKFILL_TASKS_HANDLER_URL',
+        dispatch_audience_env='SYNC_BACKFILL_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='SYNC_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='SYNC_TASKS_HANDLER_URL',
+        audience_fallback=True,  # dispatch: SYNC_BACKFILL_TASKS_OIDC_AUDIENCE or backfill handler URL
         deadline_seconds=1500,
     ),
     TaskEdge(
@@ -119,6 +138,10 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         route='/v1/conversation-finalization-jobs/run',
         dispatch_when={'LISTEN_FINALIZATION_DISPATCH_MODE': 'cloud_tasks'},
         target_env='LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        dispatch_audience_env='LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        audience_fallback=True,  # _listen_finalization_audience(): audience or handler URL
         deadline_seconds=1500,
     ),
     TaskEdge(
@@ -126,6 +149,10 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         route='/v1/users/account-deletion-wipes/run',
         dispatch_when={'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks'},
         target_env='ACCOUNT_DELETION_HANDLER_URL',
+        dispatch_audience_env='ACCOUNT_DELETION_TASKS_OIDC_AUDIENCE',
+        verify_audience_env='ACCOUNT_DELETION_TASKS_OIDC_AUDIENCE',
+        verify_audience_fallback_env='ACCOUNT_DELETION_HANDLER_URL',
+        audience_fallback=True,  # _account_deletion_oidc_audience(): audience or handler URL
         deadline_seconds=1500,
     ),
 )
@@ -200,10 +227,12 @@ class Violation:
     env: str
     scope: str
     message: str
+    fingerprint: str = ''  # non-sensitive identity detail folded into the ratchet key
 
     @property
     def key(self) -> str:
-        return f'{self.invariant}|{self.env}|{self.scope}'
+        base = f'{self.invariant}|{self.env}|{self.scope}'
+        return f'{base}|{self.fingerprint}' if self.fingerprint else base
 
     def __str__(self) -> str:
         # Values can carry cohort identifiers; never echo them into CI logs.
@@ -241,17 +270,73 @@ class Source:
             self._tmp.cleanup()
 
 
+# Renderer modules the ref evaluation must load from the archived tree, not the current checkout.
+_REF_RENDERER_MODULES = (
+    'config',
+    'config.free_tier_rollout',
+    'scripts',
+    'scripts.runtime_env_compat',
+    'scripts.render_backend_runtime_env',
+    'scripts.render_gke_backend_config',
+)
+
+_RENDERER_CACHE: dict[str, tuple[Any, Any, str]] = {}
+
+
+def _import_ref_renderers(root: Path) -> tuple[Any, Any]:
+    """Import both renderers from ``root``'s archived backend in isolation, then restore the checkout's modules.
+
+    Without this, ``--ref`` would judge a historical commit under renderer behavior it never contained.
+    """
+    saved_path = sys.path[:]
+    saved_modules = [(name, sys.modules.pop(name)) for name in _REF_RENDERER_MODULES if name in sys.modules]
+    sys.path.insert(0, str(root / 'backend'))
+    try:
+        import scripts.render_backend_runtime_env as ref_cloud_run  # noqa: PLC0415
+        import scripts.render_gke_backend_config as ref_gke  # noqa: PLC0415
+
+        return ref_cloud_run, ref_gke
+    finally:
+        sys.path[:] = saved_path
+        for name in _REF_RENDERER_MODULES:
+            sys.modules.pop(name, None)
+        for name, module in saved_modules:
+            sys.modules[name] = module
+
+
+def _renderer_pair(source: Source) -> tuple[Any, Any, str]:
+    """(cloud-run renderer, gke renderer, error). Refs load their own; the checkout reuses the imports above."""
+    key = str(source.root)
+    if key not in _RENDERER_CACHE:
+        if source.ref is None:
+            _RENDERER_CACHE[key] = (cloud_run_renderer, gke_renderer, '')
+        else:
+            try:
+                ref_cloud_run, ref_gke = _import_ref_renderers(source.root)
+                _RENDERER_CACHE[key] = (ref_cloud_run, ref_gke, '')
+            except Exception as exc:  # noqa: BLE001 - any load failure is a reported render error, not a crash
+                _RENDERER_CACHE[key] = (None, None, f'renderer code failed to load at ref {source.ref}: {exc}')
+    return _RENDERER_CACHE[key]
+
+
 def _mapping(value: object) -> ConfigDict:
     return cast(ConfigDict, value) if isinstance(value, dict) else {}
 
 
 @contextlib.contextmanager
-def _placeholder_environ(names: set[str]) -> Iterator[None]:
-    """Stand in for the deploy workflow's GitHub variables so the real renderers run hermetically."""
-    saved = {name: os.environ.get(name) for name in names}
+def _hermetic_environ(required: set[str], defaulted: set[str]) -> Iterator[None]:
+    """Stand in for the deploy workflow's GitHub variables so the real renderers run hermetically.
+
+    ``required`` bindings (no checked-in default) get the ``<dynamic>`` placeholder; ``defaulted`` bindings
+    are unset so the renderer falls back to the manifest default instead of an ambient shell/CI value —
+    otherwise the baseline is nondeterministic and a broken default can be masked.
+    """
+    saved = {name: os.environ.get(name) for name in required | defaulted}
     try:
-        for name in names:
+        for name in required:
             os.environ[name] = DYNAMIC
+        for name in defaulted - required:  # a name bound both ways stays placeholdered: required wins
+            os.environ.pop(name, None)
         yield
     finally:
         for name, value in saved.items():
@@ -271,19 +356,25 @@ def _patched(owner: object, name: str, value: object) -> Iterator[None]:
         setattr(owner, name, original)
 
 
-def _env_var_bindings(node: object) -> set[str]:
-    found: set[str] = set()
+def _env_var_bindings(node: object) -> tuple[set[str], set[str]]:
+    """(required, defaulted) env_var names under ``node``; defaulted ones carry a checked-in default."""
+    required: set[str] = set()
+    defaulted: set[str] = set()
     if isinstance(node, dict):
         mapping = cast(ConfigDict, node)
         env_var = mapping.get('env_var')
-        if isinstance(env_var, str) and mapping.get('default') is None:
-            found.add(env_var)
+        if isinstance(env_var, str):
+            (defaulted if mapping.get('default') is not None else required).add(env_var)
         for value in mapping.values():
-            found |= _env_var_bindings(value)
+            req, dflt = _env_var_bindings(value)
+            required |= req
+            defaulted |= dflt
     elif isinstance(node, list):
         for value in cast(list[object], node):
-            found |= _env_var_bindings(value)
-    return found
+            req, dflt = _env_var_bindings(value)
+            required |= req
+            defaulted |= dflt
+    return required, defaulted
 
 
 _YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
@@ -306,30 +397,38 @@ def _load_yaml_path(path: Path) -> ConfigDict:
     return cast(ConfigDict, loaded)
 
 
-def _render_cloud_run(env_config: ConfigDict, errors: list[str]) -> ConfigDict:
-    with _placeholder_environ(_env_var_bindings(env_config.get('cloud_run'))):
+def _render_cloud_run(renderer: Any, env_config: ConfigDict, errors: list[str]) -> ConfigDict:
+    required, defaulted = _env_var_bindings(env_config.get('cloud_run'))
+    with _hermetic_environ(required, defaulted):
         try:
-            return cloud_run_renderer._render_cloud_run_state(env_config)  # pyright: ignore[reportPrivateUsage]
+            return renderer._render_cloud_run_state(env_config)  # pyright: ignore[reportAttributeAccessIssue]
         except (ValueError, KeyError, TypeError) as exc:
             errors.append(f'cloud run render failed: {exc}')
             return {}
 
 
-def _render_config_map(env: str, manifest_text: str, env_config: ConfigDict, errors: list[str]) -> dict[str, str]:
+def _render_config_map(
+    renderer: Any, env: str, manifest_text: str, env_config: ConfigDict, errors: list[str]
+) -> dict[str, str]:
     entries = _mapping(_mapping(_mapping(env_config.get('gke')).get('config_map')).get('entries'))
     names = {
         str(key)
         for key, entry in entries.items()
         if _mapping(entry).get('source') == 'environment' and _mapping(entry).get('default') is None
     }
-    names |= set(gke_renderer.LEGACY_GKE_CONFIG_KEYS.get(env, ()))
+    defaulted = {
+        str(key)
+        for key, entry in entries.items()
+        if _mapping(entry).get('source') == 'environment' and _mapping(entry).get('default') is not None
+    }
+    legacy = set(renderer.LEGACY_GKE_CONFIG_KEYS.get(env, ()))
     with tempfile.NamedTemporaryFile('w', suffix='.yaml', delete=False) as handle:
         handle.write(manifest_text)
         path = Path(handle.name)
     try:
         # Same renderer; only its file load is swapped for the cached parse of identical text.
-        with _placeholder_environ(names), _patched(gke_renderer, '_load_yaml', _load_yaml_path):
-            _, resolved = gke_renderer.config_map_entries(env, path)
+        with _hermetic_environ(names | legacy, defaulted), _patched(renderer, '_load_yaml', _load_yaml_path):
+            _, resolved = renderer.config_map_entries(env, path)
         return resolved
     except ValueError as exc:
         errors.append(f'gke ConfigMap render failed: {exc}')
@@ -448,12 +547,15 @@ def _urls(node: object) -> Iterator[str]:
 
 def build_model(source: Source, env: str) -> EnvModel:
     errors: list[str] = []
+    cloud_run, gke, renderer_error = _renderer_pair(source)
+    if renderer_error:
+        errors.append(renderer_error)
     manifest_text = source.read(MANIFEST)
-    manifest = cloud_run_renderer.normalize_runtime_manifest(_mapping(_load_yaml_text(manifest_text)))
+    manifest = cloud_run.normalize_runtime_manifest(_mapping(_load_yaml_text(manifest_text))) if cloud_run else {}
     env_config = _mapping(_mapping(manifest.get('environments')).get(env))
     deployments: dict[str, Deployment] = {}
 
-    state = _render_cloud_run(env_config, errors)
+    state = _render_cloud_run(cloud_run, env_config, errors) if cloud_run else {}
     hosts = _cloud_run_hosts(env_config)
     for name, service in _mapping(state.get('services')).items():
         deployments[f'cloud_run/{name}'] = Deployment(
@@ -468,7 +570,7 @@ def build_model(source: Source, env: str) -> EnvModel:
             id=f'job/{name}', entrypoint=None, env=_rendered_env(_mapping(job).get('env', []))
         )
 
-    config_map = _render_config_map(env, manifest_text, env_config, errors)
+    config_map = _render_config_map(gke, env, manifest_text, env_config, errors) if gke else {}
     for name, raw in _mapping(env_config.get('gke')).items():
         if name == 'config_map':
             continue
@@ -568,9 +670,47 @@ def _module_constants(tree: ast.AST) -> dict[str, str]:
     return constants
 
 
+def _collection_members(node: ast.AST) -> tuple[str, ...] | None:
+    """String members of a literal or ``frozenset/set/list/tuple(...)`` collection, else None."""
+    if isinstance(node, (ast.Tuple, ast.Set, ast.List)):
+        elts = node.elts
+    elif (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in ('frozenset', 'set', 'list', 'tuple')
+    ):
+        arg = node.args[0] if len(node.args) == 1 else None
+        if isinstance(arg, (ast.Tuple, ast.Set, ast.List)):
+            elts = arg.elts
+        elif arg is None:  # empty constructor
+            return ()
+        else:
+            return None
+    else:
+        return None
+    members = tuple(e.value for e in elts if isinstance(e, ast.Constant) and isinstance(e.value, str))
+    return members if len(members) == len(elts) else None
+
+
+def _module_collections(tree: ast.AST) -> dict[str, tuple[str, ...]]:
+    """Module-level named string collections (``_TRUTHY = frozenset({...})`` and shapes like it)."""
+    collections: dict[str, tuple[str, ...]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            members = _collection_members(node.value)  # type: ignore[arg-type]
+            if members is None:
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    collections[target.id] = members
+    return collections
+
+
 @dataclass
 class _ModuleIndex:
     constants: dict[str, str]
+    collections: dict[str, tuple[str, ...]]  # named string sets: _TRUTHY, _FALSY, mode enums
     candidates: list[ast.AST]  # the only node shapes the env-read scan inspects
     imports: list[ast.Import | ast.ImportFrom]
 
@@ -593,7 +733,7 @@ def _index(text: str) -> _ModuleIndex | None:
                 imports.append(node)
             elif isinstance(node, (ast.Call, ast.Subscript)) or (isinstance(node, ast.Compare) and len(node.ops) == 1):
                 candidates.append(node)
-        _INDEX_CACHE[text] = _ModuleIndex(_module_constants(tree), candidates, imports)
+        _INDEX_CACHE[text] = _ModuleIndex(_module_constants(tree), _module_collections(tree), candidates, imports)
     return _INDEX_CACHE[text]
 
 
@@ -610,9 +750,14 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for index in indexes.values():
         for name, value in index.constants.items():
             shared.setdefault(name, value)  # imported constants resolve by name across the closure
+    shared_collections: dict[str, tuple[str, ...]] = {}
+    for index in indexes.values():
+        for name, members in index.collections.items():
+            shared_collections.setdefault(name, members)  # named sets (_TRUTHY et al.) resolve by name too
     reads: dict[str, EnvRead] = {}
     for rel, index in indexes.items():
         constants = {**shared, **index.constants}
+        collections = {**shared_collections, **index.collections}
         for node in index.candidates:
             key = _is_env_call(node, constants)
             if key:
@@ -627,10 +772,12 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
                 tokens: list[str] = []
                 if isinstance(node.ops[0], (ast.Eq, ast.NotEq)) and isinstance(comparator, ast.Constant):
                     tokens = [str(comparator.value)]
-                elif isinstance(node.ops[0], (ast.In, ast.NotIn)) and isinstance(
-                    comparator, (ast.Tuple, ast.Set, ast.List)
-                ):
-                    tokens = [str(e.value) for e in comparator.elts if isinstance(e, ast.Constant)]
+                elif isinstance(node.ops[0], (ast.In, ast.NotIn)):
+                    members = _collection_members(comparator)
+                    if members is None and isinstance(comparator, ast.Name):
+                        members = collections.get(comparator.id)  # a named set such as _TRUTHY
+                    if members is not None:
+                        tokens = list(members)
                 read = reads.setdefault(root[0], EnvRead())
                 read.compared |= {t.lower() for t in tokens}
                 if isinstance(node.ops[0], (ast.Eq, ast.In)):
@@ -779,10 +926,59 @@ def _resolve_target(model: EnvModel, url: str) -> Deployment | None:
     return None
 
 
+def _canonical_hosts(model: EnvModel) -> dict[str, str]:
+    """The one host per Cloud Run service that every literal URL naming that service agrees on.
+
+    A service's own deployment URL is authoritative: any other literal URL that shares the service-name
+    prefix but disagrees on project/hash (a typo'd host) shows up as a disagreement, not a silent alias.
+    """
+    hosts: dict[str, str] = {}
+    for deployment in model.deployments.values():
+        url_hosts = deployment.url_hosts
+        if deployment.kind != 'cloud_run' or len(url_hosts) != 1:
+            continue  # no URL, or a disagreement the canonical-host invariant reports
+        hosts[_host(next(iter(url_hosts)))] = deployment.id
+    return hosts
+
+
+def _check_edge_audience(
+    edge: TaskEdge, deployment: Deployment, target: Deployment, env: str, scope: str, out: list[Violation]
+) -> None:
+    """The audience the dispatcher mints must equal the audience the target verifies (allowing documented
+    ``AUDIENCE or URL`` fallbacks on either side), or every task the edge delivers is rejected 403."""
+    if not edge.audience_fallback and not edge.dispatch_audience_env and not edge.verify_audience_env:
+        return
+    sent = (deployment.env.get(edge.dispatch_audience_env, '') if edge.dispatch_audience_env else '').strip()
+    verify_key = edge.verify_audience_env or ''
+    verified = (target.env.get(verify_key, '') if verify_key else '').strip()
+    fallback_key = edge.verify_audience_fallback_env or edge.target_env
+    fallback = (target.env.get(fallback_key, '') if fallback_key else '').strip()
+    if edge.audience_fallback and not verified:
+        verified = fallback  # production: AUDIENCE if set, else the handler URL
+    if sent in (DYNAMIC, SECRET):
+        return  # bound at deploy time; only the binding is checkable here
+    if verified in (DYNAMIC, SECRET):
+        return
+    if not sent and not verified:
+        return  # neither side configures an audience; dispatch itself is unchecked elsewhere
+    if sent != verified:
+        out.append(
+            Violation(
+                'task-edge',
+                env,
+                scope,
+                f'dispatcher mints {edge.dispatch_audience_env}={sent!r}, '
+                f'target verifies {verify_key or fallback_key}={verified!r}; every task would be rejected',
+            )
+        )
+
+
 def check_task_edges(ctx: Context) -> list[Violation]:
-    """Every enabled dispatcher has a non-empty HTTPS target that resolves to a service able to do the work."""
+    """Every enabled dispatcher has a non-empty HTTPS target that resolves to a service able to do the work:
+    the right host (canonically), the right route, and an audience the target will actually verify."""
     out: list[Violation] = []
     for model in ctx.models.values():
+        canonical = _canonical_hosts(model)
         for edge in TASK_EDGES:
             for deployment in model.deployments.values():
                 if edge.dispatchers and deployment.id not in edge.dispatchers:
@@ -802,14 +998,49 @@ def check_task_edges(ctx: Context) -> list[Violation]:
                         )
                     )
                     continue
+                parsed = urlsplit(url)
+                host = _host(url)
+                canonical_id = canonical.get(host)
                 target = _resolve_target(model, url)
-                if target is None:
+                if target is None or (canonical_id is not None and canonical_id != target.id):
                     out.append(
                         Violation(
                             'task-edge',
                             model.env,
                             scope,
-                            f'{edge.target_env} host {_host(url)} is not a service in {model.env}',
+                            f'{edge.target_env} host {host} is not the canonical host of a service in {model.env}',
+                        )
+                    )
+                    continue
+                if edge.append_route:
+                    # The dispatcher joins its RPC path onto the URL: a path here would produce a doubled path.
+                    if parsed.path not in ('', '/'):
+                        out.append(
+                            Violation(
+                                'task-edge',
+                                model.env,
+                                scope,
+                                f'{edge.target_env} must be a bare origin; production appends {edge.route!r}',
+                            )
+                        )
+                        continue
+                    if parsed.query or parsed.fragment:
+                        out.append(
+                            Violation(
+                                'task-edge',
+                                model.env,
+                                scope,
+                                f'{edge.target_env} must be a bare origin (no query/fragment)',
+                            )
+                        )
+                        continue
+                elif parsed.path.rstrip('/') != edge.route.rstrip('/'):
+                    out.append(
+                        Violation(
+                            'task-edge',
+                            model.env,
+                            scope,
+                            f'{edge.target_env} path {parsed.path!r} is not the handler route {edge.route!r}',
                         )
                     )
                     continue
@@ -824,17 +1055,7 @@ def check_task_edges(ctx: Context) -> list[Violation]:
                                 f'target {target.id} has {key}={got!r}, handler needs {want!r}',
                             )
                         )
-                if edge.handler_audience_env:
-                    audience = target.env.get(edge.handler_audience_env, '').strip()
-                    if audience != DYNAMIC and _host(audience) != _host(url):
-                        out.append(
-                            Violation(
-                                'task-edge',
-                                model.env,
-                                scope,
-                                f'target {target.id} verifies {edge.handler_audience_env}={audience!r}, dispatcher sends {_host(url)}',
-                            )
-                        )
+                _check_edge_audience(edge, deployment, target, model.env, scope, out)
                 if edge.deadline_seconds and target.kind == 'cloud_run':
                     timeout = _seconds(target.flags.get('--timeout'))
                     if timeout is None:
@@ -856,6 +1077,33 @@ def check_task_edges(ctx: Context) -> list[Violation]:
                             )
                         )
     return _dedupe(out)
+
+
+def check_canonical_hosts(ctx: Context) -> list[Violation]:
+    """Each Cloud Run service has one canonical host: every literal URL naming the service agrees on it.
+
+    Service identity comes from the service's own deployment URL, not from the target URL being validated —
+    otherwise a typo'd project/hash that still starts with the service name would validate itself.
+    """
+    out: list[Violation] = []
+    for model in ctx.models.values():
+        env_config = _mapping(_mapping(model.manifest.get('environments')).get(model.env))
+        services = sorted(_mapping(_mapping(env_config.get('cloud_run')).get('services')))
+        disagreements: dict[str, set[str]] = {name: set() for name in services}
+        for url in _urls(env_config):
+            host = _host(url)
+            service = _service_for_host(host, services)
+            if service:
+                disagreements[service].add(host)
+        for service, hosts in disagreements.items():
+            if len(hosts) > 1:
+                rendered = ', '.join(sorted(hosts))
+                out.append(
+                    Violation(
+                        'canonical-host', model.env, f'cloud_run/{service}', f'URLs disagree on the host: {rendered}'
+                    )
+                )
+    return out
 
 
 def check_edges_declared(ctx: Context) -> list[Violation]:
@@ -993,7 +1241,11 @@ def check_no_uid_literals(ctx: Context) -> list[Violation]:
                     count = len(FIREBASE_UID_PATTERN.findall(value))
                     out.append(
                         Violation(
-                            'no-uid-literals', model.env, f'{deployment.id}/{key}', f'{count} UID-shaped literal(s)'
+                            'no-uid-literals',
+                            model.env,
+                            f'{deployment.id}/{key}',
+                            f'{count} UID-shaped literal(s)',
+                            fingerprint=f'uids={count}',  # appending to an accepted cohort must not stay "known"
                         )
                     )
     return _dedupe(out)
@@ -1027,6 +1279,7 @@ INVARIANTS: tuple[tuple[str, Check], ...] = (
     ('renders', check_renders),
     ('config-map-source', check_config_map_sources),
     ('task-edge', check_task_edges),
+    ('canonical-host', check_canonical_hosts),
     ('edge-declared', check_edges_declared),
     ('coupled-flag', check_coupled_flags),
     ('reader-split', check_reader_split),
