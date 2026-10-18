@@ -15,25 +15,17 @@ import database.chat_receipts as chat_receipts_db
 def test_message_receipt_snapshot_success():
     mock_user_ref = MagicMock()
     mock_match = MagicMock()
-    mock_user_ref.collection.return_value.where.return_value.limit.return_value.stream.return_value = [
-        mock_match
-    ]
+    mock_user_ref.collection.return_value.where.return_value.limit.return_value.stream.return_value = [mock_match]
 
-    res = chat_receipts_db.message_receipt_snapshot(
-        mock_user_ref, "msg-123", transaction="mock-tx"
-    )
+    res = chat_receipts_db.message_receipt_snapshot(mock_user_ref, "msg-123", transaction="mock-tx")
     assert res == mock_match
     mock_user_ref.collection.assert_called_once_with("messages")
-    mock_user_ref.collection.return_value.where.assert_called_once_with(
-        "id", "==", "msg-123"
-    )
+    mock_user_ref.collection.return_value.where.assert_called_once_with("id", "==", "msg-123")
 
 
 def test_message_receipt_snapshot_not_found():
     mock_user_ref = MagicMock()
-    mock_user_ref.collection.return_value.where.return_value.limit.return_value.stream.return_value = (
-        []
-    )
+    mock_user_ref.collection.return_value.where.return_value.limit.return_value.stream.return_value = []
 
     res = chat_receipts_db.message_receipt_snapshot(mock_user_ref, "msg-missing", None)
     assert res is None
@@ -50,6 +42,4 @@ def test_message_receipt_snapshot_contention_propagates():
     mock_user_ref.collection.side_effect = Exception("Firestore transaction contention")
 
     with pytest.raises(Exception, match="Firestore transaction contention"):
-        chat_receipts_db.message_receipt_snapshot(
-            mock_user_ref, "msg-fail", transaction="mock-tx"
-        )
+        chat_receipts_db.message_receipt_snapshot(mock_user_ref, "msg-fail", transaction="mock-tx")
