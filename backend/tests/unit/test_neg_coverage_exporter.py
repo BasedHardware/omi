@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from scripts.neg_coverage_exporter import (
     ApiError,
@@ -168,3 +171,35 @@ def test_exporter_metrics_have_only_bounded_stage_and_zone_labels():
     assert 'zone="us-central1-a"' in rendered
     assert all(f'stage="{stage}"' in rendered for stage in STAGES)
     assert "endpoint_ip" not in rendered
+
+
+def test_exporter_chart_does_not_render_kubernetes_rbac():
+    repo_root = Path(__file__).resolve().parents[3]
+    chart = repo_root / "backend/charts/monitoring/neg-coverage-exporter"
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "prod-omi-neg-coverage-exporter",
+            str(chart),
+            "--namespace",
+            "prod-omi-monitoring",
+            "-f",
+            str(chart / "prod-values.yaml"),
+            "--set-string",
+            "image.tag=test",
+        ],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    resources = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+
+    assert {resource["kind"] for resource in resources} == {
+        "Deployment",
+        "Service",
+        "ServiceAccount",
+        "ServiceMonitor",
+    }
+    assert not any(resource["apiVersion"].startswith("rbac.authorization.k8s.io/") for resource in resources)

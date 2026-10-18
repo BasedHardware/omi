@@ -91,6 +91,9 @@ env:
 
 jobs:
   helm-upgrade:
+    outputs:
+      checked_out_sha: ${{ steps.admit-deploy-source.outputs.checked_out_sha }}
+      neg_coverage_exporter_image_tag: ${{ steps.resolve-listen-image.outputs.neg_coverage_exporter_image_tag }}
     # On manual dispatch use the chosen environment; on auto push only deploy
     # to dev (prod still requires an explicit workflow_dispatch for safety).
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
@@ -114,6 +117,7 @@ jobs:
           fetch-depth: 0
 
       - name: Admit checked-out production source and image identity
+        id: admit-deploy-source
         run: |
           set -euo pipefail
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -128,6 +132,7 @@ jobs:
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "checked_out_sha=$CHECKED_OUT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -168,6 +173,7 @@ jobs:
             || echo "No existing release found"
 
       - name: Resolve backend-listen image tag
+        id: resolve-listen-image
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
@@ -209,6 +215,7 @@ jobs:
           fi
           echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
           echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
+          echo "neg_coverage_exporter_image_tag=$RESOLVED_TAG" >> "$GITHUB_OUTPUT"
 
       # Kept and rollback images are already serving and indexes are
       # create-only, so the rollback lane must not gain new failure modes; the
@@ -346,16 +353,6 @@ jobs:
             ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"} \
             --dry-run
 
-      - name: NEG coverage exporter Helm dry run
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && env.BACKEND_LISTEN_SOURCE_SHA != '' }}
-        run: |
-          set -euo pipefail
-          helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
-            ./backend/charts/monitoring/neg-coverage-exporter \
-            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
-            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
-            --dry-run
-
       # The ExternalSecret resource (which tells external-secrets which GCP
       # Secret Manager keys to sync into the K8s `*-omi-backend-secrets`
       # secret) lives in this chart. Without re-applying it, a new chart key
@@ -389,16 +386,6 @@ jobs:
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}
-
-      - name: Upgrade NEG coverage exporter Helm chart
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && env.BACKEND_LISTEN_SOURCE_SHA != '' }}
-        run: |
-          set -euo pipefail
-          helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
-            ./backend/charts/monitoring/neg-coverage-exporter \
-            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
-            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
-            --atomic --wait --timeout 5m
 
       - name: Roll back backend-listen Helm release
         if: ${{ github.event.inputs.mode == 'rollback' }}
@@ -449,12 +436,80 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
-      - name: Verify NEG coverage exporter rollout
-        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && env.BACKEND_LISTEN_SOURCE_SHA != '' }}
-        run: |
-          kubectl -n prod-omi-monitoring rollout status deploy/neg-coverage-exporter --timeout=300s
-
       - name: Show pod status
         if: always()
         run: |
           kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-backend-listen --no-headers
+
+  deploy-neg-coverage-exporter:
+    name: Deploy NEG coverage exporter
+    needs: helm-upgrade
+    if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Google Auth (prod WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: us-central1
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy and verify NEG coverage exporter
+        env:
+          IMAGE_TAG: ${{ needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag }}
+        run: |
+          set -euo pipefail
+          report_exporter_failure() {
+            local stage="$1"
+            echo "::error title=NEG coverage exporter ${stage} failed::The listen rollout job succeeded; this exporter job fails independently."
+            {
+              echo "### NEG coverage exporter deployment failed"
+              echo "- Stage: ${stage}"
+              echo "- The listen rollout job remains successful and deployed."
+              echo "- This failed final job makes the overall workflow conclusion failure."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          if ! helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
+            ./backend/charts/monitoring/neg-coverage-exporter \
+            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
+            --set-string "image.tag=${IMAGE_TAG}" \
+            --dry-run; then
+            report_exporter_failure "Helm dry run"
+          fi
+          if ! helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
+            ./backend/charts/monitoring/neg-coverage-exporter \
+            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
+            --set-string "image.tag=${IMAGE_TAG}" \
+            --atomic --wait --timeout 5m; then
+            report_exporter_failure "Helm upgrade"
+          fi
+          if ! kubectl -n prod-omi-monitoring rollout status deploy/neg-coverage-exporter --timeout=300s; then
+            report_exporter_failure "rollout verification"
+          fi
+          {
+            echo "### NEG coverage exporter deployment succeeded"
+            echo "- Image: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${IMAGE_TAG}"
+            echo "- Backend-listen rollout completed successfully in the preceding job."
+          } >> "$GITHUB_STEP_SUMMARY"
