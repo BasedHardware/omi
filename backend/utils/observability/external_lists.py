@@ -5,7 +5,11 @@ from typing import Any
 
 from prometheus_client import Counter, Histogram
 
-from database.firestore_read_origin import RequestReadTrace, bind_request_read_trace, reset_request_read_trace
+from utils.observability.firestore_request_reads import (
+    RequestReadTrace,
+    bind_request_read_trace,
+    reset_request_read_trace,
+)
 
 EXTERNAL_LIST_HTTP_TOTAL = Counter(
     'omi_external_list_http_requests_total',

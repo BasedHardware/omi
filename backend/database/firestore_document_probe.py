@@ -71,7 +71,8 @@ from typing import Any, Callable
 from prometheus_client import Counter
 
 from database.firestore_tier_context import current_tier
-from database.firestore_read_origin import current_read_origin, trace_request_reads
+from database.firestore_read_origin import current_read_origin
+from utils.observability.firestore_request_reads import trace_request_reads
 
 logger = logging.getLogger(__name__)
 
