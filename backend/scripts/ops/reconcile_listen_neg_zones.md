@@ -8,8 +8,12 @@ from that backend service.
 
 After the production listen rollout and readiness checks, run
 `reconcile_listen_neg_zones.py` against the Service's
-`cloud.google.com/neg-status` annotation. It lists exact-name NEGs across
-zones, compares them with the backend service, and copies the existing
+`cloud.google.com/neg-status` annotation. It lists exact-name NEGs, keeps only
+the zones the Service's status declares — `gcloud compute
+network-endpoint-groups list` covers global, regional, and all zonal scopes by
+default, while GKE only guarantees custom NEG name uniqueness within a region,
+so a same-named NEG elsewhere is rejected instead of attached — compares them
+with the backend service, and copies the existing
 balancing mode, per-endpoint request limit, capacity scaler, and (for
 `IN_FLIGHT`) traffic duration when attaching missing zones. The script fails
 if status declares a zone whose NEG is not listable or if attached backends do

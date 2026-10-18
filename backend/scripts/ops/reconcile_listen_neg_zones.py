@@ -151,20 +151,32 @@ def _neg_status_from_service(service: Any) -> tuple[str, set[str]]:
     return neg_name, declared_zones
 
 
-def _neg_zones(neg_list: Any, expected_name: str) -> set[str]:
+def _neg_zones(neg_list: Any, expected_name: str, allowed_zones: set[str]) -> set[str]:
     if not isinstance(neg_list, list):
         raise ReconcileError("NEG listing returned an unexpected response")
     zones: set[str] = set()
+    out_of_scope: set[str] = set()
     for item in neg_list:
         if not isinstance(item, dict) or item.get("name") != expected_name:
             continue
         zone_value = item.get("zone")
         zone = _zone_from_resource(zone_value) if isinstance(zone_value, str) else None
+        # `gcloud compute network-endpoint-groups list` covers global, regional, and
+        # every zonal scope by default, while GKE only guarantees custom NEG name
+        # uniqueness within a region. Only the Service's declared zones may attach;
+        # exact-name resources anywhere else are rejected, never attached.
         if zone is None:
-            raise ReconcileError("an exact-name NEG is not in a recognized zone")
+            out_of_scope.add("a regional or global scope")
+            continue
+        if zone not in allowed_zones:
+            out_of_scope.add(zone)
+            continue
         if zone in zones:
             raise ReconcileError("NEG listing returned duplicate resources for a zone")
         zones.add(zone)
+    if out_of_scope:
+        detail = ", ".join(sorted(out_of_scope))
+        raise ReconcileError(f"exact-name NEGs exist outside the listen Service's declared zones: {detail}")
     if not zones:
         raise ReconcileError("no exact-name zonal NEGs were found")
     return zones
@@ -282,7 +294,7 @@ def reconcile(args: argparse.Namespace) -> None:
         operation="NEG listing",
         permission="compute.networkEndpointGroups.list",
     )
-    zones = _neg_zones(listed_negs, neg_name)
+    zones = _neg_zones(listed_negs, neg_name, declared_zones)
     unlisted_declared_zones = declared_zones - zones
     if unlisted_declared_zones:
         missing = ", ".join(sorted(unlisted_declared_zones))

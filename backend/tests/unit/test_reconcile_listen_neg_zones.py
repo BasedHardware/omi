@@ -45,6 +45,12 @@ if args[:3] == ["compute", "network-endpoint-groups", "list"]:
         {"name": "prod-backend-listen-neg", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-f"},
         {"name": "prod-backend-listen-neg-shadow", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/us-central1-x"},
     ]
+    if os.environ.get("FAKE_FOREIGN_ZONE_NEG"):
+        listed.append(
+            {"name": "prod-backend-listen-neg", "zone": "https://www.googleapis.com/compute/v1/projects/based-hardware/zones/europe-west1-b"}
+        )
+    if os.environ.get("FAKE_GLOBAL_NEG"):
+        listed.append({"name": "prod-backend-listen-neg", "region": "https://www.googleapis.com/compute/v1/projects/based-hardware/regions/us-central1"})
     missing_zone = os.environ.get("FAKE_MISSING_ZONE")
     if missing_zone:
         listed = [item for item in listed if not item["zone"].endswith("/" + missing_zone)]
@@ -99,7 +105,16 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         path.chmod(0o755)
 
-    def _run(self, *extra_args, add_mode=None, missing_zone=None, all_attached=False, disagree_traffic=False):
+    def _run(
+        self,
+        *extra_args,
+        add_mode=None,
+        missing_zone=None,
+        all_attached=False,
+        disagree_traffic=False,
+        foreign_zone_neg=False,
+        global_neg=False,
+    ):
         env = os.environ.copy()
         env["PATH"] = f"{self.bin_dir}{os.pathsep}{env.get('PATH', '')}"
         env["FAKE_GCLOUD_LOG"] = str(self.log_path)
@@ -111,6 +126,10 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
             env["FAKE_ALL_ATTACHED"] = "1"
         if disagree_traffic:
             env["FAKE_DISAGREE_TRAFFIC"] = "1"
+        if foreign_zone_neg:
+            env["FAKE_FOREIGN_ZONE_NEG"] = "1"
+        if global_neg:
+            env["FAKE_GLOBAL_NEG"] = "1"
         return subprocess.run(
             [
                 sys.executable,
@@ -200,6 +219,20 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("us-central1-f", result.stderr)
         self.assertIn("no listable NEG", result.stderr)
+        self.assertFalse(any("add-backend" in call for call in self._gcloud_calls()))
+
+    def test_rejects_exact_name_neg_in_zone_outside_declared_zones(self):
+        result = self._run(foreign_zone_neg=True)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("outside the listen Service's declared zones: europe-west1-b", result.stderr)
+        self.assertFalse(any("add-backend" in call for call in self._gcloud_calls()))
+
+    def test_rejects_exact_name_neg_without_a_zone_scope(self):
+        result = self._run(global_neg=True)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("outside the listen Service's declared zones: a regional or global scope", result.stderr)
         self.assertFalse(any("add-backend" in call for call in self._gcloud_calls()))
 
     def test_dry_run_with_all_zones_attached_is_an_idempotent_noop(self):
