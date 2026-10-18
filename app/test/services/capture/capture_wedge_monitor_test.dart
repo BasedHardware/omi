@@ -52,6 +52,166 @@ void main() {
     flagEnabled = true;
   });
 
+  for (final trigger in [
+    CaptureWedgeMonitor.triggerConnectedNoBytes,
+    CaptureWedgeMonitor.triggerZeroByteStreak,
+    CaptureWedgeMonitor.triggerRapidReconnects,
+  ]) {
+    Future<CaptureWedgeMonitor> declare() async {
+      final monitor = makeMonitor(withRetry: true);
+      addTearDown(monitor.dispose);
+      if (trigger == CaptureWedgeMonitor.triggerConnectedNoBytes) {
+        connectedSession(monitor);
+        now = now.add(CaptureWedgeMonitor.connectedNoBytesWindow);
+        monitor.runConnectedWatchdog();
+      } else {
+        for (var i = 0; i < 3; i++) {
+          if (trigger == CaptureWedgeMonitor.triggerZeroByteStreak) {
+            zeroSession(monitor);
+          } else {
+            monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: Duration.zero);
+          }
+        }
+      }
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt?.trigger, trigger);
+      return monitor;
+    }
+
+    test('$trigger resolves from sustained new BLE ingress without a transcript or socket', () async {
+      final monitor = await declare();
+      monitor.onBleIngressBytes('dev-b', 80);
+      monitor.onBleIngressBytes('dev-a', 0);
+      now = now.add(const Duration(seconds: 10));
+      monitor.onBleIngressBytes('dev-a', 80);
+      expect(monitor.visiblePrompt, isNotNull, reason: 'one packet is insufficient');
+      now = now.add(const Duration(seconds: 6));
+      monitor.onBleIngressBytes('dev-a', 80);
+      expect(monitor.visiblePrompt, isNotNull, reason: 'a long gap restarts the proof window');
+      for (var i = 0; i < 5; i++) {
+        now = now.add(const Duration(seconds: 1));
+        monitor.onBleIngressBytes('dev-a', 80);
+      }
+      expect(monitor.visiblePrompt, isNull);
+      expect(forEvent('Capture Recovery Resolved').single['trigger'], trigger);
+    });
+
+    test('$trigger resolves only on fresh subscription-confirmed native flowing health', () async {
+      final monitor = await declare();
+      void health({String phase = 'flowing', bool subscribed = true, bool fresh = true}) {
+        monitor.observeIngressHealth(
+            'dev-a',
+            CaptureIngressHealth(
+              phase: phase,
+              generation: 'recovered',
+              reason: 'audio',
+              validUntilMs: now.millisecondsSinceEpoch + (fresh ? 60000 : -1),
+              subscriptionConfirmed: subscribed,
+              unverifiedSinceMs: 0,
+            ));
+      }
+
+      health(subscribed: false);
+      expect(monitor.visiblePrompt, isNotNull);
+      health(fresh: false);
+      expect(monitor.visiblePrompt, isNotNull);
+      health(phase: 'quiet');
+      expect(monitor.visiblePrompt, isNotNull);
+      now = now.add(const Duration(seconds: 1));
+      health();
+      expect(monitor.visiblePrompt, isNull);
+      expect(forEvent('Capture Recovery Resolved').single['trigger'], trigger);
+    });
+  }
+
+  test('BLE recovery leaves simultaneous transcription and WAL recovery evidence intact', () async {
+    final monitor = makeMonitor();
+    addTearDown(monitor.dispose);
+    for (var i = 0; i < 3; i++) {
+      final handle = connectedSession(monitor);
+      monitor.onCaptureSessionEnded(handle, binaryBytesSent: 320);
+      zeroSession(monitor);
+    }
+    monitor.observeWalBacklog(pendingCount: 1, oldestPendingAt: now.subtract(const Duration(hours: 3)));
+    await pumpEventQueue();
+    for (var i = 0; i < 6; i++) {
+      now = now.add(const Duration(seconds: 1));
+      monitor.onBleIngressBytes('dev-a', 80);
+      monitor.onBleIngressBytes(CaptureWedgeMonitor.localWalDeviceId, 80);
+    }
+    expect(monitor.visiblePrompt, isNull);
+    expect(forEvent('Capture Recovery Resolved').map((e) => e['trigger']), [CaptureWedgeMonitor.triggerZeroByteStreak]);
+    monitor.onTranscriptObserved('dev-a');
+    monitor.onUploadCompleted();
+    expect(forEvent('Capture Recovery Resolved').map((e) => e['trigger']), [
+      CaptureWedgeMonitor.triggerZeroByteStreak,
+      CaptureWedgeMonitor.triggerBytesSentNoTranscript,
+      CaptureWedgeMonitor.triggerUploadSilence,
+    ]);
+  });
+
+  test('a cached native flowing lease cannot resolve a newly declared BLE episode', () async {
+    final monitor = makeMonitor();
+    addTearDown(monitor.dispose);
+    final cached = CaptureIngressHealth(
+      phase: 'flowing',
+      generation: 'native-1',
+      reason: 'audio',
+      validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+      subscriptionConfirmed: true,
+      unverifiedSinceMs: 0,
+    );
+    monitor.observeIngressHealth('dev-a', cached);
+    for (var i = 0; i < 3; i++) {
+      zeroSession(monitor);
+    }
+    await pumpEventQueue();
+    monitor.observeIngressHealth('dev-a', cached);
+    expect(monitor.visiblePrompt, isNotNull);
+  });
+
+  test('BLE proof during an in-flight retry prevents its late completion from restoring the banner', () async {
+    final retry = Completer<void>();
+    final monitor = makeMonitor(withRetry: true, bleRetry: (_) => retry.future);
+    addTearDown(monitor.dispose);
+    for (var i = 0; i < 3; i++) {
+      zeroSession(monitor);
+    }
+    await pumpEventQueue();
+    for (var i = 0; i < 6; i++) {
+      now = now.add(const Duration(seconds: 1));
+      monitor.onBleIngressBytes('dev-a', 80);
+    }
+    expect(monitor.hasActiveEpisode('dev-a'), isFalse);
+    retry.complete();
+    await pumpEventQueue();
+    expect(monitor.visiblePrompt, isNull);
+    expect(forEvent('Capture Recovery Resolved'), hasLength(1));
+  });
+
+  test('BLE ingress and flowing health cannot clear storage-at-risk', () async {
+    final monitor = makeMonitor();
+    addTearDown(monitor.dispose);
+    monitor.observeStorageAtRisk(engagedAt: now, blockedCount: 1, retainedCount: 1, reason: 'disk_reserve');
+    await pumpEventQueue();
+    for (var i = 0; i < 6; i++) {
+      now = now.add(const Duration(seconds: 1));
+      monitor.onBleIngressBytes(CaptureWedgeMonitor.localWalDeviceId, 80);
+    }
+    monitor.observeIngressHealth(
+        CaptureWedgeMonitor.localWalDeviceId,
+        CaptureIngressHealth(
+          phase: 'flowing',
+          generation: 'native-1',
+          reason: 'audio',
+          validUntilMs: now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+          subscriptionConfirmed: true,
+          unverifiedSinceMs: 0,
+        ));
+    expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+    expect(forEvent('Capture Recovery Resolved'), isEmpty);
+  });
+
   test('batch suppresses transcript alarms and preserves BLE ingress recovery', () async {
     final monitor = makeMonitor(withRetry: true);
     addTearDown(monitor.dispose);
