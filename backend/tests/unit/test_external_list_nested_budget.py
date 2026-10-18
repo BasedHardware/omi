@@ -224,6 +224,72 @@ def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkey
     print(f'mixed nested MCP exhausted={bounded_reads}; clean={clean_reads}; prior-path={prior_reads}')
 
 
+def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatch):
+    now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    rows = {
+        f'users/owner/memories/h-{i}': {
+            'id': f'h-{i}',
+            'content': f'Legacy durable fact {i}',
+            'category': 'work',
+            'created_at': now - timedelta(seconds=i),
+            'updated_at': now - timedelta(seconds=i),
+            'data_protection_level': 'standard',
+            'reviewed': False,
+        }
+        for i in range(600)
+    }
+    # Advance admission time between synthetic requests; offline queries run
+    # faster than the process-wide eight-operation burst would allow in a loop.
+    ticks = iter(range(1000))
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance(clock=lambda: next(ticks)))
+    store = Store(rows)
+    service = MemoryService(db_client=store)
+    # Empty canonical stream, with real mixed merge, dual history-index reads,
+    # canonical/override status batches and hydration. No network or cloud clients.
+    monkeypatch.setattr(service._canonical, 'read', lambda *a, **k: [])
+    calls = []
+
+    def read(*args, **kwargs):
+        calls.append(kwargs)
+        return service.read(*args, **kwargs)
+
+    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
+    bounded = budget(1500)
+    result = handlers.memories_page_core(
+        'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=bounded
+    )
+    assert bounded.truncated and result['scan_truncated'] and result['has_more']
+    assert len(calls) == 1
+    assert store.batch_gets > 0 and store.streams == 2
+    assert store.physical == bounded.docs_scanned
+    # Existing materialized RPC accounting may overshoot by one bounded window.
+    assert store.physical <= 1500 + 600
+    assert result['scanned_count'] < 600
+    # The full, old path traverses all rows and preserves legacy ordering.
+    calls.clear()
+    store.physical = store.streams = store.batch_gets = 0
+    unbounded = handlers.memories_page_core('owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test')
+    assert not unbounded['scan_truncated']
+    assert len(calls) > 1
+    assert [row['id'] for row in unbounded['memories']] == [f'h-{i}' for i in range(25)]
+    assert store.physical > 10000
+    prior_reads = store.physical
+    calls.clear()
+    store.physical = store.streams = store.batch_gets = 0
+    clean = budget(25000)
+    same = handlers.memories_page_core(
+        'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=clean
+    )
+    assert same['memories'] == unbounded['memories']
+    assert len(calls) == 1
+    assert not same['scan_truncated'] and not clean.truncated
+    assert store.physical == clean.docs_scanned == 3000
+    assert store.physical < prior_reads
+    print(
+        f'legacy performance MCP exhausted={bounded.docs_scanned}; clean={clean.docs_scanned}; prior-path={prior_reads}'
+    )
+
+
 @pytest.mark.parametrize('use_cursor', [False, True])
 def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_cursor):
     now = datetime(2026, 10, 18, tzinfo=timezone.utc)
