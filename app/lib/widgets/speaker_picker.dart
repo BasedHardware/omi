@@ -83,7 +83,11 @@ Future<SpeakerPickerChoice?> showSpeakerPicker(
     title: title ?? context.l10n.whoIsItTitle,
     builder: (sheetContext) => _SpeakerPicker(
       candidates: candidates.where((c) => c.personId != excludePersonId).toList(),
-      people: people.where((p) => p.id != excludePersonId).toList(),
+      // Optimistic placeholders are pre-reconciliation local ids the backend
+      // would reject as person_id; the prompt-card caller filtered them the
+      // same way before this became shared (mirror here so every caller is
+      // covered, not just the one that remembered).
+      people: people.where((p) => p.id != excludePersonId && !p.id.startsWith('optimistic-person:')).toList(),
       allowUnknown: allowUnknown,
       offerMeAndNotAPerson: offerMeAndNotAPerson,
     ),
@@ -110,6 +114,11 @@ class _SpeakerPicker extends StatefulWidget {
 class _SpeakerPickerState extends State<_SpeakerPicker> {
   final _search = TextEditingController();
   String _query = '';
+  bool _showAllEveryone = false;
+
+  /// Everyone rows rendered before the "Show all N" expander, mirroring the
+  /// tag-speaker sheet's bounded initial layout for large rosters.
+  static const int _kEveryoneCap = 24;
 
   @override
   void dispose() {
@@ -163,89 +172,99 @@ class _SpeakerPickerState extends State<_SpeakerPicker> {
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final exact = widget.people.any((p) => p.name.toLowerCase() == lower);
     final canAdd = q.length >= 2 && q.length <= 40 && !exact;
+    final isSearching = q.isNotEmpty;
+    // Bounded Everyone tail: cap the initial render behind a "Show all N"
+    // expander (search results are already query-bounded), so a large roster
+    // does not lay out every row on open or per keystroke.
+    final showAllEveryone = _showAllEveryone || isSearching;
+    final visibleEveryone = showAllEveryone ? everyone : everyone.take(_kEveryoneCap).toList();
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
-      child: SingleChildScrollView(
+      child: ListView(
         padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            OmiSearchField(
-              placeholder: l10n.peopleSearchPlaceholder,
-              controller: _search,
-              onChanged: (value) => setState(() => _query = value),
-              onCleared: () => setState(() => _query = ''),
-            ),
-            const SizedBox(height: OmiSpacing.sm),
-            if (widget.offerMeAndNotAPerson && q.isEmpty) ...[
-              OmiSettingsGroup(
-                children: [
-                  OmiSettingsRow(
-                    key: const Key('speaker_picker_me'),
-                    leading: const Icon(Icons.person_outline),
-                    title: l10n.speakerTagPromptThatsMeAction,
-                    onTap: () => _pick(const SpeakerPickerChoice.me()),
-                  ),
-                  OmiSettingsRow(
-                    key: const Key('speaker_picker_not_a_person'),
-                    leading: const Icon(Icons.tv_outlined),
-                    title: l10n.speakerTagPromptNotAPerson,
-                    onTap: () => _pick(const SpeakerPickerChoice.notAPerson()),
-                  ),
-                ],
-              ),
-              const SizedBox(height: OmiSpacing.md),
-            ],
+        children: [
+          OmiSearchField(
+            placeholder: l10n.peopleSearchPlaceholder,
+            controller: _search,
+            onChanged: (value) => setState(() => _query = value),
+            onCleared: () => setState(() => _query = ''),
+          ),
+          const SizedBox(height: OmiSpacing.sm),
+          if (widget.offerMeAndNotAPerson && q.isEmpty) ...[
             OmiSettingsGroup(
               children: [
                 OmiSettingsRow(
-                  key: const Key('speaker_picker_new_person'),
-                  leading: const Icon(Icons.person_add_alt_outlined),
-                  title: canAdd ? l10n.addNamedPersonAction(q) : l10n.newPersonEllipsis,
-                  onTap: canAdd ? () => _returnNamed(q) : _newPerson,
+                  key: const Key('speaker_picker_me'),
+                  leading: const Icon(Icons.person_outline),
+                  title: l10n.speakerTagPromptThatsMeAction,
+                  onTap: () => _pick(const SpeakerPickerChoice.me()),
                 ),
-                if (widget.allowUnknown)
+                OmiSettingsRow(
+                  key: const Key('speaker_picker_not_a_person'),
+                  leading: const Icon(Icons.tv_outlined),
+                  title: l10n.speakerTagPromptNotAPerson,
+                  onTap: () => _pick(const SpeakerPickerChoice.notAPerson()),
+                ),
+              ],
+            ),
+            const SizedBox(height: OmiSpacing.md),
+          ],
+          OmiSettingsGroup(
+            children: [
+              OmiSettingsRow(
+                key: const Key('speaker_picker_new_person'),
+                leading: const Icon(Icons.person_add_alt_outlined),
+                title: canAdd ? l10n.addNamedPersonAction(q) : l10n.newPersonEllipsis,
+                onTap: canAdd ? () => _returnNamed(q) : _newPerson,
+              ),
+              if (widget.allowUnknown)
+                OmiSettingsRow(
+                  key: const Key('speaker_picker_unknown'),
+                  leading: const Icon(Icons.help_outline),
+                  title: l10n.speakerTagPromptDontKnow,
+                  onTap: () => _pick(const SpeakerPickerChoice.unknown()),
+                ),
+            ],
+          ),
+          if (closest.isNotEmpty) ...[
+            const SizedBox(height: OmiSpacing.md),
+            OmiSettingsGroup(
+              header: l10n.speakerTagPromptClosestVoices,
+              children: [
+                for (final c in closest)
                   OmiSettingsRow(
-                    key: const Key('speaker_picker_unknown'),
-                    leading: const Icon(Icons.help_outline),
-                    title: l10n.speakerTagPromptDontKnow,
-                    onTap: () => _pick(const SpeakerPickerChoice.unknown()),
+                    key: Key('speaker_picker_person_${c.personId}'),
+                    title: c.name,
+                    leading: c.pinned ? const Icon(Icons.push_pin) : const Icon(Icons.person_outline),
+                    trailing: c.matchLevel == null ? null : VoiceMatchMeter(level: c.matchLevel!),
+                    onTap: () => _pick(SpeakerPickerChoice.person(c.personId, c.name)),
                   ),
               ],
             ),
-            if (closest.isNotEmpty) ...[
-              const SizedBox(height: OmiSpacing.md),
-              OmiSettingsGroup(
-                header: l10n.speakerTagPromptClosestVoices,
-                children: [
-                  for (final c in closest)
-                    OmiSettingsRow(
-                      key: Key('speaker_picker_person_${c.personId}'),
-                      title: c.name,
-                      leading: c.pinned ? const Icon(Icons.push_pin) : const Icon(Icons.person_outline),
-                      trailing: c.matchLevel == null ? null : VoiceMatchMeter(level: c.matchLevel!),
-                      onTap: () => _pick(SpeakerPickerChoice.person(c.personId, c.name)),
-                    ),
-                ],
-              ),
-            ],
-            if (everyone.isNotEmpty) ...[
-              const SizedBox(height: OmiSpacing.md),
-              OmiSettingsGroup(
-                header: l10n.everyoneHeader,
-                children: [
-                  for (final p in everyone)
-                    OmiSettingsRow(
-                      key: Key('speaker_picker_person_${p.id}'),
-                      title: p.name,
-                      leading: PersonAvatar(person: p, size: 32, showVoiceBadge: false),
-                      onTap: () => _pick(SpeakerPickerChoice.person(p.id, p.name)),
-                    ),
-                ],
-              ),
-            ],
           ],
-        ),
+          if (everyone.isNotEmpty) ...[
+            const SizedBox(height: OmiSpacing.md),
+            OmiSettingsGroup(
+              header: l10n.everyoneHeader,
+              children: [
+                for (final p in visibleEveryone)
+                  OmiSettingsRow(
+                    key: Key('speaker_picker_person_${p.id}'),
+                    title: p.name,
+                    leading: PersonAvatar(person: p, size: 32, showVoiceBadge: false),
+                    onTap: () => _pick(SpeakerPickerChoice.person(p.id, p.name)),
+                  ),
+                if (!showAllEveryone && everyone.length > _kEveryoneCap)
+                  OmiSettingsRow(
+                    key: const Key('speaker_picker_show_all'),
+                    title: l10n.showAllPeople(everyone.length),
+                    leading: const Icon(Icons.unfold_more),
+                    onTap: () => setState(() => _showAllEveryone = true),
+                  ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -139,6 +139,20 @@ void main() {
     expect(_speakerAnswer(sent)['is_me'], false);
   });
 
+  testWidgets('optimistic placeholder people never appear in the picker, so their temp ids cannot be sent',
+      (tester) async {
+    final sent = <(String, Map<String, dynamic>)>[];
+    await _pumpSheet(
+      tester,
+      review: await _review(sent),
+      people: [_person('optimistic-person:local-1', 'Draft Person'), _person('p-dana', 'Dana')],
+    );
+    await _openPicker(tester);
+    expect(find.byKey(const Key('speaker_picker_person_optimistic-person:local-1')), findsNothing);
+    expect(find.text('Draft Person'), findsNothing);
+    expect(find.byKey(const Key('speaker_picker_person_p-dana')), findsOneWidget);
+  });
+
   testWidgets('typing an existing name offers no new person, so the listed person is what gets sent', (tester) async {
     final sent = <(String, Map<String, dynamic>)>[];
     await _pumpSheet(tester, review: await _review(sent), people: [_person('p-dana', 'Dana')]);
