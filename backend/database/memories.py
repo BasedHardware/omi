@@ -506,7 +506,13 @@ def list_memory_updated_or_created_index(
         # until it holds the page, its order is exhausted, or it spends the flat slack.
         window_limit = candidate_limit
         window_docs: List[Any] = []
-        incremental = os.getenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', '').strip().lower() != 'false'
+        # Date inequalities can normalize additional SDK order fields for a
+        # snapshot cursor. Preserve the released prefix query for those callers.
+        incremental = (
+            start_date is None
+            and end_date is None
+            and os.getenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', '').strip().lower() != 'false'
+        )
         while True:
             if incremental:
                 # Retain each fetched prefix and seek after its last snapshot.

@@ -23,6 +23,10 @@ caching. `OMI_EXTERNAL_LIST_METRICS_ENABLED=false` disables HTTP measurement and
 the new per-request read histogram. Cache invalidation stays active when readers
 are disabled, protecting enabled readers and subsequent re-enablement.
 
+Hour-long promote markers use a separate key suffix. Disabling its long-TTL
+lever immediately stops reading already stored hour-long markers and uses the
+released 90-second namespace. The full empty-cache switch bypasses both.
+
 ## Task writer coverage
 
 `database.action_item_write_fence` installs SDK commit fences from `database._client`.
@@ -74,6 +78,14 @@ Readers bypass during busy/unavailable states and recheck versions on hits and
 before background population. A late old fill can only address its old key.
 Bodies retain AES-GCM encryption, authenticated opaque keys, owner/auth/query
 isolation, query-start deadlines, size limits and bounded population admission.
+
+A process death after `begin`, or cancellation before `finish`, can orphan a
+writer ticket. That user then remains uncached even after later confirmed writes.
+This is intentional fail-closed behavior shared with promote, not an automatic
+lease: expiring an uncertain ticket could release a still-running durable write.
+Do not add a writer-hash TTL as recovery. Any separately authorized operator
+repair must first quiesce and resolve all affected writers, discard their cached
+entries, then reset the fence metadata together. No such repair was run here.
 
 As with the existing promote fence, immediate invalidation depends on Redis
 confirming a pre-write fence. A total Redis outage spanning both begin and end,
@@ -152,6 +164,10 @@ prefix. Snapshot `start_after` now reads only the suffix needed to grow it. Both
 visibility filtering, final merge and stable ordering. The mixed canonical /
 historical fixture reads 84 instead of 124 (32.3% lower), with identical rows.
 Canonical identity and suppression checks remain authoritative.
+
+Date-bounded callers keep the released expanding-prefix query shape: Firestore
+SDK snapshot cursors can normalize additional inequality order fields there.
+The Developer/MemoryService windows optimized here do not pass date bounds.
 
 ## Measurement and modeled savings
 

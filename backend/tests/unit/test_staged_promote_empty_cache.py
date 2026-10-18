@@ -526,3 +526,21 @@ def test_long_ttl_kill_switch_restores_90_seconds(storage, monkeypatch):
     clock.seconds += 1
     cache.load_projection('u', 7, origin)
     assert origin.call_count == 2
+
+
+def test_long_ttl_kill_switch_bypasses_an_existing_one_hour_marker(storage, monkeypatch):
+    clock, redis = storage
+    origin = Mock(return_value=[])
+    cache.load_projection('u', 7, origin)
+    hour_marker = next(key for key, value in redis.data.items() if value == '1')
+    clock.seconds += 10
+    monkeypatch.setenv('OMI_STAGED_PROMOTE_LONG_TTL_ENABLED', 'false')
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 2
+    assert redis.get(hour_marker) == '1'  # Still present, but never read with the lever off.
+    clock.seconds += 89
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 2
+    clock.seconds += 1
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 3

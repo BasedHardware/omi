@@ -141,6 +141,42 @@ def budget(documents):
     return ListReadBudget(deadline_monotonic=time.monotonic() + 100, max_documents=documents)
 
 
+@pytest.mark.parametrize('bounds', ['start', 'end', 'both'])
+def test_date_bounded_hidden_memory_windows_keep_released_prefix_queries(monkeypatch, bounds):
+    from database import memories
+
+    now = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    rows = {
+        f'users/owner/memories/h-{i:02}': {
+            'id': f'h-{i:02}',
+            'category': 'work',
+            'created_at': now - timedelta(seconds=i),
+            **({'updated_at': now - timedelta(seconds=i)} if i != 12 else {}),
+            **({'user_review': False} if i < 12 else {}),
+        }
+        for i in range(24)
+    }
+    kwargs = {}
+    if bounds in {'start', 'both'}:
+        kwargs['start_date'] = now - timedelta(days=1)
+    if bounds in {'end', 'both'}:
+        kwargs['end_date'] = now + timedelta(days=1)
+
+    def no_cursor(*args):
+        raise AssertionError('Date-bounded queries must retain their released prefix shape')
+
+    monkeypatch.setattr(Query, 'start_after', no_cursor)
+    baseline = Store(rows)
+    monkeypatch.setenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED', 'false')
+    expected = memories.list_memory_updated_or_created_index('owner', limit=4, firestore_client=baseline, **kwargs)
+    current = Store(rows)
+    monkeypatch.delenv('OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED')
+    actual = memories.list_memory_updated_or_created_index('owner', limit=4, firestore_client=current, **kwargs)
+    assert actual == expected
+    assert [row['id'] for row in actual] == [f'h-{i:02}' for i in range(12, 16)]
+    assert current.windows == baseline.windows and len(current.windows) > 2
+
+
 def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkeypatch):
     now = datetime(2026, 10, 18, tzinfo=timezone.utc)
     rows = {

@@ -175,6 +175,17 @@ def test_unknown_begin_poison_and_version_eviction_never_alias(redis):
     assert versions.version('owner') not in (old, None)
 
 
+def test_orphan_writer_stays_fail_closed_after_a_later_confirmed_write(redis):
+    versions.begin('owner')  # Model a crashed writer whose durable result is uncertain.
+    later = versions.begin('owner')
+    versions.finish('owner', later)
+    key = versions._key('owner')
+    assert redis.ttl(key + ':writers') == -1
+    assert versions.version('owner') is None
+    assert lookup()[1] is None
+    assert getattr(lookup()[0].state, 'external_list_cache_entry', None) is None
+
+
 def test_long_ttl_flag_and_write_when_reader_flag_off(redis, monkeypatch):
     request, _ = lookup()
     entry = request.state.external_list_cache_entry
