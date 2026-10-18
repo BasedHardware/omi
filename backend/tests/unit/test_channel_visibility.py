@@ -115,6 +115,19 @@ class TestVisibleSessions:
         with patch.object(channel_visibility, 'cohort_enabled', return_value=True):
             assert channel_visibility.visible_sessions('u1', firestore_client=_BoomDb()) == []
 
+    def test_session_missing_channel_link_id_skipped(self):
+        db = _db_with([{'visible_in_app': True}], [{'title': 'no link field'}])
+        with patch.object(channel_visibility, 'cohort_enabled', return_value=True):
+            assert channel_visibility.visible_sessions('u1', firestore_client=db) == []
+
+    def test_link_payload_non_dict_truthy_skipped(self):
+        db = _db_with(['yes', {'visible_in_app': True}], [{'channel_link_id': 0}, {'channel_link_id': 1}])
+        with patch.object(channel_visibility, 'cohort_enabled', return_value=True):
+            out = channel_visibility.visible_sessions('u1', firestore_client=db)
+        # link 0's truthy non-dict payload is not a dict -> not visible;
+        # only the session on link 1 matches.
+        assert [s['id'] for s in out] == ['session-1']
+
     def test_none_client_returns_empty(self):
         with patch.object(channel_visibility, 'cohort_enabled', return_value=True), patch.object(
             channel_visibility, 'get_firestore_client', return_value=None
