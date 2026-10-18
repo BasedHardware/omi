@@ -46,6 +46,7 @@ from database.legal_holds import (
     destructive_operation_gate,
 )
 from database.review_queue import purge_stale_review_conflicts_for_memories
+from database.memory_vector_metadata import is_tombstoned_or_deleted_metadata
 from database.vector_db import delete_memory_vector
 from models.memories import MemoryDB
 from models.knowledge_ledger_search import (
@@ -401,21 +402,6 @@ def _legacy_read_memories(uid: str, *, limit: int = 100, offset: int = 0) -> Lis
     return _validate_memory_list(memories)
 
 
-def _is_truthy_flag(val: Any) -> bool:
-    if val is True:
-        return True
-    if isinstance(val, (int, float)) and not isinstance(val, bool):
-        return val == 1
-    if isinstance(val, bytes):
-        try:
-            val = val.decode("utf-8", errors="ignore")
-        except Exception:
-            return False
-    if isinstance(val, str):
-        return val.lower().strip() in {"true", "1", "yes"}
-    return False
-
-
 def _memory_ids_and_scores(
     matches: Any,
 ) -> tuple[List[str], Dict[str, float]]:
@@ -466,25 +452,7 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
             continue
         if memory.get("is_locked", False):
             continue
-        raw_status = memory.get("status")
-        status = str(getattr(raw_status, "value", raw_status) or "").lower().strip()
-        raw_redaction = memory.get("redaction_status")
-        redaction_status = str(getattr(raw_redaction, "value", raw_redaction) or "").lower().strip()
-        raw_source_state = memory.get("source_state")
-        source_state = str(getattr(raw_source_state, "value", raw_source_state) or "").lower().strip()
-        if (
-            status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
-            or redaction_status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
-            or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
-            or _is_truthy_flag(memory.get("deleted"))
-            or _is_truthy_flag(memory.get("is_deleted"))
-            or _is_truthy_flag(memory.get("tombstoned"))
-            or _is_truthy_flag(memory.get("is_tombstoned"))
-            or _is_truthy_flag(memory.get("soft_deleted"))
-            or _is_truthy_flag(memory.get("is_soft_deleted"))
-            or _is_truthy_flag(memory.get("purged"))
-            or _is_truthy_flag(memory.get("is_purged"))
-        ):
+        if is_tombstoned_or_deleted_metadata(memory):
             continue
         payload = cast(Any, memory_api_payload(memory, MemoryApiExposure.LEGACY))
         if isinstance(payload, dict):

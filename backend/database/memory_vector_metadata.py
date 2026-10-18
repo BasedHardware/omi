@@ -164,6 +164,54 @@ def _is_truthy_flag(val: Any) -> bool:
     return False
 
 
+def is_tombstoned_or_deleted_metadata(metadata: Any) -> bool:
+    """Return True if metadata indicates a deleted, tombstoned, or purged entity."""
+    if not isinstance(metadata, dict):
+        to_dict_meta = getattr(metadata, "to_dict", None)
+        if callable(to_dict_meta):
+            try:
+                md = to_dict_meta()
+                if isinstance(md, dict):
+                    metadata = md
+                else:
+                    return False
+            except Exception:
+                return False
+        elif metadata is not None and hasattr(metadata, "get"):
+            try:
+                metadata = dict(metadata)
+            except Exception:
+                return False
+        elif hasattr(metadata, "__dict__"):
+            try:
+                metadata = dict(vars(metadata))
+            except Exception:
+                return False
+        else:
+            return False
+
+    raw_status = metadata.get("status")
+    status = str(getattr(raw_status, "value", raw_status) or "").lower().strip()
+    raw_redaction = metadata.get("redaction_status")
+    redaction_status = str(getattr(raw_redaction, "value", raw_redaction) or "").lower().strip()
+    raw_source_state = metadata.get("source_state")
+    source_state = str(getattr(raw_source_state, "value", raw_source_state) or "").lower().strip()
+
+    return bool(
+        status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
+        or redaction_status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
+        or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
+        or _is_truthy_flag(metadata.get("deleted"))
+        or _is_truthy_flag(metadata.get("is_deleted"))
+        or _is_truthy_flag(metadata.get("tombstoned"))
+        or _is_truthy_flag(metadata.get("is_tombstoned"))
+        or _is_truthy_flag(metadata.get("soft_deleted"))
+        or _is_truthy_flag(metadata.get("is_soft_deleted"))
+        or _is_truthy_flag(metadata.get("purged"))
+        or _is_truthy_flag(metadata.get("is_purged"))
+    )
+
+
 def parse_memory_search_vector_hit(match: Any) -> ParsedMemoryVectorHit:
     if not isinstance(match, dict):
         return ParsedMemoryVectorHit(
@@ -174,25 +222,7 @@ def parse_memory_search_vector_hit(match: Any) -> ParsedMemoryVectorHit:
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
-        raw_status = metadata.get("status")
-        status = str(getattr(raw_status, "value", raw_status) or "").lower().strip()
-        raw_redaction = metadata.get("redaction_status")
-        redaction_status = str(getattr(raw_redaction, "value", raw_redaction) or "").lower().strip()
-        raw_source_state = metadata.get("source_state")
-        source_state = str(getattr(raw_source_state, "value", raw_source_state) or "").lower().strip()
-        if (
-            status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
-            or redaction_status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
-            or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
-            or _is_truthy_flag(metadata.get("deleted"))
-            or _is_truthy_flag(metadata.get("is_deleted"))
-            or _is_truthy_flag(metadata.get("tombstoned"))
-            or _is_truthy_flag(metadata.get("is_tombstoned"))
-            or _is_truthy_flag(metadata.get("soft_deleted"))
-            or _is_truthy_flag(metadata.get("is_soft_deleted"))
-            or _is_truthy_flag(metadata.get("purged"))
-            or _is_truthy_flag(metadata.get("is_purged"))
-        ):
+        if is_tombstoned_or_deleted_metadata(metadata):
             return ParsedMemoryVectorHit(
                 hit=None, decision=SearchDecision.stale_vector, reason="tombstoned_or_deleted_vector"
             )
@@ -235,25 +265,7 @@ def parse_search_vector_hit(match: Any) -> ParsedVectorHit:
     try:
         if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
-        raw_status = metadata.get("status")
-        status = str(getattr(raw_status, "value", raw_status) or "").lower().strip()
-        raw_redaction = metadata.get("redaction_status")
-        redaction_status = str(getattr(raw_redaction, "value", raw_redaction) or "").lower().strip()
-        raw_source_state = metadata.get("source_state")
-        source_state = str(getattr(raw_source_state, "value", raw_source_state) or "").lower().strip()
-        if (
-            status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
-            or redaction_status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
-            or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
-            or _is_truthy_flag(metadata.get("deleted"))
-            or _is_truthy_flag(metadata.get("is_deleted"))
-            or _is_truthy_flag(metadata.get("tombstoned"))
-            or _is_truthy_flag(metadata.get("is_tombstoned"))
-            or _is_truthy_flag(metadata.get("soft_deleted"))
-            or _is_truthy_flag(metadata.get("is_soft_deleted"))
-            or _is_truthy_flag(metadata.get("purged"))
-            or _is_truthy_flag(metadata.get("is_purged"))
-        ):
+        if is_tombstoned_or_deleted_metadata(metadata):
             return ParsedVectorHit(
                 hit=None, decision=SearchDecision.stale_vector, reason="tombstoned_or_deleted_vector"
             )
