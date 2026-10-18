@@ -78,8 +78,8 @@ jobs:
       - name: Provision dashboards
         env:
           # Ops Grafana service-account token (same secret family the pusher
-          # auto-deploy uses for alert-route verification). Do not use
-          # GRAFANA_TOKEN; that belongs to the TV Cloud Run instance.
+          # auto-deploy uses for alert-route verification). The former TV
+          # instance credential is reserved for the separate retirement tool.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
           GRAFANA_URL: ${{ matrix.environment == 'prod' && 'https://monitor.omi.me' || 'https://monitor.omiapi.com' }}
           GIT_SHORT_SHA: ${{ github.sha }}

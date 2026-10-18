@@ -12,18 +12,19 @@ import logging
 import threading
 from typing import Any, Callable, Mapping, Sequence
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
 from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
     worker_silence_disposition_enabled,
+    worker_validation_disposition_enabled,
 )
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork
+from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.observability.fallback import record_fallback
 
@@ -255,7 +256,7 @@ class PipelineWorker:
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
-    ) -> Sequence[WorkResult | HeldWork | RecoveryWork]:
+    ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
         if any(item.duration_seconds > self.config.max_unit_seconds for item in items):
@@ -324,8 +325,14 @@ class PipelineWorker:
                             item.segment_id,
                             padded_retry_empty=bool(state.get('padded_retry_empty')),
                             padded_retry=state.get('padded_retry'),
+                            reason=reason,
                         )
                     )
+                elif isinstance(exc, BatchValidationError) and worker_validation_disposition_enabled():
+                    # Repeating the same validated GPU failure cannot establish
+                    # silence or corrupt audio. End this chain now and retain
+                    # custody for the independent privacy-fenced recovery path.
+                    results.append(ValidationFailureWork(item.segment_id, stage, reason))
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(
@@ -357,7 +364,22 @@ class PipelineWorker:
                 if not 0 < duration <= self.config.max_unit_seconds or abs(duration - item.duration_seconds) > 0.1:
                     raise ValueError('decoded duration differs from admitted capture')
                 stage = 'vad_windows'
-                spans = list(self.vad(samples))
+                silence = None
+                try:
+                    spans = list(self.vad(samples))
+                except BatchValidationError as error:
+                    if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
+                        raise
+                    # A frame may start beyond a very short real buffer (20 ms
+                    # in production). Only independent strict VAD can establish
+                    # silence; malformed/unavailable evidence stays held.
+                    try:
+                        silence = inspect_worker_silence(item, samples)
+                    except Exception:
+                        pass
+                    if silence is None:
+                        raise
+                    spans = []
                 shapes[item.segment_id]['vad_spans'] = len(spans)
                 clips = list(speech_windows(item, samples, spans, self.config))
                 shapes[item.segment_id]['windows'] = len(clips)
@@ -367,6 +389,7 @@ class PipelineWorker:
                     'samples': samples,
                     'words': [],
                     'silence': not clips,
+                    'silence_payload': silence,
                     'reused': False,
                     'speech_spans': speech_spans,
                     'speech_seconds': sum(span['end'] - span['start'] for span in speech_spans),
@@ -495,7 +518,7 @@ class PipelineWorker:
                         )
                     )
                     stage = 'assemble_words'
-                silence = None
+                silence = state['silence_payload']
                 if (
                     not state['silence']
                     and not words

@@ -148,7 +148,7 @@ def test_runtime_manifest_keeps_the_drain_bounded_and_authorized(manifest):
 
     dev_env = manifest["environments"]["dev"]["cloud_run"]["jobs"]["knowledge-ledger-drain-job"]["env"]
     assert dev_env["KNOWLEDGE_LEDGER_DRAIN_ENABLED"]["value"] == "false"
-    assert dev_env["KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"]["value"] == ("9OqYLlKJv4hmeYpIhwJcHBR975i2")
+    assert "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST" not in dev_env
     prod_env = manifest["environments"]["prod"]["cloud_run"]["jobs"]["knowledge-ledger-drain-job"]["env"]
     assert prod_env["KNOWLEDGE_LEDGER_DRAIN_ENABLED"]["value"] == "false"
-    assert prod_env["KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST"]["value"] == ""
+    assert "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST" not in prod_env

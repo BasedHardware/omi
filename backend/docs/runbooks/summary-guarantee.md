@@ -1,8 +1,11 @@
-# First summary deadline and summary debt (dark)
+# First summary deadline and summary debt
 
-Default behavior remains unchanged: both gates are false. `first_pending_at`
-is now recorded in each outbox obligation even before rollout. No account
-content enters scheduling metadata or metrics.
+Code and dev defaults keep both gates false. Production config enables the
+first-summary deadline for 100% of owners on all six producing/processing
+hosts and enables debt repair on the scheduled backend-sync owner. These
+settings take effect only when the corresponding artifacts are deployed.
+`first_pending_at` is recorded in each outbox obligation even before rollout.
+No account content enters scheduling metadata or metrics.
 
 ## Contract
 
@@ -112,7 +115,49 @@ server-provenance debt only; unmarked historical rows are outside the numerator.
 No recurring COUNT scan was added. Process death after commit but before metric
 emission can lose a Prometheus observation; the durable metadata remains truth.
 
-## Enable and rollback (lead owned; no production mutation in this PR)
+## Production policy and rollback
+
+The checked-in production policy is ship-on. Keep the six hosts aligned:
+backend-listen, pusher, backend, backend-sync, backend-sync-backfill and
+backend-integration use `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
+`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The existing scheduled backend-sync
+owner also uses `SUMMARY_DEBT_REPAIR_ENABLED=true`. The bounded repair cost
+above is unchanged. No new index, scheduler, provider or capacity is required.
+
+The master flag also routes summary enrichment on both HTTP adapters through
+the existing `postprocess_executor` rather than the STT `sync_executor`.
+The sync pool has sixteen workers; an on-time Cloud Tasks delivery can still
+wait behind long transcription there. The post-processing pool already hosts
+ordinary finalization; this separates work classes without resizing a pool or
+adding instances. Flag off restores the original adapter pool. A real-executor
+regression fills a transcription pool and verifies a summary can finish.
+
+Rollback the sweep with `SUMMARY_DEBT_REPAIR_ENABLED=false`; rollback deadline
+processing with `FIRST_SUMMARY_DEADLINE_ENABLED=false` on every host. Existing
+durable work remains retryable. A percentage rollback retains the explicit
+allowlist and, where configured, previously admitted deadline protection.
+
+The current finalizer also finishes an eligible completed server minimum
+under its existing job lease before terminal fanout. Rich completed rows,
+manual/local-only/privacy/discarded rows and exhausted empty-output budgets
+are excluded. No second finalization generation is created. A summary failure
+keeps the original job retryable. Background repair still refuses every
+finalization-owned generation.
+
+Do not bulk-repair a conversation merely because its admission projection
+still says `finalization_status=queued` or it lacks a first-pending marker.
+Check the authoritative job and actual summary presence first. Live hosts
+without the summary gate previously produced rich summaries without these
+metadata fields.
+
+`omi_closed_to_summary_seconds` supplements the existing acceptance histogram
+using the later of acceptance and `finished_at` (last speech). This excludes
+open-speech overlap while retaining silence-close and provider/queue delay.
+Missing acceptance/finish or a finish in the future produces no sample. It
+does not reconstruct a historical close timestamp or prove fleet-wide SLO
+coverage before all processing hosts run the instrumentation.
+
+## Original qualification sequence (historical)
 
 1. Merge the manifest and run/approve `.github/workflows/gcp_firestore_indexes.yml`
    for its exact commit. Wait for the declared collection-group ascending index on

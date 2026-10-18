@@ -26,6 +26,12 @@ LATENCY = Histogram(
     ['lane'],
     buckets=(30, 60, 120, 300, 600, 1800, 3600, 14400, 43200),
 )
+CLOSED_LATENCY = Histogram(
+    'omi_closed_to_summary_seconds',
+    'First durable summary after both server acceptance and last speech',
+    ['lane'],
+    buckets=(30, 60, 120, 180, 300, 600, 1800, 3600, 14400),
+)
 DEBT = Gauge('omi_summary_debt_overdue', 'Overdue summary debt in the bounded repair window')
 OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary debt observed by repair')
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
@@ -131,6 +137,18 @@ def refusal(row: Row) -> str | None:
     return None
 
 
+def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
+    """The current finalization lease may finish its own completed minimum.
+
+    Completed is a lifecycle state, not proof of summary delivery. Never bypass
+    another generation through the background repair path; the finalizer has
+    already checked its job/revision/lease before calling this predicate.
+    """
+    if not enabled(uid) or row.get('finalization_job_id') != job_id or present(row.get('structured')):
+        return False
+    return refusal({**row, 'finalization_job_id': None}) is None
+
+
 def creation_result(write: Row, uid: str) -> Row | None:
     # A deliberate minimum is durable debt, not a terminal summary receipt.
     if (
@@ -191,11 +209,16 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_blocked_reason'] = None
         if rich:
             write['summary_title_provenance'] = 'generated'
+        finished = write.get('finished_at', existing.get('finished_at'))
+        closed_latency = None
+        if accepted is not None and isinstance(finished, datetime) and finished.timestamp() <= current:
+            closed_latency = max(0, current - max(accepted, finished.timestamp()))
         return dict(
             lane=lane(existing),
             reason=('discarded' if discarded else 'summary') if accepted is not None else 'accept_unknown',
             present=rich,
             latency=max(0, current - accepted) if accepted is not None else None,
+            closed_latency=closed_latency,
         )
     return None
 
@@ -222,3 +245,5 @@ def emit(receipt: Row | None) -> None:
     RECEIPTS.labels(receipt['lane'], receipt['reason'], str(receipt['present']).lower()).inc()
     if receipt['present'] and receipt['latency'] is not None:
         LATENCY.labels(receipt['lane']).observe(receipt['latency'])
+    if receipt['present'] and receipt.get('closed_latency') is not None:
+        CLOSED_LATENCY.labels(receipt['lane']).observe(receipt['closed_latency'])

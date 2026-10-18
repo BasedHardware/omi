@@ -112,6 +112,7 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # and projection follow-ups; pusher mounts neither surface.
         'BATCH_PIPELINE_HEAD_PRIORITY_ENABLED',
         'BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED',
         'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
         'BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED',
         'BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED',
@@ -157,6 +158,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
             "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
+            "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
@@ -271,6 +273,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
             "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
+            "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",

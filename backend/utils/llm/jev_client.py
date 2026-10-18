@@ -15,6 +15,7 @@ answer" and keep their existing safe default. Nothing here raises.
 """
 
 from __future__ import annotations
+from utils.generated_compute import current_generated_compute_allowed
 
 import logging
 import math
@@ -100,6 +101,8 @@ def ask_jev(
     its latency histogram: EXP-004 shadow calls must not inflate the live
     decision lanes' failure and latency signals while they ramp.
     """
+    if not current_generated_compute_allowed('jev_decisions', allow_byok=False):
+        return None
     started = time.monotonic()
     outcome = 'success'
     try:

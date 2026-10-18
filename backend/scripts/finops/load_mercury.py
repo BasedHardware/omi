@@ -6,7 +6,7 @@ import datetime as dt
 import json
 import pathlib
 
-from mercury_costs import CATEGORIES, MercuryError, anniversary, days, load_map, money, saas_rows
+from mercury_costs import CATEGORIES, SYNTHETIC_VENDORS, MercuryError, anniversary, days, load_map, money, saas_rows
 
 META = [('run_id', 'STRING'), ('computed_at', 'TIMESTAMP')]
 SCHEMAS = {
@@ -53,8 +53,10 @@ def ready_snapshot(raw: pathlib.Path, config: dict) -> dict | None:
             raise MercuryError('Mercury artifact must contain aggregates only')
         vendor, category = row['vendor'], row['category']
         entry = config['vendors'].get(vendor)
-        valid = (entry and category == entry['category'] and category != 'excluded') or (
-            vendor == category and category in ('unmapped', 'excluded')
+        valid = (
+            (entry and category == entry['category'] and category != 'excluded')
+            or (vendor == category and category in ('unmapped', 'excluded'))
+            or (vendor in SYNTHETIC_VENDORS and category in CATEGORIES and category != 'excluded')
         )
         if not valid or row['date'] not in window:
             raise MercuryError('unknown Mercury aggregate key')

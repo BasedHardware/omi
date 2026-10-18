@@ -1065,7 +1065,9 @@ extension SettingsContentView {
     return ("unknown", "unknown")
   }
 
-  func startCheckout(for priceId: String) {
+  /// `selection` names the plan and interval when the caller already knows them (the
+  /// storefront payload); otherwise they are looked up in the local catalog.
+  func startCheckout(for priceId: String, selection known: (plan: String, interval: String)? = nil) {
     guard activeCheckoutPriceId == nil else { return }
     if let subscription = userSubscription?.subscription,
       SubscriptionPlanPresentation.purchase(
@@ -1081,7 +1083,7 @@ extension SettingsContentView {
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
     subscriptionConfirmation = nil
-    let selection = checkoutSelection(for: priceId)
+    let selection = known ?? checkoutSelection(for: priceId)
     pendingCheckoutPlanId = selection.plan
     pendingCheckoutInterval = selection.interval
     AnalyticsManager.shared.upgradePlanSelected(

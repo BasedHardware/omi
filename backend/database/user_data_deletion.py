@@ -4,15 +4,24 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
+from database._client import get_data_plane_firestore_client
+from database.staged_promote_cache import invalidate_around_write
+
 logger = logging.getLogger(__name__)
 
 
+@invalidate_around_write
 def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> dict:
     # Top-level batch stores are outside users/{uid}; fence and purge them
     # before deleting the last references needed for retryable object erasure.
     from database.batch_pipeline_purge import purge_batch_owner
 
     purge_batch_owner(uid)
+    # Membership is user data outside the recursive users/{uid} subtree, and it
+    # lives in the customer data plane (which can differ from this compute
+    # client's project). A failed delete must propagate so the account wipe
+    # retries it.
+    get_data_plane_firestore_client().collection('rollout_cohorts').document(uid).delete()
     user_ref = client.collection('users').document(uid)
     root_exists = user_ref.get().exists
 

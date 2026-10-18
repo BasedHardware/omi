@@ -1,3 +1,5 @@
+from utils import funded_processing
+from utils.processing_backlog import defer_estimate
 import os
 import json
 import random
@@ -11,6 +13,8 @@ from datetime import timezone, timedelta, datetime
 from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
+
+from functools import wraps
 
 from fastapi import HTTPException
 
@@ -75,9 +79,12 @@ from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
+    RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
+    recovery_transcript_below_content_floor,
+    recovery_transcript_word_count,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -366,6 +373,7 @@ def _get_structured(
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
     recovery_transcript_decoded: bool = True,
+    recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
 ) -> Tuple[Structured, bool]:
     try:
@@ -530,6 +538,34 @@ def _get_structured(
                         RelevanceDecision('discard', 'rule', ordinary.reason, ProcessingTrigger.SERVER_RECOVERY)
                     )
                 return Structured(), True
+            stored_structured = getattr(main_conv, 'structured', None)
+            stored_title = getattr(stored_structured, 'title', '') or ''
+            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
+            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
+                not stored_title.strip() or stored_title_provenance == 'server_minimum'
+            )
+            if (
+                recovery_transcript_decoded
+                and stored_content_is_replaceable
+                and not getattr(main_conv, 'user_title', None)
+                and not is_release_probe_uid(uid)
+                and not user_kept
+                and not getattr(main_conv, 'photos', None)
+                and recovery_transcript_below_content_floor(main_conv)
+            ):
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
+                    )
+                if recovery_minimum_fallback_observer is not None:
+                    recovery_minimum_fallback_observer()
+                return (
+                    build_deterministic_minimum_structured(
+                        main_conv,
+                        tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+                    ),
+                    False,
+                )
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
@@ -639,6 +675,8 @@ def _get_structured(
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
     except Exception as e:
+        if funded_processing.enabled() and _is_funded_budget_denial(e):
+            raise
         raise conversation_processing_http_exception(e) from e
 
 
@@ -2408,6 +2446,30 @@ def _is_ingress_create(
 
 # Bound for reject-log provenance only. Schema caps are larger; logs must stay
 # a single line even when the payload never passed validation.
+def _store_budget_waiting(uid, conversation, *, client_projection=None):
+    initial = _is_ingress_create(conversation)
+    estimate = defer_estimate(conversation)
+    # Model-free title only; preserve every transcript and external text field.
+    structured = _build_deferred_structured(conversation)
+    result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
+    _attach_client_projection(result, client_projection)
+    result.processing_deferred = True
+    result.deferred = False
+    result.discarded = False
+    result.status = ConversationStatus.completed
+    result.external_data = {**(result.external_data or {}), 'processing_backlog_estimate': estimate}
+    payload = omit_null_processing_state(strip_client_processing(result.model_dump()))
+    payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    payload['jit_first_open'] = None
+    if initial:
+        if client_projection is not None:
+            payload.update(client_processing_mutation(client_projection))
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+    return result, persisted
+
+
 def _store_deferred_conversation(
     uid: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
@@ -2789,6 +2851,49 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
 
 @spelling_context_run
 @conversation_scope
+def _is_funded_budget_denial(error):
+    return (
+        isinstance(error, HTTPException)
+        and error.status_code == 402
+        and isinstance(error.detail, dict)
+        and error.detail.get('error') == 'usage_budget_exhausted'
+    )
+
+
+def _preserve_capture_on_budget_denial(function):
+    @wraps(function)
+    def preserve_capture(uid, language_code, conversation, *args, **kwargs):
+        if not funded_processing.enabled():
+            return function(uid, language_code, conversation, *args, **kwargs)
+        # A later model dispatch can observe a cap crossed by earlier usage.
+        # Keep the ingress snapshot, even when a downstream step mutated it.
+        captured = conversation.model_copy(deep=True)
+        try:
+            return function(uid, language_code, conversation, *args, **kwargs)
+        except HTTPException as error:
+            if not _is_funded_budget_denial(error):
+                raise
+            raw = (
+                _is_ingress_create(captured)
+                or captured.processing_deferred
+                or (captured.status == ConversationStatus.processing and captured.structured == Structured())
+            )
+            persisted = False
+            if raw:
+                captured, persisted = _store_budget_waiting(
+                    uid, captured, client_projection=kwargs.get('client_projection')
+                )
+            if kwargs.get('persistence_observer') is not None:
+                kwargs['persistence_observer'](persisted)
+            if kwargs.get('derived_effects_disposition_observer') is not None:
+                kwargs['derived_effects_disposition_observer'](DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+            return captured
+
+    return preserve_capture
+
+
+@_preserve_capture_on_budget_denial
+@funded_processing.scoped
 def process_conversation(
     uid: str,
     language_code: str,
@@ -2816,6 +2921,7 @@ def process_conversation(
     ``user_kept`` is the stored ``sync_relevance_user_kept`` restore marker,
     which the wire model does not carry; it outranks every relevance tier.
     """
+    backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess, bypass_jit_first_open = mode.run_now, mode.reprocess, mode.bypass_jit_first_open
     # Snapshot before this call replaces structured or status. Sync intake's
@@ -2875,6 +2981,25 @@ def process_conversation(
             link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
+    if funded_processing.enabled():
+        waiting = bool(getattr(conversation, 'processing_deferred', False))
+        if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
+            raw_capture = (
+                not is_initial_creation
+                and conversation.status == ConversationStatus.processing
+                and conversation.structured == Structured()
+            )
+            if is_initial_creation or waiting or raw_capture:
+                stored, persisted = _store_budget_waiting(uid, conversation, client_projection=client_projection)
+                report_persistence(persisted, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+                return stored
+            # A retry/reprocess of an existing enriched row must not replace its
+            # structure, discard state or derived-work markers with a raw shell.
+            # Its transcript is already persisted by ingress; deny this attempt.
+            report_persistence(False, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
+            return conversation
+        if waiting:
+            conversation.processing_deferred = False
     # The synthetic release-probe identity (dev pusher release lane) is
     # exempt from the desktop deferral gates below so the probe certifies
     # the full terminal desktop path end to end. New desktop gates must
@@ -2920,7 +3045,7 @@ def process_conversation(
     # Flag off leaves the legacy branch below byte-identical.
     # The stale-marker clear below is applied only when this branch actually
     # consulted the policy and continued to process_normally (paid upgrade).
-    clear_stale_terminal_marker = False
+    clear_stale_terminal_marker = backlog_authorized
     if (
         # `uid` is required, not optional: the flag is necessary but never
         # sufficient, and `free_tier_local_processing_enabled(None)` is answered
@@ -2997,6 +3122,7 @@ def process_conversation(
     # handled desktop); flag-off behaviour stays the legacy fail-open deferral.
     elif (
         not force_process
+        and not backlog_authorized
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
@@ -3097,6 +3223,12 @@ def process_conversation(
     bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
+    recovery_minimum_fallback = False
+
+    def _mark_recovery_minimum_fallback() -> None:
+        nonlocal recovery_minimum_fallback
+        recovery_minimum_fallback = True
+
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -3107,8 +3239,23 @@ def process_conversation(
         user_kept=user_kept,
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
+        recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
     )
+    if recovery_minimum_fallback:
+        sys.stdout.write(
+            json.dumps(
+                {
+                    'event': 'selfheal_guard',
+                    'outcome': 'kept_minimum',
+                    'reason': 'content_below_floor',
+                    'transcript_words': recovery_transcript_word_count(conversation),
+                    'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
+                }
+            )
+            + '\n'
+        )
+        sys.stdout.flush()
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -3125,6 +3272,7 @@ def process_conversation(
         trigger is ProcessingTrigger.SERVER_RECOVERY
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
+        and not recovery_minimum_fallback
     ):
         sys.stdout.write(
             json.dumps(
@@ -3174,6 +3322,8 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
+    if recovery_minimum_fallback:
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
         # minimum's local_pending); the object the caller returns must agree,
@@ -3188,7 +3338,14 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    report_persistence(persisted, completed=conversation)
+    if recovery_minimum_fallback:
+        report_persistence(
+            persisted,
+            completed=conversation,
+            derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS,
+        )
+    else:
+        report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
             'processing result fenced before canonical completion side effects uid=%s conversation=%s',
@@ -3416,6 +3573,8 @@ def process_conversation(
 
 
 def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], token: str) -> None:
+    if conversation_data.get('processing_deferred') or not funded_processing.processing_allowed(uid):
+        raise RuntimeError('first-open work waiting for funded processing')
     from utils.conversations.jit_first_open_worker import run_first_open_derived_work as run
 
     run(uid, conversation_data, token)

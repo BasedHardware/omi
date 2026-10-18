@@ -154,6 +154,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
 from dependencies import (  # noqa: E402
+    ApiKeyAuth,
+    get_api_key_auth,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
 )
@@ -162,6 +164,8 @@ from dependencies import (  # noqa: E402
 def _build():
     app = FastAPI()
     app.include_router(developer_router)
+    auth = ApiKeyAuth('uid1', ['action_items:read', 'action_items:write'], app_id='test-app', key_id='test-key')
+    app.dependency_overrides[get_api_key_auth] = lambda: auth
     app.dependency_overrides[get_uid_with_action_items_read] = lambda: 'uid1'
     app.dependency_overrides[get_uid_with_action_items_write] = lambda: 'uid1'
     return TestClient(app, raise_server_exceptions=False)

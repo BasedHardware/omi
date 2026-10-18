@@ -4,7 +4,7 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.batch_pipeline import (
     authoritative_labels_enabled,
     require_live_target_enabled,
@@ -23,6 +23,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
 from utils.batch_pipeline.correctness_metrics import record_labels
@@ -190,6 +191,7 @@ class Projector:
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
         self.followups = None
+        self.discovery = ProjectionDiscovery(store)
 
     def persist(self, segment_id: str) -> None:
         """Only ordered assignment holds the owner claim; receipts are the outbox."""
@@ -539,7 +541,7 @@ class Projector:
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
-        for segment_id in self.store.store.projection_pending(limit=max(1, min(limit, 100))):
+        for segment_id in self.discovery.next(limit=max(1, min(limit, 100))):
             try:
                 if async_projection_enabled():
                     self.persist(segment_id)

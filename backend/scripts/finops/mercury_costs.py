@@ -26,6 +26,8 @@ CATEGORIES = {
     'excluded',
 }
 DEFAULT_MAX_UNCATEGORIZED_USD = Decimal('2500')
+# Vendor labels for rule-classified aggregates; never a raw counterparty name.
+SYNTHETIC_VENDORS = ('mercury_category', 'category_data', 'uncategorized_payment')
 MAP_PATH = pathlib.Path(__file__).with_name('mercury_vendor_map.json')
 
 

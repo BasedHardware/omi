@@ -65,7 +65,7 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.analytics import record_sync_v1_usage as record_usage
@@ -137,6 +137,7 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,
@@ -193,6 +194,8 @@ from utils.sync.capture_manifest import (
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
 from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
+from config.sync_owner_concurrency import preparation_width
+from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 # Only the API process importing this router owns held-audio STT recovery.
@@ -606,14 +609,18 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
-    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock.
+    # Legacy exhaustion retains the installed-client path below.
+
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
     has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
     should_lock = False
     if not has_credits:
         allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+        should_lock = (
+            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+            and allowance.reason != 'usage_budget_exhausted'
+        )
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -683,7 +690,8 @@ async def sync_local_files(
                 content={
                     'new_memories': [],
                     'updated_memories': [],
-                    'credits_exhausted': cap_admission.get('reason') == 'plan_allowance_exhausted',
+                    'credits_exhausted': cap_admission.get('reason')
+                    in {'plan_allowance_exhausted', 'usage_budget_exhausted'},
                     'held_audio': True,
                     'held_files': len(wav_paths),
                 },
@@ -1114,7 +1122,10 @@ async def sync_local_files_v2(
     should_lock = False
     if not has_credits:
         allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+        should_lock = (
+            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+            and allowance.reason != 'usage_budget_exhausted'
+        )
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])
@@ -1987,6 +1998,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
+    if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
+        await warm_rollout_cohorts(payload['uid'])
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
@@ -2286,6 +2299,20 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
+        sequencer_epoch = payload.get('sequencer_epoch')
+        if (
+            sync_lane == SyncLane.BACKFILL.value
+            and isinstance(sequencer_epoch, int)
+            and sequencer_epoch > 0
+            and preparation_width() > 1
+        ):
+            # Pure future downloads share this instance with a possible next
+            # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
+            # conversation authority. A cross-instance delivery simply misses.
+            start_background_task(
+                run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
+                name='sync:owner-prefetch',
+            )
         if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(

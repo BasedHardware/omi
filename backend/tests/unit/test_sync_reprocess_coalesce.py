@@ -927,6 +927,7 @@ def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_ena
 
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
     reprocess.mark('u', 'c', 'en', now=0)
@@ -972,6 +973,7 @@ def test_invalid_deadline_never_grants_summary_drain_eligibility(monkeypatch, de
     from config import summary_guarantee
 
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     row = {'uid': 'u', 'summary_deadline_at': deadline}
@@ -984,6 +986,7 @@ def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_qu
 
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark('u', 'c', 'en', now=0)
@@ -1014,6 +1017,7 @@ def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_qu
 def test_preserved_callback_rule_discard_receipt_settles_without_empty_failure(state, monkeypatch):
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark('u', 'c', 'en', now=0)
@@ -1055,6 +1059,7 @@ def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monke
 @pytest.mark.parametrize('has_output', [False, True])
 def test_later_summary_keeps_legacy_callback_validation_and_completion(state, monkeypatch, preserve, has_output):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
     rows, tasks = state

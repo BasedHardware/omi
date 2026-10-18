@@ -8,10 +8,13 @@ description: >-
   run also reads the pre-send gate's own verdict for each seeded plan -- allowed past
   the allowance on an overage plan, blocked on a hard-capped one -- without sending a
   query itself; the send paths are covered by FloatingBarUsageLimiterTests.
+  The default-off ladder pause slot must leave these legacy banner states intact;
+  ChatBudgetPauseTests separately exercise and render the backend pause goldens.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatQuotaBanner.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatQuotaBannerView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBudgetPauseView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift
 preconditions:
   - automation_bridge_ready

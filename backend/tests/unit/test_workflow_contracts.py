@@ -1496,6 +1496,16 @@ def test_listen_gate_is_the_conditional_source_sha_gate():
     workflow = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
     assert policy.workflow_gate_violations(workflow, name=name, dockerfiles=dockerfiles) == []
 
+    # A separate exporter deployment job may inherit protection from the
+    # listen rollout only through a required successful dependency.
+    without_exporter_dependency = workflow.replace('    needs: helm-upgrade\n', '    needs: []\n', 1)
+    assert any(
+        'listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate' in violation
+        for violation in policy.workflow_gate_violations(
+            without_exporter_dependency, name=name, dockerfiles=dockerfiles
+        )
+    )
+
     gate_block = re.search(r'      - name: Verify serving Firestore indexes\n(?:        .*\n)+', workflow).group(0)
     removed = workflow.replace(gate_block, '')
     assert policy.workflow_gate_violations(removed, name=name, dockerfiles=dockerfiles)
@@ -1762,7 +1772,18 @@ cmd = args[0]
 if cmd == 'fetch':
     sys.exit(0)
 if cmd == 'cat-file':
-    sys.exit(0 if args[-1].removesuffix('^{commit}') in tags else 1)
+    spec = args[-1].removesuffix('^{commit}')
+    if ':' in spec:
+        # Path-object probe ("<sha>:<path>"): resolvable commits are cohort-aware
+        # unless the case explicitly opts out with STUB_GIT_COHORT_PATH_COMMITS.
+        cohort_file = os.environ.get('STUB_GIT_COHORT_PATH_COMMITS', '')
+        cohort = (
+            json.load(open(cohort_file))
+            if cohort_file and os.path.exists(cohort_file)
+            else list(tags.values()) + list(tags)
+        )
+        sys.exit(0 if spec.split(':', 1)[0] in cohort else 1)
+    sys.exit(0 if spec in tags else 1)
 if cmd == 'merge-base':
     sys.exit(0 if args[2] in ancestors else 1)
 if cmd == 'rev-parse':
@@ -1827,19 +1848,22 @@ def _stub_bin(tmp_path: Path) -> Path:
 def _run_step(run: str, env: dict[str, str], substitutions: dict[str, str], tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     env_file = tmp_path / 'github.env'
+    output_file = tmp_path / 'github.output'
     env_file.touch()
+    output_file.touch()
     proc = subprocess.run(
         ['bash', '-c', _render_run(run, substitutions)],
-        env={**os.environ, **env, 'GITHUB_ENV': str(env_file)},
+        env={**os.environ, **env, 'GITHUB_ENV': str(env_file), 'GITHUB_OUTPUT': str(output_file)},
         capture_output=True,
         text=True,
     )
     outputs = {}
-    if env_file.exists():
-        for line in env_file.read_text(encoding='utf-8').splitlines():
-            if '=' in line:
-                key, value = line.split('=', 1)
-                outputs[key] = value
+    for output_path in (env_file, output_file):
+        if output_path.exists():
+            for line in output_path.read_text(encoding='utf-8').splitlines():
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    outputs[key] = value
     return proc, outputs
 
 
@@ -1883,13 +1907,22 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     # The kept lane replays an already-gated image; it must not resolve a SHA.
     assert 'BACKEND_LISTEN_SOURCE_SHA' not in outputs
 
-    # Even when the kept tag cannot be resolved locally, the kept lane exits
-    # before any git lookup and still emits no source SHA.
+    # A chart-only upgrade must not land cohort-removal values on an image whose
+    # commit predates the Firestore cohort resolver.
+    case = tmp_path / 'kept-tag-pre-cohort'
+    env = base_env | _listen_env(case, {'abc1234': 'c' * 40}, image='gcr.io/test-project/backend:abc1234')
+    (case / 'cohort-commits.json').write_text(json.dumps([]), encoding='utf-8')
+    env |= {'STUB_GIT_COHORT_PATH_COMMITS': str(case / 'cohort-commits.json'), 'REQUESTED_TAG': ''}
+    proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
+    assert proc.returncode == 1
+    assert 'cohort resolver' in proc.stderr
+
+    # An unresolvable running tag cannot be proven cohort-aware; the kept lane
+    # must fail closed rather than apply cohort-removal values blindly.
     case = tmp_path / 'kept-tag-unresolvable'
     env = base_env | _listen_env(case, {}, image='gcr.io/test-project/backend:eeeeeee') | {'REQUESTED_TAG': ''}
     proc, outputs = _run_step(run, env, _LISTEN_SUBSTITUTIONS, case)
-    assert proc.returncode == 0, proc.stderr
-    assert outputs['BACKEND_LISTEN_IMAGE_TAG'] == 'eeeeeee'
+    assert proc.returncode == 1
     assert 'BACKEND_LISTEN_SOURCE_SHA' not in outputs
 
     case = tmp_path / 'explicit-tag'
@@ -1902,6 +1935,7 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert outputs['BACKEND_LISTEN_IMAGE_TAG'] == 'ddddddd'
     assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'd' * 40
+    assert outputs['neg_coverage_exporter_image_tag'] == 'ddddddd'
 
     case = tmp_path / 'missing-tag'
     env = base_env | _listen_env(case, {'abc1234': 'c' * 40}, image='') | {'REQUESTED_TAG': ''}
