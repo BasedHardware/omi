@@ -159,3 +159,8 @@ def speech_empty_multilingual_enabled() -> bool:
 def terminal_empty_disposition_enabled() -> bool:
     """Dark, evidenced terminal empty result; never grants another paid intent."""
     return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_silence_disposition_enabled() -> bool:
+    """Dark worker-side use of integration's strict local silence evidence."""
+    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'

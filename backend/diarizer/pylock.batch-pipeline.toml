@@ -137,6 +137,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93
 wheels = [{ url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", upload-time = 2022-10-25T02:36:20Z, size = 25335, hashes = { sha256 = "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6" } }]
 
 [[packages]]
+name = "coloredlogs"
+version = "15.0.1"
+sdist = { url = "https://files.pythonhosted.org/packages/cc/c7/eed8f27100517e8c0e6b923d5f0845d0cb99763da6fdee00478f91db7325/coloredlogs-15.0.1.tar.gz", upload-time = 2021-06-11T10:22:45Z, size = 278520, hashes = { sha256 = "7c991aa71a4577af2f82600d8f8f3a89f936baeaf9b50a9c197da014e5bf16b0" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/a7/06/3d6badcf13db419e25b07041d9c7b4a2c331d3f4e7134445ec5df57714cd/coloredlogs-15.0.1-py2.py3-none-any.whl", upload-time = 2021-06-11T10:22:42Z, size = 46018, hashes = { sha256 = "612ee75c546f53e92e70049c9dbfcc18c935a2b9a53b66085ce9ef6a6e5c0934" } }]
+
+[[packages]]
 name = "colorlog"
 version = "6.12.0"
 sdist = { url = "https://files.pythonhosted.org/packages/8c/55/ba79756cb90c8d69d599d57785398ac87bba7b19c80e87f4e8a562197c93/colorlog-6.12.0.tar.gz", upload-time = 2026-07-23T13:40:40Z, size = 18151, hashes = { sha256 = "2a7924c1dadf18b22a0eb8b06d1c7b01d5341707ec1641eb6fcc4fde0c3e8e5f" } }
@@ -242,6 +248,11 @@ name = "filelock"
 version = "4.2.0"
 sdist = { url = "https://files.pythonhosted.org/packages/f4/a9/1af41b37c3279712b22cdc63aac78a52432202b6fe1f9666a2a3d2831fb4/filelock-4.2.0.tar.gz", upload-time = 2026-10-14T20:57:13Z, size = 569667, hashes = { sha256 = "7a60906c75227cf04d0c273afadc8219400f11aeb13cc69591d4f6cdc6c8036e" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/8e/a3/9bc26acff301fe1aaea1cc3d82a1d57e0a34df3e1cadbfa91ac2dbcdde5c/filelock-4.2.0-py3-none-any.whl", upload-time = 2026-10-14T20:57:11Z, size = 135032, hashes = { sha256 = "2ff5690882e8cdb00ef31fb3d01a3094c29f30985426c59495afb1733f3b7238" } }]
+
+[[packages]]
+name = "flatbuffers"
+version = "25.12.19"
+wheels = [{ url = "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl", upload-time = 2025-12-19T23:16:13Z, size = 26661, hashes = { sha256 = "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4" } }]
 
 [[packages]]
 name = "fonttools"
@@ -363,6 +374,12 @@ name = "huggingface-hub"
 version = "0.36.2"
 sdist = { url = "https://files.pythonhosted.org/packages/7c/b7/8cb61d2eece5fb05a83271da168186721c450eb74e3c31f7ef3169fa475b/huggingface_hub-0.36.2.tar.gz", upload-time = 2026-02-06T09:24:13Z, size = 649782, hashes = { sha256 = "1934304d2fb224f8afa3b87007d58501acfda9215b334eed53072dd5e815ff7a" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/a8/af/48ac8483240de756d2438c380746e7130d1c6f75802ef22f3c6d49982787/huggingface_hub-0.36.2-py3-none-any.whl", upload-time = 2026-02-06T09:24:11Z, size = 566395, hashes = { sha256 = "48f0c8eac16145dfce371e9d2d7772854a4f591bcb56c9cf548accf531d54270" } }]
+
+[[packages]]
+name = "humanfriendly"
+version = "10.0"
+sdist = { url = "https://files.pythonhosted.org/packages/cc/3f/2c29224acb2e2df4d2046e4c73ee2662023c58ff5b113c4c1adac0886c43/humanfriendly-10.0.tar.gz", upload-time = 2021-09-17T21:40:43Z, size = 360702, hashes = { sha256 = "6b0b831ce8f15f7300721aa49829fc4e83921a9a301cc7f606be6686a2288ddc" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/f0/0f/310fb31e39e2d734ccaa2c0fb981ee41f7bd5056ce9bc29b2248bd569169/humanfriendly-10.0-py2.py3-none-any.whl", upload-time = 2021-09-17T21:40:39Z, size = 86794, hashes = { sha256 = "1697e1a8a8f550fd43c2865cd84542fc175a61dcb779b6fee18cf6b6ccba1477" } }]
 
 [[packages]]
 name = "hydra-core"
@@ -756,6 +773,11 @@ name = "onnx"
 version = "1.22.0"
 sdist = { url = "https://files.pythonhosted.org/packages/04/19/8ea73a64b368b75fe339771a20a02bc61ea1f551484c9e3d9d0bfbd0450f/onnx-1.22.0.tar.gz", upload-time = 2026-06-15T12:50:05Z, size = 12024721, hashes = { sha256 = "ef40c0aaf0b643857ea9306fc7eddce17eaf9fb0407e4801f1fc5758443a38e0" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/2b/a0/c9d9d56ceadb1c0a90a7cbec5a0510520ab6538938944fa84548e4b5b054/onnx-1.22.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2026-06-15T12:49:19Z, size = 19110720, hashes = { sha256 = "1d0a2bdb15eb2b3cb65c438f3423d9620d14fdce32f92380e6bb1b2e09568ef5" } }]
+
+[[packages]]
+name = "onnxruntime"
+version = "1.19.0"
+wheels = [{ url = "https://files.pythonhosted.org/packages/fa/ca/769da06e76b14a315a1effa5b01d906963379495cd82c00b5023be4c3e61/onnxruntime-1.19.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", upload-time = 2024-08-15T19:17:37Z, size = 13172071, hashes = { sha256 = "6f379d1f050cfb55ce015d53727b78ee362febc065c38eed81512b22b757da73" } }]
 
 [[packages]]
 name = "opentelemetry-api"

@@ -13,7 +13,12 @@ import threading
 from typing import Any, Callable, Mapping, Sequence
 
 from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
-from config.batch_pipeline import empty_asr_recovery_enabled, empty_asr_disposition_enabled
+from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from config.batch_pipeline import (
+    empty_asr_recovery_enabled,
+    empty_asr_disposition_enabled,
+    worker_silence_disposition_enabled,
+)
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
@@ -268,6 +273,7 @@ class PipelineWorker:
         failure_records = []
         held = set()
         recovery_records = []
+        silence_records = []
         shapes = {item.segment_id: {'samples': -1, 'vad_spans': -1, 'windows': -1, 'asr_words': 0} for item in items}
 
         def allowed(required):
@@ -455,6 +461,23 @@ class PipelineWorker:
                         )
                     )
                     stage = 'assemble_words'
+                silence = None
+                if (
+                    not state['silence']
+                    and not words
+                    and not shapes[item.segment_id]['asr_words']
+                    and worker_silence_disposition_enabled()
+                ):
+                    try:
+                        silence = inspect_worker_silence(item, state['samples'])
+                    except Exception:
+                        # Unavailable/invalid strict VAD is never silence. Keep
+                        # the original empty-ASR quarantine and recovery route.
+                        silence = None
+                    if silence is not None:
+                        state['silence'] = True
+                        state['speech_spans'], state['speech_seconds'] = [], 0.0
+                        self.counts['silence'] += 1
                 if not state['silence'] and not words:
                     raise BatchValidationError(
                         ValidationReason.NO_OWNED_WORDS
@@ -489,6 +512,8 @@ class PipelineWorker:
                     'speech_seconds': state['speech_seconds'],
                     'speech_spans': state['speech_spans'],
                 }
+                if silence is not None:
+                    payload.update(silence)
                 if cap_dispatch_enabled():
                     payload['cap_dispatch'] = {
                         'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
@@ -497,6 +522,8 @@ class PipelineWorker:
                 stage = 'persist'
                 uri = self.persist(item, payload)
                 results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
+                if silence is not None:
+                    silence_records.append(item.segment_id)
             except Exception as exc:
                 fail(item, exc, stage)
         # Emit only strings/integers after every item exception handler has exited.
@@ -526,6 +553,14 @@ class PipelineWorker:
                 )
             except Exception:
                 pass  # Metrics/logging cannot invalidate a completed inference.
+        for segment_id in silence_records:
+            try:
+                record_fallback(
+                    component='stt_selection', from_mode='batch', to_mode='none', reason='other', outcome='recovered'
+                )
+                logger.info('event=batch_worker_silence_disposition segment_id=%s outcome=silence', segment_id)
+            except Exception:
+                pass  # Observability cannot invalidate a persisted result.
         for error_class, failure_stage, segment_id, reason, samples, spans, clips, asr_words, owned in failure_records:
             try:
                 logger.error(
