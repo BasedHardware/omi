@@ -83,7 +83,7 @@ def test_quarantine_recovery_is_david_only_on_prod_integration(
             key = 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'
             recovery_allowlist = env.get(key)
             if stage == 'prod' and name == 'backend-integration':
-                assert config['cloud_run']['services'][name]['secrets'][key] == {'secret': key, 'version': 'latest'}
+                assert config['cloud_run']['services'][name]['secrets'][key] == {'secret': key, 'version': '1'}
                 assert recovery_allowlist is None
                 recovery_allowlist = {'value': UID, 'category': 'rollout'}
             elif stage == 'prod' and name == 'backend-listen':

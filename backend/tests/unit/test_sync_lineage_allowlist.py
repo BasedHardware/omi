@@ -551,7 +551,13 @@ def _declared(env_config, kind, service):
         return ('secret', ref['secret'], ref.get('version', 'latest'))
     if entry is not None and 'secret' in entry:
         assert entry['secret']['name'] == 'prod-omi-backend-secrets'
-        return ('secret', entry['secret']['key'], 'latest')
+        chart = yaml.safe_load(
+            (
+                Path(__file__).resolve().parents[2] / 'charts/backend-secrets/prod_omi_backend_secrets_values.yaml'
+            ).read_text()
+        )
+        version = next(row['version'] for row in chart['externalSecret']['secretKeys'] if row['secretKey'] == key)
+        return ('secret', entry['secret']['key'], str(version))
     return None if entry is None else entry.get('value')
 
 
@@ -565,5 +571,5 @@ def runtime_env_manifest():
 def test_prod_stages_one_identical_allowlist_on_every_gated_service_and_dev_admits_everyone(runtime_env_manifest):
     prod, dev = runtime_env_manifest['environments']['prod'], runtime_env_manifest['environments']['dev']
     values = {_declared(prod, kind, service) for kind, service in GATED_SERVICES}
-    assert values == {('secret', sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'latest')}
+    assert values == {('secret', sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '1')}
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)

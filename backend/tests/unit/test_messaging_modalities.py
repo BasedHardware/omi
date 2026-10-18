@@ -315,7 +315,7 @@ def test_private_prod_policy_paid_telegram_legacy_imessage_without_seat_io(monke
     assert 'OMI_MESSAGING_CHANNEL_POLICY' not in backend['env']
     assert backend['secrets']['OMI_MESSAGING_CHANNEL_POLICY'] == {
         'secret': 'OMI_MESSAGING_CHANNEL_POLICY',
-        'version': 'latest',
+        'version': '1',
     }
     # Payload membership is private; exercise the reviewed policy with a synthetic owner.
     policy = '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["synthetic-owner"],"seat_cap":"off"}}'

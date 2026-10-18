@@ -89,6 +89,12 @@ if [[ -z "$TARGET_SECRET_NAME" ]]; then
   exit 2
 fi
 
+# Production carries pinned private cohorts. Never deploy them using stale ESO data.
+if [[ "$ENVIRONMENT" == "prod" && "$DRY_RUN" != "true" && "$WAIT_EXTERNAL_SECRET" != "true" ]]; then
+  echo "ERROR: production private cohorts require a fresh ExternalSecret sync." >&2
+  exit 2
+fi
+
 HELM_ARGS=(
   "$RELEASE_NAME"
   "$CHART_DIR"
@@ -126,6 +132,10 @@ if [[ "$WAIT_EXTERNAL_SECRET" == "true" ]]; then
   if [[ "$wait_status" -eq 0 ]]; then
     verify_target_secret_keys
   elif [[ "$wait_status" -eq 2 ]]; then
+    if [[ "$ENVIRONMENT" == "prod" ]]; then
+      echo "ERROR: production private cohorts require a fresh ExternalSecret sync; refusing stale target data." >&2
+      exit 2
+    fi
     echo "WARNING: ExternalSecret did not report a fresh refresh before timeout; verifying current target secret keys." >&2
     verify_target_secret_keys
   else

@@ -1174,7 +1174,7 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     ]
     for key in secret_names:
         assert key not in env
-        assert config['secrets'][key] == {'secret': key, 'version': 'latest'}
+        assert config['secrets'][key] == {'secret': key, 'version': '1'}
     action = yaml.load(
         (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
     )
@@ -1213,7 +1213,7 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     values, secrets = clone_environment(
         source, _render_env_vars(cohort_env), _render_secrets(cohort_secrets), clone_step['env']['REMOVE_ENV_VARS']
     )
-    assert set(secrets.splitlines()) == {f'{key}={key}:latest' for key in secret_names}
+    assert set(secrets.splitlines()) == {f'{key}={key}:1' for key in secret_names}
     rendered = dict(line.split('=', 1) for line in values.splitlines())
     assert {key: rendered[key] for key in expected} == expected
     assert not secret_names & rendered.keys()

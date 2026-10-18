@@ -29,7 +29,7 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
             assert binding[key] == {'secret': {'name': 'prod-omi-backend-secrets', 'key': key}, 'category': 'rollout'}
         else:
             assert key not in binding
-            assert manifest['cloud_run']['services'][host]['secrets'][key] == {'secret': key, 'version': 'latest'}
+            assert manifest['cloud_run']['services'][host]['secrets'][key] == {'secret': key, 'version': '1'}
         monkeypatch.setenv(key, uid)
     assert flags.enabled_for(uid)
     assert not flags.enabled_for('synthetic-outside-cohort')

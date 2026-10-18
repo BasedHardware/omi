@@ -1,7 +1,8 @@
 # Private production allowlists
 
 Production uses one Secret Manager secret per allowlist, named exactly like the
-env variable. Cloud Run declares these under `cloud_run.services.*.secrets` in
+env variable. The initial migration pins immutable version `1` everywhere.
+Cloud Run declares these under `cloud_run.services.*.secrets` in
 `deploy/runtime_env/prod.overlay.yaml`; the renderer emits `secretKeyRef` state
 and deploy-cloudrun secret inputs. GKE uses the existing backend-secrets
 ExternalSecret/SecretStore and required `valueFrom.secretKeyRef` entries in the
@@ -22,7 +23,9 @@ Do this **before merge or any prod deployment of this source**. Do not create
 secrets or change IAM from an agent read-only tier. Do not place payloads in Git,
 logs, shell history, arguments, or a CI artifact. Disable shell tracing.
 
-1. Freeze allowlist rotation for the migration. Capture the current serving
+1. Freeze allowlist rotation for the migration. This source pins version `1`;
+   verify each create command produces that version and that it remains enabled.
+   Capture the current serving
    revision identities and traffic, and prior Helm release revisions, privately.
    Compare each allowlist across its consumers in memory; stop if values differ.
    Preserve exact CSV bytes, including cohort order and lack of a newline.
@@ -37,9 +40,11 @@ logs, shell history, arguments, or a CI artifact. Disable shell tracing.
    from retained runtime config. Use those verified values. Never seed an empty
    payload: some consumers interpret empty as a wider rollout.
 3. The lead runs these exact commands using the attended human credential tier.
-   `create --data-file` creates both the secret and its first version. If any
-   name already exists, stop and verify its payload and IAM; do not overwrite it
-   or add another version blindly.
+   `create --data-file` creates both the secret and immutable version `1`. If any
+   name already exists, stop and verify the pinned version `1` payload, enabled
+   state and IAM specifically. If the intended payload is in a different
+   version, revise the Cloud Run and chart pins together through review before
+   deploying. Do not overwrite it or add another version blindly.
 
 ```bash
 set -euo pipefail
@@ -136,10 +141,10 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
    Backfill's clone receives its own secret overlay, so inherited sync literals
    cannot reintroduce the migrated names.
 3. The stack deploys backend-secrets **before** backend-listen. Its script forces
-   an ExternalSecret refresh, waits, and checks target Secret keys and decoded private payloads without printing values. A refresh
-   timeout may fall back to checking current keys/payloads; missing or empty cohorts fail closed
-   before listen upgrade. For this migration require an observed fresh Ready
-   sync and all thirteen nonempty payloads, even if keys already existed.
+   an ExternalSecret refresh, waits, and checks target Secret keys and decoded private payloads without printing values. A production refresh
+   timeout fails closed, and production cannot bypass the refresh wait. Observe
+   a fresh Ready sync and all thirteen nonempty payloads before listen upgrade,
+   even if keys already existed.
 4. Helm replaces the env list: the prod listen/pusher values therefore contain
    explicit required `secretKeyRef` entries. An omitted key is not repaired by
    `envFrom`; this PR retains the binding in the rendered list. Missing Secret
@@ -160,9 +165,23 @@ flag registry includes Cloud Run service and job secret declarations.
 The dev composed manifest is semantically unchanged. Historical literal lineage
 manifests remain replayable; current secret manifests must agree by name/version
 on four Cloud Run hosts and the listener, including the rendered Helm entry.
-Secret refs establish a common source, not payload equality: freeze `latest`
-while rolling out. ESO refresh does not update a running process's env; later
-rotation requires controlled Cloud Run revisions and GKE pod rollouts.
+The source gate rejects mutable aliases, divergent Cloud Run versions, or an
+ExternalSecret version that differs from its Cloud Run consumers. The same
+immutable version is selected by ExternalSecret `remoteRef.version`.
+
+Do not bind private cohorts to `latest`: Cloud Run resolves env secrets when an
+instance starts, so an existing revision could otherwise change cohort during
+scale-out. [Google recommends pinned env-secret versions](https://docs.cloud.google.com/run/docs/configuring/services/secrets).
+The [ExternalSecret remote reference API](https://external-secrets.io/latest/api/spec/#externalsecretdataremoteref)
+supports a version selector. Secret refs identify immutable bytes, not verified
+membership: compare cohorts privately before rollout. Creating version `2`
+changes neither these Cloud Run refs nor the pinned ExternalSecret. A later
+rotation must update every affected Cloud Run version and the chart's per-key
+version together, validate candidate revisions and a fresh ESO sync, then roll
+all affected pods and promote under the owning release gates. Keep admission
+off and drain accepted cohort work when changing admission/recovery/lineage
+membership; do not mix active old/new routing cohorts. Existing instances/pods
+retain their prior env until replaced. Keep old versions enabled for rollback.
 
 ## Verification and rollback
 
@@ -175,7 +194,7 @@ mixed, missing, or divergent lineage refs and nonempty public UID allowlists.
 
 After an authorized deploy: verify each serving Cloud Run revision reports the
 reviewed `OMI_BACKEND_RELEASE_SHA`, 100% traffic on the expected promoted revision,
-and one same-name `secretKeyRef:latest` per declared allowlist with no literal or
+and one same-name `secretKeyRef:1` per declared allowlist with no literal or
 duplicate. Verify backend-listen and pusher's image digests/release identity,
 ready pod env refs, current ExternalSecret Ready/refresh and all required target
 keys. Compare actual cohorts privately, emitting only equality/cardinality
@@ -195,3 +214,9 @@ Cloud Run revisions reference them. Avoid redeploying historical source that
 would reintroduce public literals. Do not widen an allowlist or turn off recovery
 protections to make a rollout pass. A later live-only rollback turns the live
 admission flag off while accepted work drains; see the batch pipeline runbook.
+
+For a later cohort-version rollback, keep admission off and drain accepted work.
+Restore the captured Cloud Run revisions and select the prior immutable versions
+in the current ExternalSecret chart without removing any keys. Require a fresh
+ESO sync and roll all affected GKE pods before resuming cohort routing. Never
+change a Secret Manager alias to perform a cohort rollback.

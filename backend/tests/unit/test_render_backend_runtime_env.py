@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES
+
 _SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render_backend_runtime_env.py'
 _MODULE = runpy.run_path(str(_SCRIPT), run_name='render_backend_runtime_env')
 _MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
@@ -939,7 +941,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         assert {
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
-        } == {(name, name, 'latest') for name in names}, service
+        } == {(name, name, '1' if name in PRIVATE_COHORT_ENV_NAMES else 'latest') for name in names}, service
     backend_env = prod['cloud_run']['services']['backend']['env']
     token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
     assert token.startswith('phc_')

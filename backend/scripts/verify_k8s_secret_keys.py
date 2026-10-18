@@ -14,7 +14,11 @@ import yaml
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES, valid_private_cohort_payload  # noqa: E402
+from scripts.private_cohort_secrets import (
+    PRIVATE_COHORT_ENV_NAMES,
+    pinned_secret_version,
+    valid_private_cohort_payload,
+)  # noqa: E402
 
 
 def main() -> int:
@@ -71,6 +75,10 @@ def expected_keys(values_file: Path) -> set[str]:
             entry_dict: Dict[str, Any] = cast(Dict[str, Any], entry)
             secret_key = entry_dict.get('secretKey')
             if isinstance(secret_key, str) and secret_key:
+                if secret_key in PRIVATE_COHORT_ENV_NAMES and not pinned_secret_version(
+                    str(entry_dict.get('version', ''))
+                ):
+                    raise ValueError('Private cohort ExternalSecret requires an immutable numeric version')
                 expected.add(secret_key)
     if not expected:
         raise ValueError(f'{values_file} does not define externalSecret.secretKeys')

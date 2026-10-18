@@ -17,7 +17,11 @@ if str(BACKEND_ROOT) not in sys.path:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import render_backend_runtime_env  # noqa: E402
 import repair_cloud_run_traffic  # noqa: E402
-from private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES, valid_private_cohort_payload  # noqa: E402
+from private_cohort_secrets import (
+    PRIVATE_COHORT_ENV_NAMES,
+    pinned_secret_version,
+    valid_private_cohort_payload,
+)  # noqa: E402
 from attach_cloud_run_gmp_sidecar import SIDECAR_NAME  # noqa: E402
 from runtime_env_validation.common import compute_project  # noqa: E402
 from runtime_env_capability_contracts import validate_voice_transcription_storage  # noqa: E402
@@ -453,6 +457,9 @@ def check_private_cohort_payloads(*, env: str, manifest_path: Path, project: str
             if name not in PRIVATE_COHORT_ENV_NAMES:
                 continue
             secret, version = str(entry['secret']), str(entry.get('version', 'latest'))
+            if not pinned_secret_version(version):
+                invalid.append(name)
+                continue
             if (secret, version) in seen:
                 continue
             seen.add((secret, version))

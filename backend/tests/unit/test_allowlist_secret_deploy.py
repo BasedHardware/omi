@@ -49,7 +49,7 @@ def test_cloud_run_merge_removes_literals_and_sets_secrets_in_same_deploy(prod):
         assert not names & config['env'].keys()
         assert names <= set(render._remove_env_extra(name, config).split(','))
         for key in names:
-            assert refs[key] == {'name': key, 'valueFrom': {'secretKeyRef': {'name': key, 'key': 'latest'}}}
+            assert refs[key] == {'name': key, 'valueFrom': {'secretKeyRef': {'name': key, 'key': '1'}}}
         if name == 'backend-sync-backfill':
             call = next(s for s in stack if s.get('id') == 'sync-backfill')['with']
             assert call['remove_env_extra'] == '${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}'
@@ -105,6 +105,27 @@ def test_external_secret_sync_precedes_listen_upgrade_and_checks_all_keys():
     chart = yaml.safe_load(values.read_text())
     refs = {e['secretKey']: e['remoteKey'] for e in chart['externalSecret']['secretKeys']}
     assert all(refs[k] == k for k in KEYS)
+    rendered = list(
+        yaml.safe_load_all(
+            subprocess.check_output(
+                [
+                    'helm',
+                    'template',
+                    'prod-backend-secrets',
+                    str(ROOT / 'backend/charts/backend-secrets'),
+                    '-f',
+                    str(values),
+                    '--set-string',
+                    'gsa.name=synthetic,gke.projectID=based-hardware,gke.clusterLocation=us-central1,gke.clusterName=synthetic',
+                ],
+                text=True,
+            )
+        )
+    )
+    external = next(doc for doc in rendered if doc and doc.get('kind') == 'ExternalSecret')
+    sources = {row['secretKey']: row['remoteRef'] for row in external['spec']['data']}
+    assert all(sources[key] == {'key': key, 'version': '1'} for key in KEYS)
+    assert 'version' not in sources['OPENAI_API_KEY']
     action = (ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text()
     assert action.index('name: Deploy backend-secrets to GKE') < action.index('name: Deploy ${{ env.SERVICE }}-listen')
     script = (ROOT / 'backend/scripts/deploy-backend-secrets.sh').read_text()
@@ -162,3 +183,21 @@ def test_missing_allowlist_key_blocks_secret_deploy_fallback(monkeypatch, capsys
     output = capsys.readouterr()
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' in output.err
     assert 'c3ludGhldGlj' not in output.err + output.out
+
+
+@pytest.mark.parametrize(
+    'name', ['BATCH_PIPELINE_UID_ALLOWLIST', 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'DREAM_AGENT_UID_ALLOWLIST']
+)
+def test_private_versions_reject_cross_host_or_external_secret_drift(prod, name):
+    drift = deepcopy(prod)
+    drift['cloud_run']['services']['backend-sync']['secrets'][name]['version'] = '2'
+    assert render.validate_private_cohort_versions(drift)
+    coordinated_cloud = deepcopy(prod)
+    for host in coordinated_cloud['cloud_run']['services'].values():
+        if name in host.get('secrets', {}):
+            host['secrets'][name]['version'] = '2'
+    assert render.validate_private_cohort_versions(coordinated_cloud) == []
+    assert any(
+        'ExternalSecret must match' in e
+        for e in render.validate_private_cohort_versions(coordinated_cloud, check_chart=True)
+    )

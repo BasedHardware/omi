@@ -86,25 +86,68 @@ _SYNC_LINEAGE_ALLOWLIST_KEY = 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST'
 _SYNC_LINEAGE_CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 
 
+def validate_private_cohort_versions(env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
+    from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES, pinned_secret_version
+
+    bindings: dict[str, set[tuple[str, str]]] = {}
+    errors = []
+    for host in env_config.get('cloud_run', {}).get('services', {}).values():
+        for name, entry in host.get('secrets', {}).items():
+            if name not in PRIVATE_COHORT_ENV_NAMES:
+                continue
+            if not isinstance(entry, dict):
+                errors.append('Private cohort requires an explicit secret binding')
+                continue
+            source = (str(entry.get('secret', '')), str(entry.get('version', '')))
+            bindings.setdefault(name, set()).add(source)
+            if source[0] != name or not pinned_secret_version(source[1]):
+                errors.append('Private cohort requires its same-name secret and an immutable numeric version')
+    for name, sources in bindings.items():
+        if len(sources) != 1:
+            errors.append('Private cohort must use an identical immutable version across Cloud Run hosts')
+    if check_chart and bindings:
+        chart = yaml.safe_load(
+            (ROOT / 'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml').read_text()
+        )
+        rows = chart['externalSecret']['secretKeys']
+        for name in PRIVATE_COHORT_ENV_NAMES:
+            refs = [row for row in rows if row.get('secretKey') == name]
+            if (
+                len(refs) != 1
+                or refs[0].get('remoteKey') != name
+                or not pinned_secret_version(str(refs[0].get('version', '')))
+            ):
+                errors.append(
+                    'Private cohort ExternalSecret requires its same-name secret and an immutable numeric version'
+                )
+            elif name in bindings and bindings[name] != {(name, str(refs[0]['version']))}:
+                errors.append('Private cohort ExternalSecret must match the immutable Cloud Run version')
+    return errors
+
+
 def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
     if env != 'prod':
         return []  # dev deliberately admits everyone
+    from scripts.private_cohort_secrets import pinned_secret_version
+
     services = env_config.get('cloud_run', {}).get('services', {})
     listener = env_config.get('gke', {}).get('backend-listen', {})
     hosts = [(f'cloud_run/{name}', services.get(name, {})) for name in _SYNC_LINEAGE_CLOUD_RUN_HOSTS]
     hosts.append(('gke/backend-listen', listener))
-    errors = []
+    errors = validate_private_cohort_versions(env_config, check_chart=check_chart)
     bindings = []
+    versions = []
     for scope, host in hosts:
         entry = host.get('env', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
         secret = host.get('secrets', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
         if scope.startswith('cloud_run/') and isinstance(secret, dict) and not entry:
-            bindings.append(('secret', secret.get('secret'), str(secret.get('version', 'latest'))))
+            bindings.append(('secret', secret.get('secret')))
+            versions.append(str(secret.get('version', 'latest')))
         elif isinstance(entry, dict) and isinstance(entry.get('secret'), dict) and 'value' not in entry:
             ref = entry['secret']
             if ref.get('name') != 'prod-omi-backend-secrets':
                 errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must use the backend secret')
-            bindings.append(('secret', ref.get('key'), 'latest'))
+            bindings.append(('secret', ref.get('key')))
         elif isinstance(entry, dict) and isinstance(entry.get('value'), str):
             # Replay historical releases, including explicitly reviewed empty widening.
             bindings.append(('literal', entry['value']))
@@ -112,8 +155,13 @@ def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check
             errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} requires an explicit literal or secret binding')
     if len(set(bindings)) > 1:
         errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must be identical on all five hosts')
-    if bindings and bindings[0][0] == 'secret' and bindings[0][1:] != (_SYNC_LINEAGE_ALLOWLIST_KEY, 'latest'):
-        errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must use its same-name Secret Manager secret at latest')
+    if bindings and bindings[0][0] == 'secret':
+        if bindings[0][1:] != (_SYNC_LINEAGE_ALLOWLIST_KEY,):
+            errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must use its same-name Secret Manager secret')
+        if len(versions) != 4 or len(set(versions)) != 1 or not all(pinned_secret_version(v) for v in versions):
+            errors.append(
+                f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must use one immutable numeric version on all Cloud Run hosts'
+            )
     if check_chart and not errors:
         values_file = listener.get('values_file')
         if not isinstance(values_file, str):

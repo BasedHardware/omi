@@ -25,6 +25,10 @@ PRIVATE_COHORT_ENV_NAMES = frozenset(
 )
 
 
+def pinned_secret_version(version: object) -> bool:
+    return isinstance(version, str) and version.isascii() and version.isdigit() and not version.startswith('0')
+
+
 def valid_private_cohort_payload(name: str, payload: str | bytes) -> bool:
     if isinstance(payload, bytes):
         try:

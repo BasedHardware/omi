@@ -49,7 +49,7 @@ def test_cloud_run_preflight_blocks_empty_or_inaccessible_payload_without_loggin
     monkeypatch.setattr(
         preflight,
         '_cloud_run_service_configs',
-        lambda **kwargs: {'backend-sync': {'secrets': {KEY: {'secret': KEY, 'version': 'latest'}}}},
+        lambda **kwargs: {'backend-sync': {'secrets': {KEY: {'secret': KEY, 'version': '1'}}}},
     )
     monkeypatch.setattr(preflight, 'check_rendered_secrets', lambda **kwargs: [])
     calls = []
@@ -65,7 +65,7 @@ def test_cloud_run_preflight_blocks_empty_or_inaccessible_payload_without_loggin
         ['preflight', '--env', 'prod', '--project', 'synthetic', '--service', 'backend-sync', '--check-secrets'],
     )
     assert preflight.main() == expected
-    assert calls == [['gcloud', 'secrets', 'versions', 'access', 'latest', f'--secret={KEY}', '--project=synthetic']]
+    assert calls == [['gcloud', 'secrets', 'versions', 'access', '1', f'--secret={KEY}', '--project=synthetic']]
     output = capsys.readouterr()
     if expected:
         assert 'private cohort payload validation failed' in output.err
@@ -78,7 +78,9 @@ def test_cloud_run_preflight_blocks_empty_or_inaccessible_payload_without_loggin
 @pytest.mark.parametrize('payload,expected', [('', 1), ('  , , ', 1), ('synthetic-owner', 0)])
 def test_k8s_gate_checks_payload_not_just_presence(tmp_path, monkeypatch, capsys, payload, expected):
     values = tmp_path / 'values.yaml'
-    values.write_text(f'externalSecret:\n  secretKeys:\n    - secretKey: {KEY}\n      remoteKey: {KEY}\n')
+    values.write_text(
+        f'externalSecret:\n  secretKeys:\n    - secretKey: {KEY}\n      remoteKey: {KEY}\n      version: \"1\"\n'
+    )
     data = {KEY: base64.b64encode(payload.encode()).decode()}
     monkeypatch.setattr(sys, 'argv', ['verify', str(values)])
     monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'data': data})))
@@ -200,3 +202,91 @@ def test_standalone_pusher_stops_before_config_or_helm_on_empty_cohort(tmp_path,
         i for i, step in enumerate(steps) if step['name'] == 'Create isolated production Pusher and listener canary'
     )
     assert any('backend/scripts/deploy-backend-config.sh' in step.get('run', '') for step in steps[:canary_step])
+
+
+@pytest.mark.parametrize('version', ['latest', 'current', '0', '01', '-1', ''])
+def test_private_cloud_run_preflight_rejects_mutable_or_invalid_version(monkeypatch, version):
+    preflight = _preflight()
+    monkeypatch.setattr(
+        preflight,
+        '_cloud_run_service_configs',
+        lambda **kwargs: {'backend-sync': {'secrets': {KEY: {'secret': KEY, 'version': version}}}},
+    )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('unpinned versions must fail before any payload read')
+
+    monkeypatch.setattr(preflight.subprocess, 'run', forbidden)
+    assert preflight.check_private_cohort_payloads(env='prod', manifest_path=Path('unused'), project='synthetic') == [
+        KEY
+    ]
+
+
+@pytest.mark.parametrize('version', ['latest', 'current', '0', '01', ''])
+def test_private_external_secret_rejects_unpinned_version(tmp_path, version):
+    import yaml
+
+    values = tmp_path / 'values.yaml'
+    values.write_text(
+        yaml.safe_dump({'externalSecret': {'secretKeys': [{'secretKey': KEY, 'remoteKey': KEY, 'version': version}]}})
+    )
+    with pytest.raises(ValueError, match='immutable numeric version'):
+        k8s.expected_keys(values)
+
+
+@pytest.mark.parametrize('refresh_status', [0, 2])
+def test_production_secret_deploy_requires_fresh_external_secret(tmp_path, refresh_status):
+    chart = ROOT / 'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml'
+    data = {name: base64.b64encode(b'synthetic-owner').decode() for name in k8s.expected_keys(chart)}
+    data['OMI_MESSAGING_CHANNEL_POLICY'] = base64.b64encode(
+        b'{"imessage":{"enabled":true,"cohort":["synthetic-owner"]}}'
+    ).decode()
+    secret = tmp_path / 'secret.json'
+    secret.write_text(json.dumps({'data': data}))
+    log = tmp_path / 'calls'
+    for name in ['helm', 'kubectl']:
+        command = tmp_path / name
+        command.write_text(
+            '#!'
+            + sys.executable
+            + '\n'
+            + 'import os, pathlib, sys\n'
+            + 'with open(os.environ["CALLS"], "a") as f: f.write(pathlib.Path(sys.argv[0]).name + " " + " ".join(sys.argv[1:]) + "\\n")\n'
+            + 'if "get" in sys.argv and "secret" in sys.argv: print(pathlib.Path(os.environ["FAKE_SECRET"]).read_text())\n'
+        )
+        command.chmod(0o755)
+    python = tmp_path / 'python3'
+    python.write_text(
+        '#!/bin/sh\ncase "$1" in *wait_external_secret_refresh.py) exit "$REFRESH_STATUS";; esac\nexec "$REAL_PYTHON" "$@"\n'
+    )
+    python.chmod(0o755)
+    env = {
+        **os.environ,
+        'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'],
+        'REAL_PYTHON': sys.executable,
+        'REFRESH_STATUS': str(refresh_status),
+        'ENVIRONMENT': 'prod',
+        'GCP_PROJECT_ID': 'synthetic',
+        'GKE_CLUSTER': 'synthetic',
+        'REGION': 'us-central1',
+        'CALLS': str(log),
+        'FAKE_SECRET': str(secret),
+        'WAIT_EXTERNAL_SECRET': 'true',
+        'DRY_RUN': 'false',
+    }
+    result = subprocess.run(
+        ['bash', 'backend/scripts/deploy-backend-secrets.sh'], cwd=ROOT, env=env, capture_output=True, text=True
+    )
+    assert result.returncode == refresh_status
+    assert ('get secret' in log.read_text()) is (refresh_status == 0)
+    assert 'synthetic-owner' not in result.stdout + result.stderr
+    if refresh_status:
+        assert 'refusing stale target data' in result.stderr
+    # The same production path must reject attempts to bypass the wait before Helm mutation.
+    log.write_text('')
+    env['WAIT_EXTERNAL_SECRET'] = 'false'
+    result = subprocess.run(
+        ['bash', 'backend/scripts/deploy-backend-secrets.sh'], cwd=ROOT, env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 2 and not log.read_text()
+    assert 'require a fresh ExternalSecret sync' in result.stderr
