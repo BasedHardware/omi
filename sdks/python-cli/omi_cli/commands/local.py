@@ -207,7 +207,7 @@ def delete_task(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete task {task_id}?", abort=True)
+        typer.confirm(f"Delete task {task_id}?", abort=True, err=ctx.renderer.json_mode)
     _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{escape(task_id)}[/bold].")
 
 

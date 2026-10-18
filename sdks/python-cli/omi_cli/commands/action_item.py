@@ -172,7 +172,7 @@ def delete_action_item(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete action item {action_item_id}?", abort=True)
+        typer.confirm(f"Delete action item {action_item_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/action-items/{path_segment(action_item_id)}")
     if ctx.renderer.json_mode:
