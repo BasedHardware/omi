@@ -24,6 +24,11 @@ BYOK_QUOTA_ERROR_DETAIL = {
 # raises it as a plain 400, so the provider's own text is the only classifier.
 _ANTHROPIC_CREDIT_EXHAUSTED_MARKER = 'credit balance is too low'
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
+PROVIDER_TIMEOUT_FAILURE_CLASS = 'provider_timeout'
+PROVIDER_TIMEOUT_ERROR_DETAIL = {
+    'code': PROVIDER_TIMEOUT_FAILURE_CLASS,
+    'message': 'The model provider did not answer in time. Please retry this request later.',
+}
 
 logger = logging.getLogger(__name__)
 
@@ -129,5 +134,13 @@ def conversation_processing_http_exception(error: BaseException) -> HTTPExceptio
             'Conversation processing halted because the configured BYOK provider account is out of credit or quota'
         )
         return HTTPException(status_code=429, detail=BYOK_QUOTA_ERROR_DETAIL)
+    if isinstance(error, TimeoutError):
+        # The shaped-notes loop enforces its whole-call deadline with
+        # ``asyncio.timeout`` (and a socket read past its own deadline unifies
+        # to the same builtin since 3.10). An expired deadline is a transient
+        # upstream-latency condition, not a server bug: answer 504 so clients
+        # and SDKs can tell a retryable timeout from the generic 500.
+        logger.warning('Conversation processing halted because the model lane exceeded its request deadline')
+        return HTTPException(status_code=504, detail=PROVIDER_TIMEOUT_ERROR_DETAIL)
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)
