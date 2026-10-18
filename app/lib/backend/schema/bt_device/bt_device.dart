@@ -662,15 +662,19 @@ class BtDevice {
     }
   }
 
+  /// The pairing note for third-party hardware whose firmware Omi has no compatibility check for.
+  /// Its device info falls back to a 1.0.0 placeholder, so the note must not claim this unit works.
+  String _unverifiedFirmwareNote(String vendorApp) =>
+      'Omi connects to your $name directly over Bluetooth and does not use the $vendorApp app.\n\n'
+      'Firmware updates from the $vendorApp app can change how the device works, and newer firmware may stop '
+      'Omi from recording. If your $name pairs but does not record, its firmware may not be supported yet.';
+
   /// Returns firmware warning message for this device type
   /// Empty string means no warning needed
   String getFirmwareWarningMessage() {
     switch (type) {
       case DeviceType.plaud:
-        // Omi cannot read a PLAUD's firmware version, so it must not claim this unit is compatible.
-        return 'Omi connects to your $name directly over Bluetooth and does not use the PLAUD app.\n\n'
-            'Firmware updates from the PLAUD app can change how the device works, and newer firmware may stop '
-            'Omi from recording. If your $name pairs but does not record, its firmware may not be supported yet.';
+        return _unverifiedFirmwareNote('PLAUD');
 
       case DeviceType.bee:
         if (isBeeFirmwareUnsupported) {
@@ -683,16 +687,13 @@ class BtDevice {
             'For the best experience, please keep your current firmware version.';
 
       case DeviceType.fieldy:
-        return 'Your $name\'s current firmware works great with Omi.\n\n'
-            'We recommend keeping your current firmware and not updating through the Compass app, as newer versions may affect compatibility.';
+        return _unverifiedFirmwareNote('Compass');
 
       case DeviceType.friendPendant:
-        return 'Your $name\'s current firmware works great with Omi.\n\n'
-            'We recommend keeping your current firmware and not updating through the Friend app, as newer versions may affect compatibility.';
+        return _unverifiedFirmwareNote('Friend');
 
       case DeviceType.limitless:
-        return 'Your $name\'s current firmware works great with Omi.\n\n'
-            'We recommend keeping your current firmware and not updating through the Limitless app, as newer versions may affect compatibility.';
+        return _unverifiedFirmwareNote('Limitless');
 
       case DeviceType.omi:
       case DeviceType.openglass:
