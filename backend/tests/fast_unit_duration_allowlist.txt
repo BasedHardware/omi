@@ -474,3 +474,11 @@ tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requi
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
 tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
+# 2026-10-18: parses the full Cloud Run runtime_env manifest inside the call
+# phase under file isolation (~1.0s CPU). Upstream module-scope hoist is open
+# in BasedHardware/omi#22072; until it merges this is structural slowness, not
+# a correctness issue — CI run 39083390067 fails the same file on main.
+tests/unit/test_cloud_run_job_identity.py::test_prod_job_runs_as_jobs_runtime_and_drops_the_key
+# 2026-10-18: same manifest-parse class on the capture-evidence manifest —
+# all 24 assertions pass; the file exits nonzero only on the CPU guard.
+tests/unit/test_capture_evidence_admission.py
