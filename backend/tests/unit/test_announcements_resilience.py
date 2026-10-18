@@ -229,6 +229,16 @@ def test_get_pending_announcements_sanitizes_test_uids(fake_client):
     assert len(res) == 1
     assert res[0].id == "ann_test_exclusive"
 
+    res_untrimmed = announcements_db.get_pending_announcements(
+        uid="  user_vip  ",
+        app_version="1.0.0",
+        platform="ios",
+        trigger="app_launch",
+        firestore_client=fake_client,
+    )
+    assert len(res_untrimmed) == 1
+    assert res_untrimmed[0].id == "ann_test_exclusive"
+
     # Non-targeted user is excluded
     res_other = announcements_db.get_pending_announcements(
         uid="user_normal",
