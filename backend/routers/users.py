@@ -2029,9 +2029,7 @@ def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
-    updated = daily_summaries_db.set_daily_summary_visibility(uid, summary_id, value)
-    if not updated:
-        raise HTTPException(status_code=404, detail='Daily summary not found')
+    daily_summaries_db.set_daily_summary_visibility(uid, summary_id, value)
     if value == 'private':
         remove_daily_summary_to_uid(summary_id)
     else:
