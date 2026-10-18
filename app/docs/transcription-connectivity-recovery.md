@@ -20,7 +20,8 @@ BYOK credentials and unavailable Whisper assets cannot gate that choice.
 Editing a provider key updates only headers matching the previous generated
 credential. Explicit different header values, custom URLs and parameters are
 preserved, including when Advanced is collapsed. Parser and audio-field edits
-participate in socket configuration identity.
+participate in socket configuration identity. Configurations without these
+overrides retain their legacy identity, including persisted paywall selections.
 
 Saving dispatches the existing `TranscriptionSettingsChanged` capture event.
 CaptureCoordinator retains capture/session ownership while replacing the
@@ -34,6 +35,7 @@ recordings, modify WAL retention or alter subscription entitlements.
 - [x] Rotate/clear generated Deepgram headers while preserving explicit overrides.
 - [x] Preserve custom settings when Advanced is collapsed; reconnect on parser edits.
 - [x] Permit saving Omi/Parakeet with an inactive missing Whisper model.
+- [x] Preserve legacy configuration IDs and release an existing paywall pin on paid upgrade.
 - [x] Exercise real settings widgets and the capture/WAL pipeline with retained bytes.
 - [ ] Merge and ship a mobile build containing these changes. No backend deployment is required.
 - [ ] On a physical CV1/iPhone, compare short recordings on Wi-Fi and cellular,

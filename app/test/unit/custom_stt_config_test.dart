@@ -1,8 +1,31 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 
 void main() {
+  test('configs without parser overrides retain their persisted legacy identity', () {
+    // Historical hash input before parser fields joined the identity. Preserve
+    // IDs saved by released clients, including paywall-selected on-device STT.
+    const legacyInput = {
+      'api_key': null,
+      'language': null,
+      'model': null,
+      'url': null,
+      'host': null,
+      'port': null,
+      'request_type': null,
+      'headers': null,
+      'params': null,
+      'send_raw_audio_to_omi': true,
+    };
+    final legacyHash = jsonEncode(legacyInput).hashCode.abs().toRadixString(16).padLeft(8, '0').substring(0, 8);
+    const config = CustomSttConfig(provider: SttProvider.onDeviceWhisper);
+    expect(config.sttConfigId, 'onDeviceWhisper:$legacyHash');
+    expect(CustomSttConfig.fromJson(config.toJson()).sttConfigId, config.sttConfigId);
+  });
+
   test('response parser edits change the live config identity', () {
     const before = CustomSttConfig(provider: SttProvider.deepgramLive, schemaJson: {'text_path': 'before'});
     const after = CustomSttConfig(provider: SttProvider.deepgramLive, schemaJson: {'text_path': 'after'});
