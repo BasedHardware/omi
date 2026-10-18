@@ -973,6 +973,7 @@ class CaptureController extends ChangeNotifier
         if (!_captureControllerDisposed) {
           _syncCaptureHealthTimer(state);
           _syncCalendarGapTimer();
+          _reconcileTranscriptionKeepAlive();
           notifyListeners();
         }
       },
@@ -2717,6 +2718,7 @@ class CaptureController extends ChangeNotifier
 
   void updateRecordingState(RecordingState state) {
     recordingState = state;
+    if (state == RecordingState.deviceRecord) _reconcileTranscriptionKeepAlive();
     notifyListeners();
   }
 
@@ -3352,7 +3354,8 @@ class CaptureController extends ChangeNotifier
         _pendantSuspension == null;
     if (stagedPhase != CapturePhase.pendantLive && !attestedIdle) return;
     final deviceRevision = _deviceIdentityRevision;
-    final codec = await _getAudioCodec(device.id);
+    final codec = await _getReconnectAudioCodec(device.id);
+    if (codec == null) return;
     if (!_captureSessionIsCurrent(token) || _deviceIdentityStale(deviceRevision)) return;
     if (_capture.stagedReadModel.phase != stagedPhase || _recordingDevice?.id != device.id) return;
     if (!_shouldReconnectTranscriptionSocket) return;

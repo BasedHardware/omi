@@ -2,6 +2,32 @@ part of 'capture_controller.dart';
 
 /// Pendant uplink effects share the existing admission and session owners.
 extension _CaptureUplinkPolicy on CaptureController {
+  /// Reconcile both the staged BLE activation and its committed ownership.
+  /// Socket setup/close may have tried to arm before deviceRecord existed.
+  void _reconcileTranscriptionKeepAlive() {
+    if (_captureControllerDisposed ||
+        _capture.stagedReadModel.phase != CapturePhase.pendantLive ||
+        !_shouldReconnectTranscriptionSocket ||
+        _transcriptServiceReady ||
+        (_keepAliveTimer?.isActive ?? false)) {
+      return;
+    }
+    _socketReconnectPending = true;
+    _startKeepAliveServices();
+  }
+
+  /// A BLE codec request must not hold the serialized KeepAliveTick forever.
+  /// Timing out this read (rather than dispatch) leaves no late socket effects.
+  Future<BleAudioCodec?> _getReconnectAudioCodec(String deviceId) async {
+    final expired = Completer<BleAudioCodec?>();
+    final deadline = _scheduling.once(const Duration(seconds: 10), () => expired.complete(null));
+    try {
+      return await Future.any<BleAudioCodec?>([_getAudioCodec(deviceId), expired.future]);
+    } finally {
+      deadline.cancel();
+    }
+  }
+
   Future<void> _recoverCaptureRestoreMarkers() async {
     // Upgrade from #20837: an automatic power pause is not user mute intent.
     // The serialized reducer rechecks the marker so a newer manual mute wins.
