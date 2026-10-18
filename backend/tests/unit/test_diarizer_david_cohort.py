@@ -17,21 +17,26 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
     ]['prod']
     binding = manifest['gke']['pusher']['env'] if host == 'pusher' else manifest['cloud_run']['services'][host]['env']
     stages = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())
-    keys = tuple(stages['A'])
+    keys = tuple(key for key in stages['A'] if not key.endswith('UID_ALLOWLIST'))
     selected = {key: binding[key]['value'] for key in keys}
-    assert selected == stages['E']
+    assert selected == {key: value for key, value in stages['E'].items() if key in keys}
     assert selected == {key: manifest['gke']['pusher']['env'][key]['value'] for key in keys}
     for key, value in selected.items():
         monkeypatch.setenv(key, value)
-    uid = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
-    assert selected['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'] == uid
+    uid = 'synthetic-owner'
+    for key in ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'):
+        if host == 'pusher':
+            assert binding[key] == {'secret': {'name': 'prod-omi-backend-secrets', 'key': key}, 'category': 'rollout'}
+        else:
+            assert key not in binding
+            assert manifest['cloud_run']['services'][host]['secrets'][key] == {'secret': key, 'version': 'latest'}
+        monkeypatch.setenv(key, uid)
     assert flags.enabled_for(uid)
     assert not flags.enabled_for('synthetic-outside-cohort')
     assert flags.authoritative_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == 'true')
     assert flags.sync_enabled_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == 'true')
     assert selected['TRANSCRIPTION_FINAL_PASS_BACKEND'] == 'pyannote'
     assert selected['HOSTED_DIARIZATION_API_URL'] == 'http://172.16.160.20/diarizer-batch'
-    assert binding['TRANSCRIPTION_SHADOW_UID_ALLOWLIST']['value'] == uid
     assert binding['TRANSCRIPTION_SHADOW_PERCENT']['value'] == selected['TRANSCRIPTION_FINAL_PASS_PERCENT']
     if host == 'pusher':
         chart = yaml.load(

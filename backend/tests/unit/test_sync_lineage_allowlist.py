@@ -542,7 +542,16 @@ GATED_SERVICES = (
 
 def _declared(env_config, kind, service):
     services = env_config['cloud_run']['services'] if kind == 'cloud_run' else env_config['gke']
-    entry = (services[service].get('env') or {}).get(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV)
+    key = sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV
+    host = services[service]
+    entry = (host.get('env') or {}).get(key)
+    if key in host.get('secrets', {}):
+        ref = host['secrets'][key]
+        assert entry is None
+        return ('secret', ref['secret'], ref.get('version', 'latest'))
+    if entry is not None and 'secret' in entry:
+        assert entry['secret']['name'] == 'prod-omi-backend-secrets'
+        return ('secret', entry['secret']['key'], 'latest')
     return None if entry is None else entry.get('value')
 
 
@@ -556,6 +565,5 @@ def runtime_env_manifest():
 def test_prod_stages_one_identical_allowlist_on_every_gated_service_and_dev_admits_everyone(runtime_env_manifest):
     prod, dev = runtime_env_manifest['environments']['prod'], runtime_env_manifest['environments']['dev']
     values = {_declared(prod, kind, service) for kind, service in GATED_SERVICES}
-    assert len(values) == 1 and all(values), values
-    assert all(uid.strip() for uid in next(iter(values)).split(','))
+    assert values == {('secret', sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, 'latest')}
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)
