@@ -5,7 +5,7 @@ Notion, or a personal vault.
 See goals_markdown.md for the full recipe.
 
 Usage:
-    omi --json goal list > goals.json
+    omi --json goal list --include-inactive --limit 100 > goals.json
     python goals_to_markdown.py goals.json --output-dir ./vault/goals/
 
 Every goal gets ASCII progress-bar rendering (``██████░░░░ 60%``), YAML
@@ -52,9 +52,24 @@ def fmt_num(value: Optional[float]) -> str:
     return f"{value:g}" if value is not None else ""
 
 
+def _metric(item: Dict[str, Any], key: str) -> Any:
+    """GoalResponse nests the categorical + metric under "metric"
+    ({type,current,target,unit}) — read it with a flat-key fallback for
+    exports that already flattened the shape."""
+    metric = item.get("metric")
+    if isinstance(metric, dict) and metric.get(key) is not None:
+        return metric.get(key)
+    # A flattened export may emit current_value/target_value or goal_type —
+    # try the flat name first, then the legacy rename.
+    flat = item.get(f"{key}_value" if key in ("current", "target") else key)
+    if flat is not None:
+        return flat
+    return item.get("goal_type") if key == "type" else None
+
+
 def progress_ratio(item: Dict[str, Any]) -> Optional[float]:
     """Progress ratio toward target; None for qualitative/no-target goals."""
-    cur, target = number(item.get("current_value")), number(item.get("target_value"))
+    cur, target = number(_metric(item, "current")), number(_metric(item, "target"))
     if cur is None or target is None or target == 0:
         return None
     return cur / target
@@ -77,8 +92,11 @@ def slugify(text: str) -> str:
 def frontmatter(item: Dict[str, Any]) -> str:
     """YAML frontmatter block — Obsidian sees it, Notion ignores it cleanly."""
     lines = ["---"]
-    for key in ("id", "category", "goal_type", "unit", "is_active", "created_at"):
-        v = item.get(key)
+    # "goal_type"/"unit" resolve through the nested metric block (flat
+    # released-client aliases are the fallback). No "category" — goals
+    # carry none.
+    for key in ("id", "goal_type", "unit", "is_active", "created_at"):
+        v = _metric(item, "type") if key == "goal_type" else (_metric(item, key) if key == "unit" else item.get(key))
         if v is not None:
             lines.append(f"{key}: {json.dumps(v) if isinstance(v, (bool, int, float)) else json.dumps(one_line(v))}")
     lines.append("---")
@@ -92,19 +110,18 @@ def goal_to_markdown(item: Dict[str, Any]) -> str:
 
     active = item.get("is_active", True)
     parts.append(f"**Status:** {'active' if active else 'inactive'}")
-    cur, target = number(item.get("current_value")), number(item.get("target_value"))
+    cur, target = number(_metric(item, "current")), number(_metric(item, "target"))
     if cur is not None or target is not None:
         metric = f"{fmt_num(cur) or '0'} / {fmt_num(target) or '?'}"
-        if item.get("unit"):
-            metric += f" {one_line(item['unit'])}"
+        if _metric(item, "unit"):
+            metric += f" {one_line(_metric(item, 'unit'))}"
         parts.append(f"**Progress:** {metric}")
     for key, label in (
-        ("category", "Category"),
         ("goal_type", "Type"),
         ("created_at", "Created"),
         ("deadline", "Deadline"),
     ):
-        v = one_line(item.get(key))
+        v = one_line(_metric(item, "type") if key == "goal_type" else item.get(key))
         if v:
             parts.append(f"**{label}:** {v}")
     gid = one_line(item.get("id"))

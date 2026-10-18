@@ -9,8 +9,12 @@ Python 3.9+ and an authenticated `omi-cli` for the initial export.
 Export your goals:
 
 ```sh
-omi --json goal list > goals.json
+omi --json goal list --include-inactive --limit 100 > goals.json
 ```
+
+`--include-inactive` keeps completed and paused goals in the export —
+`goal list` defaults to active-only; `--limit` raises the 10-per-page
+default to the 100-per-page cap.
 
 ## The converter
 
@@ -22,7 +26,6 @@ Each note renders like:
 ```markdown
 ---
 id: "g1"
-category: "health"
 goal_type: "numeric"
 unit: "glasses"
 is_active: true
@@ -35,14 +38,13 @@ created_at: "2026-10-01T00:00:00Z"
 
 **Status:** active
 **Progress:** 6 / 10 glasses
-**Category:** health
 **Type:** numeric
 **Created:** 2026-10-01T00:00:00Z
 **Omi ID:** `g1`
 ```
 
 * **ASCII progress bar** (`██████░░░░ 60%`) for metric goals — blank for
-  qualitative goals with no `target_value`.
+  qualitative goals with no numeric target.
 * **YAML frontmatter** — Obsidian reads it; Notion ignores it cleanly.
 * **One note per goal**, filename slugged from the title (traversal-safe,
   duplicate slugs get `_2`, `_3`, …).

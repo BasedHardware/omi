@@ -15,14 +15,16 @@ sys.path.insert(0, str(HERE.parents[1] / "examples"))
 
 import goals_to_markdown as m  # noqa: E402
 
+# Shaped like a real GoalResponse: required flat released-client aliases plus
+# the optional nested `metric` object (goals carry no `category` field).
 GOAL = {
     "id": "g1",
     "title": "Drink water",
-    "category": "health",
     "goal_type": "numeric",
     "current_value": 6.0,
     "target_value": 10.0,
     "unit": "glasses",
+    "metric": {"type": "numeric", "current": 6.0, "target": 10.0, "unit": "glasses"},
     "is_active": True,
     "created_at": "2026-10-01T00:00:00Z",
 }
