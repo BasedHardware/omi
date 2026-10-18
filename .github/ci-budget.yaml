@@ -3686,6 +3686,7 @@
             "web/app/**",
             "web/packages/note-shared/**",
             "config/public-build-*.json",
+            ".dockerignore",
             ".github/workflows/gcp_app.yml",
             ".github/actions/deploy-public-build/**",
             ".github/actions/prepare-public-build/**",

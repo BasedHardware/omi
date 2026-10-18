@@ -1649,6 +1649,12 @@ class RepositoryBetaRoutingConfig(unittest.TestCase):
         self.assertIn("  workflow_dispatch:\n    inputs:", personas_workflow)
         self.assertIn("environment: ${{ github.event_name == 'workflow_dispatch'", workflow)
 
+        # The app image builds from the repository root (build_context "."),
+        # so the root .dockerignore is a build input and must retrigger the
+        # deploy when its context rules change.
+        self.assertEqual(contract["targets"]["app"]["deployment"]["build_context"], ".")
+        self.assertIn("'.dockerignore'", workflow)
+
         # Every repository script the shared deploy pipeline executes — plus
         # each helper those scripts import from .github/scripts — must be in
         # the push path filter, so a helper fix on main redeploys the app.
