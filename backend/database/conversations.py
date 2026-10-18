@@ -1,5 +1,4 @@
 from database import conversation_visibility_counts, processing_backlog
-from database.fsr_read_cache import forget_request_reads
 from utils.conversations import summary_delivery
 import copy
 import hashlib
@@ -937,6 +936,17 @@ def _collect_visible_conversation_page(
     return conversations
 
 
+def _drop_summary_memo(uid: str) -> None:
+    """Forget a request-scoped summary read after its transaction commits.
+
+    Importing the memo cache registers Prometheus series. Conversation imports
+    stay free of that until a summary write has actually committed.
+    """
+    from database.fsr_read_cache import forget_request_reads
+
+    forget_request_reads(uid)
+
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 @after_write('conversations')
@@ -1026,7 +1036,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
     run_transactional(db, _write_processing_result)
     if summary_changed:
-        forget_request_reads(uid)
+        _drop_summary_memo(uid)
 
     summary_delivery.emit(summary_receipt)
     invalidate_people_stats_cache(uid)
@@ -1219,7 +1229,7 @@ def persist_processing_result_with_lifecycle(
 
     persisted = run_transactional(db, _persist)
     if summary_changed:
-        forget_request_reads(uid)
+        _drop_summary_memo(uid)
     if persisted:
 
         summary_delivery.emit(summary_receipt)
@@ -1276,7 +1286,7 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
             run_transactional(db, create_waiting)
             if summary_changed:
-                forget_request_reads(uid)
+                _drop_summary_memo(uid)
         else:
             conversation_ref.create(conversation_data)
     except (AlreadyExists, Conflict):

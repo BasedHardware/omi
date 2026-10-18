@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from models.users import HeldAudioSummary
 from database import processing_backlog as backlog_store
+from database import fsr_read_cache
 from database.fsr_read_cache import forget_request_reads, request_read_scope
 from utils.sync import cap_hold, cap_hold_recovery
 from utils.sync import held_audio_summary as summary
@@ -345,7 +346,7 @@ def test_summary_memo_is_dropped_only_after_the_staged_write_commits(monkeypatch
         order.append('forget')
         forget_request_reads(uid)
 
-    monkeypatch.setattr(backlog_store, 'forget_request_reads', tracking_forget)
+    monkeypatch.setattr(fsr_read_cache, 'forget_request_reads', tracking_forget)
 
     async def once():
         scope = request_read_scope()

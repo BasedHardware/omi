@@ -8,8 +8,6 @@ import hashlib
 
 from google.cloud import firestore
 
-from database.fsr_read_cache import forget_request_reads, memo
-
 COLLECTION = 'processing_backlog_items'
 SUMMARY = 'processing_backlog'
 
@@ -50,8 +48,19 @@ def read_processing_backlog_summary(uid: str) -> dict:
     return summary_ref(uid).get().to_dict() or {}
 
 
+def _request_memo():
+    """Load the request memo only when a backlog read or committed write needs it.
+
+    Importing it registers Prometheus series. A fresh import of this module,
+    such as the archive-filter seam, must not register those series again.
+    """
+    from database import fsr_read_cache
+
+    return fsr_read_cache
+
+
 def read(uid: str) -> dict:
-    return memo(uid, 'processing_backlog_summary', lambda: read_processing_backlog_summary(uid))
+    return _request_memo().memo(uid, 'processing_backlog_summary', lambda: read_processing_backlog_summary(uid))
 
 
 def stage_transition(
@@ -149,7 +158,7 @@ def start(
 
     with external_write_fence(uid, firestore_client=client):
         result = commit(client.transaction())
-    forget_request_reads(uid)
+    _request_memo().forget_request_reads(uid)
     return result
 
 
@@ -170,7 +179,7 @@ def claim(uid: str, token: str, period: str) -> str | None:
 
     with external_write_fence(uid, firestore_client=client):
         result = commit(client.transaction())
-    forget_request_reads(uid)
+    _request_memo().forget_request_reads(uid)
     return result
 
 
@@ -188,7 +197,7 @@ def checkpoint(uid: str, token: str, lease: str, updates: dict) -> bool:
 
     with external_write_fence(uid, firestore_client=client):
         result = commit(client.transaction())
-    forget_request_reads(uid)
+    _request_memo().forget_request_reads(uid)
     return result
 
 
@@ -234,7 +243,7 @@ def finish(uid: str, token: str, lease: str, period: str) -> bool:
 
     with external_write_fence(uid, firestore_client=client):
         result = commit(client.transaction())
-    forget_request_reads(uid)
+    _request_memo().forget_request_reads(uid)
     return result
 
 
@@ -250,7 +259,7 @@ def remove(uid: str, identity: str) -> None:
     with external_write_fence(uid, firestore_client=client):
         commit(client.transaction())
     if staged:
-        forget_request_reads(uid)
+        _request_memo().forget_request_reads(uid)
 
 
 def claim_item(uid: str, identity: str) -> str | None:
