@@ -301,17 +301,19 @@ or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout uses the private Firestore `sync-lineage-resolve` cohort to limit
-per-segment binding, the pinned live origin, the live revision fence and the
-open-live enrichment deferral. Nonmembers behave as with the kill switch off;
-the kill switch wins. The metadata-only listen origin stamp ignores membership
-so future widening finds existing lineage. Cloud Run and listen resolve the
-same environment-specific user data. An absent legacy env key denies nonmembers;
-a retained explicitly empty legacy value preserves its former enable-all behavior
-only as a migration fallback. Read errors deny membership. Refused eligible
-uploads log `event=sync_lineage_resolve outcome=not_allowlisted` with no ids.
-The metric comes from backend-sync, which is not scraped, so logs are the watch
-source. See [private rollout cohorts](runbooks/rollout-cohorts.md) for seeding,
-cache expiry, deploy ordering and rollback.
+per-segment binding. Missing Firestore fields retain legacy env membership;
+empty or absent legacy lineage keys preserve enable-all, including dev.
+The kill switch wins over binding admission. Sync appends to live targets always
+preserve the live origin, and fresh speech on any `sync_live_target` always
+advances its revision regardless of cohort membership or the lineage kill
+switch. The metadata-only listen origin stamp stays under the kill switch alone.
+Cloud Run preserves omitted live allowlists; listen retains its legacy chart
+value until a separate removal PR after seed and verification. Read errors deny
+cohort membership. Refused eligible uploads log
+`event=sync_lineage_resolve outcome=not_allowlisted` with no ids. The metric
+comes from backend-sync, which is not scraped, so logs are the watch source.
+See [private rollout cohorts](runbooks/rollout-cohorts.md) for seeding, cache
+expiry, deploy ordering and rollback.
 `SYNC_LINEAGE_S1_REQUIRED` (default on; unset or blank on, explicit on-tokens
 on, any unrecognized value including a typo off) additionally requires, inside
 `lineage_resolution_requested` after the kill switch and the allowlist, a
@@ -3646,6 +3648,34 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+
+`SYNC_LIVE_OVERLAP_ENABLED` defaults on. An unstamped upload can adopt a
+completed or in-progress live conversation when its speech interval strictly
+overlaps that row, both rows identify the same known device/source/lock
+partition, and the live row has content and live provenance. Discovery reads
+only interval metadata (up to 128 rows, 10-second RPC deadline); the assignment
+transaction rereads and validates all candidates, preferring the greatest
+overlap. Empty reconnect stubs, touching intervals, other devices and deleted
+rows stay excluded. Explicit targets retain priority. The existing merge path
+owns transcript dedupe, speaker assignments, lifecycle and revision fencing;
+live identities are never donated into each other. Adoption pins `started_at`
+even without `audio_timeline` (production listen has v2 disabled), preserving
+offsets from the listener's cached origin. Earlier sync speech keeps its exact
+negative offset and is marked `unplaced`; it remains visible without claiming
+seek alignment. Fresh live writes advance `sync_content_revision` for every
+adopted target, so an older processor cannot overwrite a delayed live final.
+Neither safeguard depends on the lineage rollout allowlist.
+
+This admission creates no hidden donor and no pending merge debt. Lookup failure
+uses ordinary retained sync publication immediately; live document capacity
+exhaustion uses the existing size-rollover fallback. Captured speech never waits
+for another upload to make a hidden row visible. Storage/commit failures still
+propagate to existing durable job retries. Set `SYNC_LIVE_OVERLAP_ENABLED=false`
+on the four sync writers to restore the old admission path. Bounded
+`event=sync_live_overlap` outcomes distinguish merged, published and lookup-failed
+attempts without account or transcript labels. Other live/live overlap causes
+and cached Home donor eviction are outside this change.
+
 Compatibility is equality of all three fields: two locked captures are compatible,
 so locked chunks merge, append to a locked explicit target and deduplicate on retry
 exactly as unlocked ones do. A mismatch means a field differs.
@@ -5643,3 +5673,21 @@ are independent of new admission; rollback reuses the same queues and receipts.
 See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
 for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
+
+
+### Sync finalize target recovery
+
+`SYNC_FINALIZE_TARGET_RECOVERY_ENABLED` defaults on (unset/blank); explicit off or
+an unrecognized token restores strict donor-refresh failures. After transcript
+assignment and audio persistence, donor refresh follows only the server-authored
+`sync_merged_into` returned by the rejecting transaction, with at most 16 targets.
+Deleted/missing targets without a successor complete without refresh or donor
+retraction. Other refresh errors defer cleanup, preserving donor tasks and the
+pending revision receipt; later appends retry it. Audio copy remains strict.
+The transaction still rejects writes into deleted conversations. Bounded
+`sync_bridge_refresh` reasons expose degraded completion. Remaining internal
+finalize errors are retryable `sync_finalize_failed`, provider/model `unknown`,
+with a class/site-only `sync_finalize_exception` diagnostic. Deleted-target
+acknowledgement belongs only to the legacy post-persistence callback. The shared bridge helper keeps its string-or-superseded contract;
+synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
+the kill switch on every sync-intake service; classification remains internal.

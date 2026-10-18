@@ -84,6 +84,9 @@ environments:
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
           LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED: {value: 'true', category: rollout}
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
@@ -830,6 +833,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -1112,6 +1118,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -1397,6 +1406,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -1670,6 +1682,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -2344,6 +2359,9 @@ environments:
           CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
@@ -3123,6 +3141,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -3489,6 +3510,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -3851,6 +3875,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
@@ -4200,6 +4227,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_MODE: {value: shadow, category: rollout}
             DESKTOP_PENDANT_CALL_LINK_PERCENT: {value: '100', category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
