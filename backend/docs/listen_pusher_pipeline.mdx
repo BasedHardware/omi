@@ -6,6 +6,13 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Soniox transport exceptions log once at the first socket death, with bounded
+`operation`, `exception_class`, `received_close_code`, `sent_close_code`,
+`close_cause`, and `session_age_bucket` fields. A missing close frame is `-1`;
+`close_cause=keepalive_ping_timeout` identifies our WebSocket library's sent
+timeout close. These diagnostics omit exception text and provider close reasons,
+and retain the existing typed failure and recovery behavior.
+
 ## Default-off funded transcription cap
 
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
