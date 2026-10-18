@@ -142,6 +142,42 @@ def serving_revision(service_document: Mapping[str, Any]) -> str:
     return best_name
 
 
+def stale_candidate_tags(
+    service_document: Mapping[str, Any], *, target: str, keep_latest: int, keep_tags: Sequence[str] = ()
+) -> list[str]:
+    """Return this target's candidate tags that no longer serve a purpose.
+
+    Every promotion adds a `public-<target>-<run>-<attempt>` tag and nothing
+    removed them, so services accumulated ~80 tagged traffic entries. Keep the
+    newest `keep_latest` candidate tags (rollback targets with stable URLs), any
+    tag on a revision that holds traffic, and `keep_tags`; return the rest of
+    the tags owned by this target (`public-<target>-...` or `<target>-...`).
+    Tags owned by anything else are never returned.
+    """
+
+    spec = service_document.get("spec")
+    traffic = spec.get("traffic") if isinstance(spec, Mapping) else None
+    if not traffic:
+        status = service_document.get("status")
+        traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    entries = [e for e in traffic or () if isinstance(e, Mapping) and isinstance(e.get("tag"), str) and e["tag"]]
+    serving = {
+        e.get("revisionName")
+        for e in traffic or ()
+        if isinstance(e, Mapping) and isinstance(e.get("percent"), int) and e["percent"] > 0
+    }
+    candidate = re.compile(rf"public-{re.escape(target)}-(\d+)-(\d+)")
+    owned = [e for e in entries if e["tag"].startswith((f"public-{target}-", f"{target}-"))]
+    numbered = sorted(
+        (e for e in owned if candidate.fullmatch(e["tag"])),
+        key=lambda e: tuple(int(g) for g in candidate.fullmatch(e["tag"]).groups()),
+    )
+    keep = set(keep_tags) | {e["tag"] for e in owned if e.get("revisionName") in serving}
+    if keep_latest > 0:
+        keep |= {e["tag"] for e in numbered[-keep_latest:]}
+    return [e["tag"] for e in owned if e["tag"] not in keep]
+
+
 @dataclass(frozen=True)
 class Deployment:
     region: str

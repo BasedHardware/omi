@@ -10,6 +10,8 @@ from starlette.websockets import WebSocket
 from firebase_admin import auth
 from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
+
+from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
@@ -232,9 +234,9 @@ def get_current_user_uid(
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
 
-    # The content-free fleet sink must reject hot callers without customer-store
+    # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
-    if getattr(getattr(request, 'url', None), 'path', None) == '/v1/telemetry/fleet':
+    if getattr(getattr(request, 'url', None), 'path', None) in {'/v1/telemetry/fleet', '/v1/users/client-state'}:
         validate_byok_request(uid)
         return uid
 
@@ -263,6 +265,7 @@ def get_current_user_uid(
 
     _recover_locked_content_if_request(uid, request)
 
+    load_rollout_cohorts(uid)
     return uid
 
 

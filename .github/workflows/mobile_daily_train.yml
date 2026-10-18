@@ -4,9 +4,10 @@ name: Mobile daily train
 # from here: one Codemagic `mobile-daily-train` run per day on main. The train
 # self-drives the release once the stores approve: iOS submissions use
 # AFTER_APPROVAL with the automatic phased rollout (pausable in App Store
-# Connect), Android starts a staged production rollout at 5% (haltable in Play
-# Console) and promotes it one ladder hop per gate-green day. Store review and
-# the console brakes still gate everything; it never bypasses them.
+# Connect), Android starts a staged production rollout at 1% (haltable in Play
+# Console) and promotes it one ladder hop per 4-hour observation window via
+# mobile_rollout_watch.yml. Store review and the console brakes still gate
+# everything; it never bypasses them.
 # See .github/agent-docs/mobile-release-process.md.
 #
 # Dispatch is owned by the operator-side release gate (Hermes cron

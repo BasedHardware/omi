@@ -69,7 +69,7 @@ class TestTranscribeStoredConversationAudio:
 
         bucket = SimpleNamespace(blob=lambda path: SimpleNamespace(download_as_bytes=lambda: download(path)))
         monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
-        chunks = [{'timestamp': 1.0}]
+        chunks = [{'timestamp': 1.0, 'path': 'chunks/u1/c1/1.000.bin'}]
         if batch:
             chunks[0].update(is_batch=True, path='chunks/u1/c1/1.000-1.100.batch.enc')
         monkeypatch.setattr(storage, 'list_audio_chunks', lambda *args: chunks)

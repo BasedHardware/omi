@@ -154,6 +154,39 @@ runs:
           echo "flag=--tag=${{ inputs.candidate_tag }}" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: Resolve live sync-backfill maxScale
+      id: live-max-scale
+      shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.service }}-sync-backfill
+        CLOUD_RUN_PROJECT: ${{ inputs.project_id }}
+        CLOUD_RUN_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+        # Service-level caps are the live ops control; older services may only have a revision cap.
+        # Listing distinguishes a fresh service from an API/auth failure, which must stop deployment.
+        MAX_SCALE="$(gcloud run services list \
+          --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
+          --filter="metadata.name=$CLOUD_RUN_SERVICE" \
+          --format='json(metadata.name,metadata.annotations,spec.template.metadata.annotations)' \
+          | jq -er --arg service "$CLOUD_RUN_SERVICE" '
+            [.[] | select(.metadata.name == $service)]
+            | if length > 1 then error("Duplicate Cloud Run service") else
+                (.[0].metadata.annotations["run.googleapis.com/maxScale"]
+                 // .[0].spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"]
+                 // "40") end
+            | if type == "string" and test("^[1-9][0-9]*$") then .
+              else error("Invalid Cloud Run maxScale") end
+            # Bound digits before shell arithmetic; oversized annotations use the fresh-service default.
+            | if length > 3 then "40"
+              elif tonumber > 500 then "40" else . end')"
+        echo "max_scale=$MAX_SCALE" >> "$GITHUB_OUTPUT"
+        # Resolve in worker AND platform/dispatch invocations, which reconcile the queue separately.
+        DISPATCH_LIMIT=$((MAX_SCALE * 6))
+        if (( DISPATCH_LIMIT > 90 )); then DISPATCH_LIMIT=90; fi
+        if (( DISPATCH_LIMIT < 1 )); then DISPATCH_LIMIT=1; fi
+        echo "max_concurrent_dispatches=$DISPATCH_LIMIT" >> "$GITHUB_OUTPUT"
+
     - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
       if: ${{ inputs.mode == 'worker' }}
       id: deploy-backend-sync-backfill
@@ -168,8 +201,8 @@ runs:
           --revision-suffix=${{ inputs.revision_suffix }}-base
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=3
-          --max-instances=40
-          --max=40
+          --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
+          --max=${{ steps.live-max-scale.outputs.max_scale }}
           --concurrency=6
           --cpu=2
           --memory=8Gi
@@ -208,8 +241,13 @@ runs:
     - name: Reconcile bounded sync backfill queue
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
+      env:
+        BACKFILL_MAX_CONCURRENT_DISPATCHES: ${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}
       run: |
-        # Train 1 starts at 90/15 after the 40 x 6 worker capacity is ready.
+        set -euo pipefail
+        # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
+        # The 15/s rate caps starts, not in-flight work; the concurrency limit below
+        # independently prevents dispatch beyond worker capacity, including bursts.
         # Retain 8 GiB and one owner per UID. Later operator steps require
         # latency/retry/GPU/Firestore/Redis gates and a follow-up config train.
         # Dispatch concurrency must not exceed the worker's capacity:
@@ -225,7 +263,7 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=90 \
+            --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
@@ -233,7 +271,7 @@ runs:
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=90 \
+            --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s

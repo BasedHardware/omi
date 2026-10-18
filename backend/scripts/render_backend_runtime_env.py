@@ -74,33 +74,13 @@ _SYNC_LINEAGE_CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfi
 
 
 def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check_chart: bool = False) -> list[str]:
-    if env != 'prod':
-        return []  # dev deliberately admits everyone
+    # Cloud Run merges omitted env keys; Helm keeps its legacy values until a later cutover.
     services = env_config.get('cloud_run', {}).get('services', {})
-    listener = env_config.get('gke', {}).get('backend-listen', {})
     hosts = [(f'cloud_run/{name}', services.get(name, {})) for name in _SYNC_LINEAGE_CLOUD_RUN_HOSTS]
-    hosts.append(('gke/backend-listen', listener))
     errors = []
-    values = []
     for scope, host in hosts:
-        entry = host.get('env', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
-        if not isinstance(entry, dict) or not isinstance(entry.get('value'), str):
-            errors.append(
-                f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be an explicit literal (empty deliberately widens)'
-            )
-        else:
-            values.append(entry['value'])
-    if len(set(values)) > 1:
-        errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must be identical on all five hosts')
-    if check_chart and not errors:
-        values_file = listener.get('values_file')
-        if not isinstance(values_file, str):
-            errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} requires a checked-in listen values_file')
-        else:
-            chart = yaml.safe_load((ROOT / values_file).read_text())
-            entries = [entry for entry in chart.get('env', []) if entry.get('name') == _SYNC_LINEAGE_ALLOWLIST_KEY]
-            if len(entries) != 1 or entries[0].get('value') != values[0]:
-                errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} listen chart must match the five-host manifest')
+        if _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('env', {}) or _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('secrets', {}):
+            errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be absent; membership lives in Firestore')
     return errors
 
 
@@ -217,6 +197,7 @@ def main() -> int:
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
+                    (f'{output_prefix}_flags', _render_flags(service_config.get('flags', {}))),
                     (f'{output_prefix}_forbidden_env_names', ','.join(sorted(service_config.get('forbidden_env', [])))),
                     (f'{output_prefix}_remove_env_extra', _remove_env_extra(service, service_config)),
                 )
@@ -370,7 +351,7 @@ def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
             raise ValueError(f'Cloud Run service {service_name} must be a mapping')
         service_state: ConfigDict = {
             'env': _render_state_env(service_config),
-            'flags': dict(network_flags),
+            'flags': {**network_flags, **_render_flag_values(_as_config_dict(service_config.get('flags')) or {})},
         }
         service_account = _service_account(str(service_name), service_config)
         if service_account:

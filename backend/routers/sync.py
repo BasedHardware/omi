@@ -1,3 +1,5 @@
+from database import sync_redrive
+from utils.sync import redrive_policy
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -15,6 +17,8 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from config.summary_guarantee import repair_enabled as summary_repair_enabled
+from services import summary_debt_repair
 from config.batch_pipeline import enabled_for as batch_enabled_for
 from utils.batch_pipeline.intake import accept_upload as accept_batch_upload, get_durable_job_status
 from models.sync_job_status import (
@@ -29,6 +33,7 @@ from database import fair_use as fair_use_db
 from database import sync_dead_letters
 from database import sync_backfill_sequencer
 from database import users as users_db
+from database.memories import historical_scan_memo_scope
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
 from database.sync_jobs import (
@@ -132,6 +137,7 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,
@@ -178,6 +184,7 @@ from utils.sync.backfill import (
     retry_after_next_utc_day,
     try_acquire_backfill_slot,
 )
+from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
@@ -187,6 +194,8 @@ from utils.sync.capture_manifest import (
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
 from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
+from config.sync_owner_concurrency import preparation_width
+from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 # Only the API process importing this router owns held-audio STT recovery.
@@ -1013,6 +1022,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
     )
+    record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
         _capture_matches_server_conversation,
@@ -1020,6 +1030,7 @@ async def sync_local_files_v2(
         conversation_id,
         filenames,
         client_device_context.client_device_id,
+        snapshot_out=record_snapshot,
     )
     lane_decision = classify_sync_lane(
         filenames,
@@ -1165,7 +1176,23 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
-        if batch_enabled_for(uid):
+        record_response = await registered_record_response(
+            uid=uid,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            content_id=content_id,
+            paths=paths,
+            source=source.value,
+            client_device_id=client_device_context.client_device_id,
+            byok_enabled=byok_enabled,
+            recording_session_id=recording_session_id,
+            loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+        )
+        if isinstance(record_response, JSONResponse):
+            return record_response
+
+        if record_response is RecordUploadRoute.BATCH or (
+            record_response is not RecordUploadRoute.LEGACY and batch_enabled_for(uid)
+        ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
@@ -1193,6 +1220,7 @@ async def sync_local_files_v2(
                     'capture_evidence_claims': capture_claims,
                     'raw_capture_paths': archive_paths,
                 },
+                record_router=registered_record_response,
             )
             if batch_response is not None:
                 return batch_response
@@ -1713,10 +1741,28 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     if durable is not None:
         return with_poll_hint(durable, surface_open=surface_open)
     job = get_sync_job(job_id)
+    if job and job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
+    # A read can reconcile a proven content completion without rewriting Redis,
+    # binding a run lease or competing with the worker's terminal authority.
+    from utils.sync.completed_status import get_completed_legacy_status
+
+    try:
+        completed = get_completed_legacy_status(job_id, uid, job)
+    except Exception as error:
+        logger.error('event=sync_status_reconciliation outcome=retrying exception_type=%s', type(error).__name__)
+        raise _sync_finalization_retrying()
+    if completed is not None:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='redis_status',
+            to_mode='durable_completion',
+            reason='unavailable',
+            outcome='recovered',
+        )
+        return with_poll_hint(completed, surface_open=surface_open)
     if not job:
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
-    if job['uid'] != uid:
-        raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
 
     # A stale state can only be finalized by the holder of the same run lease
     # as Cloud Tasks/inline execution. Re-read after acquiring it so an active
@@ -1903,6 +1949,17 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
             repair = {'repaired': 0, 'error': 1}
         outcomes['reprocess_repaired'] = repair['repaired']
         outcomes['reprocess_repair_errors'] = repair['error']
+        if summary_repair_enabled():
+            # Only the scheduled two-minute owner scans conversation debt.
+            # Batch pumps replay the outbox without paying a per-pump cursor read.
+            try:
+                summary = await run_blocking(db_executor, summary_debt_repair.tick)
+            except Exception as error:
+                logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
+                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+            outcomes['summary_debt_scanned'] = summary['scanned']
+            outcomes['summary_debt_admitted'] = summary['admitted']
+            outcomes['summary_debt_errors'] = summary['errors']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 
@@ -1933,6 +1990,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
+    if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
+        await warm_rollout_cohorts(payload['uid'])
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
@@ -2129,6 +2188,11 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             ledger_fence_active = await run_blocking(db_executor, sync_job_uses_ledger_fence, job)
             if ledger_fence_active and runtime_fence_mode is not SyncLedgerFenceMode.ACTIVE:
                 return JSONResponse(status_code=503, content={'status': 'fence_mode_mismatch'})
+        if not job and redrive_policy.enabled():
+            custody = await run_blocking(db_executor, sync_redrive.preserve_missing_job, uid, job_id, payload)
+            # ACK only after durable custody. Neither branch deletes staged
+            # bytes or releases a partial ledger claim to blind provider retry.
+            return JSONResponse(status_code=200, content={'status': custody})
         if not job:
             # Job TTL (24h) expired before dispatch — staged blobs are gone or
             # about to be (1-day lifecycle); the app re-uploads on 404.
@@ -2189,6 +2253,15 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 content_id=content_id,
                 run_lock_token=lock_token,
             )
+        elif redrive_policy.legacy_convergence_enabled():
+            converged = await run_blocking(
+                db_executor,
+                sync_redrive.converge_legacy_completion,
+                job_id=job_id,
+                uid=uid,
+                content_id=content_id,
+                run_lock_token=lock_token,
+            )
         if converged is not None:
             await _delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
@@ -2218,6 +2291,20 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
+        sequencer_epoch = payload.get('sequencer_epoch')
+        if (
+            sync_lane == SyncLane.BACKFILL.value
+            and isinstance(sequencer_epoch, int)
+            and sequencer_epoch > 0
+            and preparation_width() > 1
+        ):
+            # Pure future downloads share this instance with a possible next
+            # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
+            # conversation authority. A cross-instance delivery simply misses.
+            start_background_task(
+                run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
+                name='sync:owner-prefetch',
+            )
         if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
@@ -2238,29 +2325,33 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
 
         job_dir = f'syncing/{uid}/{job_id}'
         try:
-            await _run_full_pipeline_background_async(
-                job_id,
-                uid,
-                blob_paths,
-                source,
-                should_lock,
-                job_dir,
-                conversation_id,
-                geolocation=geolocation,
-                task_mode=True,
-                client_device_id=client_device_id,
-                client_platform=client_platform,
-                sync_lane=sync_lane,
-                content_id=content_id,
-                run_lock_token=lock_token if ledger_fence_active else None,
-                content_run_bound=ledger_fence_active,
-                ledger_fence_active=ledger_fence_active,
-                **({'raw_capture_paths': raw_capture_paths} if raw_capture_paths else {}),
-                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
-                recording_session_id=recording_session_id,
-                audio_start_seconds=audio_start_seconds,
-                audio_end_seconds=audio_end_seconds,
-            )
+            # One memo per locked task attempt, in the pipeline's async context.
+            # run_blocking copies this context into each executor leaf; scope exit
+            # closes inherited memo references even if a cancelled leaf outlives us.
+            with historical_scan_memo_scope(uid):
+                await _run_full_pipeline_background_async(
+                    job_id,
+                    uid,
+                    blob_paths,
+                    source,
+                    should_lock,
+                    job_dir,
+                    conversation_id,
+                    geolocation=geolocation,
+                    task_mode=True,
+                    client_device_id=client_device_id,
+                    client_platform=client_platform,
+                    sync_lane=sync_lane,
+                    content_id=content_id,
+                    run_lock_token=lock_token if ledger_fence_active else None,
+                    content_run_bound=ledger_fence_active,
+                    ledger_fence_active=ledger_fence_active,
+                    **({'raw_capture_paths': raw_capture_paths} if raw_capture_paths else {}),
+                    **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                    recording_session_id=recording_session_id,
+                    audio_start_seconds=audio_start_seconds,
+                    audio_end_seconds=audio_end_seconds,
+                )
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
             await finalize_sync_job_superseded(

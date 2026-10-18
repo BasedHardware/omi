@@ -9,6 +9,8 @@ raises and verification returns 403 — the handler ships in the shared image
 to services that must never accept task traffic. A caller that has already
 staged audio must not start an inline worker after an enqueue exception: a
 lost create-task acknowledgement can mean the deterministic named task exists.
+Quarantine recovery is separately fenced by RecoveryStore.start: its task and
+inline fallback adopt the same paid token and cannot both invoke the provider.
 """
 
 from config import audio_archive
@@ -451,6 +453,15 @@ def _listen_finalization_audience() -> str:
 
 def _listen_finalization_invoker_sa() -> str:
     return os.getenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA') or _invoker_sa()
+
+
+def listen_finalization_binding() -> dict[str, str]:
+    return {
+        'queue': os.getenv('LISTEN_FINALIZATION_TASKS_QUEUE', ''),
+        'handler': _listen_finalization_handler_url(),
+        'audience': _listen_finalization_audience(),
+        'invoker_sa': _listen_finalization_invoker_sa(),
+    }
 
 
 def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:

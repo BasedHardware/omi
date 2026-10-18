@@ -28,6 +28,19 @@ def state(monkeypatch):
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
+
+    def empty_failure(_client, _collection, document_id, owner, token):
+        row = rows[document_id]
+        assert row['owner'] == owner and row['task_token'] == token
+        row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
+        if row['summary_empty_failures'] == 3:
+            row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
+            return True
+        return False
+
+    # Actual multi-document failure persistence is exercised by the emulator.
+    monkeypatch.setattr(reprocess, 'record_empty_failure', empty_failure)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: None)
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
     monkeypatch.delenv('SYNC_TASKS_OIDC_AUDIENCE', raising=False)
@@ -264,6 +277,12 @@ def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
                 assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
 
 
+def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_manifest):
+    services = runtime_manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM']['value'] == 'false'
+
+
 @pytest.fixture(scope='module')
 def sync_router():
     import importlib
@@ -304,6 +323,34 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
         'reprocess_repaired': 0 if repair_raises else 3,
         'reprocess_repair_errors': 1 if repair_raises else repair_errors,
     }
+
+
+def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
+    client, ref = Mock(), Mock()
+    client.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(
+        reprocess,
+        '_effects_binding',
+        lambda: {
+            'queue': 'existing',
+            'handler': 'https://worker.invalid/v2/sync-jobs/run',
+            'audience': 'https://worker.invalid/v2/sync-jobs/run',
+            'invoker_sa': 'worker@example.invalid',
+        },
+    )
+    monkeypatch.setattr(reprocess.time, 'time', lambda: 1000)
+    wake = Mock()
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    reprocess.mark_effects('owner', 'conversation', 'en')
+    ref.get.assert_not_called()
+    ref.set.assert_called_once()
+    body = ref.set.call_args.args[0]
+    assert body['effects_only'] is True and 'lease_until' not in body and 'owner' not in body
+    assert body['due_at'] == 4540 and body['task_due_at'] == 4540
+    assert ref.set.call_args.kwargs == {'merge': True}
+    assert wake.call_args.args[0]['document_id'] == reprocess.key('owner', 'conversation\0effects')
 
 
 @pytest.fixture
@@ -448,6 +495,83 @@ def test_rebind_cas_conflict_rereads_a_new_lease(state, sweep_query, monkeypatch
     assert len(tasks) == 1  # The failed CAS never dispatches its tentative token.
 
 
+def test_lazy_unbound_host_keeps_debt_without_failing_visible_completion(monkeypatch):
+    client, ref = Mock(), Mock()
+    client.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(reprocess, '_effects_binding', lambda: {})
+    wake = Mock()
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    reprocess.mark_effects('owner', 'conversation', 'en')
+    ref.set.assert_called_once()
+    ref.get.assert_not_called()
+    wake.assert_not_called()
+
+
+def test_repaired_delivery_token_always_gets_a_new_cloud_task_name(state, monkeypatch):
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = dict(tasks[0], wake_token='obsolete-name')
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(row)
+    first = enqueue.call_args.args[2]
+    row['task_token'] = 'new-fenced-delivery'
+    _ENQUEUE(row)
+    assert enqueue.call_args.args[2] != first
+    assert enqueue.call_args.args[3]['task_token'] == 'new-fenced-delivery'
+
+
+@pytest.mark.parametrize('revision_enabled', [False, True])
+@pytest.mark.parametrize('redis_available', [False, True])
+@pytest.mark.parametrize('opened', [False, True])
+def test_demand_master_preserves_production_settle_and_one_pass(
+    state, monkeypatch, redis_available, opened, revision_enabled
+):
+    import fakeredis
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    rows, _ = state
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true' if revision_enabled else 'false')
+    clock = [1000000]
+    monkeypatch.setattr(reprocess.time, 'time', lambda: clock[0])
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_TOOL_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(demand, 'client', (lambda: redis) if redis_available else Mock(side_effect=ConnectionError()))
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    monkeypatch.setattr(reprocess, '_enqueue', _ENQUEUE)
+    if opened:
+        demand.observe_surface('u', 'phone', {'surface_open': True, 'transcript_visible': False})
+    for offset in range(0, 500, 100):
+        clock[0] = 1000000 + offset
+        reprocess.mark('u', 'c', 'en')
+    key = reprocess.key('u', 'c')
+    assert enqueue.call_count == 1
+    assert enqueue.call_args.kwargs['schedule_at'] == 1000600
+    assert rows[key]['due_at'] == 1001000
+    process = Mock()
+    clock[0] = 1000600
+    assert reprocess.run(key, rows[key]['task_token'], process) == 'deferred'
+    process.assert_not_called()
+    assert enqueue.call_count == 2
+    assert enqueue.call_args.kwargs['schedule_at'] == 1001000
+    clock[0] = 1001000
+    assert reprocess.run(key, rows[key]['task_token'], process) == 'processed'
+    process.assert_called_once_with('u', 'c', 'en')
+    assert not rows
+
+
 def test_repeat_work_window_has_a_hard_ceiling_without_a_second_queue(state, monkeypatch):
     rows, tasks = state
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
@@ -480,3 +604,478 @@ def test_repeat_work_deadline_survives_overlapping_revision_and_next_mark(state,
     assert reprocess.run(key, tasks[-1]['task_token'], process, now=3900) == 'processed'
     process.assert_called_once_with('u', 'c', 'en')
     assert not rows
+
+
+@pytest.mark.parametrize(
+    'demand_enabled,revision_enabled,expected_due',
+    [(False, False, 4600), (False, True, 3600), (True, False, 3540), (True, True, 3540)],
+)
+def test_demand_and_revision_reuse_keep_their_existing_ceilings(
+    state, monkeypatch, demand_enabled, revision_enabled, expected_due
+):
+    rows, tasks = state
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true' if demand_enabled else 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true' if revision_enabled else 'false')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    assert rows[key]['due_at'] == 600
+    for now in range(100, 4001, 100):
+        reprocess.mark('u', 'c', 'en', now=now)
+    assert rows[key]['due_at'] == expected_due
+    assert rows[key]['effects_only'] is False
+    assert len(tasks) == 1
+
+
+def test_first_summary_continuous_appends_cannot_extend_dispatch(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    for now in range(0, 120, 5):
+        reprocess.mark('u', 'c', 'en', now=now)
+    row = rows[reprocess.key('u', 'c')]
+    assert row['first_pending_at'] == 0 and row['due_at'] == 120
+    output = SimpleNamespace(discarded=False, structured={'overview': 'A real summary'})
+    assert reprocess.run(reprocess.key('u', 'c'), tasks[0]['task_token'], lambda *_: output, now=120) == 'processed'
+    assert rows[reprocess.key('u', 'c')]['summary_seen']
+    reprocess.mark('u', 'c', 'en', now=121)
+    assert rows[reprocess.key('u', 'c')]['due_at'] == 721
+    assert rows[reprocess.key('u', 'c')]['first_pending_at'] == 121
+
+
+def test_enabling_deadline_wakes_preexisting_later_task(state, monkeypatch):
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    original = tasks[0]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    reprocess.mark('u', 'c', 'en', now=100)
+    assert len(tasks) == 2 and tasks[-1]['due_at'] == 120
+    assert reprocess.run(reprocess.key('u', 'c'), original, Mock(), now=600) == 'stale'
+
+
+def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryOutputUnavailable
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    with pytest.raises(SummaryOutputUnavailable):
+        reprocess.run(key, token, lambda *_: SimpleNamespace(discarded=False, structured={}), now=120)
+    assert reprocess.run(key, token, Mock(), now=121) == 'busy'
+    reprocess.mark('u', 'c', 'en', now=150)
+    assert rows[key]['due_at'] == 120 and rows[key]['first_pending_at'] == 0
+    output = SimpleNamespace(discarded=False, structured={'overview': 'Recovered'})
+    assert reprocess.run(key, token, lambda *_: output, now=120 + reprocess.LEASE_SECONDS) == 'processed'
+    assert reprocess.run(key, token, Mock(), now=2000) == 'stale'
+
+
+def test_first_summary_bypasses_demand_tier_wait_without_extra_reads(state, monkeypatch):
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    schedule = Mock(side_effect=AssertionError('first summary cannot wait behind demand tiers'))
+    monkeypatch.setattr(demand, 'schedule', schedule)
+    enqueue = Mock()
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(tasks[0])
+    schedule.assert_not_called()
+    assert enqueue.call_args.kwargs['schedule_at'] == 120
+
+
+def test_short_first_summary_lease_and_rolled_back_later_revision(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+
+    def death(*_):
+        assert rows[key]['lease_until'] == 240
+        raise RuntimeError('worker terminated')
+
+    with pytest.raises(RuntimeError):
+        reprocess.run(key, tasks[0]['task_token'], death, now=120)
+    assert reprocess.run(key, tasks[0]['task_token'], Mock(), now=239) == 'busy'
+    result = SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+    reprocess.run(key, tasks[0]['task_token'], lambda *_: result, now=240)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    reprocess.mark('u', 'c', 'en', now=241)
+    assert tasks[-1]['due_at'] == 841
+    assert reprocess.run(key, tasks[-1]['task_token'], Mock(), now=841) == 'processed'
+    assert not rows
+
+
+def test_first_summary_retry_preserves_queued_token(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+    earliest = tasks[0]['task_token']
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+    for now in (240, 360, 480):
+        reprocess.sweep(now=now)
+        assert rows[key]['task_token'] == earliest
+    assert rows[key]['wake_generation'] == 3
+    output = SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+    assert reprocess.run(key, earliest, lambda *_: output, now=480) == 'processed'
+
+
+def test_live_request_heartbeats_same_owner_token_without_a_replacement_wake(state, monkeypatch):
+    import threading
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setattr(reprocess, 'FIRST_SUMMARY_HEARTBEAT_SECONDS', 0.01)
+    clock = [120]
+    monkeypatch.setattr(reprocess, 'time', SimpleNamespace(time=lambda: clock[0]))
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    renewed = threading.Event()
+    mutate = reprocess._mutate
+
+    def observe(document_id, operation):
+        result = mutate(document_id, operation)
+        if rows.get(key, {}).get('lease_until', 0) > 300:
+            renewed.set()
+        return result
+
+    monkeypatch.setattr(reprocess, '_mutate', observe)
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+
+    def slow_process(*_):
+        owner = rows[key]['owner']
+        assert rows[key]['lease_until'] == 240
+        clock[0] = 300  # The original 120s lease expires during model work.
+        assert renewed.wait(1)
+        assert rows[key]['owner'] == owner and rows[key]['task_token'] == token
+        assert reprocess.sweep(now=300) == {'repaired': 0, 'error': 0}
+        assert len(tasks) == 1
+        duplicate = Mock()
+        assert reprocess.run(key, token, duplicate, now=300) == 'busy'
+        duplicate.assert_not_called()
+        return SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+
+    assert reprocess.run(key, token, slow_process, now=120) == 'processed'
+    assert rows[key]['dormant'] and rows[key]['summary_seen']
+    assert not any(t.name == 'first-summary-heartbeat' and t.is_alive() for t in threading.enumerate())
+
+
+def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryOutputUnavailable
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    empty = lambda *_: SimpleNamespace(discarded=False, structured={})
+    for now in (120, 240):
+        with pytest.raises(SummaryOutputUnavailable):
+            reprocess.run(key, token, empty, now=now)
+    assert reprocess.run(key, token, empty, now=360) == 'blocked'
+    assert rows[key]['summary_empty_failures'] == 3 and rows[key]['due_at'] is None
+    reprocess.mark('u', 'c', 'en', now=1000)
+    assert len(tasks) == 1 and rows[key]['due_at'] is None
+    process = Mock()
+    assert reprocess.run(key, token, process, now=1000) == 'stale'
+    process.assert_not_called()
+
+
+def test_revision_changed_before_repair_claim_keeps_same_version_debt(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryRepairSuperseded
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
+    version = rows[key]['version']
+
+    def append_before_claim(*_):
+        raise SummaryRepairSuperseded('new revision without outbox mark', retry_revision=4)
+
+    assert reprocess.run(key, tasks[0]['task_token'], append_before_claim, now=120) == 'superseded'
+    assert rows[key]['version'] == version
+    assert rows[key]['summary_repair'] and rows[key]['summary_expected_revision'] == 4
+    assert rows[key]['lease_until'] == 0 and rows[key]['due_at'] == 120
+    output = SimpleNamespace(discarded=False, structured={'overview': 'New revision summary'})
+    assert reprocess.run(key, tasks[-1]['task_token'], lambda *_: output, now=120) == 'processed'
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_repair_preclaim_retries_only_an_eligible_new_revision(pipeline, monkeypatch, manual):
+    from utils.conversations import summary_delivery as delivery
+
+    row = {'status': 'completed', 'summary_title_provenance': 'server_minimum', 'sync_content_revision': 4}
+    if manual:
+        row['user_title'] = 'Synthetic manual title'
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: row)
+    process = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    token = delivery.REPAIR_CONTEXT.set({'summary_expected_revision': 3})
+    try:
+        with pytest.raises(delivery.SummaryRepairSuperseded) as error:
+            pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+        assert error.value.retry_revision == (None if manual else 4)
+        process.assert_not_called()
+    finally:
+        delivery.REPAIR_CONTEXT.reset(token)
+
+
+def test_superseded_repair_retires_only_its_own_generation(state, monkeypatch):
+    from utils.conversations.summary_delivery import SummaryRepairSuperseded
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+
+    def supersede(*_):
+        raise SummaryRepairSuperseded('manual edit')
+
+    assert reprocess.run(key, tasks[-1]['task_token'], supersede, now=120) == 'superseded'
+    assert not rows
+    reprocess.mark('u', 'c', 'en', now=200)
+
+    def append_then_supersede(*args):
+        reprocess.mark(*args, now=321)
+        raise SummaryRepairSuperseded('new revision')
+
+    assert reprocess.run(key, tasks[-1]['task_token'], append_then_supersede, now=320) == 'superseded'
+    assert rows[key]['lease_until'] == 0 and not rows[key]['summary_repair']
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch, enabled):
+    import asyncio
+    import json
+
+    async def run(_executor, fn):
+        return fn()
+
+    monkeypatch.setattr(sync_router, 'run_blocking', run)
+    monkeypatch.setattr(sync_router.uid_sequencer, 'sweep', Mock(return_value={'error': 0}))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(reprocess, 'sweep', Mock(return_value={'repaired': 0, 'error': 0}))
+    monkeypatch.setattr(sync_router, 'summary_repair_enabled', lambda: enabled)
+    scan = Mock(return_value={'scanned': 100, 'admitted': 10, 'errors': 0})
+    monkeypatch.setattr(sync_router.summary_debt_repair, 'tick', scan)
+    response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
+    outcomes = json.loads(response.body)['outcomes']
+    if enabled:
+        scan.assert_called_once_with()
+        assert outcomes['summary_debt_scanned'] == 100 and outcomes['summary_debt_admitted'] == 10
+    else:
+        scan.assert_not_called()
+        assert 'summary_debt_scanned' not in outcomes
+
+
+def test_discard_is_terminal_but_does_not_count_as_a_first_summary(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+    result = SimpleNamespace(discarded=True, structured={'overview': ''})
+    assert reprocess.run(key, tasks[-1]['task_token'], lambda *_: result, now=120) == 'processed'
+    assert not rows
+    reprocess.mark('u', 'c', 'en', now=10000)
+    assert rows[key]['due_at'] == 10120 and not rows[key].get('summary_seen')
+
+
+def test_first_summary_fulfilled_during_append_starts_a_later_revision_window(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    rows, tasks = state
+    key = reprocess.key('u', 'c')
+    reprocess.mark('u', 'c', 'en', now=0)
+
+    def persist_then_append(*args):
+        reprocess.mark(*args, now=10001)
+        return SimpleNamespace(discarded=False, structured={'overview': 'Real summary'})
+
+    reprocess.run(key, tasks[-1]['task_token'], persist_then_append, now=10000)
+    reprocess.mark('u', 'c', 'en', now=10002)
+    assert rows[key]['first_pending_at'] == 10000
+    assert rows[key]['due_at'] == 10602
+
+
+@pytest.mark.parametrize('preserve', [False, True])
+def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_enabled(state, monkeypatch, preserve):
+    from config import summary_guarantee
+
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    assert not summary_guarantee.enabled('u')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    assert not summary_guarantee.enabled('u')
+
+    def no_output(*_):
+        assert summary_guarantee.enabled('u') == preserve
+        assert not summary_guarantee.enabled('unrelated-owner')
+        reprocess.mark('u', 'nested-conversation', 'en', now=120)
+        nested = rows[reprocess.key('u', 'nested-conversation')]
+        assert nested['due_at'] == 720 and 'summary_deadline_at' not in nested
+        return None
+
+    if preserve:
+        with pytest.raises(reprocess.FirstSummaryCallbackPending):
+            reprocess.run(key, token, no_output, now=120)
+        assert 'summary_empty_failures' not in rows[key]
+        assert rows[key]['first_pending_at'] == 0
+        assert rows[key]['due_at'] == rows[key]['task_due_at'] == 120
+        assert rows[key]['lease_until'] == 240  # Short admitted-deadline lease, not 1800s.
+        reprocess.mark('u', 'c', 'en', now=180)
+        assert rows[key]['due_at'] == 120
+        assert rows[key]['task_token'] == token
+        output = SimpleNamespace(discarded=False, structured={'overview': 'Synthetic recovered summary'})
+        assert reprocess.run(key, token, lambda *_: output, now=240) == 'processed'
+        assert rows[key]['summary_seen'] and rows[key]['dormant']
+    else:
+        assert reprocess.run(key, token, no_output, now=120) == 'processed'
+        assert key not in rows  # Reproduce the legacy loss of scheduling debt.
+    assert not summary_guarantee.enabled('u')
+    assert summary_guarantee.ADMITTED_OWNER.get() is None
+    reprocess.mark('u', 'new-conversation', 'en', now=300)
+    new = rows[reprocess.key('u', 'new-conversation')]
+    assert new['due_at'] == 900 and 'summary_deadline_at' not in new
+
+
+@pytest.mark.parametrize('deadline', [None, True, '120', float('nan'), float('inf')])
+def test_invalid_deadline_never_grants_summary_drain_eligibility(monkeypatch, deadline):
+    from config import summary_guarantee
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    row = {'uid': 'u', 'summary_deadline_at': deadline}
+    assert not summary_guarantee.first_summary_pending(row)
+
+
+def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_queued_token(state, monkeypatch):
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    schedule, enqueue = Mock(), Mock()
+    monkeypatch.setattr(demand, 'schedule', schedule)
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(rows[key])
+    schedule.assert_not_called()
+    assert enqueue.call_args.kwargs['schedule_at'] == 120
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+    assert reprocess.sweep(now=240) == {'repaired': 1, 'error': 0}
+    assert rows[key]['task_token'] == token and rows[key]['wake_generation'] == 1
+    for exclusions in ({'effects_only': True}, {'summary_seen': True}):
+        rows[key].update(exclusions)
+        from config import summary_guarantee
+
+        assert not summary_guarantee.preserves_admitted(rows[key])
+        rows[key].update({field: False for field in exclusions})
+
+
+def test_preserved_callback_rule_discard_receipt_settles_without_empty_failure(state, monkeypatch):
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+
+    def rule_discard(*_):
+        context = reprocess.summary_delivery.PROCESS_CONTEXT.get()
+        assert context is not None
+        context['discarded'] = True
+        return None
+
+    assert reprocess.run(key, token, rule_discard, now=120) == 'processed'
+    assert key not in rows
+
+
+@pytest.mark.parametrize('persisted', [False, True])
+def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monkeypatch, persisted):
+    monkeypatch.setattr(
+        pipeline.conversations_db,
+        'get_conversation',
+        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'transcript_segments': []},
+    )
+    monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
+    monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *a, **k: persisted)
+    monkeypatch.setattr(pipeline, 'record_conversation_relevance', Mock())
+    context = {}
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        assert pipeline._reprocess_conversation_after_update('u', 'c', 'en') is None
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    assert context.get('discarded', False) == persisted
+
+
+@pytest.mark.parametrize('preserve', [False, True])
+@pytest.mark.parametrize('has_output', [False, True])
+def test_later_summary_keeps_legacy_callback_validation_and_completion(state, monkeypatch, preserve, has_output):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    rows[key]['summary_seen'] = True
+
+    def callback(*_):
+        assert reprocess.summary_delivery.PROCESS_CONTEXT.get() is None
+        return SimpleNamespace(discarded=False, structured={'overview': 'Synthetic output'} if has_output else {})
+
+    if has_output:
+        assert reprocess.run(key, token, callback, now=120) == 'processed'
+        assert rows[key]['dormant'] and rows[key]['summary_seen']
+    else:
+        with pytest.raises(reprocess.summary_delivery.SummaryOutputUnavailable):
+            reprocess.run(key, token, callback, now=120)
+        assert not rows[key].get('dormant')
+        assert rows[key]['lease_until'] == 1920

@@ -235,3 +235,11 @@ Turning admission off returns new unowned uploads to legacy; existing batch
 claims drain through their recorded protocol. Never copy in-flight work into
 legacy or purge pending artifacts to roll back. Detailed RPC/index/operator
 settings are in `batch-pipeline-serving.md`; no merge/deploy is authorized here.
+
+With dark `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=true`, both exhausted
+padded `empty_asr` and `no_owned_words` hand off immediately to the existing
+fenced CPU recovery lane. Strict local VAD on the original unit makes the final
+silence decision; the GPU worker never infers silence from empty text or from
+words outside its core. Speech gets the once-only legacy recovery attempt.
+See [serving recovery](batch-pipeline-serving.md#dark-empty-asr-disposition) for
+closed diagnostics, historical held-unit disposition and rollback semantics.

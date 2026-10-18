@@ -35,6 +35,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 @SuppressLint("MissingPermission")
 class OmiBleManager private constructor(private val application: Application) {
 
+    internal val savedReconnect = BleSavedReconnect()
+
     companion object {
         private const val TAG = "OmiBle"
         private const val RSSI_HISTORY_LIMIT = 120

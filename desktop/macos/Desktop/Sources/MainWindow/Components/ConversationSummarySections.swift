@@ -160,22 +160,12 @@ struct ConversationSummarySections: View {
               documentProse: true
             )
 
-            let sourceIDs = ConversationSummarySelection.resolvableSourceIDs(
-              section.sourceSegmentIDs, segments: transcriptSegments)
-            if !sourceIDs.isEmpty, let onOpenSources {
-              Button {
-                onOpenSources(sourceIDs)
-              } label: {
-                Label(
-                  sourceIDs.count == 1 ? "Source" : "Sources (\(sourceIDs.count))",
-                  systemImage: "text.quote"
-                )
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-              }
-              .buttonStyle(.plain)
-              .accessibilityIdentifier("conversation-summary-section-sources")
-              .help("Open the supporting transcript")
+            if let onOpenSources {
+              ConversationQuoteTimestamps(
+                sources: ConversationQuoteTimestamp.resolve(section.sourceSegmentIDs, segments: transcriptSegments),
+                onOpenSource: { onOpenSources([$0]) }
+              )
+              .id(section.sourceSegmentIDs)
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)

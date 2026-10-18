@@ -20,6 +20,10 @@ final class BleHostApiImpl: BleHostApi {
         bleManager.connectPeripheral(uuid: uuid)
     }
 
+    func configureSavedReconnect(uuid: String, enabled: Bool) throws {
+        bleManager.configureSavedReconnect(uuid: uuid, enabled: enabled)
+    }
+
     func unmanageDevice(uuid: String) throws {
         bleManager.disconnectPeripheral(uuid: uuid)
     }

@@ -5,6 +5,11 @@ Cloud Monitoring exporter and the Prometheus scrape configuration.
 """
 
 from pathlib import Path
+import json
+import os
+import subprocess
+
+import pytest
 
 import yaml
 
@@ -36,6 +41,7 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'backend/charts/monitoring/alerts/live-stt.json',
         'backend/charts/monitoring/alerts/resilience.json',
         'backend/charts/monitoring/live-alert-gate.json',
+        'backend/charts/monitoring/gmp/frontend-values.prod.yaml',
         '.github/workflows/gcp_cloud_run_metrics_egress.yml',
     }
     environment = triggers['workflow_dispatch']['inputs']['environment']
@@ -51,7 +57,7 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
     )
 
 
-def test_workflow_installs_both_pinned_releases_atomically() -> None:
+def test_workflow_installs_both_pinned_releases_with_retention_safe_prod_rollback() -> None:
     scripts = _run_scripts(_workflow())
 
     assert 'stack_release=dev-kube-prometheus-stack' in scripts
@@ -109,6 +115,65 @@ def test_stack_upgrade_keeps_the_parent_applied_stats_proxy_annotation() -> None
     workflow_text = WORKFLOW.read_text(encoding='utf-8').lower()
     assert 'kubectl apply' not in workflow_text
     assert 'create configmap' not in workflow_text
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_production_overlay_and_rollback_flags_reach_helm_only_in_prod(tmp_path, environment):
+    steps = _workflow()['jobs']['deploy']['steps']
+    script = next(step['run'] for step in steps if step['name'] == 'Deploy Prometheus scrape configuration')
+    helm = tmp_path / 'helm'
+    helm.write_text(
+        '#!/usr/bin/env python3\nimport json,os,sys\nopen(os.environ["RECORDED_ARGS"],"w").write(json.dumps(sys.argv[1:]))\n'
+    )
+    helm.chmod(0o755)
+    recorded = tmp_path / 'args.json'
+    env = {
+        **os.environ,
+        'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'],
+        'MONITORING_NAMESPACE': f'{environment}-omi-monitoring',
+        'STACK_RELEASE': f'{environment}-stack',
+        'STACK_VALUES': 'base-values.yaml',
+        # Defined for both environments like the resolve step, and non-empty so
+        # local bash 3.2 does not treat the empty stack_flags array as unbound.
+        'STATS_PROXY_SHA256': '0' * 64,
+        'RECORDED_ARGS': str(recorded),
+    }
+    subprocess.run(['bash', '-c', script], env=env, check=True, capture_output=True, text=True)
+    arguments = json.loads(recorded.read_text())
+    assert ('--atomic' in arguments) is (environment == 'dev')
+    assert '--skip-crds' in arguments
+    assert ('backend/charts/monitoring/gmp/frontend-values.prod.yaml' in arguments) is (environment == 'prod')
+
+
+def test_grafana_writers_share_environment_lock_and_prod_checks_query_path():
+    workflow = _workflow()
+    provision = workflow['jobs']['provision-live-alerts']
+    assert provision['concurrency'] == {
+        'group': "grafana-alert-provisioning-${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}",
+        'cancel-in-progress': 'false',
+    }
+    step = next(
+        step for step in workflow['jobs']['deploy']['steps'] if step['name'] == 'Verify production GMP query path'
+    )
+    assert step['if'] == "github.event.inputs.environment == 'prod'"
+    assert 'provision_monitoring_alerts.py --probe-datasources' in step['run']
+    assert '--context gke_based-hardware_us-central1_prod-omi-gke' in step['run']
+    assert step['env']['MONITOR_GRAFANA_TOKEN'] == '${{ secrets.MONITOR_GRAFANA_TOKEN }}'
+    dashboard = yaml.load(
+        (ROOT / '.github/workflows/grafana_dashboard_provisioning.yml').read_text(), Loader=yaml.BaseLoader
+    )
+    writer = dashboard['jobs']['provision']
+    assert writer['concurrency'] == {
+        'group': 'grafana-alert-provisioning-${{ matrix.environment }}',
+        'cancel-in-progress': 'false',
+    }
+    assert writer['environment'] == "${{ matrix.environment == 'prod' && 'prod' || 'development' }}"
+    assert writer['strategy']['matrix']['environment'] == ["${{ github.event.inputs.environment || 'dev' }}"]
+    alert_step = next(
+        s for s in writer['steps'] if s.get('name') == 'Apply production alert definitions and check drift'
+    )
+    assert alert_step['if'] == "matrix.environment == 'prod'"
+    assert '--backup-file' in alert_step['run']
 
 
 def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:

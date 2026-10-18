@@ -3,6 +3,59 @@
   "adopted_files": [],
   "events": [
     {
+      "id": "savedPendantReconnectObserved",
+      "wire_name": "Saved Pendant Reconnect",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trigger": {
+          "type": "enum",
+          "wire_name": "trigger",
+          "values": [
+            "launch",
+            "resume",
+            "adapter_on",
+            "backoff",
+            "native_retry"
+          ]
+        },
+        "attempt": {
+          "type": "int",
+          "wire_name": "attempt"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "attempted",
+            "connected",
+            "failed_not_ready",
+          "failed_timeout",
+          "failed_adapter_not_ready",
+          "failed_native_connect",
+            "failed_connection",
+            "failed_connect",
+            "failed_disconnected",
+            "failed_pairing_lost",
+            "failed_no_gatt",
+            "failed_gatt",
+            "skipped_user_or_pairing_block",
+            "skipped_kill_switch"
+          ]
+        },
+        "disconnectedMs": {
+          "type": "int",
+          "wire_name": "disconnected_ms"
+        }
+      },
+      "consumers": [
+        "saved-pendant-reconnect"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onboardingCompleted",
       "wire_name": "Onboarding Completed",
       "status": "active",

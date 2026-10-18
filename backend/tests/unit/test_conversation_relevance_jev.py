@@ -1,9 +1,10 @@
 """The Jev model tier of conversation relevance (relevance.py + relevance_jev.py, #14835).
 
 Pins: flag default off; the tier order (restore -> rules -> model -> calendar)
-is unchanged; Jev replaces conv_discard only when supplied; discard strictly
-above the threshold; Jev failures advance to cheaper arms; the stored record and metric say
-which tier decided. All transcripts are synthetic.
+is unchanged; Jev replaces conv_discard only when supplied; its comparison is
+strict above the threshold by default, with inclusive comparison opt-in; Jev
+failures advance to cheaper arms; the stored record and metric say which tier
+decided. All transcripts are synthetic.
 """
 
 from __future__ import annotations
@@ -31,6 +32,12 @@ def isolated_relevance_circuits():
     get_relevance_circuit.cache_clear()
     yield
     get_relevance_circuit.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def default_jev_discard_policy(monkeypatch):
+    monkeypatch.delenv('CONVERSATION_RELEVANCE_JEV_DISCARD_THRESHOLD', raising=False)
+    monkeypatch.delenv('CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE', raising=False)
 
 
 def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=False):
@@ -76,7 +83,51 @@ def test_jev_above_threshold_discards_without_calling_conv_discard():
     assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'jev', 'jev_discard')
     record = decision.as_record()
     assert record['decided_by'] == 'jev'
-    assert record['jev'] == {'p_discard': 0.97, 'threshold': JEV_DISCARD_THRESHOLD, 'model': 'typesafe/jev-1.13'}
+    assert record['jev'] == {
+        'p_discard': 0.97,
+        'threshold': JEV_DISCARD_THRESHOLD,
+        'comparison': '>',
+        'model': 'typesafe/jev-1.13',
+    }
+
+
+def test_jev_unset_cutoff_keeps_exactly_at_default_threshold():
+    decision, _, _ = _decide(jev=lambda: 0.80)
+
+    assert JEV_DISCARD_THRESHOLD == 0.80
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'jev', 'jev_keep')
+    assert decision.as_record()['jev'] == {
+        'p_discard': 0.8,
+        'threshold': 0.8,
+        'comparison': '>',
+        'model': 'typesafe/jev-1.13',
+    }
+
+
+def test_jev_inclusive_cutoff_discards_at_threshold(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE', 'true')
+    decision, _, _ = _decide(jev=lambda: 0.80)
+
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'jev', 'jev_discard')
+    assert decision.as_record()['jev']['threshold'] == 0.8
+    assert decision.as_record()['jev']['comparison'] == '>='
+
+
+def test_jev_out_of_range_cutoff_falls_back_to_default(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_DISCARD_THRESHOLD', '0.96')
+    decision, _, _ = _decide(jev=lambda: 0.90)
+
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'jev', 'jev_discard')
+    assert decision.as_record()['jev']['threshold'] == JEV_DISCARD_THRESHOLD
+    assert decision.as_record()['jev']['comparison'] == '>'
+
+
+def test_jev_invalid_inclusive_value_defaults_to_strict(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE', 'sometimes')
+    decision, _, _ = _decide(jev=lambda: 0.80)
+
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'jev', 'jev_keep')
+    assert decision.as_record()['jev']['comparison'] == '>'
 
 
 @pytest.mark.parametrize('p_discard', [JEV_DISCARD_THRESHOLD, 0.5, 0.0])

@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
-import { wallPayload } from "@/lib/wall-cache";
+import { wallPayload, wallSnapshotStore } from "@/lib/wall-cache";
 import { localWallFixture } from "@/lib/wall-local-fixture";
 import { SERIES_NAMES, SeriesName, seriesPayload } from "@/lib/wall-series";
 
@@ -23,7 +23,9 @@ export async function GET(
     });
   try {
     const snapshot = localWallFixture().then(
-      (fixture) => fixture || wallPayload(undefined, undefined, retain)
+      (fixture) =>
+        fixture ||
+        wallPayload(undefined, undefined, retain, wallSnapshotStore())
     );
     const payload = await seriesPayload(
       name as SeriesName,

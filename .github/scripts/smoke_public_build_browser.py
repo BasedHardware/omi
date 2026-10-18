@@ -7,6 +7,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit
@@ -22,6 +23,7 @@ SAFE_BROWSER_SMOKE_REASONS = frozenset(
     {
         "candidate URL must be an absolute HTTPS URL",
         "headless browser did not run",
+        "headless browser timed out rendering the candidate",
         "headless browser could not render the candidate",
         "unknown public-build target",
         "client public-build canary did not become ready",
@@ -57,6 +59,18 @@ def browser_candidates(environment: dict[str, str] | None = None) -> tuple[str, 
 
 
 def render_candidate(*, browser: str, base_url: str) -> str:
+    for attempt in range(3):
+        try:
+            # Keep the original first-attempt allowance. With at most five
+            # candidates, two 19s retries plus 5s sleeps add at most 240s.
+            return _render_candidate_once(browser=browser, base_url=base_url, timeout=45 if attempt == 0 else 19)
+        except BrowserSmokeError:
+            if attempt == 2:
+                raise
+            time.sleep(5)
+
+
+def _render_candidate_once(*, browser: str, base_url: str, timeout: int) -> str:
     try:
         result = subprocess.run(
             [
@@ -73,9 +87,11 @@ def render_candidate(*, browser: str, base_url: str) -> str:
             check=False,
             capture_output=True,
             text=True,
-            timeout=45,
+            timeout=timeout,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        raise BrowserSmokeError("headless browser timed out rendering the candidate") from exc
+    except OSError as exc:
         raise BrowserSmokeError("headless browser did not run") from exc
     if result.returncode != 0:
         raise BrowserSmokeError("headless browser could not render the candidate")

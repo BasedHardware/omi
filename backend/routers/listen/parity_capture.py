@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from copy import deepcopy
+from dataclasses import replace
 from hashlib import sha256
 import logging
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from testing.parity_pack_v0.capture import CaptureInvocation, CaptureTap
-from testing.parity_pack_v0.schema import CassetteIdentity
+from testing.parity_pack_v0.schema import CassetteIdentity, RequestFingerprint
 from testing.parity_pack_v0.whitelist import CaptureWhitelist
 
 from .parity_telemetry import record_parity_capture_event, record_parity_capture_lifecycle
@@ -78,6 +79,7 @@ class ListenParityCapture:
         self._event_count = 0
         self._audio_bytes = 0
         self._limit_reached = False
+        self._provider_observed = False
 
     @classmethod
     def from_environ(
@@ -156,6 +158,22 @@ class ListenParityCapture:
             )
             return cls(None, environ=environ)
 
+    def reselect(self, *, provider: str, model: str, request: Mapping[str, Any]) -> bool:
+        """Refresh initial route metadata while retaining cap-paused client audio."""
+        invocation = self._invocation
+        if invocation is None or self._provider_observed:
+            return False
+        try:
+            identity = replace(invocation.identity, route_or_model=model or provider or 'live')
+            fingerprint = RequestFingerprint.from_request(request)
+            invocation.identity = identity
+            invocation.fingerprint = fingerprint
+            return True
+        except Exception as error:
+            self._invocation = None  # Disable capture if route metadata cannot be refreshed.
+            logger.warning('Parity pack reselection failed error_type=%s', type(error).__name__)
+            return False
+
     @property
     def enabled(self) -> bool:
         return self._invocation is not None
@@ -196,6 +214,8 @@ class ListenParityCapture:
             return
         try:
             invocation.observe(direction, payload)
+            if direction != 'client':
+                self._provider_observed = True
             self._event_count += 1
             self._audio_bytes += audio_bytes
             record_parity_capture_lifecycle('observe', 'succeeded', environ=self._environ)

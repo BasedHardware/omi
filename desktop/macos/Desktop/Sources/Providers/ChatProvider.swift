@@ -1311,12 +1311,23 @@ class ChatProvider: ObservableObject {
   @Published var claudeAuthUrl: String?
   /// Prevent duplicate browser launches for the same explicit User Claude flow.
   private var claudeAuthLaunchRequested = false
+  /// When Settings' Connect Claude last asked the runtime for a sign-in URL.
+  private var claudeConnectRequestedAt: Date?
   /// The current process has observed a successful explicit OAuth callback.
   /// Passive settings refreshes must not erase that state when Claude stores the
   /// token in its foreign Keychain item instead of the legacy config file.
   private var claudeAuthSucceededInCurrentProcess = false
   /// Whether the user has a cached Claude OAuth token
   @Published var isClaudeConnected = false
+  /// The provider answered `auth_required` in this process: the credential was
+  /// rejected or expired, or a sign-in is still in progress. That observation
+  /// outranks a cached token and an earlier OAuth success, so Settings offers
+  /// Connect until a fresh explicit sign-in succeeds. Credentials are kept.
+  private var claudeProviderRejected = false
+  /// Passive refreshes read the legacy config token through this seam.
+  var readLegacyClaudeConfigToken: () -> String? = { ChatProvider.legacyClaudeConfigToken() }
+  /// A validated sign-in URL from an explicit Connect opens through this seam.
+  var openClaudeSignInURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
   /// Cumulative tokens used in the current session via Omi account
   @Published var sessionTokensUsed: Int = 0
   /// Cumulative USD cost spent using the Omi account, persisted across sessions.
@@ -2284,7 +2295,30 @@ class ChatProvider: ObservableObject {
       harness: activeBridgeHarness,
       bridgeMode: bridgeMode
     )
-    NSWorkspace.shared.open(url)
+    openClaudeSignInURL(url)
+  }
+
+  /// Settings' Connect Claude. Since the July change that stopped opening the
+  /// browser mid-turn, this is the only control that asks the runtime for a
+  /// sign-in URL and opens it.
+  func connectClaude() async {
+    guard isUserClaudeMode else { return }
+    guard await ensureBridgeStarted() else {
+      errorMessage = "Unable to start Claude sign-in. Try again."
+      return
+    }
+    claudeConnectRequestedAt = Date()
+    await resolvedAgentClient().requestProviderAuth()
+  }
+
+  /// The runtime answers Connect within a second or two. A request it never answered
+  /// must not let a later, unrelated `auth_required` open the browser.
+  nonisolated static let claudeConnectAnswerWindow: TimeInterval = 30
+
+  /// A turn's `auth_required` never opens the browser by itself; only a recent Connect does.
+  nonisolated static func opensClaudeSignIn(connectRequestedAt: Date?, now: Date, authUrl: String?) -> Bool {
+    guard let connectRequestedAt, authUrl != nil else { return false }
+    return now.timeIntervalSince(connectRequestedAt) <= claudeConnectAnswerWindow
   }
 
   private static func providerAuthRequiredUserMessage(isUserClaudeMode: Bool) -> String {
@@ -2294,7 +2328,12 @@ class ChatProvider: ObservableObject {
     return "This chat uses Claude and needs sign-in. Start a new chat with Omi AI or reconnect Claude in Settings."
   }
 
-  private func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
+  func handleClaudeAuthRequired(methods: [[String: Any]], authUrl: String?) {
+    // Claude is not authenticated right now. Expose Connect without signing out
+    // of Omi or deleting the Claude credential, and never open the browser here.
+    claudeProviderRejected = true
+    claudeAuthSucceededInCurrentProcess = false
+    isClaudeConnected = false
     // A fresh bridge-issued authorization URL represents a new OAuth
     // attempt (for example after the bounded callback timeout). Reset the
     // launch latch so a retry can open the new URL, while duplicate events
@@ -2306,6 +2345,13 @@ class ChatProvider: ObservableObject {
     claudeAuthUrl = authUrl
     // Provider auth is distinct from the Pro upgrade sheet.
     isClaudeAuthRequired = false
+    let opensSignIn = Self.opensClaudeSignIn(
+      connectRequestedAt: claudeConnectRequestedAt, now: Date(), authUrl: authUrl)
+    if authUrl != nil { claudeConnectRequestedAt = nil }
+    if opensSignIn {
+      claudeAuthLaunchRequested = false
+      startClaudeAuth()
+    }
 
     let sessionAdapterId = activeChatTelemetryAttempt?.attempt.resolvedSessionAdapterId
     AnalyticsManager.shared.providerAuthRequired(
@@ -2316,7 +2362,7 @@ class ChatProvider: ObservableObject {
     )
   }
 
-  private func handleClaudeAuthSuccess() {
+  func handleClaudeAuthSuccess() {
     isClaudeAuthRequired = false
     claudeAuthLaunchRequested = false
     claudeAuthUrl = nil
@@ -2331,15 +2377,19 @@ class ChatProvider: ObservableObject {
   /// Keychain item. The bridge owns that credential and the success event is
   /// the authoritative signal for this process.
   func markClaudeAuthSucceeded() {
+    claudeProviderRejected = false
     claudeAuthSucceededInCurrentProcess = true
     isClaudeConnected = true
   }
 
+  /// A provider rejection observed in this process wins over a cached token and an
+  /// earlier OAuth success; only a later verified sign-in clears it.
   nonisolated static func claudeConnectionStatus(
     configToken: String?,
-    explicitAuthSucceeded: Bool
+    explicitAuthSucceeded: Bool,
+    providerRejected: Bool
   ) -> Bool {
-    explicitAuthSucceeded || (configToken?.isEmpty == false)
+    !providerRejected && (explicitAuthSucceeded || (configToken?.isEmpty == false))
   }
 
   nonisolated static func validatedClaudeOAuthURL(_ urlString: String?) -> URL? {
@@ -2394,19 +2444,21 @@ class ChatProvider: ObservableObject {
   func checkClaudeConnectionStatus() {
     // Check the legacy config file, but preserve a successful explicit OAuth
     // event when the current Claude flow stores credentials only in Keychain.
-    let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
-    var configToken: String?
-    if FileManager.default.fileExists(atPath: configPath),
-      let data = FileManager.default.contents(atPath: configPath),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let tokenCache = json["oauth:tokenCache"] as? String
-    {
-      configToken = tokenCache
-    }
+    // A rejection observed since then still wins over both.
     isClaudeConnected = Self.claudeConnectionStatus(
-      configToken: configToken,
-      explicitAuthSucceeded: claudeAuthSucceededInCurrentProcess
+      configToken: readLegacyClaudeConfigToken(),
+      explicitAuthSucceeded: claudeAuthSucceededInCurrentProcess,
+      providerRejected: claudeProviderRejected
     )
+  }
+
+  nonisolated static func legacyClaudeConfigToken() -> String? {
+    let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+    guard FileManager.default.fileExists(atPath: configPath),
+      let data = FileManager.default.contents(atPath: configPath),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+    return json["oauth:tokenCache"] as? String
   }
 
   /// Disconnect from Claude: clear OAuth token, switch back to free mode via serialized path

@@ -92,6 +92,7 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'SyncConversationPersistenceFenced',
         'SyncJobRunLeaseLost',
         'TranscriptionFailure',
+        'RefreshConversationUnavailable',
         'OtherException',
     }
 )

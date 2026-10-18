@@ -139,3 +139,13 @@ def test_non_contention_errors_are_not_replayed(sdk_assignment, monkeypatch, err
         persist(store)
     assert len(store.transactions) == len(reads) == 1
     assert store.commits == []
+
+
+def test_batch_opt_in_retries_without_enabling_legacy_assignment(sdk_assignment):
+    store, reads = sdk_assignment(read_errors=[Aborted('synthetic contention')])
+    result, created, _ = conversations_db.assign_sync_conversation(
+        'synthetic-unit', chunk('canonical', 1000), firestore_client=store, retry_contention=True
+    )
+    assert created and result['id'] == 'canonical'
+    assert len(store.transactions) == len(reads) == 2
+    assert len(store.commits) == 1

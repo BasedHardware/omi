@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+CacheMaintenance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+ReconcileRetry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/KnowledgeLedgerMirrorStagingSchema.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift

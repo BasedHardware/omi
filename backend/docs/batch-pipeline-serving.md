@@ -275,3 +275,263 @@ any held failures. Leave recovery on for that owner for future quarantines after
 verification. Roll back to off to stop new dispatches; accepted normal
 projection still drains. Failed/ambiguous intents require a separately reviewed
 operator decision, never a blind reset to prepared.
+
+### Dark empty-ASR disposition
+
+`BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=false` is the default on all roles.
+Enable on the GPU worker and the CPU recovery host together after releasing the
+same reviewed source. With the flag on, exhausted padded `empty_asr` and
+`no_owned_words` both use the existing per-unit recovery handoff. The worker's
+pyannote speech prediction and words outside a window core do not authorize
+silence. CPU recovery checks the canonical unit with strict local Silero VAD:
+
+- Affirmative no-speech emits the ordinary encrypted silence result. There is no
+  provider dispatch or paid allowance requirement. Ordinary ordered merge,
+  assignment receipts, all-sibling accounting and client publication still own
+  completion; no completion fields are fabricated.
+- Speech uses the existing legacy prerecorded client once, with client retries
+  disabled. Failed/empty/invalid output remains held. The existing intent token,
+  privacy checks, run owner and ambiguous-call fence remain authoritative.
+- Decode/VAD failures remain failures. Nonfinite/out-of-range model probabilities
+  are rejected. No empty ASR or out-of-core word clocks alone become silence.
+
+Recovery failures persist `recovery.failure={stage,reason}`. Stages are
+`audio_validation|strict_vad|provider|response_validation|payload_validation`;
+reasons are closed codes defined in `recovery_disposition.py`. The content-free
+`event=batch_recovery_failure` carries those two codes only. Original exception
+bodies, words, identifiers, artifact references and tokens are never emitted.
+A running intent abandoned after 900 seconds records `provider/abandoned_running`.
+
+For historical `failed_held`, use
+`scripts/batch_pipeline_held_disposition.py --stage prod --owner-env DAVID_UID
+--quarantined-before <UTC-cutoff> --expect-count <count>` in an existing secure
+runtime with `ENCRYPTION_SECRET` and `BUCKET_BATCH_PIPELINE`. Dry-run requires the
+`ro-prod` tier and uses read-only transactions/GCS reads; audio is decrypted and
+evaluated only in memory. It prints aggregate silent/speech counts, fraction and
+a digest binding owner, cohort, immutable audio generation/run/privacy metadata
+and classification. No secret retrieval, STT call, user API call or temporary
+media file is involved. Missing secure material fails before cloud data reads.
+
+Apply requires `prod-operator`, the flag on, the same recovery owner allowlist,
+`--approve-plan-sha256 <reviewed-digest> --apply`. The default fixed prefix is one
+silent unit; repeated commands target the same prefix. `--apply-limit <count>`
+expands that prefix only after explicit approval. All units are checked again
+before apply, and each silent unit is reclassified immediately before its CAS.
+The operator creates a separate no-provider `silence_disposition` intent; it
+never resets or modifies the original spent paid-STT intent. Its create-only
+artifact token reconciles lost upload replies. A token/privacy/run-fenced CAS
+restores `result_ready/merge_pending` with a silence result; the existing serving
+sweep then drains it. Speech units stay held: their permitted fallback has
+already been spent, so replaying paid STT would violate the no-double-call rule.
+
+Rollback disables new dispositions on both hosts. Already persisted silence
+artifacts retain their silence outcome during reconciliation even after flag
+rollback. Keep ordinary serving/merge/projection draining; never clear paid
+intents, claims or receipts. Stop an operator command to stop further units;
+already committed completion is not reversed.
+
+### Independent multilingual recovery for speech-empty units (dark)
+
+`BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED=false` keeps the existing
+recovery route. With it enabled on the CPU recovery host, a strict-VAD-positive
+unit uses the existing Modulate prerecorded client directly, once, with
+`attempts=2` (no recursive client retries). It does not return to the failed
+Parakeet model when the intake language is unset. Silence still requires the
+strict local VAD evidence introduced by `EMPTY_ASR_DISPOSITION`; an empty
+alternate response remains `failed_held`. The existing recovery paid-intent,
+privacy, allowance, result, merge and projection fences remain authoritative.
+This change needs a backend/integration image release; no GPU model or decoder
+change is required. Keep the new flag off until an owner-scoped canary succeeds.
+
+`backend/scripts/batch_pipeline_speech_redrive.py` is the historical operator.
+It requires one owner, a UTC cutoff, the **full original strict-VAD census
+SHA256**, exact total/speech counts and explicit `--paid-epoch 2`. It caps the
+approved set at 67 speech-positive units and scans at most 1000 owner jobs. The
+new plan digest binds the original census (including immutable audio/run/privacy
+bindings), alternate provider, operation and paid epoch. Dry-run uses only
+read-only Firestore transactions and encrypted audio reads, with at most four
+concurrent read operations. It never calls STT or registers/writes artifacts.
+
+Apply also requires `--approve-plan-sha256`, the new flag and the existing
+recovery owner gate. Its default `--apply-limit 1` always selects the same sorted
+speech prefix. A separate `speech_redrive` intent preserves the original
+`recovery` map verbatim, records paid epoch 2, and uses CAS to spend the one new
+provider call. Prepared intents can resume; running intents only reconcile their
+create-only encrypted result. An uncertain/lost provider response stays held;
+after 900 seconds it becomes terminal without another call. A lost storage reply
+can reconcile the deterministic artifact. Increasing the limit to 67 includes
+already-attempted canary receipts rather than selecting 67 additional units.
+Successful results use the ordinary merge/projection/client completion path.
+The silence operator refuses a job that already has a speech-redrive intent.
+
+Supply secrets using the existing secure runtime injection; scripts never fetch
+or print keys. Tier names do not grant permissions: the current `ro-prod` cannot
+read the batch bucket, and `prod-operator` cannot write Firestore. The lead's
+existing human-tier secure runner can supply both the encryption secret and,
+for apply only, the configured Modulate key. The operator accepts that tier and
+still enforces all owner/digest/privacy/CAS fences. Do not substitute a user's
+public API token or call `api.omi.me`.
+
+Rollback disables `BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED` and stops the
+operator. Do not erase or reset either paid epoch, content claims or result
+receipts. Disabling the flag prevents new dispatches; an already-running provider
+may finish. Completed transcripts are real historical writes and are not undone
+by a flag rollback; correct them only through the normal reviewed content path.
+
+### Terminal empty recognition (dark)
+
+`BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED=false` is the CPU recovery
+kill switch. Deploy the worker from the same change first: its exhausted
+`RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
+lease CAS only when the GPU padded retry actually ran and returned empty; units
+whose padded length exceeds `min(120, max_padded_seconds)` (>116s) skip that
+retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. Recovery
+pins/persists its provider before dispatch. With the flag on, positive strict
+local VAD, affirmative GPU padded-empty evidence, and a validated empty
+**multilingual** response produce `no_recoverable_speech`. Oversized units that
+skipped the GPU padded retry still run strict VAD and multilingual recovery, but
+an empty multilingual response stays `failed_held` rather than terminal-empty.
+Timeouts, malformed responses, uncertain calls, missing evidence, and provider
+failures stay held. There are no additional calls after exhaustion and no
+paid-intent resets.
+
+This is an empty-words **terminal degradation**, distinct from silence. The
+encrypted result retains validated positive VAD and closed recognition evidence.
+Projection validates that artifact, assigns no words for the span, and resumes
+normal ordered merge, sibling publication, ledger/client completion and retention.
+This span contributes **zero transcription usage**, while the existing captured
+seconds correctness counter records `event=no_recoverable_speech`. The structured
+log is `event=batch_terminal_empty stage=response_validation
+reason=no_recoverable_speech`; shared fallback telemetry reports `degraded`.
+Completed upload responses retain the compatible `success` outcome and add
+`no_recoverable_speech_segments`; an empty exhausted upload is never reported as
+`expected_silence`. Existing completed results remain readable after flag rollback.
+
+Historical tool: `backend/scripts/batch_pipeline_terminal_empty.py`. It is
+one-owner, cutoff/count-bounded (at most 20), read-only by default, and digest-bound.
+Use `--metadata-only` with `ro-prod` for fence/eligibility counts without audio or
+secrets. Full dry-run needs securely injected `DAVID_UID`, `ENCRYPTION_SECRET` and
+`BUCKET_BATCH_PIPELINE` plus batch-bucket read permission. `ro-prod` cannot read
+that bucket; `prod-operator` currently cannot write Firestore. The lead's existing
+authorized secure runner is required for full census/apply; never print runtime
+material or use a user API. No secret fetching is embedded in the tool.
+
+For old rows lacking provenance, `--attest-pre-provenance-exhaustion` explicitly
+attests the reviewed padded-empty evidence and the multilingual-empty provenance
+of legacy `response_validation/empty_asr` intents. This declaration, all original
+paid intents, VAD decisions, owner, cutoff and any canary epoch are digest-bound.
+It never treats generic failure as empty. The old GPU canary's **spent** epoch 1
+remains intact: strict no-speech creates silence without STT. Positive VAD selects
+`canary_recovery`, requiring explicit `--canary-paid-epoch 2` in both the dry-run
+and approved apply. That is at most **one** independent Modulate call, with normal
+provider/cap/privacy/CAS fences. Words publish normally; a definite empty response
+becomes terminal-empty; an uncertain call stays held. This is separate from the
+previous authorization for 67 other units. Do not enable a canary paid epoch
+without the owner's authorization.
+
+```sh
+# Existing secure runtime injection; no credentials or owner printed.
+nice -n 19 backend/.venv/bin/python backend/scripts/batch_pipeline_terminal_empty.py \
+  --stage prod --quarantined-before 2026-10-17T10:30:00Z --expect-count 6 \
+  --attest-pre-provenance-exhaustion
+# If the canary is VAD-positive and epoch 2 is authorized, repeat the dry-run with
+# --canary-paid-epoch 2. It changes the approval digest.
+# Then repeat the SAME arguments plus --apply --approve-plan-sha256 "$PLAN" \
+# --apply-limit 1; validate the canary, then increase the fixed prefix to 6.
+```
+
+Keep intake paused during this repair. Enable only the new terminal flag on
+integration after deploying CPU and worker artifacts, retaining strict disposition,
+multilingual recovery, serving/recovery and the existing owner fence. Do not
+replace environment files or reset intake defaults. Rollback disables the new
+flag and stops operator invocation; committed projections are not undone and
+spent intents never become retryable. Inspect completion and terminal-empty
+captured-duration rates before any ramp: terminal completion does not prove ASR
+quality or make the unresolved duration disappear from correctness metrics.
+
+
+## Dark projection tail controls
+
+`BATCH_PIPELINE_HEAD_PRIORITY_ENABLED=false` and
+`BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED=false` are independent accepted-work
+controls, declared on the backend services and listen Helm values. They do not
+admit new work or change recovery spend policy. Enable only on the qualified
+5% cohort's serving/worker RPC host after release approval; neither is enabled
+by this change. Rollback each to false; ordinary queue links and existing
+persisted/ready receipts remain compatible with the synchronous path.
+
+Head priority splices the owner's earliest `merge_pending` job to the front of
+its existing priority queue when it is ready and found within a shared budget
+of 64 head-query/link reads per shard transaction. Duration, eligible unit kind
+and privacy must pass before any link changes; a head this pool cannot lease
+leaves FIFO intact. The selected job still pays its actual DRR cost, passes privacy checks, and respects
+fresh reservations, duration and shared-GPU capacity. It never steals a live
+lease, changes priority class, invents silence, or resolves an uncertain paid
+intent. Outside the bounded search it retains FIFO. Quarantine already removes
+`merge_pending`, so a held quarantine unit is not an ordered-merge blocker;
+settled recovery re-enters the pending set. A slow leased head must finish or
+follow the existing fenced lease/recovery protocol.
+
+Async projection keeps capture-ordered commit and the transactional predecessor
+check unchanged. Only assignment (including all multipart receipts) holds the
+owner claim. Its atomic persist advances the projection watermark; a later
+unit can become visible only after every committed predecessor has persisted
+(or its privacy erasure receipt permits progress). Captures admitted after a
+later commit retain the existing explicit `late_capture` behavior. No disjoint
+segment independence or change to transcript visibility order is assumed.
+
+The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
+use the same async coordinator. Their pass persists the bounded pending page,
+then schedules at most four tracked follow-ups per process without awaiting
+slow effects. A finished task immediately refills its slot from the bounded
+page, without an additional 20-second serving sleep. Each follow-up coordinator
+has a 120-second deadline, plus at most two seconds for advisory-claim cleanup.
+Timeout cancels its remaining steps and frees the slot without closing the drain;
+the unchanged persisted/ready receipt is retried on a later sweep. Already-running
+executor calls cannot be forcibly stopped by asyncio cancellation and may finish
+late; receipt/enrichment and ledger transactions retain their replay fences.
+Shutdown cancellation stops refill. Persisted result receipts are the durable outbox. Partial
+assignment rows do not consume follow-up slots; a rotating cursor prevents
+repeated failures at the front of the page from monopolizing those slots.
+A separate advisory segment claim coalesces replicas; it never owns the
+assignment watermark. Each bridge, playback and enrichment step is offloaded
+separately. After playback a second bridge check copies any late donor audio
+if a concurrent assignment redirected the target. Native records retain their
+fixed target behavior. Privacy checks and the original retained-audio policy
+remain in effect. Enrichment and the ready receipt still commit together;
+usage/client/content completion still requires every sibling ready and commits
+atomically in the content ledger. Completion is retryable after a lost reply,
+process restart, or rollback, without retranscription.
+
+Qualification target: quarantine to **completed content ledger** p95 <=300s
+for all units in the fixed fleet 5% admission cohort, including pending ages.
+This removes queue inversion and owner-wide external-work serialization; it
+is not a numerical production latency guarantee. A live head can renew its
+lease, external effects can exceed the budget, a crashed advisory claim can
+last 300s, and the existing 100-row sweep page can be saturated. Do not add
+stage p95s or exclude held units. Measure the full cohort for at least one hour
+with phase timings before claiming the target or increasing admission.
+
+### Projection discovery progress
+
+`BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED` defaults to `true` (kill switch:
+`false` restores oldest-100 discovery). Assignment and async follow-ups each
+advance their own bounded 100-row keyset scan across pending, persisted and
+ready results. The cursor uses `(committed_at, document ID)`, so equal timestamps
+and deletion of the cursor row cannot pin a page. End-of-scan wraps to the head;
+restart begins at the head without dropping any durable obligations. Follow-ups
+launch the whole bounded page before fetching the next one. Discovery order is
+only a hint: existing transactional predecessor, privacy, all-sibling readiness,
+receipt replay and paid-intent fences remain authoritative.
+
+The query reuses the declared prod/dev results composite index:
+`projection_state ASC, committed_at ASC, __name__ ASC` in
+`database/sync_pipeline_indexes.py` and the generated `firestore.indexes.json`.
+No new index or production index mutation is needed.
+
+With accepted-work serving enabled, committed pending/persisted/ready debt is
+rediscovered automatically after deployment; no one-time kick is needed for the
+page deadlock. `quarantine_held` obligations still require their ordinary fenced
+recovery to succeed; pagination neither retries uncertain paid intents nor
+resolves genuine held quarantines. Monitor falling pending age/count and durable
+content/client completion on the deployed release before expanding admission.
