@@ -47,9 +47,11 @@ def cohort_enabled(uid, channel=None):
     if channel is None:
         return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
     policy = channel_policy(channel)
+    cohort = policy['cohort']
     return policy['enabled'] and (
-        policy['cohort'] == '*'
-        or in_rollout_cohort(uid, 'messaging-' + channel, legacy_members=tuple(policy['cohort']))
+        cohort == '*'
+        or isinstance(cohort, list)
+        and in_rollout_cohort(uid, 'messaging-' + channel, legacy_members=tuple(cohort))
     )
 
 
