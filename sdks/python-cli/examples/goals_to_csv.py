@@ -84,7 +84,10 @@ def _metric(item: Dict[str, Any], key: str) -> Any:
     metric = item.get("metric")
     if isinstance(metric, dict) and metric.get(key) is not None:
         return metric.get(key)
-    return item.get(f"{key}_value" if key in ("current", "target") else key)
+    flat = item.get(f"{key}_value" if key in ("current", "target") else key)
+    if flat is not None:
+        return flat
+    return item.get("goal_type") if key == "type" else None
 
 
 def progress_pct(item: Dict[str, Any]) -> str:
