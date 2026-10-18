@@ -9,6 +9,8 @@ import pytest
 
 from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
+from utils.batch_pipeline import projection
+from utils.sync import bridge
 
 
 @pytest.fixture
@@ -324,8 +326,6 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
 
 @pytest.mark.parametrize('enabled', [False, True])
 def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(binding, monkeypatch, caplog, enabled):
-    from utils.batch_pipeline import projection
-    from utils.sync import bridge
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', str(enabled).lower())
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: 'synthetic-conversation')
