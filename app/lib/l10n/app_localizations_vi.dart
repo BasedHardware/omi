@@ -13516,7 +13516,46 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityRetryAll => 'Thử lại tất cả';
 
   @override
+  String get activityAttentionStorageTitle => 'Bộ nhớ đầy — bản ghi đã tạm dừng';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Giải phóng dung lượng hoặc điều chỉnh tự động đồng bộ';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration âm thanh đã lưu trên điện thoại này';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Các bản ghi đang an toàn và sẽ được tải lên khi có thể';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'đã tạm dừng $count bản ghi',
+      one: 'đã tạm dừng 1 bản ghi',
+    );
+    return 'Bộ nhớ đầy — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi đang chờ',
+      one: '1 bản ghi đang chờ',
+    );
+    return 'Tải lên bị đình trệ — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
+
+  @override
+  String get activityAttentionSemantics => 'Hoạt động, cần chú ý';
 
   @override
   String get connectAgentHeadline => 'Dùng bộ nhớ Omi của bạn trong ChatGPT và các tác tử AI';

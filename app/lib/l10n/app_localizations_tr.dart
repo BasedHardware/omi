@@ -13531,7 +13531,46 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityRetryAll => 'Tümünü yeniden dene';
 
   @override
+  String get activityAttentionStorageTitle => 'Depolama alanı dolu — kayıtlar duraklatıldı';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Yer açın veya otomatik eşitlemeyi ayarlayın';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return 'Bu telefona kaydedilmiş $duration ses';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Kayıtlar güvende ve olduğunda yüklenecek';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt duraklatıldı',
+      one: '1 kayıt duraklatıldı',
+    );
+    return 'Depolama alanı dolu — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt bekliyor',
+      one: '1 kayıt bekliyor',
+    );
+    return 'Yükleme durdu — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
+
+  @override
+  String get activityAttentionSemantics => 'Etkinlik, ilgilenilmesi gerekiyor';
 
   @override
   String get connectAgentHeadline => 'Omi hafızanı ChatGPT\'de ve yapay zeka ajanlarında kullan';

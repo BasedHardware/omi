@@ -13570,7 +13570,46 @@ class AppLocalizationsTe extends AppLocalizations {
   String get activityRetryAll => 'అన్నింటినీ మళ్లీ ప్రయత్నించండి';
 
   @override
+  String get activityAttentionStorageTitle => 'నిల్వ నిండింది — రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'స్థలాన్ని ఖాళీ చేయండి లేదా ఆటో-సింక్ సర్దుబాటు చేయండి';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return 'ఈ ఫోన్‌లో $duration ఆడియో సేవ్ చేయబడింది';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'రికార్డింగ్‌లు సురక్షితంగా ఉన్నాయి, వీలైనప్పుడు అప్‌లోడ్ అవుతాయి';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి',
+      one: '1 రికార్డింగ్ పాజ్ చేయబడింది',
+    );
+    return 'నిల్వ నిండింది — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు వేచి ఉన్నాయి',
+      one: '1 రికార్డింగ్ వేచి ఉంది',
+    );
+    return 'అప్‌లోడ్ ఆగిపోయింది — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
+
+  @override
+  String get activityAttentionSemantics => 'యాక్టివిటీ, శ్రద్ధ అవసరం';
 
   @override
   String get connectAgentHeadline => 'ChatGPT మరియు మీ AI ఏజెంట్లలో మీ Omi మెమరీని ఉపయోగించండి';

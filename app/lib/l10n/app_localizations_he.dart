@@ -13425,7 +13425,46 @@ class AppLocalizationsHe extends AppLocalizations {
   String get activityRetryAll => 'נסה הכול שוב';
 
   @override
+  String get activityAttentionStorageTitle => 'האחסון מלא — ההקלטות מושהות';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'פנו מקום או שנו את הסנכרון האוטומטי';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration של אודיו נשמרו בטלפון הזה';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'ההקלטות בטוחות ויועלו ברגע שיהיה אפשרי';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות מושהות',
+      one: 'הקלטה אחת מושהית',
+    );
+    return 'האחסון מלא — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות ממתינות',
+      one: 'הקלטה אחת ממתינה',
+    );
+    return 'ההעלאה נתקעה — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
+
+  @override
+  String get activityAttentionSemantics => 'פעילות, דורש תשומת לב';
 
   @override
   String get connectAgentHeadline => 'השתמשו בזיכרון של Omi ב-ChatGPT ובסוכני ה-AI שלכם';

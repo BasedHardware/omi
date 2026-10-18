@@ -16,6 +16,7 @@ import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/pages/review/review_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
@@ -40,6 +41,7 @@ class ActivityPage extends StatefulWidget {
     this.seen,
     this.probeDreamReport,
     this.pendingWork,
+    this.captureWedgeMonitor,
   });
 
   final RecentRecapsLoader? loadRecaps;
@@ -49,6 +51,9 @@ class ActivityPage extends StatefulWidget {
 
   /// Injectable for tests; defaults to [PendingWorkStore.instance].
   final PendingWorkStore? pendingWork;
+
+  /// Injectable for tests and visual audits; defaults to [CaptureWedgeMonitor.instance].
+  final CaptureWedgeMonitor? captureWedgeMonitor;
 
   @override
   State<ActivityPage> createState() => _ActivityPageState();
@@ -72,6 +77,7 @@ class _ChangeItem extends _ActivityItem {
 class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver {
   late final ActivitySeen _seen = widget.seen ?? ActivitySeen.instance;
   late final PendingWorkStore _pendingWork = widget.pendingWork ?? PendingWorkStore.instance;
+  late final CaptureWedgeMonitor _captureMonitor = widget.captureWedgeMonitor ?? CaptureWedgeMonitor.instance;
 
   /// The last visit before this one: items newer than it get a dot.
   late final int _previousVisitMs;
@@ -140,6 +146,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     if (!mounted || generation != _generation) return;
     // The section is on screen now: its items stop lighting the bell here and on the Mac.
     unawaited(_pendingWork.markSeen());
+    _captureMonitor.markCaptureAttentionSeen();
     final loaded = results[0] as ({List<DailySummary> items, bool ok});
     // A refresh that started before a deletion may still return the deleted recap.
     final recaps = (items: loaded.items.where((r) => !_deletedIds.contains(r.id)).toList(), ok: loaded.ok);
@@ -212,8 +219,9 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final attention = NeedsAttentionSection(store: _pendingWork);
-    final hasAttention = NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>());
+    final attention = NeedsAttentionSection(store: _pendingWork, captureMonitor: _captureMonitor);
+    final hasAttention =
+        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor);
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();

@@ -9,17 +9,20 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -397,6 +400,33 @@ void _seedVisibleWedgeEpisode() {
   });
 }
 
+/// A quiet monitor owning both slow-burn capture problems, so Activity's Needs attention rows
+/// render: a phone disk refusing new recordings, and an upload stalled for hours. Passed into the
+/// page directly; the app's instance is untouched.
+CaptureWedgeMonitor _seededCaptureAttention() {
+  final monitor = CaptureWedgeMonitor(
+    featureGate: () async => true,
+    track: (_, __) {},
+    bleRetry: (_) async {},
+    transferRetry: () async {},
+    appBuild: () => 'audit',
+    platform: () => 'audit',
+  );
+  final now = DateTime.now();
+  monitor.observeStorageAtRisk(
+    engagedAt: now.subtract(const Duration(minutes: 95)),
+    blockedCount: 3,
+    retainedCount: 720,
+    reason: 'disk_reserve',
+  );
+  monitor.observeWalBacklog(
+    pendingCount: 5,
+    oldestPendingAt: now.subtract(const Duration(hours: 3, minutes: 10)),
+    pendingSeconds: 47 * 60,
+  );
+  return monitor;
+}
+
 const _home = 'lib/pages/home/page.dart (Home: live card, record button, device chip)';
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
 
@@ -497,14 +527,41 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runLivePage(a, AuditLive.phonePaused),
   ),
   AuditScenario(
-    id: 'home-capture-recovery-banner',
-    title: 'Home, pendant live, recovery banner',
-    page: _home,
-    state: 'The pendant streams, but the BLE link stalled: the banner retries in place '
-        '(never opens settings), explains itself on demand, and can be dismissed',
+    id: 'conversation-live-recovery-banner',
+    title: 'Live page, pendant, recovery banner',
+    page: _live,
+    state: 'The pendant streams, but the BLE link stalled: the one banner retries in place '
+        '(never opens settings), explains itself on demand, and can be dismissed. Home carries '
+        'no banner — slow-burn problems live in the Activity bell',
     run: (a) {
       _seedVisibleWedgeEpisode();
-      return _runHome(a, AuditLive.pendant, pendantConnected: true);
+      return _runLivePage(a, AuditLive.pendant);
+    },
+  ),
+  AuditScenario(
+    id: 'activity-capture-attention',
+    title: 'Activity: capture problems under Needs attention',
+    page: 'lib/pages/activity/activity_page.dart (ActivityPage)',
+    state: 'Phone storage full with three recordings blocked, and an upload stalled three hours '
+        'with five recordings (47 minutes of audio) waiting; no recaps, changes, or server attention',
+    run: (a) async {
+      final monitor = _seededCaptureAttention();
+      addTearDown(monitor.dispose);
+      var stored = DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v);
+      await a.pump(
+        ActivityPage(
+          seen: seen,
+          captureWedgeMonitor: monitor,
+          probeDreamReport: () async => false,
+          loadRecaps: _noRecaps,
+          loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+        ),
+        scaffold: false,
+      );
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
+      await a.shot('Open the bell: capture problems sit under Needs attention');
     },
   ),
   AuditScenario(

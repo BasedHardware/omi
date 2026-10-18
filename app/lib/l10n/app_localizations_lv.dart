@@ -13547,7 +13547,46 @@ class AppLocalizationsLv extends AppLocalizations {
   String get activityRetryAll => 'Mēģināt visu vēlreiz';
 
   @override
+  String get activityAttentionStorageTitle => 'Atmiņa pilna — ieraksti apturēti';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Atbrīvojiet vietu vai pielāgojiet automātisko sinhronizāciju';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration audio saglabāts šajā tālrunī';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Ieraksti ir drošībā un tiks augšupielādēti, tiklīdz tas būs iespējams';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'apturēti $count ieraksti',
+      one: 'apturēts 1 ieraksts',
+    );
+    return 'Atmiņa pilna — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'gaida $count ieraksti',
+      one: 'gaida 1 ieraksts',
+    );
+    return 'Augšupielāde apstājusies — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitāte, pieprasa uzmanību';
 
   @override
   String get connectAgentHeadline => 'Izmantojiet savu Omi atmiņu ChatGPT un savos MI aģentos';

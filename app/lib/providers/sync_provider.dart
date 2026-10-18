@@ -625,7 +625,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       final oldestSeconds = pendingLocal.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b);
       oldestPendingAt = DateTime.fromMillisecondsSinceEpoch(oldestSeconds * 1000);
     }
-    _captureWedgeMonitor.observeWalBacklog(pendingCount: pendingLocal.length, oldestPendingAt: oldestPendingAt);
+    final pendingSeconds = pendingLocal.fold<int>(0, (sum, wal) => sum + (wal.seconds > 0 ? wal.seconds : 0));
+    _captureWedgeMonitor.observeWalBacklog(
+      pendingCount: pendingLocal.length,
+      oldestPendingAt: oldestPendingAt,
+      pendingSeconds: pendingSeconds,
+    );
     try {
       final risk = _walService.getSyncs().phone.retentionRisk as WalRetentionRisk?;
       if (risk != null) {

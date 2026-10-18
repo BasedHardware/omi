@@ -13570,7 +13570,48 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityRetryAll => 'Összes újrapróbálása';
 
   @override
+  String get activityAttentionStorageTitle => 'A tárhely megtelt — a felvételek szünetelnek';
+
+  @override
+  String get activityAttentionStorageSubtitle =>
+      'Szabadítson fel helyet, vagy módosítsa az automatikus szinkronizálást';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration hang mentve ezen a telefonon';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting =>
+      'A felvételek biztonságban vannak, és feltöltésre kerülnek, amint lehetséges';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel szünetel',
+      one: '1 felvétel szünetel',
+    );
+    return 'A tárhely megtelt — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel várakozik',
+      one: '1 felvétel várakozik',
+    );
+    return 'A feltöltés elakadt — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';
+
+  @override
+  String get activityAttentionSemantics => 'Tevékenység, figyelmet igényel';
 
   @override
   String get connectAgentHeadline => 'Használd az Omi-memóriádat a ChatGPT-ben és az AI-ügynökeidben';

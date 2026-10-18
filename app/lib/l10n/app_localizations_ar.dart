@@ -13445,7 +13445,46 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityRetryAll => 'إعادة محاولة الكل';
 
   @override
+  String get activityAttentionStorageTitle => 'مساحة التخزين ممتلئة — تم إيقاف التسجيلات مؤقتًا';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'حرّر مساحة أو عدّل المزامنة التلقائية';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration من الصوت محفوظة على هذا الهاتف';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'التسجيلات آمنة وسيتم رفعها عندما يصبح ذلك ممكنًا';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم إيقاف $count تسجيلًا مؤقتًا',
+      one: 'تم إيقاف تسجيل واحد مؤقتًا',
+    );
+    return 'مساحة التخزين ممتلئة — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلًا في الانتظار',
+      one: 'تسجيل واحد في الانتظار',
+    );
+    return 'توقف الرفع — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';
+
+  @override
+  String get activityAttentionSemantics => 'النشاط، يتطلب انتباهًا';
 
   @override
   String get connectAgentHeadline => 'استخدم ذاكرة Omi في ChatGPT ووكلاء الذكاء الاصطناعي لديك';

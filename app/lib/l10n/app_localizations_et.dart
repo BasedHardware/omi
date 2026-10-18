@@ -13512,7 +13512,46 @@ class AppLocalizationsEt extends AppLocalizations {
   String get activityRetryAll => 'Proovi kõiki uuesti';
 
   @override
+  String get activityAttentionStorageTitle => 'Salvestusruum on täis — salvestised peatatud';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Vabastage ruumi või kohandage automaatset sünkroonimist';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration heli on sellesse telefoni salvestatud';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Salvestised on turvalised ja laaditakse üles niipea kui võimalik';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'peatatud on $count salvestist',
+      one: 'peatatud on 1 salvestis',
+    );
+    return 'Salvestusruum on täis — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ootab $count salvestist',
+      one: 'ootab 1 salvestis',
+    );
+    return 'Üleslaadimine on seiskunud — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
+
+  @override
+  String get activityAttentionSemantics => 'Tegevus, vajab tähelepanu';
 
   @override
   String get connectAgentHeadline => 'Kasuta oma Omi mälu ChatGPT-s ja oma tehisintellekti agentides';

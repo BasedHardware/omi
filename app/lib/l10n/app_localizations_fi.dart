@@ -13523,7 +13523,46 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityRetryAll => 'Yritä kaikkia uudelleen';
 
   @override
+  String get activityAttentionStorageTitle => 'Tallennustila täynnä — tallenteet keskeytetty';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Vapauta tilaa tai muuta automaattista synkronointia';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration ääntä tallennettu tähän puhelimeen';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Tallenteet ovat turvassa ja ladataan, kun se on mahdollista';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta keskeytetty',
+      one: '1 tallenne keskeytetty',
+    );
+    return 'Tallennustila täynnä — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta odottaa',
+      one: '1 tallenne odottaa',
+    );
+    return 'Lataus on pysähtynyt — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
+
+  @override
+  String get activityAttentionSemantics => 'Aktiviteetti, vaatii huomiota';
 
   @override
   String get connectAgentHeadline => 'Käytä Omi-muistiasi ChatGPT:ssä ja tekoälyagenteissasi';

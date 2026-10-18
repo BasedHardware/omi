@@ -13554,7 +13554,46 @@ class AppLocalizationsNl extends AppLocalizations {
   String get activityRetryAll => 'Alles opnieuw proberen';
 
   @override
+  String get activityAttentionStorageTitle => 'Opslag vol — opnames gepauzeerd';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Maak ruimte vrij of pas autosync aan';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration audio opgeslagen op deze telefoon';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Opnames zijn veilig en worden geüpload zodra dat kan';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnames gepauzeerd',
+      one: '1 opname gepauzeerd',
+    );
+    return 'Opslag vol — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnames wachten',
+      one: '1 opname wacht',
+    );
+    return 'Upload vastgelopen — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
+
+  @override
+  String get activityAttentionSemantics => 'Activiteit, aandacht nodig';
 
   @override
   String get connectAgentHeadline => 'Gebruik je Omi-geheugen in ChatGPT en je AI-agents';

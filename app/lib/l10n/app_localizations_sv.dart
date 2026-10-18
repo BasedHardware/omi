@@ -13523,7 +13523,46 @@ class AppLocalizationsSv extends AppLocalizations {
   String get activityRetryAll => 'Försök igen med alla';
 
   @override
+  String get activityAttentionStorageTitle => 'Lagringen är full — inspelningar pausade';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Frigör utrymme eller justera autosynkronisering';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration ljud sparat på den här telefonen';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Inspelningarna är säkra och laddas upp när det är möjligt';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar pausade',
+      one: '1 inspelning pausad',
+    );
+    return 'Lagringen är full — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar väntar',
+      one: '1 inspelning väntar',
+    );
+    return 'Uppladdningen har stannat — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitet, kräver uppmärksamhet';
 
   @override
   String get connectAgentHeadline => 'Använd ditt Omi-minne i ChatGPT och dina AI-agenter';

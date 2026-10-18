@@ -13610,7 +13610,46 @@ class AppLocalizationsTa extends AppLocalizations {
   String get activityRetryAll => 'அனைத்தையும் மீண்டும் முயலவும்';
 
   @override
+  String get activityAttentionStorageTitle => 'சேமிப்பு நிரம்பியது — பதிவுகள் இடைநிறுத்தப்பட்டன';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'இடத்தை காலியாக்கவும் அல்லது ஆட்டோ-சிங்கை மாற்றவும்';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return 'இந்த ஃபோனில் $duration ஆடியோ சேமிக்கப்பட்டது';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'பதிவுகள் பாதுகாப்பாக உள்ளன, சாத்தியமானதும் பதிவேற்றப்படும்';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள் இடைநிறுத்தப்பட்டன',
+      one: '1 பதிவு இடைநிறுத்தப்பட்டது',
+    );
+    return 'சேமிப்பு நிரம்பியது — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள் காத்திருக்கின்றன',
+      one: '1 பதிவு காத்திருக்கிறது',
+    );
+    return 'பதிவேற்றம் நின்றுவிட்டது — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
+
+  @override
+  String get activityAttentionSemantics => 'ஆக்டிவிட்டி, கவனம் தேவை';
 
   @override
   String get connectAgentHeadline => 'ChatGPT மற்றும் உங்கள் AI ஏஜென்ட்களில் உங்கள் Omi நினைவகத்தைப் பயன்படுத்துங்கள்';

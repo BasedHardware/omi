@@ -13528,7 +13528,46 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityRetryAll => 'Coba lagi semua';
 
   @override
+  String get activityAttentionStorageTitle => 'Penyimpanan penuh — rekaman dijeda';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Kosongkan ruang atau sesuaikan sinkronisasi otomatis';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration audio tersimpan di telepon ini';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Rekaman aman dan akan diunggah saat memungkinkan';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman dijeda',
+      one: '1 rekaman dijeda',
+    );
+    return 'Penyimpanan penuh — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman menunggu',
+      one: '1 rekaman menunggu',
+    );
+    return 'Unggahan terhenti — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Percakapan ini tidak dapat diringkas';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitas, perlu perhatian';
 
   @override
   String get connectAgentHeadline => 'Gunakan memori Omi Anda di ChatGPT dan agen AI Anda';

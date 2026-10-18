@@ -7,6 +7,7 @@ import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.d
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -14,20 +15,33 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// Work that could not finish, at the top of Activity: conversations the server gave up summarizing
 /// (with Try Again) and recordings that could not be processed (opening Offline Sync, which owns
 /// their retry). Home never shows these; the bell's warning dot points here.
+///
+/// Slow-burn capture problems live here too, read from the capture wedge monitor: a full phone
+/// disk pausing recordings, and an upload stalled long enough to need attention. Both open
+/// Offline Sync, which owns storage management and retry.
 class NeedsAttentionSection extends StatelessWidget {
-  const NeedsAttentionSection({super.key, required this.store, this.syncProvider, this.openConversation});
+  const NeedsAttentionSection({
+    super.key,
+    required this.store,
+    this.syncProvider,
+    this.captureMonitor,
+    this.openConversation,
+  });
 
   final PendingWorkStore store;
 
   /// Injectable for tests; defaults to the app provider when one is in scope.
   final SyncProvider? syncProvider;
 
+  /// Injectable for tests; defaults to [CaptureWedgeMonitor.instance].
+  final CaptureWedgeMonitor? captureMonitor;
+
   /// Injectable for tests; defaults to opening the conversation detail page.
   final Future<void> Function(BuildContext context, String conversationId)? openConversation;
 
   /// Whether the section draws anything for this state.
-  static bool hasContent(PendingWorkStore store, SyncProvider? sync) =>
-      store.attention.isNotEmpty || _recordingCount(sync) > 0;
+  static bool hasContent(PendingWorkStore store, SyncProvider? sync, [CaptureWedgeMonitor? monitor]) =>
+      store.attention.isNotEmpty || _recordingCount(sync) > 0 || monitor?.hasCaptureAttention == true;
 
   static int _recordingCount(SyncProvider? sync) =>
       sync == null ? 0 : groupRecordingBlocks(SyncPendingWork.attention(sync)).length;
@@ -35,13 +49,16 @@ class NeedsAttentionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sync = syncProvider ?? context.watch<SyncProvider?>();
+    final monitor = captureMonitor ?? CaptureWedgeMonitor.instance;
     return ListenableBuilder(
-      listenable: store,
+      listenable: Listenable.merge([store, monitor]),
       builder: (context, _) {
-        if (!hasContent(store, sync)) return const SizedBox.shrink();
+        if (!hasContent(store, sync, monitor)) return const SizedBox.shrink();
         final l = context.l10n;
         final dates = OmiDateFormat.of(context);
         final recordings = _recordingCount(sync);
+        final storage = monitor.storageAtRisk;
+        final upload = monitor.uploadStall;
         final retryable = store.attention.where((i) => i.retryable && i.retryState == AttentionRetryState.none);
         return Column(
           key: const Key('activity_needs_attention'),
@@ -104,6 +121,34 @@ class NeedsAttentionSection extends StatelessWidget {
                       busy: false,
                       onRetry: null,
                       onTap: () => openOfflineSyncDetails(context, sync!),
+                    ),
+                  ],
+                  if (storage != null) ...[
+                    if (store.attention.isNotEmpty || recordings > 0)
+                      Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
+                    _AttentionRow(
+                      key: const Key('activity_attention_storage'),
+                      title: storage.blockedCount > 0
+                          ? l.activityAttentionStorageBlocked(storage.blockedCount)
+                          : l.activityAttentionStorageTitle,
+                      subtitle: l.activityAttentionStorageSubtitle,
+                      busy: false,
+                      onRetry: null,
+                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
+                    ),
+                  ],
+                  if (upload != null) ...[
+                    if (store.attention.isNotEmpty || recordings > 0 || storage != null)
+                      Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
+                    _AttentionRow(
+                      key: const Key('activity_attention_upload_stalled'),
+                      title: l.activityAttentionUploadStalled(upload.pendingCount),
+                      subtitle: upload.pendingSeconds > 0
+                          ? l.activityAttentionUploadKept(OmiDuration.compact(upload.pendingSeconds, l))
+                          : l.activityAttentionUploadWaiting,
+                      busy: false,
+                      onRetry: null,
+                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
                     ),
                   ],
                 ],

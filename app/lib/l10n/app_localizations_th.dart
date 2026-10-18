@@ -13452,7 +13452,46 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityRetryAll => 'ลองใหม่ทั้งหมด';
 
   @override
+  String get activityAttentionStorageTitle => 'พื้นที่เก็บข้อมูลเต็ม — การบันทึกหยุดชั่วคราว';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'ล้างพื้นที่หรือปรับการซิงก์อัตโนมัติ';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return 'บันทึกเสียงไว้ $duration บนเครื่องนี้';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'การบันทึกปลอดภัยและจะอัปโหลดเมื่อทำได้';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'หยุดชั่วคราว $count รายการ',
+      one: 'หยุดชั่วคราว 1 รายการ',
+    );
+    return 'พื้นที่เก็บข้อมูลเต็ม — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count รายการกำลังรอ',
+      one: '1 รายการกำลังรอ',
+    );
+    return 'การอัปโหลดหยุดชะงัก — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ไม่สามารถสรุปบทสนทนานี้ได้';
+
+  @override
+  String get activityAttentionSemantics => 'กิจกรรม ต้องดำเนินการ';
 
   @override
   String get connectAgentHeadline => 'ใช้ความจำ Omi ของคุณใน ChatGPT และเอเจนต์ AI ของคุณ';

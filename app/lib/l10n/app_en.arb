@@ -16304,9 +16304,52 @@
     "@activityRetryAll": {
         "description": "Button in Activity's Needs attention section that retries every failed item once"
     },
+    "activityAttentionStorageTitle": "Storage full — recordings paused",
+    "@activityAttentionStorageTitle": {
+        "description": "Needs attention row: phone disk is full, so recordings cannot be written"
+    },
+    "activityAttentionStorageSubtitle": "Free space or adjust auto-sync",
+    "@activityAttentionStorageSubtitle": {
+        "description": "Needs attention row subtitle: how to fix a full phone disk"
+    },
+    "activityAttentionUploadKept": "{duration} of audio saved on this phone",
+    "@activityAttentionUploadKept": {
+        "description": "Needs attention row subtitle: kept-audio length behind a stalled upload",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "activityAttentionUploadWaiting": "Recordings are safe and will upload when possible",
+    "@activityAttentionUploadWaiting": {
+        "description": "Needs attention row subtitle for a stalled upload when the kept-audio length is unknown"
+    },
+    "activityAttentionStorageBlocked": "Storage full — {count, plural, =1{1 recording paused} other{{count} recordings paused}}",
+    "@activityAttentionStorageBlocked": {
+        "description": "Needs attention row: phone disk is full and blocked recordings are counted",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "activityAttentionUploadStalled": "Upload stalled — {count, plural, =1{1 recording waiting} other{{count} recordings waiting}}",
+    "@activityAttentionUploadStalled": {
+        "description": "Needs attention row: uploads made no progress long enough to need attention",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {
         "description": "Needs attention row: the server gave up summarizing a conversation"
+    },
+    "activityAttentionSemantics": "Activity, needs attention",
+    "@activityAttentionSemantics": {
+        "description": "Bell accessibility label when its warning dot is lit for attention items"
     },
     "connectAgentHeadline": "Use your Omi memory in ChatGPT and your AI agents",
     "@connectAgentHeadline": {

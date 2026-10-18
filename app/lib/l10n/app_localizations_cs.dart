@@ -13520,7 +13520,46 @@ class AppLocalizationsCs extends AppLocalizations {
   String get activityRetryAll => 'Zkusit vše znovu';
 
   @override
+  String get activityAttentionStorageTitle => 'Úložiště je plné — nahrávky pozastaveny';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Uvolněte místo nebo upravte automatickou synchronizaci';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration zvuku uloženého v tomto telefonu';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Nahrávky jsou v bezpečí a nahrají se, jakmile to bude možné';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pozastaveno $count nahrávek',
+      one: 'pozastavena 1 nahrávka',
+    );
+    return 'Úložiště je plné — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'čeká $count nahrávek',
+      one: 'čeká 1 nahrávka',
+    );
+    return 'Odesílání pozastaveno — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivita, vyžaduje pozornost';
 
   @override
   String get connectAgentHeadline => 'Používejte svou paměť Omi v ChatGPT a svých AI agentech';

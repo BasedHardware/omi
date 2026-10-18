@@ -24051,11 +24051,53 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get activityRetryAll;
 
+  /// Needs attention row: phone disk is full, so recordings cannot be written
+  ///
+  /// In en, this message translates to:
+  /// **'Storage full — recordings paused'**
+  String get activityAttentionStorageTitle;
+
+  /// Needs attention row subtitle: how to fix a full phone disk
+  ///
+  /// In en, this message translates to:
+  /// **'Free space or adjust auto-sync'**
+  String get activityAttentionStorageSubtitle;
+
+  /// Needs attention row subtitle: kept-audio length behind a stalled upload
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} of audio saved on this phone'**
+  String activityAttentionUploadKept(String duration);
+
+  /// Needs attention row subtitle for a stalled upload when the kept-audio length is unknown
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings are safe and will upload when possible'**
+  String get activityAttentionUploadWaiting;
+
+  /// Needs attention row: phone disk is full and blocked recordings are counted
+  ///
+  /// In en, this message translates to:
+  /// **'Storage full — {count, plural, =1{1 recording paused} other{{count} recordings paused}}'**
+  String activityAttentionStorageBlocked(int count);
+
+  /// Needs attention row: uploads made no progress long enough to need attention
+  ///
+  /// In en, this message translates to:
+  /// **'Upload stalled — {count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
+  String activityAttentionUploadStalled(int count);
+
   /// Needs attention row: the server gave up summarizing a conversation
   ///
   /// In en, this message translates to:
   /// **'Couldn\'t summarize this conversation'**
   String get attentionSummaryFailed;
+
+  /// Bell accessibility label when its warning dot is lit for attention items
+  ///
+  /// In en, this message translates to:
+  /// **'Activity, needs attention'**
+  String get activityAttentionSemantics;
 
   /// Headline at the top of the Connect an Agent screen
   ///

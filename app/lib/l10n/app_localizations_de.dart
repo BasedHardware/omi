@@ -13617,7 +13617,46 @@ class AppLocalizationsDe extends AppLocalizations {
   String get activityRetryAll => 'Alle erneut versuchen';
 
   @override
+  String get activityAttentionStorageTitle => 'Speicher voll — Aufnahmen pausiert';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Speicherplatz freigeben oder Auto-Sync anpassen';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration Audio auf diesem Telefon gespeichert';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Aufnahmen sind sicher und werden hochgeladen, sobald möglich';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen pausiert',
+      one: '1 Aufnahme pausiert',
+    );
+    return 'Speicher voll — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen warten',
+      one: '1 Aufnahme wartet',
+    );
+    return 'Upload stockt — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Diese Unterhaltung konnte nicht zusammengefasst werden';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivität, Aufmerksamkeit erforderlich';
 
   @override
   String get connectAgentHeadline => 'Nutze dein Omi-Gedächtnis in ChatGPT und deinen KI-Agenten';

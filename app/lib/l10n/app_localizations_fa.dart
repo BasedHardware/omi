@@ -13513,7 +13513,46 @@ class AppLocalizationsFa extends AppLocalizations {
   String get activityRetryAll => 'تلاش دوباره برای همه';
 
   @override
+  String get activityAttentionStorageTitle => 'حافظه پر شده — ضبط‌ها متوقف شده‌اند';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'فضا آزاد کنید یا همگام‌سازی خودکار را تنظیم کنید';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration صدا در این گوشی ذخیره شده';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'ضبط‌ها در امان هستند و به محض امکان بارگذاری می‌شوند';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط متوقف شده‌اند',
+      one: '1 ضبط متوقف شده',
+    );
+    return 'حافظه پر شده — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط در انتظار',
+      one: '1 ضبط در انتظار',
+    );
+    return 'بارگذاری متوقف شده — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'خلاصه‌سازی این گفتگو ممکن نشد';
+
+  @override
+  String get activityAttentionSemantics => 'فعالیت، نیاز به توجه';
 
   @override
   String get connectAgentHeadline => 'از حافظهٔ Omi خود در ChatGPT و عامل‌های هوش مصنوعی‌تان استفاده کنید';

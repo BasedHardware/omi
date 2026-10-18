@@ -13336,7 +13336,46 @@ class AppLocalizationsKo extends AppLocalizations {
   String get activityRetryAll => '모두 다시 시도';
 
   @override
+  String get activityAttentionStorageTitle => '저장 공간이 가득 참 — 녹음 일시중지됨';
+
+  @override
+  String get activityAttentionStorageSubtitle => '공간을 확보하거나 자동 동기화를 조정하세요';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '이 휴대전화에 $duration 오디오 저장됨';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => '녹음은 안전하게 보관되며 가능해지면 업로드됩니다';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개 일시중지됨',
+      one: '녹음 1개 일시중지됨',
+    );
+    return '저장 공간이 가득 참 — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개 대기 중',
+      one: '녹음 1개 대기 중',
+    );
+    return '업로드 중단됨 — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
+
+  @override
+  String get activityAttentionSemantics => '활동, 주의 필요';
 
   @override
   String get connectAgentHeadline => 'ChatGPT와 AI 에이전트에서 Omi 메모리를 사용하세요';

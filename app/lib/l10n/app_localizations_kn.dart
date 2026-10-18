@@ -13557,7 +13557,46 @@ class AppLocalizationsKn extends AppLocalizations {
   String get activityRetryAll => 'ಎಲ್ಲವನ್ನೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
 
   @override
+  String get activityAttentionStorageTitle => 'ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ — ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'ಸ್ಥಳಾವಕಾಶ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ಸ್ವಯಂ-ಸಿಂಕ್ ಬದಲಾಯಿಸಿ';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return 'ಈ ಫೋನ್‌ನಲ್ಲಿ $duration ಆಡಿಯೊ ಉಳಿಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ ಮತ್ತು ಸಾಧ್ಯವಾದ ತಕ್ಷಣ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತವೆ';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ವಿರಾಮದಲ್ಲಿದೆ',
+    );
+    return 'ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತಿವೆ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಕಾಯುತ್ತಿದೆ',
+    );
+    return 'ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get activityAttentionSemantics => 'ಚಟುವಟಿಕೆ, ಗಮನ ಬೇಕು';
 
   @override
   String get connectAgentHeadline => 'ChatGPT ಮತ್ತು ನಿಮ್ಮ AI ಏಜೆಂಟ್‌ಗಳಲ್ಲಿ ನಿಮ್ಮ Omi ಸ್ಮೃತಿಯನ್ನು ಬಳಸಿ';

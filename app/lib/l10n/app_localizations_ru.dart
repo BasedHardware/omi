@@ -13564,7 +13564,46 @@ class AppLocalizationsRu extends AppLocalizations {
   String get activityRetryAll => 'Повторить все';
 
   @override
+  String get activityAttentionStorageTitle => 'Память заполнена — записи приостановлены';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Освободите место или настройте автосинхронизацию';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration аудио сохранено на этом телефоне';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Записи в безопасности и будут загружены при первой возможности';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи приостановлены',
+      one: '1 запись приостановлена',
+    );
+    return 'Память заполнена — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ждут $count записи',
+      one: 'ждёт 1 запись',
+    );
+    return 'Загрузка остановлена — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Не удалось подвести итоги этого разговора';
+
+  @override
+  String get activityAttentionSemantics => 'Активность, требует внимания';
 
   @override
   String get connectAgentHeadline => 'Используйте память Omi в ChatGPT и своих ИИ-агентах';

@@ -13330,7 +13330,46 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityRetryAll => 'すべて再試行';
 
   @override
+  String get activityAttentionStorageTitle => 'ストレージがいっぱいです — 録音を一時停止中';
+
+  @override
+  String get activityAttentionStorageSubtitle => '空き容量を確保するか、自動同期を調整してください';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return 'このスマホに $duration の音声を保存済み';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => '録音は安全に保たれ、可能になり次第アップロードされます';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を一時停止中',
+      one: '1 件の録音を一時停止中',
+    );
+    return 'ストレージがいっぱいです — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音が待機中',
+      one: '1 件の録音が待機中',
+    );
+    return 'アップロードが停止しています — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'この会話を要約できませんでした';
+
+  @override
+  String get activityAttentionSemantics => 'アクティビティ、要対応';
 
   @override
   String get connectAgentHeadline => 'OmiのメモリをChatGPTやAIエージェントで使う';

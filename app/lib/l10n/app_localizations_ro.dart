@@ -13573,7 +13573,47 @@ class AppLocalizationsRo extends AppLocalizations {
   String get activityRetryAll => 'Reîncearcă tot';
 
   @override
+  String get activityAttentionStorageTitle => 'Stocarea este plină — înregistrările sunt pauzate';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Eliberează spațiu sau ajustează sincronizarea automată';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration de audio salvat pe acest telefon';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting =>
+      'Înregistrările sunt în siguranță și vor fi încărcate când va fi posibil';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count înregistrări puse pe pauză',
+      one: '1 înregistrare pusă pe pauză',
+    );
+    return 'Stocarea este plină — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count înregistrări așteaptă',
+      one: '1 înregistrare așteaptă',
+    );
+    return 'Încărcarea s-a oprit — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
+
+  @override
+  String get activityAttentionSemantics => 'Activitate, necesită atenție';
 
   @override
   String get connectAgentHeadline => 'Folosește memoria Omi în ChatGPT și în agenții tăi AI';

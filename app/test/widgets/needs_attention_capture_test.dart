@@ -1,0 +1,250 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/review.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/sync_state.dart';
+import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/activity/activity_page.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
+import 'package:omi/pages/activity/needs_attention_section.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/wals/wal.dart';
+
+/// The slow-burn capture problems (full phone disk, stalled upload) live in Activity's Needs
+/// attention section and light the bell's warning dot, never a banner on Home.
+
+class _IdleSync extends ChangeNotifier implements SyncProvider {
+  @override
+  List<Wal> get allWals => const [];
+  @override
+  List<Wal> get displaySortedWals => const [];
+  @override
+  SyncState get syncState => const SyncState();
+  @override
+  bool get isRateLimited => false;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+Future<PendingWorkStore> _noWork() async {
+  final store = PendingWorkStore(
+    loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+    loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+  );
+  await store.refresh();
+  return store;
+}
+
+/// The section only reads the store; empty attention needs no refresh.
+PendingWorkStore _emptyStore() => PendingWorkStore(
+      loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+    );
+
+CaptureWedgeMonitor _monitor() => CaptureWedgeMonitor(
+      featureGate: () async => true,
+      track: (_, __) {},
+      bleRetry: (_) async {},
+      transferRetry: () async {},
+      appBuild: () => '1',
+      platform: () => 'ios',
+    );
+
+void _seedStorage(CaptureWedgeMonitor monitor, {int blockedCount = 3}) => monitor.observeStorageAtRisk(
+      engagedAt: DateTime.now().subtract(const Duration(minutes: 30)),
+      blockedCount: blockedCount,
+      retainedCount: 720,
+      reason: 'disk_reserve',
+    );
+
+void _seedUploadStall(CaptureWedgeMonitor monitor, {int pendingCount = 5, int pendingSeconds = 47 * 60}) =>
+    monitor.observeWalBacklog(
+      pendingCount: pendingCount,
+      oldestPendingAt: DateTime.now().subtract(const Duration(hours: 3)),
+      pendingSeconds: pendingSeconds,
+    );
+
+ConversationProvider _conversations() => ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
+
+Widget _app(Widget child, {CaptureWedgeMonitor? monitor}) => MultiProvider(
+      providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: _IdleSync()),
+        ChangeNotifierProvider<ConversationProvider>.value(value: _conversations()),
+      ],
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: NeedsAttentionSection(store: _emptyStore(), captureMonitor: monitor),
+          ),
+        ),
+      ),
+    );
+
+void main() {
+  final yesterday = DateTime.now().subtract(const Duration(days: 1));
+
+  Widget pageApp(Widget home) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: home,
+      );
+
+  group('NeedsAttentionSection capture rows', () {
+    testWidgets('storage at risk renders its row with the blocked count', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor, blockedCount: 3);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
+      expect(find.text('Storage full — 3 recordings paused'), findsOneWidget);
+      expect(find.text('Free space or adjust auto-sync'), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
+    });
+
+    testWidgets('storage with no blocked count yet reads as recordings paused', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor, blockedCount: 0);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.text('Storage full — recordings paused'), findsOneWidget);
+    });
+
+    testWidgets('an upload stall renders its row with the kept-audio length', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedUploadStall(monitor, pendingCount: 5, pendingSeconds: 47 * 60);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
+      expect(find.text('Upload stalled — 5 recordings waiting'), findsOneWidget);
+      expect(find.text('47m of audio saved on this phone'), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
+    });
+
+    testWidgets('an upload stall without known seconds falls back to the safe copy', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedUploadStall(monitor, pendingCount: 2, pendingSeconds: 0);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.text('Upload stalled — 2 recordings waiting'), findsOneWidget);
+      expect(find.text('Recordings are safe and will upload when possible'), findsOneWidget);
+    });
+
+    testWidgets('both rows together, ordered storage first with one divider each', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor);
+      _seedUploadStall(monitor);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_needs_attention')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('activity_attention_storage'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('activity_attention_upload_stalled'))).dy),
+      );
+    });
+
+    testWidgets('rows disappear when the monitor resolves them, taking the section with them', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedStorage(monitor);
+      _seedUploadStall(monitor);
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_needs_attention')), findsOneWidget);
+
+      monitor.onUploadCompleted();
+      await tester.pump();
+      expect(find.byKey(const Key('activity_attention_storage')), findsNothing);
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
+      expect(find.byKey(const Key('activity_needs_attention')), findsNothing);
+    });
+
+    test('hasContent stays consistent with the rows', () async {
+      final store = await _noWork();
+      final idle = _IdleSync();
+      final storage = _monitor();
+      addTearDown(storage.dispose);
+      expect(NeedsAttentionSection.hasContent(store, idle), isFalse);
+      expect(NeedsAttentionSection.hasContent(store, idle, storage), isFalse);
+
+      _seedStorage(storage);
+      expect(NeedsAttentionSection.hasContent(store, idle, storage), isTrue);
+
+      storage.onUploadCompleted();
+      expect(NeedsAttentionSection.hasContent(store, idle, storage), isFalse);
+
+      // A finished upload arms the silence threshold's freshness guard, so the
+      // stall case needs its own monitor.
+      final upload = _monitor();
+      addTearDown(upload.dispose);
+      _seedUploadStall(upload);
+      expect(NeedsAttentionSection.hasContent(store, idle, upload), isTrue);
+    });
+  });
+
+  group('bell', () {
+    testWidgets('unseen capture attention lights the warning dot and the semantics label', (tester) async {
+      final store = await _noWork();
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      var stored = yesterday.millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
+
+      _seedStorage(monitor);
+      await tester.pumpWidget(pageApp(Scaffold(
+        body: Center(child: ActivityBellButton(seen: seen, pendingWork: store, captureMonitor: monitor)),
+      )));
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsOneWidget);
+      expect(find.bySemanticsLabel('Activity, needs attention'), findsOneWidget);
+
+      monitor.markCaptureAttentionSeen();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+    });
+  });
+
+  group('ActivityPage', () {
+    testWidgets('shows the capture rows and marks capture attention seen on load', (tester) async {
+      final store = await _noWork();
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      var stored = yesterday.millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v, owner: () => 'u');
+      _seedStorage(monitor);
+      _seedUploadStall(monitor);
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+
+      await tester.pumpWidget(pageApp(ActivityPage(
+        pendingWork: store,
+        seen: seen,
+        captureWedgeMonitor: monitor,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: <DailySummary>[], ok: true),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('activity_attention_storage')), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse,
+          reason: 'opening Activity marks the capture rows seen; a new episode re-lights the bell');
+    });
+  });
+}

@@ -13602,7 +13602,46 @@ class AppLocalizationsEl extends AppLocalizations {
   String get activityRetryAll => 'Επανάληψη όλων';
 
   @override
+  String get activityAttentionStorageTitle => 'Ο αποθηκευτικός χώρος γέμισε — οι ηχογραφήσεις τέθηκαν σε παύση';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Απελευθερώστε χώρο ή προσαρμόστε τον αυτόματο συγχρονισμό';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration ήχου αποθηκεύτηκαν σε αυτό το τηλέφωνο';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Οι ηχογραφήσεις είναι ασφαλείς και θα αποσταλούν μόλις είναι δυνατόν';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'σε παύση $count ηχογραφήσεις',
+      one: 'σε παύση 1 ηχογράφηση',
+    );
+    return 'Ο αποθηκευτικός χώρος γέμισε — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'αναμένουν $count ηχογραφήσεις',
+      one: 'αναμένει 1 ηχογράφηση',
+    );
+    return 'Η αποστολή σταμάτησε — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
+
+  @override
+  String get activityAttentionSemantics => 'Δραστηριότητα, απαιτεί προσοχή';
 
   @override
   String get connectAgentHeadline => 'Χρησιμοποιήστε τη μνήμη του Omi στο ChatGPT και στους πράκτορες AI σας';

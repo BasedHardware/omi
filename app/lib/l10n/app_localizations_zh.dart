@@ -13311,7 +13311,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityRetryAll => '全部重试';
 
   @override
+  String get activityAttentionStorageTitle => '存储空间已满 — 录音已暂停';
+
+  @override
+  String get activityAttentionStorageSubtitle => '请释放空间或调整自动同步设置';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '已在此手机上保存 $duration 的音频';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => '录音是安全的，将在条件允许时上传';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已暂停 $count 条录音',
+      one: '已暂停 1 条录音',
+    );
+    return '存储空间已满 — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音等待中',
+      one: '1 条录音等待中',
+    );
+    return '上传停滞 — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get activityAttentionSemantics => '活动，需要关注';
 
   @override
   String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';

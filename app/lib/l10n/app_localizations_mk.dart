@@ -13579,7 +13579,46 @@ class AppLocalizationsMk extends AppLocalizations {
   String get activityRetryAll => 'Обиди ги сите повторно';
 
   @override
+  String get activityAttentionStorageTitle => 'Складиштето е полно — снимките се паузирани';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Ослободете простор или прилагодете автосинхронизација';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration звук зачуван на овој телефон';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Снимките се безбедни и ќе бидат пренесени штом е можно';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'паузирани се $count снимки',
+      one: 'паузирана е 1 снимка',
+    );
+    return 'Складиштето е полно — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'чекаат $count снимки',
+      one: 'чека 1 снимка',
+    );
+    return 'Преносот е запрен — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
+
+  @override
+  String get activityAttentionSemantics => 'Активност, бара внимание';
 
   @override
   String get connectAgentHeadline => 'Користете ја вашата Omi меморија во ChatGPT и вашите AI агенти';

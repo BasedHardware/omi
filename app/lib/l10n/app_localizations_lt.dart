@@ -13542,7 +13542,46 @@ class AppLocalizationsLt extends AppLocalizations {
   String get activityRetryAll => 'Bandyti visus iš naujo';
 
   @override
+  String get activityAttentionStorageTitle => 'Atmintis pilna — įrašai pristabdyti';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Atlaisvinkite vietos arba pakoreguokite automatinį sinchronizavimą';
+
+  @override
+  String activityAttentionUploadKept(String duration) {
+    return '$duration garso įrašyta šiame telefone';
+  }
+
+  @override
+  String get activityAttentionUploadWaiting => 'Įrašai saugūs ir bus įkelti, kai tik bus galima';
+
+  @override
+  String activityAttentionStorageBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pristabdyta $count įrašų',
+      one: 'pristabdytas 1 įrašas',
+    );
+    return 'Atmintis pilna — $_temp0';
+  }
+
+  @override
+  String activityAttentionUploadStalled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'laukia $count įrašų',
+      one: 'laukia 1 įrašas',
+    );
+    return 'Įkėlimas sustojo — $_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
+
+  @override
+  String get activityAttentionSemantics => 'Veikla, reikalauja dėmesio';
 
   @override
   String get connectAgentHeadline => 'Naudokite savo Omi atmintį ChatGPT ir savo DI agentuose';
