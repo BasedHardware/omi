@@ -254,13 +254,18 @@ class _CaptureAttentionRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 10, 12),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 10, 14),
         child: Row(
           children: [
             Container(
               width: 36,
               height: 36,
-              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              // The diagnostics badge idiom: warning wash over the tile so it reads as a
+              // warning, not a neutral gray square.
+              decoration: BoxDecoration(
+                color: Color.alphaBlend(OmiColors.warning.withValues(alpha: 0.15), OmiColors.surface2),
+                borderRadius: OmiRadius.mdAll,
+              ),
               alignment: Alignment.center,
               child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning),
             ),
@@ -286,10 +291,10 @@ class _CaptureAttentionRow extends StatelessWidget {
                 label: actionLabel,
                 onPressed: onTap,
                 size: OmiButtonSize.compact,
-                // The destructive button's tint idiom, in warning: amber label on an amber
-                // wash, so the pill names the row's action without shouting.
+                // The badge idiom: amber label on the same warning wash the diagnostics
+                // pills use, so the pill names the row's action without shouting.
                 colors: OmiButtonColors(
-                  background: Color.alphaBlend(OmiColors.warning.withValues(alpha: 0.15), OmiColors.surface1),
+                  background: OmiColors.warning.withValues(alpha: 0.15),
                   foreground: OmiColors.warning,
                 ),
               ),

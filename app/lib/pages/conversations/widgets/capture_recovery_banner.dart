@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -56,7 +57,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
               onTap: isIngressFailure ? null : () => _retry(wedge),
               child: Container(
                 key: const Key('capture_recovery_banner'),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   // Amber over the card surface keeps the tint a warning card in both
                   // appearances without a new palette entry.
@@ -70,7 +71,11 @@ class CaptureRecoveryBanner extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.warning_amber_rounded, size: 16, color: OmiColors.warning),
+                        // The firmware update card's warning triangle: same glyph, size, and
+                        // silence for screen readers, so both cards read as one family.
+                        ExcludeSemantics(
+                          child: FaIcon(FontAwesomeIcons.triangleExclamation, size: 18, color: OmiColors.warning),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -79,7 +84,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             // textPrimary, not warning: amber-on-cream fails contrast in light
                             // mode; the icon, border, and fill already carry the warning read.
-                            style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
+                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.35),
                           ),
                         ),
                       ],
@@ -91,14 +96,14 @@ class CaptureRecoveryBanner extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         l10n.captureLinkStalledTranscribesLater,
-                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
                       ),
                     ],
-                    const SizedBox(height: 10),
+                    const SizedBox(height: OmiSpacing.xs),
                     // Wrap, not Row: two compact buttons plus ✕ fit one line on current
                     // phones and fold to a second on narrow ones instead of overflowing.
                     Wrap(
-                      spacing: 8,
+                      spacing: OmiSpacing.xs,
                       runSpacing: 8,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
@@ -117,7 +122,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                               foreground: Colors.black87,
                             ),
                           ),
-                        OmiButton(
+                        OmiButton.tertiary(
                           key: const Key('capture_recovery_banner_info'),
                           label: l10n.captureBannerWhatsWrong,
                           // Fire-and-forget: opening the sheet is navigation, not a job, so the
@@ -134,26 +139,15 @@ class CaptureRecoveryBanner extends StatelessWidget {
                             );
                           },
                           size: OmiButtonSize.compact,
-                          variant: OmiButtonVariant.tertiary,
-                          colors: OmiButtonColors(
-                            background: Colors.transparent,
-                            foreground: OmiColors.textSecondary,
-                          ),
                         ),
-                        SizedBox(
-                          height: 44,
-                          child: IconButton(
-                            key: const Key('capture_recovery_banner_dismiss'),
-                            tooltip: l10n.captureBannerDismiss,
-                            onPressed: () => wedge.dismissVisibleEpisode(episode.deviceId),
-                            icon: const Icon(Icons.close),
-                            iconSize: 16,
-                            color: OmiColors.textTertiary,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                            visualDensity: VisualDensity.compact,
-                            splashRadius: 18,
-                          ),
+                        // Same filled-circle family as the capturing page's pause control.
+                        OmiIconButton.filled(
+                          key: const Key('capture_recovery_banner_dismiss'),
+                          icon: const Icon(Icons.close, size: 16),
+                          label: l10n.captureBannerDismiss,
+                          onPressed: () => wedge.dismissVisibleEpisode(episode.deviceId),
+                          fillColor: OmiColors.surface2,
+                          diameter: 36,
                         ),
                       ],
                     ),
