@@ -2990,7 +2990,7 @@ def _summary_migration_writes(client):
 
 _add(
     DriverEntry(
-        'utils.sync.cap_hold.ensure_summary',
+        'utils.sync.cap_hold._ensure_held_audio_summary',
         base={'uid': UID},
         setup=_summary_migration_pages,
         patchers=(_summary_migration_writes,),
