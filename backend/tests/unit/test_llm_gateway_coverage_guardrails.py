@@ -101,6 +101,7 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
 # llm_input_dedupe.py: checkpoint identity follows the actual notes / L1 extractor route.
+# agentic.py / shaped_chat.py: model_feature is chat_graph for CHAT_PROVIDER=openai, else chat_agent.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
@@ -116,6 +117,10 @@ KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
             'get_route_ref',
             "'conv_structure' if feature == 'notes' else 'memory_l1'",
         ),
+        ('utils/retrieval/agentic.py', 'get_llm', 'model_feature'),
+        ('utils/retrieval/agentic.py', 'get_model', 'model_feature'),
+        ('utils/retrieval/shaped_chat.py', 'get_llm', 'model_feature'),
+        ('utils/retrieval/shaped_chat.py', 'get_model', 'model_feature'),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}

@@ -29,6 +29,7 @@ async def run_shaped_chat_stream(
     configurable,
     *,
     shadow=False,
+    model_feature: str = 'chat_agent',
 ) -> Optional[str]:
     from utils.retrieval import agentic as a
     from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded, take_prepared
@@ -39,7 +40,7 @@ async def run_shaped_chat_stream(
     runtime = surface_runtime.get()
     if runtime is not None:
         mount = replace(mount, skills=(*mount.skills, runtime.skill))
-    model = a.get_llm('chat_agent', streaming=True)
+    model = a.get_llm(model_feature, streaming=True)
     cache_enabled = a.gpt56_explicit_cache_enabled() and model_supports_explicit_cache(model)
     options = chat_cache_options() if cache_enabled else None
     cache_enabled = cache_enabled and options is not None
@@ -72,7 +73,7 @@ async def run_shaped_chat_stream(
     surface = runtime.channel if runtime is not None and runtime.channel else 'app'
     usage_token = a.set_usage_context(
         configurable['user_id'],
-        'chat_agent',
+        model_feature,
         surface=surface,
         turn_id=configurable.get('thread_id') or (runtime.turn_id if runtime else None),
     )
@@ -148,7 +149,7 @@ async def run_shaped_chat_stream(
         if shadow:
             logger.warning('Shaped chat shadow failed error_type=%s', type(error).__name__)
             return 'shadow_failure'
-        await a.handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+        await a.handle_llm_error_async(error, 'openai', feature=model_feature, model=a.get_model(model_feature))
         await a.put_outcome_text(callback, full_response, a.AGENT_STREAM_FAILURE_MESSAGE)
         await callback.end()
         return f'provider_{type(error).__name__}'
