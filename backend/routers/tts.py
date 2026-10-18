@@ -77,7 +77,11 @@ def get_user_voice(uid: str = Depends(auth.get_current_user_uid)) -> AssistantVo
 def update_user_voice(
     req: AssistantVoicePreferenceUpdate, uid: str = Depends(auth.get_current_user_uid)
 ) -> AssistantVoicePreference:
-    return AssistantVoicePreference(voice_id=voice_preferences.set_assistant_voice(uid, req.voice_id))
+    try:
+        return AssistantVoicePreference(voice_id=voice_preferences.set_assistant_voice(uid, req.voice_id))
+    except ValueError as exc:
+        # Blank/invalid uid is a caller fault — reject as 4xx, not a 500.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _is_valid_voice_id(voice_id: str) -> bool:
