@@ -108,10 +108,11 @@ stages a candidate):
 
 - iOS: when the live version's phased rollout (read via
   `GET appStoreVersionPhasedRelease`, whose `startDate` is the timing anchor)
-  has been `ACTIVE` for `IOS_PHASED_JUMP_HOURS` (12h), the train deletes it —
-  Apple's "release to everyone" — taking exposure from ~1% to 100%. A `PAUSED`
-  rollout is the operator brake and never jumps; unreadable state fails
-  closed (holds).
+  has been `ACTIVE` for `IOS_PHASED_JUMP_HOURS` (12h), the train sets it to
+  `COMPLETE` (`PATCH appStoreVersionPhasedReleases/{id}`) — Apple's "release to
+  everyone" — taking exposure from ~1% to 100%, and reads the state back. Only
+  `ACTIVE` jumps: `PAUSED` is the operator brake, and any other state holds;
+  unreadable state fails closed (holds).
 - Android: the staged rollout hops one ladder step
   (`STAGED_ROLLOUT_LADDER`: 1% -> 10% -> 50% -> 100%) per
   `ROLLOUT_HOP_MIN_HOURS` (4h) window. A `halted` rollout always waits for a
