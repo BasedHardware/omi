@@ -13,7 +13,7 @@ from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.contracts import WorkResult
-from utils.batch_pipeline.recovery_disposition import STAGES, REASONS
+from utils.batch_pipeline.recovery_disposition import STAGES, REASONS, padded_skipped
 from utils.batch_pipeline.scheduler import owner_key
 
 PAID_EPOCH = 2
@@ -71,6 +71,8 @@ class SpeechRedriveStore:
                 return job
             if not self.terminal(job, existing, now):
                 raise ProjectionBlocked('terminal held obligation required')
+            if gpu_padded_retry_empty and padded_skipped(job):
+                raise ProjectionBlocked('padded retry was skipped')
             job['speech_redrive'] = {
                 'gpu_padded_retry_empty': gpu_padded_retry_empty,
                 'paid_epoch': PAID_EPOCH,
