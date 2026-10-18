@@ -149,13 +149,15 @@ def test_bad_uid_and_unknown_cohort_do_not_read(monkeypatch):
 
 
 def test_real_adapter_bounds_rpc_and_validates_document(monkeypatch):
-    import database._client
-
     client = MagicMock()
-    monkeypatch.setattr(database._client, 'data_plane_db', client)
+    monkeypatch.setattr('database.rollout_cohorts.get_data_plane_firestore_client', lambda: client)
     doc = client.collection.return_value.document.return_value.get.return_value
     doc.exists = False
     assert cohorts.read_memberships('owner') == {}
+    injected = MagicMock(name='injected')
+    injected.collection.return_value.document.return_value.get.return_value.exists = False
+    assert cohorts.read_memberships('owner', firestore_client=injected) == {}
+    injected.collection.assert_called_with('rollout_cohorts')
     doc.exists = True
     doc.to_dict.return_value = {'cohorts': {'prod': {'batch-pipeline': True}}}
     assert cohorts.read_memberships('owner') == {'prod': {'batch-pipeline': True}}
