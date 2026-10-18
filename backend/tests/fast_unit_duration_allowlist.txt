@@ -463,3 +463,7 @@ tests/unit/test_frame_request_bucket_contract.py::test_runtime_manifest_alone_ca
 # in its call phase. 0.33s CPU inside the loaded pre-push (local fail limit 0.30s).
 # Assertions still run.
 tests/unit/test_compute_admission_import_purity.py::test_enabled_non_byok_call_uses_real_budget_owner_without_importing_byok
+# 2026-10-18: lane-metering shadow merge imports usage_units in the call phase.
+# 0.32-0.36s CPU on the saturated pre-push host (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_ladder_v1_cutover.py::test_live_batch_and_on_device_are_disjoint
