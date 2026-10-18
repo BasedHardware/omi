@@ -52,6 +52,7 @@ SECRET_FILES = {
     "posthog": "MCP_POSTHOG_API_KEY",
     "soniox": "SONIOX_API_KEY",
     "deepgram": "DEEPGRAM_API_KEY",
+    "mercury": "finops-mercury-readonly",
 }
 
 

@@ -5,7 +5,15 @@ import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/env/env.dart';
 
 class McpApi {
-  static final String _baseUrl = '${Env.apiBaseUrl}v1/mcp';
+  static String get _baseUrl => '${Env.apiBaseUrl}v1/mcp';
+
+  /// Default read-only scopes for newly minted MCP API keys (`backend/config/mcp_scopes.py`).
+  static const List<String> readOnlyScopes = [
+    'memories.read',
+    'conversations.read',
+    'action_items.read',
+    'goals.read',
+  ];
 
   static Future<List<McpApiKey>> getMcpApiKeys() async {
     final response = await makeApiCall(url: '$_baseUrl/keys', headers: {}, body: '{}', method: 'GET');
@@ -18,11 +26,14 @@ class McpApi {
     }
   }
 
-  static Future<McpApiKeyCreated> createMcpApiKey(String name) async {
+  static Future<McpApiKeyCreated> createMcpApiKey(
+    String name, {
+    List<String> scopes = readOnlyScopes,
+  }) async {
     final response = await makeApiCall(
       url: '$_baseUrl/keys',
       headers: {},
-      body: jsonEncode({'name': name}),
+      body: jsonEncode({'name': name, 'scopes': scopes}),
       method: 'POST',
     );
 

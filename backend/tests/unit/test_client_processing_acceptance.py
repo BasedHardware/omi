@@ -346,7 +346,6 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
         'extract_memories_inner': MagicMock(),
         'trigger_apps': MagicMock(),
         'assign_folder': MagicMock(return_value=(None, 0.0, '')),
-        'init_first_open': MagicMock(return_value=True),
         'should_defer': MagicMock(return_value=True),
     }
     monkeypatch.setattr(pc, '_get_structured', spies['get_structured'])
@@ -354,16 +353,9 @@ def _spy_managed_effects(monkeypatch, pc) -> dict[str, MagicMock]:
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(
-        pc,
-        'resolve_authorized_first_open_plan',
-        lambda **kwargs: SimpleNamespace(defer_derived_work=True),
-    )
-    monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     return spies
 
 
@@ -373,7 +365,6 @@ def _assert_no_managed(spies: dict[str, MagicMock]) -> None:
     spies['extract_memories_inner'].assert_not_called()
     spies['trigger_apps'].assert_not_called()
     spies['assign_folder'].assert_not_called()
-    spies['init_first_open'].assert_not_called()
 
 
 def _persisted_payload(mock: MagicMock) -> dict[str, Any]:
@@ -1003,7 +994,8 @@ def test_from_segments_ingest_stores_projection_via_dedicated_mutation(monkeypat
     updates: list[dict[str, Any]] = []
 
     def fake_bind(_uid: str, _cid: str, mutation: dict[str, Any], **_kwargs: Any) -> bool:
-        updates.append(dict(mutation))
+        if 'client_processing' in mutation:
+            updates.append(dict(mutation))
         return True
 
     monkeypatch.setattr(dev.conversations_db, 'bind_client_processing', fake_bind)
@@ -1049,7 +1041,8 @@ def _race_store_harness(monkeypatch, stack, *, first_projection: Any, retry_titl
 
     def fake_bind(_uid: str, _cid: str, mutation: dict[str, Any], **_kwargs: Any) -> bool:
         _firestore_merge(store, mutation)
-        store['update'] = dict(mutation)
+        if 'client_processing' in mutation:
+            store['update'] = dict(mutation)
         return True
 
     monkeypatch.setattr(dev.conversations_db, 'get_conversation', fake_get)

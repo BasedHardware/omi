@@ -1,3 +1,4 @@
+from utils.generated_compute import require_generated_compute, generated_compute_enabled
 import base64
 import logging
 import mimetypes
@@ -336,6 +337,8 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """One Chat Completions stream: images as base64 image_url, documents as file parts."""
+        if generated_compute_enabled():
+            await run_blocking(db_executor, require_generated_compute, self.uid, 'file_chat_vision', allow_byok=False)
         assert callback is not None
         output_list: List[str] = []
         gateway_fallback_used = False
@@ -394,6 +397,7 @@ class FileChatTool:
 
     def _ask_files(self, question: str, files: List[FileChat]) -> str:
         """Non-streaming Chat Completions path used by search_files_tool."""
+        require_generated_compute(self.uid, 'file_chat_documents', allow_byok=False)
         gateway_fallback_used = False
         try:
             try:

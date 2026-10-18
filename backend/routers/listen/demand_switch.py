@@ -8,6 +8,7 @@ Policy handovers do not consume transport-failure episode allowances.
 import asyncio
 
 from config.live_demand import resolve_live_demand
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
 from utils.stt.live_failure import PendingLiveFailover, live_stt_socket_is_dead, live_stt_terminal_reason
 from utils.stt.recovery_state import LiveRecoveryController, RecoveryState, current_recovery
@@ -84,6 +85,8 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         # Demand may change during the dial; do not install a cheap candidate
         # after a visible report or rollback.
         try:
+            if lane == 'parakeet':
+                await warm_rollout_cohorts(host.request.uid)
             if lane == 'parakeet' and (
                 not demand.window_permitted
                 or demand.policy.state != 'hidden'

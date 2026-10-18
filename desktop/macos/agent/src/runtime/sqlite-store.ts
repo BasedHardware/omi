@@ -429,12 +429,8 @@ export class SqliteAgentStore implements AgentStore {
 
   constructor(options: SqliteAgentStoreOptions = {}) {
     const databasePath = options.databasePath ?? databasePathForStateDir(requiredStateDir(options.stateDir));
-    // The Swift JIT source projection preflight requires the agent state and
-    // SQLite files to be owner-only because the database can contain prompt
-    // material.  The default process umask on a developer Mac is commonly
-    // 022, which otherwise leaves new directories at 0755 and SQLite files at
-    // 0644.  Set a private umask before SQLite creates its WAL/SHM sidecars,
-    // and repair the existing directory/file modes on every open.
+    // Agent state can contain prompt material, so keep its directory, SQLite
+    // database, and sidecars owner-only even when the caller umask is permissive.
     process.umask(0o077);
     const isInMemory = databasePath === ":memory:";
     if (!isInMemory) {

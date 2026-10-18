@@ -57,14 +57,6 @@ _FINISHED = datetime(2026, 9, 2, 12, 5, tzinfo=timezone.utc)
 # on the conversation it already holds. The reprocess_force cell must actually pass them.
 _REPROCESS_FORCE_KWARGS: dict[str, Any] = {'trigger': ProcessingTrigger.USER_REPROCESS}
 
-_PENDING_JIT: dict[str, Any] = {
-    'state': 'pending',
-    'effects': {
-        'folder_assignment': {'state': 'pending'},
-        'app_fanout': {'state': 'pending'},
-    },
-}
-
 
 def _build_fakes() -> dict[str, ModuleType | None]:
     """Copied from test_process_conversation_free_tier_branch so this file stays standalone."""
@@ -599,17 +591,14 @@ def _expected_calls(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dic
             'extract_memories': False,
             'trigger_apps': False,
             'assign_folder': False,
-            'init_first_open': False,
         }
     derived = not kwargs.get('defer_derived_effects', False)
     mode = _mode(kwargs)
-    jit_eligible = not mode.bypass_jit_first_open and not mode.reprocess
     return {
         'get_structured': True,
         'extract_memories': derived,
-        'trigger_apps': derived and not jit_eligible,
-        'assign_folder': derived and not jit_eligible and not mode.reprocess,
-        'init_first_open': jit_eligible,
+        'trigger_apps': derived,
+        'assign_folder': derived and not mode.reprocess,
     }
 
 
@@ -629,37 +618,6 @@ def _expected_observer(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: 
     return True, 'terminal_no_derived_effects'
 
 
-def _seed_pending_jit(conversation: Any) -> None:
-    """Put a pending first-open obligation on the existing conversation's persist dump.
-
-    jit_first_open lives on the Firestore doc, not the Pydantic model. Conversation.dict()
-    delegates to model_dump, so wrapping only model_dump is enough for the pending
-    obligation to reach _terminal_persist_payload.
-    """
-    original_dump = conversation.model_dump
-
-    def dump_with_obligation(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        data = original_dump(*args, **kwargs)
-        data['jit_first_open'] = dict(_PENDING_JIT)
-        return data
-
-    try:
-        conversation.model_dump = dump_with_obligation
-    except (AttributeError, ValueError, TypeError):
-        object.__setattr__(conversation, 'model_dump', dump_with_obligation)
-
-
-def _jit_cleared(payload: dict[str, Any]) -> bool:
-    # persist_processing_result_with_lifecycle uses merge=True: omitting the field
-    # leaves a pending obligation in place. The terminal write must set it.
-    if 'jit_first_open' not in payload:
-        return False
-    value = payload['jit_first_open']
-    if isinstance(value, dict) and value.get('state') == 'pending':
-        return False
-    return True
-
-
 def _spy_managed_effects(monkeypatch: Any, pc: Any) -> dict[str, Any]:
     persist_payloads: list[dict[str, Any]] = []
 
@@ -673,7 +631,6 @@ def _spy_managed_effects(monkeypatch: Any, pc: Any) -> dict[str, Any]:
         'extract_memories_inner': MagicMock(),
         'trigger_apps': MagicMock(),
         'assign_folder': MagicMock(return_value=(None, 0.0, '')),
-        'init_first_open': MagicMock(return_value=True),
         'should_defer': MagicMock(return_value=True),
         'authorize': MagicMock(),
         'persist_payloads': persist_payloads,
@@ -683,21 +640,14 @@ def _spy_managed_effects(monkeypatch: Any, pc: Any) -> dict[str, Any]:
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     monkeypatch.setattr(pc.folders_db, 'get_folders', MagicMock(return_value=[{'id': 'folder-1'}]))
     monkeypatch.setattr(pc.folders_db, 'resolve_category_folder_id', MagicMock(return_value=None))
     monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', capture_persist)
     monkeypatch.setattr(pc.lifecycle_service, 'create_completed_conversation', capture_persist)
     monkeypatch.setattr(pc.lifecycle_service, 'create_processing_conversation', capture_persist)
-    monkeypatch.setattr(
-        pc,
-        'resolve_authorized_first_open_plan',
-        lambda **kwargs: SimpleNamespace(defer_derived_work=True),
-    )
 
     @contextmanager
     def _noop_track(*_args: Any, **_kwargs: Any):
@@ -712,12 +662,9 @@ def _call_coordinator(
     entry: dict[str, Any],
     *,
     extra_kwargs: dict[str, Any] | None = None,
-    seed_jit: bool = False,
     observer: _ObserverCapture | None = None,
 ) -> Any:
     conversation = _conversation_for(entry)
-    if seed_jit:
-        _seed_pending_jit(conversation)
     kwargs = dict(entry['kwargs'])
     if extra_kwargs:
         kwargs.update(extra_kwargs)
@@ -736,7 +683,6 @@ def _assert_spies(spies: dict[str, Any], expected: dict[str, bool]) -> None:
         'extract_memories': 'extract_memories_inner',
         'trigger_apps': 'trigger_apps',
         'assign_folder': 'assign_folder',
-        'init_first_open': 'init_first_open',
     }
     for name, called in expected.items():
         spy = spies[spy_names[name]]
@@ -877,7 +823,6 @@ def test_entrypoint_matrix(
     spies = _spy_managed_effects(monkeypatch, pc)
     kwargs = _effective_kwargs(entry, cell)
     extra_kwargs = dict(_REPROCESS_FORCE_KWARGS) if cell == 'reprocess_force' else None
-    seed_jit = _outcome(entry, cell, flag_on, kwargs) == 'terminal' and entry['kind'] == 'existing'
 
     def fake_authorize(uid: str, feature: str, funding_owner: str, **_kwargs: Any) -> Decision:
         return _decision_for_cell(cell, funding_owner)
@@ -910,7 +855,7 @@ def test_entrypoint_matrix(
         spies['should_defer'].return_value = cell in _BASIC_CELLS and cell != 'byok'
 
     observer = _ObserverCapture()
-    result = _call_coordinator(pc, entry, extra_kwargs=extra_kwargs, seed_jit=seed_jit, observer=observer)
+    result = _call_coordinator(pc, entry, extra_kwargs=extra_kwargs, observer=observer)
     expected = _expected_calls(entry, cell, flag_on, kwargs)
     _assert_spies(spies, expected)
 
@@ -933,15 +878,6 @@ def test_entrypoint_matrix(
         else:
             # Flag-on minimum and the flag-off eager deny: terminal store.
             assert getattr(result, 'deferred', False) is False
-            if seed_jit:
-                raw_payloads: list[Any] = spies['persist_payloads']
-                payloads: list[dict[str, Any]] = [p for p in raw_payloads if isinstance(p, dict)]
-                assert payloads, 'minimum store must persist the existing conversation'
-                last_payload = payloads[-1]
-                assert _jit_cleared(last_payload), (
-                    'terminal write must clear jit_first_open; merge=True persist '
-                    f'would keep a pending obligation: {last_payload.get("jit_first_open")!r}'
-                )
     else:
         spies['get_structured'].assert_called_once()
 

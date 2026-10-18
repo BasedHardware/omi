@@ -35,6 +35,14 @@ class TargetReport:
 
 
 def is_public_address(ip: IPAddress) -> bool:
+    # ``::ffff:100.64.0.1`` and ``100.64.0.1`` name one destination, and
+    # getaddrinfo returns either form depending on the host's resolver. Python's
+    # own categories read through to the embedded address, but CGNAT is not one
+    # of them, so classify the mapped address rather than the form it arrived in
+    # — otherwise the rule below only sees half the addresses it is written for.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
     if isinstance(ip, ipaddress.IPv4Address) and ip in CGNAT_NETWORK:
         return False
     return not (

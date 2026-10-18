@@ -291,7 +291,7 @@ jobs:
         env:
           # Dest: repo MONITOR_GRAFANA_TOKEN → monitor.omiapi.com
           # Prod: environment MONITOR_GRAFANA_TOKEN → monitor.omi.me
-          # Do not use GRAFANA_TOKEN; that belongs to the TV Cloud Run Grafana.
+          # Use only the environment-specific monitor token above.
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
           set -euo pipefail

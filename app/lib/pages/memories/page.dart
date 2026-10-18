@@ -210,8 +210,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             SliverToBoxAdapter(
                               child: MemoriesPartialLoadBanner(onRetry: () => provider.loadMemories()),
                             ),
-                          if (provider.memoryBeliefEnabled &&
-                              provider.showHistory &&
+                          if (provider.showHistory &&
                               (provider.ledgerHistoryTruncated || provider.ledgerHistoryHasMore))
                             SliverToBoxAdapter(
                               child: Padding(

@@ -51,16 +51,10 @@ export async function fetchFinopsHistory(
 }
 
 /** FinOps plan cost by day: the latest run's `fully_loaded` plan rows (USD and
- * cost-active user-days) from `unit_cost_daily`, plus any measured STT vendor
- * line. Each (date, segment_type) keeps its own latest run, so a vendor line
- * loaded by a separate run never hides the plan rows.
- *
- * Measured STT is a hook: Sol lane `lane/finops-soniox-pull` is adding a
- * Soniox usage pull to the FinOps job as a company-total component (proposed
- * `stt_soniox_measured`, segment_type `total`); the reader matches any
- * `stt_<vendor>_measured` total component, so re-check it when that lane
- * merges. Until a row exists the TV keeps the dated Soniox-console constant
- * (`wall-cost.ts`).
+ * cost-active user-days) from `unit_cost_daily`, measured STT vendor lines, and
+ * complete, fresh Mercury SaaS aggregates. Each source keeps its own latest
+ * run so a vendor line never hides plan rows. Incomplete or older-than-3-day
+ * Mercury rows are omitted and the TV keeps its dated estimate.
  */
 export const FINOPS_PLAN_COST_QUERY = `
 WITH runs AS (
@@ -70,13 +64,22 @@ WITH runs AS (
   WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
     AND ((segment_type = 'plan' AND component = 'fully_loaded')
       OR (segment_type = 'total' AND REGEXP_CONTAINS(component, r'^stt_[a-z]+_measured$')))
+), mercury AS (
+  SELECT date, amount_usd,
+    ROW_NUMBER() OVER (PARTITION BY date ORDER BY computed_at DESC, run_id DESC) AS rk
+  FROM \`based-hardware.omi_finops.mercury_saas_daily\`
+  WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
+    AND inputs_complete = TRUE
+    AND computed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
 )
 SELECT TO_JSON_STRING(STRUCT(
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, segment AS plan, usd, users,
           inputs_settled AS settled
         FROM runs WHERE rk = 1 AND segment_type = 'plan' ORDER BY day, plan) AS plans,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, SUM(usd) AS usd
-        FROM runs WHERE rk = 1 AND segment_type = 'total' GROUP BY day ORDER BY day) AS stt
+        FROM runs WHERE rk = 1 AND segment_type = 'total' GROUP BY day ORDER BY day) AS stt,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd
+        FROM mercury WHERE rk = 1 ORDER BY day) AS saas
 )) AS history`;
 
 export interface PlanCostHistory {
@@ -85,6 +88,8 @@ export interface PlanCostHistory {
   plans: Record<string, Record<string, { usd: number; users: number }>>;
   /** date → measured STT vendor USD (empty until the FinOps line exists). */
   sttMeasured: Record<string, number>;
+  /** date → complete, fresh Mercury SaaS USD; explicit zeroes are retained. */
+  saasMeasured: Record<string, number>;
 }
 
 export async function fetchPlanCostHistory(
@@ -117,11 +122,16 @@ export function parsePlanCost(json: string): PlanCostHistory {
       settled: boolean | null;
     }[];
     stt?: { day: string; usd: number }[];
+    saas?: { day: string; usd: number }[];
   };
   const unsettled = new Set(
     (parsed.plans || []).filter((r) => r.settled === false).map((r) => r.day)
   );
-  const history: PlanCostHistory = { plans: {}, sttMeasured: {} };
+  const history: PlanCostHistory = {
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: {},
+  };
   for (const r of parsed.plans || []) {
     if (unsettled.has(r.day)) continue;
     history.plans[r.day] ||= {};
@@ -131,5 +141,7 @@ export function parsePlanCost(json: string): PlanCostHistory {
     };
   }
   for (const r of parsed.stt || []) history.sttMeasured[r.day] = Number(r.usd);
+  for (const r of parsed.saas || [])
+    history.saasMeasured[r.day] = Number(r.usd);
   return history;
 }

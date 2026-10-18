@@ -27,6 +27,18 @@ PARTITION_LOOKAHEAD_DAYS = 3
 
 # Grains of the tables ``load_bigquery.py`` already loads. No partition expiry.
 AGGREGATE_CATALOG = {
+    "mercury_vendor_spend_daily": {
+        "partition": "date",
+        "partition_expiry": None,
+        "cluster": ["category", "vendor"],
+        "grain": ["date", "vendor", "category"],
+    },
+    "mercury_saas_daily": {
+        "partition": "date",
+        "partition_expiry": None,
+        "cluster": ["category", "vendor"],
+        "grain": ["date"],
+    },
     "unit_cost_daily": {
         "partition": "date",
         "partition_expiry": None,

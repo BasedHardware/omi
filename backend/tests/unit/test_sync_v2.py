@@ -8,6 +8,8 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
+
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
@@ -50,6 +52,15 @@ PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sy
 @pytest.fixture(autouse=True)
 def _prod_sync_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+
+@pytest.fixture(autouse=True)
+def _collect_previous_case_mocks():
+    # Endpoint and coordinator cases both create cyclic MagicMock graphs.
+    # Collect prior-case mocks in setup so a later call does not pay their cleanup.
+    import gc
+
+    gc.collect()
 
 
 def _read_pipeline_source():
@@ -1370,6 +1381,7 @@ class TestAsyncCoordinatorBehavioral:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.sync_empty_recovery',
             'database.firestore_read_metrics',
             'firebase_admin',
             'google',
@@ -3400,6 +3412,7 @@ class TestV2EndpointExecution:
             'database.users',
             'database.user_usage',
             'database.sync_ledger',
+            'database.sync_empty_recovery',
             'database.firestore_read_metrics',
             'firebase_admin',
             'google',

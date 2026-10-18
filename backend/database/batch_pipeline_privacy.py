@@ -6,6 +6,7 @@ hashed generation survives recursive account wipes and contains no content.
 
 from collections.abc import Iterable
 import hashlib
+from enum import Enum
 from typing import Any
 
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -13,8 +14,30 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 
 
+class BatchPrivacyReason(str, Enum):
+    ACCOUNT_DELETED = 'account_deleted'
+    ACCOUNT_MISSING = 'account_missing'
+    DATA_PROTECTION_CHANGED = 'data_protection_changed'
+    PRIVACY_GENERATION_CHANGED = 'privacy_generation_changed'
+    CONVERSATION_REDIRECT_CYCLE = 'conversation_redirect_cycle'
+    CONVERSATION_FENCE_BUDGET = 'conversation_fence_budget'
+    CONVERSATION_DELETED = 'conversation_deleted'
+    RECORDING_PRIVACY_CHANGED = 'recording_privacy_changed'
+    CONVERSATION_REDIRECT_MISSING = 'conversation_redirect_missing'
+    RESULT_LEASE_LOST = 'result_lease_lost'
+    UNKNOWN = 'unknown'
+
+
 class BatchPrivacyBlocked(RuntimeError):
     """A deleted, migrating or E2EE owner/source cannot accept server results."""
+
+    @property
+    def reason(self) -> BatchPrivacyReason:
+        """Bound telemetry even if a caller supplies an unsafe exception message."""
+        try:
+            return BatchPrivacyReason(self.args[0])
+        except (IndexError, ValueError, TypeError):
+            return BatchPrivacyReason.UNKNOWN
 
 
 def privacy_owner_key(uid: str) -> str:

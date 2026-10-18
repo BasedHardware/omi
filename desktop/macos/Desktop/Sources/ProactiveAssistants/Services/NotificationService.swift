@@ -375,8 +375,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// The main-window chat surface, where the meeting-notes card (with its
     /// conversation link) was materialized.
     case openMainChat
-    /// A muted-preview JIT banner opens the persistent in-app card so all
-    /// explicit feedback actions remain available after the user taps.
   }
 
   /// Resolve the tap destination from the notification's provenance.

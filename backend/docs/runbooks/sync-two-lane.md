@@ -396,3 +396,36 @@ apply. A nonzero error count returns a failing exit code without printing
 exception details or identities. The background reconcile job picks up repaired
 owners on ticks after their staggered deadlines. Do not apply a repair before
 the empty-owner exclusion and stagger-aware reconcile code is deployed. No one-off repair is part of deploying this code.
+
+### Durable expiry custody (dark)
+
+`SYNC_DURABLE_REDRIVE_GUARD=false` and
+`SYNC_LEGACY_COMPLETION_CONVERGENCE=false` default off in code/dev and are enabled on production `backend-sync` and `backend-sync-backfill` in `backend/deploy/runtime_env/prod.overlay.yaml`. Change only through a
+reviewed configuration rollout. The guard independently enables the existing
+bounded missing-key/run-lock scan even when
+`SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM=false`. Its transaction removes an expired
+request from dispatch only after retaining the exact accepted payload under
+`sync_redrive_required/{job_id}` with `status=redrive_required`. A canonical
+completed ledger permits retirement without a handoff. Bound runs and competing
+content owners refuse transfer. Partial results and processed segment IDs remain
+on the ledger. A missing-job worker ACK follows durable custody and retains
+staged bytes; a custody write failure propagates and keeps the task retryable.
+
+The Scheduler reads durable `sync_redrive_stats/backlog` into
+`sync_redrive_required`, `sync_redrive_nearest_deadline_timestamp_seconds`, and
+`sync_redrive_unknown_deadline`. The nearest timestamp is an exact source
+custody deadline when known, otherwise a conservative attention deadline at
+acceptance. It is **not** a promise of recoverable source bytes. A positive
+unknown count requires source inventory/preservation. These are unresolved
+handoff counts, not transcription successes. No automatic redriver, source hold,
+release or abandonment is enabled by this PR. An operator resolving custody
+must reconcile the aggregate and nearest deadline transactionally; never delete
+handoff rows to make the gauge fall.
+
+Legacy convergence reads the canonical completed result after acquiring the
+worker run lock and before download/provider work. It finalizes Redis using
+that same token via the existing compare-and-set finalizer without binding a
+ledger epoch or changing dispatch mode. Invalid/held results continue the
+ordinary path; read errors and lost tokens fail closed. Flag rollback restores
+legacy behavior but does not remove durable custody records. Leave protective
+holds intact until delivery/explicit abandonment is verified.

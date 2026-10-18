@@ -298,7 +298,6 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     llm_memories = add("utils.llm.memories", AutoMockModule("utils.llm.memories"))
     for attr in [
-        "resolve_memory_conflict",
         "extract_canonical_l1_memory_candidates",
         "extract_memories_from_text",
         "new_memories_extractor",
@@ -1366,61 +1365,6 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert results[0]['app_id'] == 'app-1'
     assert results[0]['content'] == 'APP SUMMARY'
     assert written.get('suggested_summarization_apps') == ['app-1']
-
-
-def test_running_now_still_defers_folders_and_apps_when_jit_admits(monkeypatch):
-    completed_conversation = Conversation(
-        id='conversation-jit',
-        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
-        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
-        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
-        source=ConversationSource.omi,
-        structured=Structured(title='Title', overview='Overview'),
-        transcript_segments=[],
-        status=ConversationStatus.completed,
-        discarded=False,
-    )
-
-    claims: list[str] = []
-    input_conversation = MagicMock()
-    input_conversation.source = 'omi'
-    input_conversation.get_person_ids.return_value = []
-
-    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
-    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
-    monkeypatch.setattr(
-        process_conversation,
-        'resolve_authorized_first_open_plan',
-        lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
-    )
-    monkeypatch.setattr(
-        process_conversation.conversations_db,
-        'initialize_first_open_work',
-        lambda uid, conversation_id, **_kwargs: claims.append(f'{uid}:{conversation_id}') or True,
-    )
-    monkeypatch.setattr(
-        process_conversation.folders_db,
-        'get_folders',
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('folders must defer under JIT')),
-    )
-    monkeypatch.setattr(
-        process_conversation,
-        'trigger_conversation_apps',
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('apps must defer under JIT')),
-    )
-    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
-    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', MagicMock())
-    monkeypatch.setattr(
-        process_conversation.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
-    )
-
-    process_conversation.process_conversation(
-        'uid', 'en', input_conversation, trigger=process_conversation.ProcessingTrigger.CLIENT_FINALIZE
-    )
-
-    assert claims == ['uid:conversation-jit']
 
 
 def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(monkeypatch):

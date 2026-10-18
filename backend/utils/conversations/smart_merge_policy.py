@@ -7,7 +7,7 @@ payloads. The Firestore transaction in ``database/smart_merge.py`` calls
 precondition is checked against current data, not the caller's snapshot.
 
 Partition, exclusions and gap arithmetic follow the sync bridge
-(``utils/sync/assignment.compatible_capture`` / ``auto_mergeable`` and
+(``utils/sync/live_overlap.compatible_capture`` / ``assignment.auto_mergeable`` and
 ``utils/conversation_continuity``) so the two merge paths agree on what a
 device partition and a user-managed row are.
 """
@@ -61,7 +61,6 @@ _USER_MANAGED_FLAGS = (
 class SkipReason:
     """Bounded reasons a pair never reaches Jev (metric label values)."""
 
-    UID_NOT_ALLOWED = 'uid_not_allowed'
     NOT_ELIGIBLE_SOURCE = 'not_eligible_source'
     NOT_CAPTURE_END = 'not_capture_end'
     CONVERSATION_NOT_ELIGIBLE = 'conversation_not_eligible'

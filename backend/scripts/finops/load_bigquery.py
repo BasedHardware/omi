@@ -28,6 +28,7 @@ import tempfile
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from assemble_unit_cost import COMPS  # noqa: E402
+import load_mercury  # noqa: E402
 
 AUTH_MODE = os.environ.get("FINOPS_AUTH", "local")  # 'local' (laptop cron) | 'cloudrun'
 if AUTH_MODE == "cloudrun":
@@ -100,6 +101,9 @@ CLUSTER = {
     "plan_revenue_daily": ["plan"],
     "unit_cost_user_day": ["cohort", "plan"],
 }
+
+SCHEMAS.update(load_mercury.SCHEMAS)
+CLUSTER.update(load_mercury.CLUSTER)
 
 
 def _bq_cmd() -> list[str]:
@@ -318,6 +322,7 @@ def main() -> None:
     for name in ("unit_cost_daily", "unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day"):
         ensure_table(name)
         loaded[name] = load_replace(name, tables[name], dates)
+    loaded.update(load_mercury.load(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
     print(
         json.dumps(
             {"run_id": a.run_id, "dates": dates, "rows_loaded": loaded, "dataset": "%s.%s" % (PROJECT, DATASET)},

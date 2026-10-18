@@ -1,7 +1,7 @@
 """Cohort admission and emergency stop for the free-tier rollout flags.
 
 Before this module, ``FREE_TIER_LOCAL_PROCESSING`` and
-``FREE_TIER_MEMORY_SUPPRESSION`` were global booleans: lighting one lit it for
+the retired memory-suppression experiment used global booleans: lighting one lit it for
 100% of basic users on that environment, with no remote stop (direction review
 2026-09-07 §7 item 3; flip review F-5). This module makes a lit flag mean
 "lit for the configured cohort", fail-closed, and adds two stops that need no
@@ -24,10 +24,10 @@ Stops (both revoke admission for everyone, including listed uids):
 * ``FREE_TIER_EMERGENCY_STOP=true`` — environment; needs a redeploy.
 * PostHog flag ``free-tier-kill-switch-v1`` — remote, honoured without a
   redeploy, read with the same client configuration and tri-state mapping
-  as the JIT rollout (``utils.jit_rollout``) but on this module's own small
-  executor, so a stall here cannot occupy the JIT admission bulkhead and vice
-  versa. Only a **definitively enabled** kill switch stops; unknown / absent
-  / PostHog down never blocks by itself, matching the JIT precedent, so an
+  as other PostHog readers but on this module's own small
+  executor, so a stall here cannot occupy the proactivity flag lookup pool.
+  Only a **definitively enabled** kill switch stops; unknown / absent
+  / PostHog down never blocks by itself, so an
   outage cannot re-light or un-light a cohort. The remote read happens only
   after the environment cohort admits the account, so a dark fleet makes no
   provider calls; after a genuine provider failure (timeout, unconfigured,
@@ -60,16 +60,22 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as Futur
 from dataclasses import dataclass
 from typing import Any
 
-from utils.jit_rollout import TriState
+from enum import Enum
+
+
+class TriState(str, Enum):
+    """Three-valued feature-flag result for the free-tier stop reader."""
+
+    ENABLED = 'enabled'
+    DISABLED = 'disabled'
+    UNKNOWN = 'unknown'
+
 
 logger = logging.getLogger(__name__)
 
 COHORT_ENV_SUFFIX = '_COHORT'
 EMERGENCY_STOP_ENV_VAR = 'FREE_TIER_EMERGENCY_STOP'
-# Remote stop. Reserved exposure key: read by nothing, listed so nobody
-# reuses the name for a different meaning. The environment cohort is the only
-# admission source today; do not make PostHog one without a rollout record.
-FREE_TIER_COHORT_FLAG_KEY = 'free-tier-cohort-v1'
+# Remote stop. The environment cohort is the only admission source today.
 FREE_TIER_KILL_SWITCH_FLAG_KEY = 'free-tier-kill-switch-v1'
 _HASH_SALT = b'free-tier-cohort:'
 _KILL_SWITCH_CACHE_SECONDS = 20.0
@@ -195,7 +201,7 @@ _cache: OrderedDict[str, tuple[TriState, float]] = OrderedDict()
 
 
 def _build_posthog_client() -> Any | None:
-    # Same configuration as utils.jit_rollout.PostHogJITFlagProvider._build_client.
+    # Use the shared PostHog client configuration.
     api_key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
     if not api_key:
         return None
@@ -232,11 +238,10 @@ def _get_executor() -> ThreadPoolExecutor:
 def close_free_tier_control_plane() -> None:
     """Stop accepting kill-switch work without blocking application shutdown.
 
-    Mirrors ``utils.jit_rollout.close_posthog_control_plane``: queued calls
+    Mirrors the PostHog control-plane shutdown behavior: queued calls
     are cancelled; already-running SDK calls retain their own bounded timeout
     and are not waited on here. A later in-process startup lazily creates a
-    fresh isolated executor. Wired next to the JIT close hook in the service
-    shutdown paths.
+    fresh isolated executor. Wired into the service shutdown paths.
     """
     global _executor
     with _executor_lock:
@@ -262,7 +267,7 @@ def _fetch_kill_switch(uid: str) -> TriState:
         raise TypeError('malformed_feature_flags')
     # PostHog omits a boolean flag from a healthy decide response when it
     # evaluates false for the distinct id — the kill switch's normal dark
-    # state. Following the JIT contract (utils.jit_rollout), absence in a
+    # state. Following the PostHog cohort contract, absence in a
     # well-formed mapping means the provider was reachable and asserted no
     # kill: DISABLED, not UNKNOWN, so admitted accounts are not re-queried
     # every short unknown-TTL. UNKNOWN stays reserved for a present-but-
@@ -420,7 +425,6 @@ __all__ = [
     'COHORT_REASONS',
     'CohortDecision',
     'EMERGENCY_STOP_ENV_VAR',
-    'FREE_TIER_COHORT_FLAG_KEY',
     'FREE_TIER_KILL_SWITCH_FLAG_KEY',
     'close_free_tier_control_plane',
     'cohort_admits',

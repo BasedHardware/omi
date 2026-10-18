@@ -13,10 +13,12 @@ import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/audio/conversation_playback_controller.dart';
+import 'package:omi/utils/audio/partial_audio_coverage.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
@@ -836,6 +838,19 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (mounted) setState(() {});
   }
 
+  /// "0:03 of 5:49 audio saved" when the stored audio covers much less than
+  /// the conversation: a short player is a short file, not a broken one
+  /// (#19243). Shown until playback moves; the remaining time takes the slot
+  /// after that and whenever the audio covers the conversation.
+  String? _partialAudioLabel(AppLocalizations l10n) {
+    final conversation = widget.conversation;
+    if (conversation == null) return null;
+    final saved = _totalDuration.inMilliseconds / 1000;
+    final spoken = conversation.getDurationInSeconds().toDouble();
+    if (!savedAudioIsPartial(savedSeconds: saved, conversationSeconds: spoken)) return null;
+    return l10n.playbackPartialAudioSaved(OmiDuration.offset(saved), OmiDuration.offset(spoken));
+  }
+
   String _formatDurationRemaining(Duration position) {
     final remaining = _totalDuration - position;
     // OmiDuration.offset keeps the hours: 1h 5m remaining reads 1:05:00, not 5:00.
@@ -1086,6 +1101,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final levels = speechLevels(segments, _waveformBars, start: 0, end: wallEnd > 0 ? wallEnd : null);
     final controller = widget.playbackController;
     final l10n = context.l10n;
+    final partialAudioLabel = _partialAudioLabel(l10n);
 
     final String? statusLabel = switch ((_failure, _showPreparingLabel)) {
       (_AudioFailure.transport, _) => l10n.playbackAudioNetworkFailed,
@@ -1127,6 +1143,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             final unmapped = _isAudioInitialized && _timelineMapper == null;
             final progress = !unmapped && wallEnd > 0 ? (wallSeconds / wallEnd).clamp(0.0, 1.0) : 0.0;
             final position = Duration(milliseconds: (artifactSeconds * 1000).toInt());
+            // Before anything is heard the slot explains a short recording;
+            // once playback moves it goes back to the remaining time.
+            final label = statusLabel ?? (position == Duration.zero ? partialAudioLabel : null);
             return Row(
               children: [
                 Expanded(
@@ -1158,12 +1177,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                if (statusLabel != null)
+                if (label != null)
                   Flexible(
                     child: Semantics(
                       liveRegion: true,
                       child: Text(
-                        statusLabel,
+                        label,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),

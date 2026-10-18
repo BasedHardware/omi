@@ -12,7 +12,7 @@ from pathlib import Path
 
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
-from render_feature_flag_registry import render, _parse_mapping
+from render_feature_flag_registry import render, _deploy_index, _parse_mapping
 
 
 def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]:
@@ -96,13 +96,10 @@ class RegistryFixture(unittest.TestCase):
         )
         self.write("desktop/windows/src/renderer/flags.ts", "import.meta.env.VITE_ENABLE_MISSING_WINDOWS\n")
         self.write("web/admin/src/flags.ts", "process.env.NEXT_PUBLIC_ENABLE_MISSING_WEB\n")
+        self.write("web/app/src/lib/gate.ts", "class Gate {\n  static readonly enabledFlag = 'missing-web-posthog';\n}\n")
         errors = "\n".join(self.errors())
         for key in (
-            "missing_macos_kill",
-            "missing_enable",
-            "missing-mobile-experiment",
-            "VITE_ENABLE_MISSING_WINDOWS",
-            "NEXT_PUBLIC_ENABLE_MISSING_WEB",
+            "missing_macos_kill", "missing_enable", "missing-mobile-experiment", "VITE_ENABLE_MISSING_WINDOWS", "NEXT_PUBLIC_ENABLE_MISSING_WEB", "missing-web-posthog"
         ):
             self.assertIn(f"unregistered feature flag: {key}", errors)
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
@@ -248,6 +245,23 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("(chart)", cells[7])
         empty = next(line for line in output.splitlines() if line.startswith("| `EMPTY_ENABLED` |"))
         self.assertIn("''", empty)
+
+    def test_renderer_indexes_deploy_action_env_overlays(self) -> None:
+        self.write(
+            ".github/actions/sync-backfill-lifecycle/action.yml",
+            'run: |\n  echo "sync_backfill_env_vars<<EOF"\n'
+            '  echo "SYNC_BACKFILL_ROUTING_ENABLED=true"\n  echo "EOF"\n'
+            '  gcloud run services update backend-sync --update-env-vars "SYNC_BACKFILL_EXTRA_ENABLED=on"\n',
+        )
+        self.write(
+            ".github/workflows/deploy-backend-prod.yml",
+            'run: gcloud run services update backend-sync --update-env-vars "PROD_ACTION_KILL=false"\n',
+        )
+        index = _deploy_index(self.root)
+        self.assertEqual(index["dev"]["sync-backfill-lifecycle (action)"]["SYNC_BACKFILL_ROUTING_ENABLED"], "true")
+        self.assertEqual(index["prod"]["sync-backfill-lifecycle (action)"]["SYNC_BACKFILL_EXTRA_ENABLED"], "on")
+        self.assertEqual(index["prod"]["deploy-backend-prod (action)"]["PROD_ACTION_KILL"], "false")
+        self.assertNotIn("PROD_ACTION_KILL", index["dev"].get("deploy-backend-prod (action)", {}))
 
     def test_experiment_requires_prereg(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment")]))

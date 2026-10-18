@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import httpx
 import numpy as np
 import pytest
+from prometheus_client import REGISTRY
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 from config.live_stt_recovery import session_recovery_enabled
@@ -26,6 +27,7 @@ from utils.stt import (
 )
 from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.observability.fallback import record_fallback
+from utils.observability.routing_cohort import COHORT_WINDOW_FIRST_TEXT, RoutingCohort, current_routing_cohort
 from utils.stt.live_metrics import (
     WINDOW_ADMISSION,
     WINDOW_FIRST_TEXT,
@@ -197,10 +199,16 @@ def receiver():
 
 
 @pytest.mark.asyncio
-async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
+@pytest.mark.parametrize('routing_arm', ['off', 'on', 'shadow', None])
+async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch, routing_arm):
     before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get()
     before_first = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get()
+    before_arms = {arm: COHORT_WINDOW_FIRST_TEXT.labels(routing_arm=arm)._sum.get() for arm in ('off', 'on', 'shadow')}
+    count_name = 'omi_stt_routing_cohort_window_first_text_seconds_count'
+    before_counts = {
+        arm: REGISTRY.get_sample_value(count_name, {'routing_arm': arm}) for arm in ('off', 'on', 'shadow')
+    }
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     from utils.stt import live_session
@@ -208,8 +216,12 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     usage = []
     monkeypatch.setattr(live_session, 'record_live_stt_audio_seconds', lambda **kw: usage.append(kw))
     recv = receiver()
-    session = LiveChainSession(recv)
-    socket = await session.connect(16000)
+    token = current_routing_cohort.set(RoutingCohort(routing_arm) if routing_arm is not None else None)
+    try:
+        session = LiveChainSession(recv)
+        socket = await session.connect(16000)
+    finally:
+        current_routing_cohort.reset(token)
     assert isinstance(socket.raw, st.ParakeetStreamingSocket)
     # Pure noise/silence never receives a POST, including at teardown.
     assert socket.send(bytes(32000))
@@ -218,7 +230,12 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert socket.send(b'\x01\x00' * 16000)
     assert socket.send(bytes(16000))
     assert socket.send(bytes(16000))
-    await socket.drain_and_close()
+    # Emission must use the socket's pinned arm, not this unrelated callback context.
+    token = current_routing_cohort.set(RoutingCohort('on' if routing_arm != 'on' else 'off'))
+    try:
+        await socket.drain_and_close()
+    finally:
+        current_routing_cohort.reset(token)
     assert len(client.requests) == 1
     url, kwargs = client.requests[0]
     assert url.endswith('/v1/transcribe')
@@ -235,6 +252,15 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get() == before_text + 1
     assert WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() > before_first
+    observed = WINDOW_FIRST_TEXT.labels(demand_cohort='ineligible')._sum.get() - before_first
+    for arm, before in before_arms.items():
+        delta = COHORT_WINDOW_FIRST_TEXT.labels(routing_arm=arm)._sum.get() - before
+        assert delta == pytest.approx(observed if arm == routing_arm else 0)
+        before_count = before_counts[arm]
+        assert before_count is not None
+        assert REGISTRY.get_sample_value(count_name, {'routing_arm': arm}) == before_count + (
+            1 if arm == routing_arm else 0
+        )
 
 
 @pytest.mark.asyncio

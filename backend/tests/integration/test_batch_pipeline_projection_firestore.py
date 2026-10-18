@@ -84,10 +84,14 @@ def lane(monkeypatch):
     projector = Projector(store, load, publish=lambda b, r: published.append(r), clock=clock)
     queue, merge = Scheduler(store), OrderedMerge(store)
 
-    def seed(names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0):
+    def seed(
+        names=('a',), *, device=None, protection='standard', capture_at=1000.0, duration_seconds=30.0, owner_id=None
+    ):
+        owner_id = owner_id or uid
+        client.collection('users').document(owner_id).set({'data_protection_level': 'standard'})
         ids = tuple(f'{name}-{uuid4().hex[:8]}' for name in names)
         binding = ProjectionBinding(
-            uid,
+            owner_id,
             f'job-{uuid4().hex}',
             f'content-{uuid4().hex}',
             ids,
@@ -97,21 +101,21 @@ def lane(monkeypatch):
         items = [
             WorkItem(
                 sid,
-                uid,
+                owner_id,
                 capture_at + i * 30,
                 f'gs://synthetic/{sid}#1',
                 duration_seconds,
                 Priority.DEEP,
-                conversation_id=chunk_identity(uid, 'omi', device, False, capture_at + i * 30),
+                conversation_id=chunk_identity(owner_id, 'omi', device, False, capture_at + i * 30),
                 privacy_generation=0,
             )
             for i, sid in enumerate(ids)
         ]
         assert admit(store, items, binding, 0, namespace=store.namespace)['outcome'] == 'batch'
-        ledger = sync_content_ledger_ref(client, uid, binding.content_id)
+        ledger = sync_content_ledger_ref(client, owner_id, binding.content_id)
         leases = {}
         for _ in range(240):
-            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, len(items))})
+            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, min(32, len(items)))})
             if len(leases) == len(items):
                 break
         assert len(leases) == len(items)
@@ -120,7 +124,7 @@ def lane(monkeypatch):
     def finish(batch, index=0, outcome='success'):
         sid = batch.ids[index]
         assert queue.complete(WorkResult(sid, f'gs://synthetic/results/{sid}#1', outcome), batch.leases[sid].token, 1)
-        return merge.commit_next(uid, 2)
+        return merge.commit_next(batch.binding.owner_id, 2)
 
     value = SimpleNamespace(**locals())
     yield value
@@ -1118,6 +1122,7 @@ def test_authoritative_gap_ids_do_not_inherit_speaker_zero_manual_owner(lane, mo
 
 
 def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
     from unittest.mock import Mock
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
     from utils.batch_pipeline import quarantine_recovery as module

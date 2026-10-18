@@ -4,6 +4,8 @@ from enum import IntEnum
 import hashlib
 import math
 import os
+
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
 from typing import Callable, TypeVar
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
@@ -30,9 +32,15 @@ def enabled_for(owner_id: str) -> bool:
         return False
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
-    owners = {value.strip() for value in os.getenv('BATCH_PIPELINE_UID_ALLOWLIST', '').split(',') if value.strip()}
+    return in_rollout_cohort(owner_id, 'batch-pipeline') or in_percent_cohort(owner_id, percent)
+
+
+def in_percent_cohort(owner_id: str, percent: float) -> bool:
+    """Shared unsalted admission bucket; invalid percentages never admit."""
+    if not owner_id or not math.isfinite(percent) or not 0 <= percent <= 100:
+        return False
     bucket = int.from_bytes(hashlib.sha256(owner_id.encode()).digest()[:4], 'big') / 2**32 * 100
-    return owner_id in owners or bucket < percent
+    return bucket < percent
 
 
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
@@ -100,15 +108,7 @@ def recovery_owners() -> tuple[str, ...]:
     """Recovery is independent of admission; empty allowlist always denies."""
     if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
         return ()
-    return tuple(
-        sorted(
-            {
-                value.strip()
-                for value in os.getenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', '').split(',')
-                if value.strip() and '/' not in value.strip() and len(value.strip().encode()) <= 256
-            }
-        )
-    )
+    return rollout_cohort_members('batch-pipeline-recovery')
 
 
 def authoritative_labels_enabled() -> bool:
@@ -132,7 +132,10 @@ def recover_all_admitted() -> bool:
 
 
 def recovery_enabled_for(owner_id: str) -> bool:
-    return recover_all_admitted() or owner_id in recovery_owners()
+    return recover_all_admitted() or (
+        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() == 'on'
+        and in_rollout_cohort(owner_id, 'batch-pipeline-recovery')
+    )
 
 
 def empty_asr_disposition_enabled() -> bool:
@@ -152,3 +155,45 @@ def speech_empty_multilingual_enabled() -> bool:
 def terminal_empty_disposition_enabled() -> bool:
     """Dark, evidenced terminal empty result; never grants another paid intent."""
     return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def read_only_metrics_enabled() -> bool:
+    """A scrape may stop draining only while the supervised drain is enabled."""
+    return (
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    )
+
+
+def projection_timing_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_silence_disposition_enabled() -> bool:
+    """Dark worker-side use of integration's strict local silence evidence."""
+    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def worker_validation_disposition_enabled() -> bool:
+    """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
+    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+
+
+def head_priority_enabled() -> bool:
+    """Prefer a queued capture-order head without changing lease/merge authority."""
+    return os.getenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false').strip().lower() == 'true'
+
+
+def async_projection_enabled() -> bool:
+    """Persist in order, then drain durable follow-ups outside the owner claim."""
+    return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def recovery_tasks_enabled() -> bool:
+    """Ship-on request-backed paid recovery; false restores inline sweeping."""
+    return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'
+
+
+def projection_pagination_enabled() -> bool:
+    """Ship-on fair discovery; false restores the legacy oldest-page scan."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'

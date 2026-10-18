@@ -11,14 +11,22 @@ from utils.sync import cap_hold, pipeline
 from utils import stt_cap_dispatch as cap
 
 
+@pytest.fixture(autouse=True)
+def initialized_summary(monkeypatch):
+    # This suite tests hold leaves; summary migration has separate transaction tests.
+    monkeypatch.setattr(cap_hold, 'ensure_summary', lambda uid: {'version': 2, 'seconds': 0, 'count': 0})
+
+
 @pytest.mark.parametrize('enforce', [False, True])
+@pytest.mark.parametrize('ladder', [False, True])
 @pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])
-def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued):
+def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued, ladder):
     path = tmp_path / '1792152000.wav'
     with wave.open(str(path), 'wb') as output:
         output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
         output.writeframes(b'\0' * 32000)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *_: False)
     monkeypatch.setattr(
         cap, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='plan_allowance_exhausted'))
@@ -47,7 +55,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
         is False
     )
     assert not errors
-    if enforce:
+    if enforce or ladder:
         hold.assert_called_once()
         assert hold.call_args.args[2]['timestamp'] == 1792152000
         url.assert_not_called()
@@ -175,7 +183,34 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
         order.append('upload')
 
     blob.upload_from_file.side_effect = upload
-    ref.create.side_effect = lambda *args, **kwargs: order.append('manifest')
+
+    class _Batch:
+        def create(self, document, data):
+            document.create(data)
+            order.append('manifest')
+
+        def set(self, document, data, merge=False):
+            order.append('summary')
+
+        def commit(self):
+            return None
+
+    class _Ref:
+        def collection(self, name):
+            return self
+
+        def document(self, name):
+            return self
+
+    class _Client:
+        def batch(self):
+            return _Batch()
+
+        def collection(self, name):
+            return _Ref()
+
+    ref.create.side_effect = lambda *args, **kwargs: None
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: _Client())
     monkeypatch.setattr(cap_hold, 'holds', lambda _: SimpleNamespace(document=lambda _: ref))
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
     bucket.blob.return_value = blob
@@ -184,7 +219,7 @@ def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_pat
     monkeypatch.setattr(cap_hold, 'funded_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted'))
     meta = {'timestamp': 1792152000, 'source': 'omi', 'full_capture': True}
     assert cap_hold.hold_segment('synthetic', str(path), meta) == 1
-    assert order == ['upload', 'manifest']
+    assert order == ['upload', 'manifest', 'summary']
     assert decrypt_audio_file(uploaded[0], 'synthetic') == path.read_bytes()
     manifest = ref.create.call_args.args[0]
     assert manifest['audio_path'].startswith('chunks/synthetic/cap-held/')
@@ -213,6 +248,32 @@ def test_large_hold_streams_bounded_authenticated_chunks(tmp_path, monkeypatch, 
     uploaded = []
     blob.upload_from_file.side_effect = lambda stream, **kw: uploaded.append(stream.read())
     bucket.blob.return_value = blob
+
+    class _Batch:
+        def create(self, document, data):
+            document.create(data)
+
+        def set(self, document, data, merge=False):
+            return None
+
+        def commit(self):
+            return None
+
+    class _Ref:
+        def collection(self, name):
+            return self
+
+        def document(self, name):
+            return self
+
+    class _Client:
+        def batch(self):
+            return _Batch()
+
+        def collection(self, name):
+            return _Ref()
+
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: _Client())
     monkeypatch.setattr(cap_hold, 'holds', lambda _: SimpleNamespace(document=lambda _: ref))
     monkeypatch.setattr(cap_hold, 'get_private_cloud_sync_bucket', lambda: bucket)
     monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
@@ -248,7 +309,7 @@ async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
     monkeypatch.setattr(
         cap_hold, 'funded_allowance', Mock(return_value=SimpleNamespace(managed=False, reason='allowance_unavailable'))
     )
-    monkeypatch.setattr(cap_hold, '_describe', Mock(return_value=('held', 20, {'source': 'omi'})))
+    monkeypatch.setattr(cap_hold, 'describe', Mock(return_value=('held', 20, {'source': 'omi'})))
     monkeypatch.setattr(cap_hold, '_exists', Mock(return_value=False))
     monkeypatch.setattr(cap_hold, 'upload_held_audio', Mock(return_value={'audio_path': 'synthetic'}))
     monkeypatch.setattr(cap_hold, '_publish', Mock(return_value=True))
@@ -265,7 +326,7 @@ async def test_capture_hold_coordinates_db_and_storage_leaves(monkeypatch):
     )
     assert calls == [
         (cap_hold.db_executor, cap_hold.funded_allowance),
-        (cap_hold.storage_executor, cap_hold._describe),
+        (cap_hold.storage_executor, cap_hold.describe),
         (cap_hold.db_executor, cap_hold._exists),
         (cap_hold.storage_executor, cap_hold.upload_held_audio),
         (cap_hold.db_executor, cap_hold._publish),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,6 +42,8 @@ void main() {
 
   final channels = <String>{};
   var linkUp = false;
+  var adapterState = 'on';
+  var failNativeOnce = false;
   var nativeReplaysReady = false;
   var manageCalls = 0;
   var unmanageCalls = 0;
@@ -74,13 +77,22 @@ void main() {
 
   setUp(() {
     linkUp = false;
+    adapterState = 'on';
+    failNativeOnce = false;
+    SharedPreferencesUtil().saveStringList('manualBleDisconnects', []);
     nativeReplaysReady = false;
     unmanageFails = false;
     manageCalls = 0;
     unmanageCalls = 0;
-    handle('getBluetoothState', (_) => 'on');
+    handle('getBluetoothState', (_) => adapterState);
+    handle('configureSavedReconnect', (_) => null);
     handle('manageDevice', (args) {
       manageCalls++;
+      if (failNativeOnce) {
+        failNativeOnce = false;
+        scheduleMicrotask(() => BleBridge.instance.onPeripheralDisconnected(_deviceId, 'connection_failed'));
+        return null;
+      }
       // Native answers manageDevice for an already-connected peripheral by
       // replaying device-ready (iOS replayReady, Android adoptConnectedDevice).
       if (nativeReplaysReady && args.first == _deviceId) {
@@ -136,6 +148,104 @@ void main() {
     });
   });
 
+  test('out of range launch retries the same owner and reconnects without relaunch', () {
+    fakeAsync((async) {
+      pairPendant();
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.elapse(const Duration(seconds: 61));
+      final owner = ServiceManager.instance().device.connectionFor(_deviceId);
+      expect(manageCalls, 1);
+      async.elapse(const Duration(seconds: 5));
+      expect(manageCalls, 2);
+      expect(ServiceManager.instance().device.connectionFor(_deviceId), same(owner));
+      expect(unmanageCalls, 0);
+      linkUp = true;
+      BleBridge.instance.onDeviceReady(_deviceId, _services);
+      async.elapse(const Duration(seconds: 5));
+      expect(provider.isConnected, isTrue);
+      async.elapse(const Duration(minutes: 10));
+      expect(manageCalls, 2, reason: 'a connected link has no retry timer');
+      provider.dispose();
+      async.flushMicrotasks();
+    });
+  });
+
+  test('adapter unknown at launch recovers on adapter_on without losing its owner', () {
+    fakeAsync((async) {
+      pairPendant();
+      adapterState = 'unknown';
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.flushMicrotasks();
+      final owner = ServiceManager.instance().device.connectionFor(_deviceId);
+      expect(owner, isNotNull);
+      expect(manageCalls, 0);
+      expect(unmanageCalls, 0);
+      adapterState = 'on';
+      linkUp = true;
+      nativeReplaysReady = true;
+      BleBridge.instance.onBluetoothStateChanged('on');
+      async.elapse(const Duration(seconds: 5));
+      expect(ServiceManager.instance().device.connectionFor(_deviceId), same(owner));
+      expect(manageCalls, 1);
+      expect(provider.isConnected, isTrue);
+      provider.dispose();
+      async.flushMicrotasks();
+    });
+  });
+
+  test('native fail-to-connect at launch recovers on resume using the retained transport', () {
+    fakeAsync((async) {
+      pairPendant();
+      failNativeOnce = true;
+      final provider = DeviceProvider();
+      provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+      async.flushMicrotasks();
+      final owner = ServiceManager.instance().device.connectionFor(_deviceId);
+      expect(owner, isNotNull);
+      expect(unmanageCalls, 0);
+      nativeReplaysReady = true;
+      linkUp = true;
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      async.elapse(const Duration(seconds: 3));
+      expect(manageCalls, 2);
+      expect(ServiceManager.instance().device.connectionFor(_deviceId), same(owner));
+      expect(provider.isConnected, isTrue);
+      provider.dispose();
+      async.flushMicrotasks();
+    });
+  });
+
+  for (final forget in [false, true]) {
+    test('${forget ? 'forget' : 'manual disconnect'} cancels retries and fences late ready', () {
+      fakeAsync((async) {
+        pairPendant();
+        final provider = DeviceProvider();
+        provider.initiateConnection('HomePageWrapper', boundDeviceOnly: true);
+        async.flushMicrotasks();
+        final service = ServiceManager.instance().device;
+        if (forget) {
+          service.forgetDevice(_deviceId);
+        } else {
+          service.disconnectDevice(_deviceId, userInitiated: true);
+        }
+        async.flushMicrotasks();
+        expect(unmanageCalls, 1);
+        BleBridge.instance.onDeviceReady(_deviceId, _services);
+        BleBridge.instance.onBluetoothStateChanged('on');
+        service.reconnectSavedDevice('resume');
+        async.elapse(const Duration(minutes: 15));
+        expect(manageCalls, 1);
+        expect(provider.isConnected, isFalse);
+        expect(service.canAutoReconnectDevice(_deviceId), isFalse);
+        provider.dispose();
+        async.flushMicrotasks();
+      });
+    });
+  }
+
   test('a retired registration cannot silence the transport that replaced it', () {
     final readyFor = <String>[];
     final releaseOld = BleBridge.instance.registerPeripheral(
@@ -168,7 +278,7 @@ void main() {
       final transportStates = <DeviceTransportState>[];
       timedOut.transport.connectionStateStream.listen(transportStates.add);
 
-      service.disconnectDevice(_deviceId);
+      service.disconnectDevice(_deviceId, userInitiated: true);
       async.elapse(const Duration(seconds: 1));
 
       expect(unmanageCalls, 1, reason: 'native was still connecting; an explicit disconnect must stop it');
@@ -192,7 +302,7 @@ void main() {
     var transportClosed = false;
     connection!.transport.connectionStateStream.listen((_) {}, onDone: () => transportClosed = true);
 
-    await service.disconnectDevice(_deviceId);
+    await service.disconnectDevice(_deviceId, userInitiated: true);
     await pumpEventQueue();
 
     expect(transportClosed, isTrue, reason: 'an undisposed transport stays registered for native events');

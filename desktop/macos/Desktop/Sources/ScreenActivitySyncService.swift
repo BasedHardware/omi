@@ -86,17 +86,17 @@ actor ScreenActivitySyncService {
 
   // MARK: - State
 
+  private var cursorOwner: RuntimeOwnerAuthorizationSnapshot?
   private var lastSyncedId: Int64 = 0
   private var isRunning = false
   private var syncTask: Task<Void, Never>?
   private var consecutiveFailures = 0
-  private var didStartEmbeddingRecovery = false
+  private let cursorStore = ScreenActivityCursorStore()
 
   private let batchSize = 100
   private let baseSyncInterval: UInt64 = 60_000_000_000  // 60s in nanoseconds
   private let maxSyncInterval: UInt64 = 300_000_000_000  // 300s max backoff
 
-  private let cursorKey = "screenActivitySync_lastId"
   private let compactionDelay: TimeInterval = 5 * 60
   /// How long a closed bucket's winner waits for its embedding before shipping text-only.
   /// Without it every row ships twice: once when compaction sweeps it, and again when the
@@ -113,19 +113,18 @@ actor ScreenActivitySyncService {
       return
     }
     isRunning = true
-    loadCursor()
+    loadCursor(authorization: RuntimeOwnerIdentity.captureAuthorizationSnapshot())
     log("ScreenActivitySync: starting (lastSyncedId=\(lastSyncedId), initialDelay=\(initialDelay)s)")
     syncLoop(initialDelay: initialDelay)
   }
 
   /// Stop the sync loop.
-  func stop() {
+  func stop(logStopped: Bool = true) {
     guard isRunning else { return }
     isRunning = false
     syncTask?.cancel()
     syncTask = nil
-    didStartEmbeddingRecovery = false
-    log("ScreenActivitySync: stopped")
+    if logStopped { log("ScreenActivitySync: stopped") }
   }
 
   // MARK: - Sync loop
@@ -158,81 +157,83 @@ actor ScreenActivitySyncService {
   }
 
   private func syncTick() async {
-    guard let dbPool = await getDBPool() else { return }
-
-    let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
-    if losslessEnabled {
-      await losslessSyncTick(dbPool: dbPool)
-    } else {
-      await legacySyncTick(dbPool: dbPool)
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      let dbPool = await getDBPool(), RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+    else { return }
+    if cursorOwner != authorization { loadCursor(authorization: authorization) }
+    let lossless = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+    // The OCR actor owns coalescing, retry cooldowns and the process-wide launch budget.
+    // Cold/expired entitlement must not consume a once-per-launch scheduling flag.
+    Task(priority: .utility) { await OCREmbeddingService.shared.backfillIfNeeded() }
+    let mutation = LocalMutationAuthorization { RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) }
+    do {
+      let cursor = try await Self.deliverPeriodicBatch(
+        database: dbPool, afterId: lossless ? nil : lastSyncedId, limit: batchSize, now: Date(),
+        authorizationIsCurrent: { RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) },
+        cloudAllowed: { ScreenCloudEntitlementService.shared.allowsCloud(authorization) },
+        mutation: mutation,
+        push: { rows in
+          await self.pushRows(rows, authorizationSnapshot: authorization, periodic: true)
+        })
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      if let cursor, !lossless {
+        try await saveCursor(cursor, authorization: authorization)
+      }
+      consecutiveFailures = 0
+    } catch {
+      if isRunning { recordPushFailure(path: lossless ? "lossless" : "legacy") }
     }
   }
 
-  private func losslessSyncTick(dbPool: DatabasePool) async {
-    if !didStartEmbeddingRecovery {
-      didStartEmbeddingRecovery = true
-      Task(priority: .utility) {
-        await OCREmbeddingService.shared.backfillIfNeeded()
+  /// Durable optional-projection receipt. Text can advance the legacy cursor while a later
+  /// vector remains eligible independently of that cursor. A failed/revoked push never acks.
+  static func deliverPeriodicBatch(
+    database: any DatabaseWriter, afterId: Int64?, limit: Int, now: Date,
+    authorizationIsCurrent: @escaping @Sendable () -> Bool,
+    cloudAllowed: @escaping @Sendable () -> Bool,
+    mutation: LocalMutationAuthorization,
+    push: ([[String: Any]]) async -> Bool,
+    isolation: isolated (any Actor)? = #isolation
+  ) async throws -> Int64? {
+    guard authorizationIsCurrent() else { throw LocalMutationAuthorizationError.revoked }
+    let allowsCloud = cloudAllowed()
+    let candidates: [ScreenActivitySyncCandidate] = try await mutation.withCommitLease {
+      try await database.write { db in
+        try mutation.require()
+        if let afterId {
+          return try fetchLegacySyncRows(db: db, afterId: afterId, limit: limit, now: now, cloudAllowed: allowsCloud)
+            .compactMap(syncCandidate(from:))
+        }
+        try compactClosedBuckets(db: db, now: now, slack: 300)
+        return try fetchSyncCandidates(
+          db: db, limit: limit, now: now, slack: 300,
+          embeddingGrace: allowsCloud ? 900 : 300, cloudAllowed: allowsCloud)
       }
     }
-    do {
-      let now = Date()
-      let candidates = try await dbPool.write { [batchSize, compactionDelay, embeddingGrace] db in
-        try Self.compactClosedBuckets(db: db, now: now, slack: compactionDelay)
-        return try Self.fetchSyncCandidates(
-          db: db, limit: batchSize, now: now, slack: compactionDelay, embeddingGrace: embeddingGrace)
-      }
-      guard !candidates.isEmpty else { return }
-
-      let success = await pushRows(candidates.map(\.payload))
-      if success {
-        try await dbPool.write { db in
-          try Self.markCandidatesSynced(db: db, candidates: candidates)
-        }
-        if consecutiveFailures > 0 {
-          log("ScreenActivitySync: lossless path reconnected after \(consecutiveFailures) failures")
-        }
-        consecutiveFailures = 0
-        log("ScreenActivitySync: lossless path synced \(candidates.count) rows")
-      } else {
-        recordPushFailure(path: "lossless")
-      }
-    } catch {
-      log("ScreenActivitySync: lossless read/write error — \(error.localizedDescription)")
+    guard authorizationIsCurrent() else { throw LocalMutationAuthorizationError.revoked }
+    // Re-project at the last non-suspending boundary before transport. Fresh downgrades beat
+    // stored vectors, but keep their local blob for a later upgrade.
+    let includeVectors = cloudAllowed()
+    let delivery = candidates.compactMap { candidate -> ScreenActivitySyncCandidate? in
+      if candidate.priorState == .textSynced && !includeVectors { return nil }
+      var payload = candidate.payload
+      if !includeVectors { payload.removeValue(forKey: "embedding") }
+      return ScreenActivitySyncCandidate(
+        id: candidate.id, priorState: candidate.priorState,
+        hasEmbedding: includeVectors && candidate.hasEmbedding, payload: payload)
     }
-  }
-
-  private func legacySyncTick(dbPool: DatabasePool) async {
-
-    do {
-      // Query screenshots that have embeddings and are newer than our cursor
-      let rowsPayload: ScreenActivityRowsPayload = try await dbPool.read { [lastSyncedId, batchSize] db in
-        let dbRows = try Row.fetchAll(db, sql: Self.syncRowsSQL, arguments: [lastSyncedId, batchSize])
-        let rows = dbRows.compactMap(Self.payloadRow)
-        return ScreenActivityRowsPayload(rows: rows)
+    guard !delivery.isEmpty else { return nil }
+    guard authorizationIsCurrent() else { throw LocalMutationAuthorizationError.revoked }
+    guard await push(delivery.map(\.payload)) else { throw URLError(.cannotConnectToHost) }
+    guard authorizationIsCurrent() else { throw LocalMutationAuthorizationError.revoked }
+    try await mutation.withCommitLease {
+      try await database.write { db in
+        try mutation.require()
+        try markCandidatesSynced(db: db, candidates: delivery)
       }
-      let rows = rowsPayload.rows
-
-      guard !rows.isEmpty else { return }
-
-      // Push to backend
-      let success = await pushRows(rows)
-      if success {
-        if let maxId = rows.compactMap({ $0["id"] as? Int64 }).max() {
-          lastSyncedId = maxId
-          saveCursor()
-        }
-        if consecutiveFailures > 0 {
-          log("ScreenActivitySync: reconnected after \(consecutiveFailures) failures")
-        }
-        consecutiveFailures = 0
-        log("ScreenActivitySync: synced \(rows.count) rows (lastId=\(lastSyncedId))")
-      } else {
-        recordPushFailure(path: "legacy")
-      }
-    } catch {
-      log("ScreenActivitySync: read error — \(error.localizedDescription)")
     }
+    return delivery.map(\.id).max()
   }
 
   /// Push a just-finished meeting's OCR text now, before its notes are written.
@@ -257,6 +258,7 @@ actor ScreenActivitySyncService {
       interval, database: dbPool,
       push: { await self.pushRows($0, authorizationSnapshot: authorization.snapshot) },
       authorizationIsCurrent: { authorization.isCurrent },
+      cloudAllowed: { authorization.snapshot.map { ScreenCloudEntitlementService.shared.allowsCloud($0) } ?? false },
       // INV-AUTH-1: each sync-state write holds an owner mutation lease through its commit, and
       // re-requires the owner inside the transaction, so a pool opened for the owner who was
       // signed in when this began can never mutate a replacement owner's rows.
@@ -295,6 +297,7 @@ actor ScreenActivitySyncService {
     database: any DatabaseWriter,
     push: ([[String: Any]]) async -> Bool,
     authorizationIsCurrent: () -> Bool = { true },
+    cloudAllowed: () -> Bool = { true },
     mutation: LocalMutationAuthorization = .unrestricted,
     shouldContinue: () -> Bool,
     recordFallback: (String) -> Void,
@@ -317,8 +320,16 @@ actor ScreenActivitySyncService {
         }
       }
       while true {
-        let candidates = try await database.read { db in
+        let fetched = try await database.read { db in
           try fetchMeetingWindowCandidates(db: db, interval: interval, limit: batchSize)
+        }
+        let includeVectors = cloudAllowed()
+        let candidates = fetched.map { candidate in
+          var payload = candidate.payload
+          if !includeVectors { payload.removeValue(forKey: "embedding") }
+          return ScreenActivitySyncCandidate(
+            id: candidate.id, priorState: candidate.priorState,
+            hasEmbedding: includeVectors && candidate.hasEmbedding, payload: payload)
         }
         guard !candidates.isEmpty else { break }
         guard authorizationIsCurrent() else {
@@ -425,13 +436,24 @@ actor ScreenActivitySyncService {
     }
   }
 
-  static let syncRowsSQL = """
-    SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId
-    FROM screenshots
-    WHERE id > ? AND embedding IS NOT NULL
-    ORDER BY id ASC
-    LIMIT ?
-    """
+  /// Deliver finalized OCR independently of vectors. The cursor waits for open
+  /// buckets; rows with no OCR are valid empty captures and must not stall it.
+  static func fetchLegacySyncRows(
+    db: Database, afterId: Int64, limit: Int, now: Date, cloudAllowed: Bool = true
+  ) throws -> [Row] {
+    try Row.fetchAll(
+      db,
+      sql: """
+        SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId,
+               screenActivitySyncState
+        FROM screenshots
+        WHERE (screenActivitySyncState = 0 AND id > ? AND ocrText IS NOT NULL AND LENGTH(TRIM(ocrText)) > 0
+          AND id < COALESCE((SELECT MIN(id) FROM screenshots WHERE id > ? AND
+            (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 > ?), 9223372036854775807))
+          OR (screenActivitySyncState = 1 AND embedding IS NOT NULL AND ?)
+        ORDER BY CASE screenActivitySyncState WHEN 1 THEN 0 ELSE 1 END, id ASC LIMIT ?
+        """, arguments: [afterId, afterId, now.timeIntervalSince1970, cloudAllowed, max(0, min(limit, 100))])
+  }
 
   static let compactionBucketSeconds = 300
 
@@ -477,7 +499,7 @@ actor ScreenActivitySyncService {
   }
 
   static func fetchSyncCandidates(
-    db: Database, limit: Int, now: Date, slack: TimeInterval, embeddingGrace: TimeInterval
+    db: Database, limit: Int, now: Date, slack: TimeInterval, embeddingGrace: TimeInterval, cloudAllowed: Bool = true
   ) throws -> [ScreenActivitySyncCandidate] {
     let rows = try Row.fetchAll(
       db,
@@ -496,7 +518,7 @@ actor ScreenActivitySyncService {
           )
         ) OR (
           screenActivitySyncState = ?
-          AND embedding IS NOT NULL
+          AND embedding IS NOT NULL AND ?
         )
         ORDER BY CASE screenActivitySyncState WHEN 0 THEN 0 ELSE 1 END, id ASC
         LIMIT ?
@@ -507,7 +529,7 @@ actor ScreenActivitySyncService {
         Self.bucketEligibilityCutoffEpoch(now: now, slack: slack),
         Self.compactionBucketSeconds, Self.compactionBucketSeconds,
         Self.bucketEligibilityCutoffEpoch(now: now, slack: embeddingGrace),
-        ScreenActivitySyncState.textSynced.rawValue, limit,
+        ScreenActivitySyncState.textSynced.rawValue, cloudAllowed, limit,
       ])
 
     return rows.compactMap(syncCandidate(from:))
@@ -603,10 +625,18 @@ actor ScreenActivitySyncService {
   /// owner-bound meeting flush leaves delivery to it.
   static func deliversFrameRequests(ownerBoundPush: Bool) -> Bool { !ownerBoundPush }
 
+  static func terminalStopReason(statusCode: Int, responseBody: String) -> String? {
+    if statusCode == 401 { return "unauthorized_after_refresh" }
+    if statusCode == 403 && responseBody.contains("account_deletion_in_progress") {
+      return "account_deletion_in_progress"
+    }
+    return nil
+  }
+
   /// With `authorizationSnapshot` the push is owner-bound: headers are minted for that owner only,
   /// and the request is abandoned if the session changed while they were built.
   private func pushRows(
-    _ rows: [[String: Any]], authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    _ rows: [[String: Any]], authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil, periodic: Bool = false
   ) async -> Bool {
     let accountGeneration = await MainActor.run {
       AccountCutoverControlManager.shared.control.accountGeneration
@@ -645,15 +675,47 @@ actor ScreenActivitySyncService {
         request.setValue(value, forHTTPHeaderField: key)
       }
 
-      let (data, response) = try await URLSession.shared.data(for: request)
-      guard let httpResponse = response as? HTTPURLResponse else { return false }
+      if let authorizationSnapshot {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+        if rows.contains(where: { $0["embedding"] != nil }),
+          !ScreenCloudEntitlementService.shared.allowsCloud(authorizationSnapshot)
+        {
+          return false
+        }
+      }
+      var (data, response) = try await URLSession.shared.data(for: request)
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
+      guard var httpResponse = response as? HTTPURLResponse else { return false }
+
+      if httpResponse.statusCode == 401 {
+        let refreshedHeaders = try await APIClient.shared.buildHeaders(
+          forceRefreshAuth: true, expectedAuthOwnerId: authorizationSnapshot?.ownerID)
+        if let authorizationSnapshot {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            log("ScreenActivitySync: signed-in account changed during auth refresh; not retried")
+            return false
+          }
+          if rows.contains(where: { $0["embedding"] != nil }),
+            !ScreenCloudEntitlementService.shared.allowsCloud(authorizationSnapshot)
+          {
+            return false
+          }
+        }
+        request.allHTTPHeaderFields = refreshedHeaders
+        (data, response) = try await URLSession.shared.data(for: request)
+        if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+          return false
+        }
+        guard let refreshedResponse = response as? HTTPURLResponse else { return false }
+        httpResponse = refreshedResponse
+      }
 
       if httpResponse.statusCode == 200 {
         let syncResponse = try JSONDecoder().decode(OmiAPI.ScreenActivitySyncResponse.self, from: data)
         guard let delivered = syncResponse.frameRequests, !delivered.isEmpty else {
           return true
         }
-        guard Self.deliversFrameRequests(ownerBoundPush: authorizationSnapshot != nil) else {
+        guard Self.deliversFrameRequests(ownerBoundPush: authorizationSnapshot != nil && !periodic) else {
           // The rows landed. The owner-bound meeting flush never continues into pixel claims and
           // uploads: those read the Rewind store across further awaits, where an account switch
           // could pair one owner's pixels with another's session. The backend returns recoverable
@@ -679,7 +741,7 @@ actor ScreenActivitySyncService {
             deviceID: deviceID,
             accountGeneration: accountGeneration,
             headers: headers,
-            baseURL: baseURL
+            baseURL: baseURL, authorizationSnapshot: authorizationSnapshot
           )
         else { return false }
         // Claiming is the queue ownership fence. Only after the whole batch is
@@ -689,11 +751,16 @@ actor ScreenActivitySyncService {
           deviceID: deviceID,
           accountGeneration: accountGeneration,
           headers: headers,
-          baseURL: baseURL
+          baseURL: baseURL, authorizationSnapshot: authorizationSnapshot
         )
       } else {
         let body = String(data: data, encoding: .utf8) ?? ""
-        log("ScreenActivitySync: HTTP \(httpResponse.statusCode): \(body)")
+        if let reason = Self.terminalStopReason(statusCode: httpResponse.statusCode, responseBody: body) {
+          log("ScreenActivitySync: stopping after terminal response (\(reason))")
+          stop(logStopped: false)
+          return false
+        }
+        log("ScreenActivitySync: HTTP \(httpResponse.statusCode)")
         return false
       }
     } catch {
@@ -707,9 +774,10 @@ actor ScreenActivitySyncService {
     deviceID: String,
     accountGeneration: Int,
     headers: [String: String],
-    baseURL: String
+    baseURL: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async -> Bool {
     for item in requests {
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
       if !Self.shouldClaimFrameRequest(state: item.state) { continue }
       guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state") else { return false }
       let body: [String: Any] = [
@@ -725,6 +793,7 @@ actor ScreenActivitySyncService {
       for (key, value) in headers {
         claim.setValue(value, forHTTPHeaderField: key)
       }
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
       guard let result = try? await URLSession.shared.data(for: claim),
         (result.1 as? HTTPURLResponse)?.statusCode == 200
       else {
@@ -740,9 +809,10 @@ actor ScreenActivitySyncService {
     deviceID: String,
     accountGeneration: Int,
     headers: [String: String],
-    baseURL: String
+    baseURL: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async -> Bool {
     for item in requests {
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
       // Requested/claimed are recoverable uploads. Uploaded rows are
       // recoverable promotions and must not upload a second pixel object.
       if Self.shouldUploadFrameRequest(state: item.state) {
@@ -761,7 +831,8 @@ actor ScreenActivitySyncService {
           guard
             await failFrameRequest(
               item, deviceID: deviceID, accountGeneration: accountGeneration,
-              reason: "screenshot_unavailable", headers: headers, baseURL: baseURL
+              reason: "screenshot_unavailable", headers: headers, baseURL: baseURL,
+              authorizationSnapshot: authorizationSnapshot
             )
           else { return false }
           continue
@@ -779,11 +850,15 @@ actor ScreenActivitySyncService {
         upload.timeoutInterval = 60
         upload.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         for (key, value) in headers { upload.setValue(value, forHTTPHeaderField: key) }
+        if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+          return false
+        }
         guard let uploadResult = try? await URLSession.shared.data(for: upload),
           (uploadResult.1 as? HTTPURLResponse)?.statusCode == 200
         else { return false }
       }
 
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
       if let conversationID = item.conversationId,
         let promoteURL = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/promote")
       {
@@ -813,7 +888,7 @@ actor ScreenActivitySyncService {
     accountGeneration: Int,
     reason: String,
     headers: [String: String],
-    baseURL: String
+    baseURL: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async -> Bool {
     guard let url = URL(string: baseURL + "v1/frame-requests/\(item.requestId)/state"),
       let data = try? JSONSerialization.data(withJSONObject: [
@@ -827,6 +902,7 @@ actor ScreenActivitySyncService {
     request.httpMethod = "POST"
     request.httpBody = data
     for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+    if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) { return false }
     guard let result = try? await URLSession.shared.data(for: request) else { return false }
     return (result.1 as? HTTPURLResponse)?.statusCode == 200
   }
@@ -840,12 +916,15 @@ actor ScreenActivitySyncService {
 
   // MARK: - Cursor persistence
 
-  private func loadCursor() {
-    lastSyncedId = Int64(UserDefaults.standard.integer(forKey: cursorKey))
-    log("ScreenActivitySync: loaded cursor lastSyncedId=\(lastSyncedId)")
+  private func loadCursor(authorization: RuntimeOwnerAuthorizationSnapshot?) {
+    cursorOwner = authorization
+    lastSyncedId = authorization.flatMap { try? cursorStore.load(authorization: $0) } ?? 0
   }
 
-  private func saveCursor() {
-    UserDefaults.standard.set(Int(lastSyncedId), forKey: cursorKey)
+  private func saveCursor(_ cursor: Int64, authorization: RuntimeOwnerAuthorizationSnapshot) async throws {
+    guard cursorOwner == authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+    let saved = try await cursorStore.save(cursor, authorization: authorization)
+    guard cursorOwner == authorization, RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+    lastSyncedId = max(lastSyncedId, saved)
   }
 }

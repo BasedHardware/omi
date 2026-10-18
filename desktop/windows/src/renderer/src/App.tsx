@@ -72,16 +72,6 @@ function AppShellInner(): React.JSX.Element {
     window.omi?.setTitleBarSurface?.(isHome)
   }, [isHome])
 
-  // JIT evidence navigation is routed by the main process so the insight toast
-  // cannot manufacture or dereference an href in its secondary window.
-  useEffect(() => {
-    if (IS_SECONDARY_WINDOW) return
-    return window.omi.onRewindFocusFrame((frameId) => {
-      if (!Number.isInteger(frameId) || frameId < 0) return
-      navigate(`/rewind?frame_id=${encodeURIComponent(String(frameId))}`)
-    })
-  }, [navigate])
-
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
     return window.omi.onProactivityNavigate?.((target) => {

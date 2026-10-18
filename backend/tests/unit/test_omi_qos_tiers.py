@@ -340,8 +340,6 @@ class TestModelQosProfiles:
             'memories',
             'x_memory_extraction_flex',
             'learnings',
-            'memory_conflict',
-            'memory_conflict_flex',
             'knowledge_graph',
             'memory_l1',
             'memory_l2',
@@ -870,10 +868,10 @@ class TestExpandedCallsiteCoverage:
 
         source = self._read_source("utils/llm/memories.py")
         calls = re.findall(r"get_llm\(\s*'(\w+)'", source)
-        for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
+        for key in ['memories', 'learnings', 'memory_category']:
             assert key in calls, f"Missing get_llm('{key}') in memories.py"
-        # 4th call site: the daily-sweep summary agent reuses the same memories QoS route.
-        assert calls.count('memories') == 4, "memories should appear exactly four times"
+        # The daily-sweep summary agent was retired with the daily memory sweep.
+        assert calls.count('memories') == 3, "memories should appear exactly three times"
 
     def test_knowledge_graph_all_keys(self):
         import re

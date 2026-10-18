@@ -1,3 +1,4 @@
+from utils.generated_compute import require_generated_compute, generated_compute_allowed, generated_compute_scope
 import asyncio
 import hashlib
 import os
@@ -81,7 +82,6 @@ from utils.conversations.process_conversation import (
     AppUsageAttribution,
     DerivedEffectsDisposition,
     process_conversation,
-    run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -277,40 +277,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
     conversation['deferred'] = False
     return conversation
-
-
-def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
-    """Claim once and run in the background; failure remains retryable."""
-    conversation_id = conversation.get('id')
-    if not conversation_id or not conversation.get('jit_first_open'):
-        return
-    try:
-        token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
-    except Exception as error:
-        logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
-        return
-    if token is None:
-        return
-
-    def _run() -> None:
-        succeeded = False
-        try:
-            latest = conversations_db.get_conversation(uid, conversation_id)
-            if latest is None:
-                raise RuntimeError('conversation disappeared before first-open work')
-            run_first_open_derived_work(uid, latest, token)
-            succeeded = True
-        except Exception as error:
-            logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
-        finally:
-            try:
-                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
-            except Exception as error:
-                logger.exception(
-                    'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
-                )
-
-    submit_with_context(postprocess_executor, _run)
 
 
 class ProcessConversationRequest(BaseModel):
@@ -997,6 +963,7 @@ def get_conversations(
         folder_id=folder_id,
         starred=starred,
         budget=budget,
+        list_fields_only=True,
     )
 
     redact_conversations_for_list(conversations)
@@ -1080,12 +1047,10 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
+    # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred'):
+    if conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation)
-    else:
-        _dispatch_first_open_work(uid, conversation)
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
@@ -2316,10 +2281,12 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
+    require_generated_compute(uid, 'daily_summary')
     try:
-        summary = generate_summary_with_prompt(
-            full_transcript, request.prompt, language_code=conversation.language or 'en'
-        )
+        with generated_compute_scope(uid):
+            summary = generate_summary_with_prompt(
+                full_transcript, request.prompt, language_code=conversation.language or 'en'
+            )
     except SummaryProviderError as exc:
         # The provider failed on its own account, so this is an upstream failure and not a fault
         # of the request: report it as one instead of as a 500 the client cannot act on.

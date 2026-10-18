@@ -22,7 +22,6 @@ cross-platform decision instead of a single-platform drive-by.
 | `day_keys.json`                    | Local-calendar-day identity of a UTC instant (conversation day grouping)                                                     |
 | `wire_action_item.json`            | Action item wire decode: due_at instant equality across ISO offset forms, and the null / missing / unparseable agreement set |
 | `section_labels.json`              | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days              |
-| `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads                                    |
 | `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
 | `capture_group_collapse.json`      | One list row per recorded event: which loaded member represents a capture group, and that a lone loaded member is never hidden |
 | `deterministic_title.json`         | The model-free title: first sentence of the joined transcript, 60 code points cut on a word boundary (the clients' last-resort title for an untitled legacy row) |
@@ -35,25 +34,11 @@ section projections, and unattributed app results.
 
 | Platform                       | Suite                                                                                                                                                                                    | Runs                                                      |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py`                                                                           | Backend unit suite and Desktop Backend Contracts CI       |
+| Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`                                                                                                                                             | Backend unit suite and Desktop Backend Contracts CI       |
 | Flutter app                    | `app/test/parity/parity_contracts_test.dart`                                                                                                                                             | `app/test.sh`, CI Flutter tests                           |
 | Windows desktop                | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts`                                                                     | `npm test` in `desktop/windows`, CI Desktop Windows tests |
 | macOS desktop                  | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter and the capture-group collapse adapter (`CaptureGroupPresentationTests.swift` pins the same cases inline) remain pending. | Desktop Swift CI                                          |
 | Web app                        | `web/app/src/lib/__tests__/knowledgeLedger.test.ts`                                                                                                                                      | `web/app/test.sh`, CI Web App checks                      |
-
-The JIT runtime matrix is additionally consumed by the shipped mobile, macOS,
-Windows, and web adapters plus the backend and standalone MCP suites. It proves
-that a mixed response keeps all authoritative text readable, grants ledger
-authority only to `knowledge_ledger.v1`, and makes future evidence inert by
-mapping its semantics to `unknown` or omitting its references. It does not
-activate JIT retrieval, trigger evaluation, frame requests, or any production
-rollout gate.
-
-The macOS adapter exercises both sides of that boundary: `ServerMemory` keeps
-all text while recognizing only the v1 ledger authority, and `ChatMessageDB`
-keeps chat text while ignoring the unrecognized evidence envelope rather than
-projecting it into metadata or content blocks. This proves inert compatibility;
-it does not claim that macOS renders structured chat evidence.
 
 The backend suite validates every fixture file structurally (parseable, complete
 expectations, self-consistent day-key arithmetic) so a malformed fixture cannot pass
@@ -92,10 +77,10 @@ in the same PR.
    sits on the strict side (it refuses to accept these forms, so it can never
    re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
    both client behaviors until the platforms converge.
-5. JIT proactivity watchlist/ambient parity is retired as of 2026-10-03: both
-   desktop producers are deleted and reservations return a static 410. Shared
-   rollout authority and canonical mirrors remain. See
-   [`backend/docs/proactivity-v2-retirement.md`](../../backend/docs/proactivity-v2-retirement.md).
+5. JIT proactivity watchlist/ambient parity was retired in the 2026-10-03
+   desktop cleanup. The remaining JIT routes and rollout runtime were removed
+   on 2026-10-18; they no longer return a static 410. Canonical mirrors and
+   export/deletion handling for stored data remain.
 
 6. Malformed duration inputs. `conversation_duration.json` pins only well-formed
    vectors. The backend helper (`backend/utils/conversations/duration.py`) and macOS

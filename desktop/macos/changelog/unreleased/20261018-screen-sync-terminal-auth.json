@@ -1,0 +1,3 @@
+{
+  "change": "Screen activity sync stops retrying after a refreshed authentication failure or while account deletion is in progress."
+}

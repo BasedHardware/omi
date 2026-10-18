@@ -1,75 +1,152 @@
 # Local inference architecture
 
-`LocalInference/` owns on-device generation and embedding. Nothing here opens a
-cloud LLM client. Capture, OCR, and cloud upload stay on their existing paths.
+`LocalInference/` owns on-device generation and embeddings. Local engines never
+open a cloud LLM client. Capture and OCR remain independent of vector generation.
 
-## Ports
+## Screen vector entitlement and routing
 
-- `LocalInferenceService` — structured generation / tool loops (summaries).
-- `LocalEmbeddingService` — sentence vectors. Implementations must not use a
-  network provider. NaturalLanguage types are not Sendable; the Apple adapter
-  keeps them inside an actor.
+`ScreenEmbeddingPolicy` synchronously peeks `ScreenCloudEntitlementService`'s
+owner-session-bound server subscription cache. The five-minute TTL bounds stale
+paid grants. Missing/expired/revoked authority denies cloud spend and coalesces a
+background refresh (15-second deadline, 30-second failure retry floor); capture
+never awaits it. Launch/sign-in/checkout's existing `FloatingBarUsageLimiter`
+fetch also seeds it. Fresh Free/Plus replies beat persisted paid UI hints.
+Owner transitions invalidate receipts, including same-user reauthentication;
+late subscription replies cannot repopulate a replacement session's cache.
+Free, Plus, mobile-only Unlimited-v2, missing and unknown plans never authorize
+Gemini embeddings. Active Pro (`operator`), Architect (including legacy `pro`),
+and Neo (`unlimited`) before its server-reported desktop grandfather deadline
+retain Gemini upload plus local desktop retrieval. BYOK does not grant cloud
+screen-vector storage.
 
-## Embedding engines
+TODO(#21488 follow-up): replace the temporary plan derivation with the server's
+`cloud_screen_vectors` capability when the subscription wire supplies it. Main
+currently exposes no such capability. Plan identity alone must never imply that
+Plus has Pro-only screen context.
 
+Local embeddings default **on in Stable, Beta and dev** (David, 2026-10-18).
 `LocalEmbeddingRuntime.makeDefault()` registers Apple `NLContextualEmbedding`
-(`apple_nlce`) as the only production engine. Released bundles stay on Gemini
-until opt-in; non-production dogfoods the local path. English uses the English
-model; non-English dominant text falls back to the Latin/multilingual model.
-`hasAvailableAssets` is checked first; a miss calls `requestAssets` once with a
-bounded wait, then the probe reports `assets_unavailable`. Capture never waits
-on that request. When opt-in is off, `selectEngine()` is `.disabled` and the
-indexer is a no-op (no probe, no `requestAssets`).
+(`apple_nlce`, macOS 14+). A bounded synthetic probe verifies assets, vectors and
+latency before selection. Probes are cached for 60 seconds by model, thermal state
+and kill switches. Missing assets or a failed/slow engine use FTS-only without
+calling Gemini for plans lacking cloud vectors. A query failure after selection
+also remains FTS-only. Rewind UI and chat use `ScreenHistorySearchRoute`.
 
-There is no downloadable CoreML pack in this tree. Vectors live only in
-`local_embeddings`, keyed by `(sourceKind, sourceId, modelId)`.
+Capture schedules local indexing after OCR without awaiting it. The Gemini queue,
+flush, every backfill batch, and the final single/batch HTTP dispatch recheck
+entitlement. A downgrade drops queued cloud projection work; OCR remains intact
+and local backfill can recover vectors. Backfill is AC-bounded. Local vectors live
+only in `local_embeddings`, keyed by source kind, source id and model id; they
+are never uploaded as Gemini vectors. Hybrid search fuses FTS and cosine via RRF.
 
-## Opt-in and kill switches
+Every outbound single/batch embedding requires an explicit runtime owner
+snapshot. OCR pins it when queued, backfill/search before reads, and task
+backfill before loading rows. Authority is checked after auth and immediately
+before HTTP; owner transition or missing authorization cannot use the next
+account's token, regardless of a cached paid plan. Local writes retain owner
+mutation commit leases.
 
-Default **on** in non-production (`AppBuild.isNonProduction`), **off** on
-production-family bundles (stable and Beta). Readable from the process
-environment or the app UserDefaults:
+Both sync paths deliver vectorless OCR and retain durable optional-projection
+receipts. Legacy cursor delivery waits for completed five-minute buckets and
+skips empty captures; pending text advances its cursor independently of vectors.
+A `textSynced` row with a later Gemini vector is selected independently of that
+cursor, and becomes `fullySynced` only after vector delivery succeeds. Free/Plus
+strip stored cloud vectors while keeping text-first state for a later upgrade;
+they do not repeatedly upload those rows. Failed/revoked pushes never acknowledge
+rows. Sync headers and acknowledgement commits bind the captured owner. The
+legacy cursor has owner-keyed persistence and monotonic saves under a session
+mutation lease. A missing owner key starts at zero; the unowned historical cursor
+is never adopted or claimed. Legacy pending rows may be re-delivered once in
+100-row batches rather than risk skipping another owner's history.
+Cloud screen rows remain readable by time/app even without vectors.
 
-- `OMI_LOCAL_EMBEDDINGS=1` / `localEmbeddingsEnabled` — opt in on a
-  production-family bundle. `0`/`false`/`off` turns it off even in
-  non-production.
-- `OMI_DISABLE_LOCAL_EMBEDDINGS=1` / `disableLocalEmbeddings` — hard kill.
-  Screen search keeps the existing Gemini path even if opt-in is on.
-- `OMI_FORCE_LOCAL_EMBEDDING_ENGINE=<id>` / `forceLocalEmbeddingEngine` — pin an
-  engine id. Unknown ids fail closed to keyword-only.
+Cloud embedding recovery is coalesced in `OCREmbeddingService` for both startup
+callers and every sync tick. Missing/expired grants, battery power, transport
+errors and interrupted runs retain a 60-second retry floor. Completion schedules
+a five-minute missing-vector probe so rows captured during a later unknown grant
+can recover, including Stable's legacy path with an old completed marker. The
+legacy rearm uses the existing missing-embedding index and an existence query;
+lossless retains its completed-bucket winner rearm. Progress commits after each
+batch. Attempted documents, including failed batches, share one process-launch
+budget (500 lossless / 5000 legacy); retries and owner resets cannot replenish
+it. Batch calls are at most 100 documents and stop on battery or revoked authority.
+No per-frame polling or recovery telemetry is added.
 
-Generation has a parallel pair (`OMI_DISABLE_LOCAL_INFERENCE`,
-`OMI_FORCE_LOCAL_INFERENCE_ENGINE`) documented on `LocalInferenceKillSwitches`.
+## Kill switches and capability signal
 
-## Probe and fail-closed ladder
+- `OMI_LOCAL_EMBEDDINGS=0` (also `false`/`off`) or UserDefaults
+  `localEmbeddingsEnabled=false`: disable local vectors. Entitled plans use legacy
+  Gemini search; other plans keep FTS. Explicit environment wins over defaults.
+- `OMI_DISABLE_LOCAL_EMBEDDINGS=1` or `disableLocalEmbeddings=true`: hard kill local
+  vectors and omit `X-Omi-Local-Embeddings`. **This deliberately does not restore
+  Gemini for unentitled plans**, unlike the closed, unmerged #13473 design.
+- `OMI_FORCE_LOCAL_EMBEDDING_ENGINE=<id>` or `forceLocalEmbeddingEngine`: unknown
+  engine ids fail closed to FTS.
+- Every Gemini proxy request, including generation/streaming clients, sends
+  `X-Omi-Local-Embeddings: 1` through `applyGeminiProxyHeaders` unless hard-killed.
+  The signal declares client capability, not a successful model probe or spend
+  authorization. Local opt-out still sends it so it cannot bypass server policy.
 
-1. Not opted in, or hard kill → Gemini screen search (existing path). No probe,
-   no indexer, no `requestAssets`. `recordFallback` `to: keyword` is not used;
-   the route is `legacy`.
-2. Opted in, selected engine, 32-token synthetic fixture, dimension,
-  two-second budget → hybrid (FTS + cosine, RRF). Probe verdicts are cached
-  in-process per `(engineID, modelID, thermal, kill-switch)` with a 60s TTL
-  and invalidation on thermal or kill-switch change. `embed` and the probe
-  race each engine call against `Task.sleep` (`embedBudget` 30s, probe 2s);
-  timeout records `engine_timeout` and fail-closes to keyword, never Gemini.
-3. Opted in, probe miss (`assets_unavailable`, over budget, unknown engine) →
-   local FTS-only. Never Gemini. `recordFallback` `to: keyword`.
-4. Opted in, selected engine that then fails a query → keyword-only. The route
-   does not change to Gemini.
+The existing remote `free-tier-kill-switch-v1` stops local vectors and summary
+attachment on a definitive boolean true. `LocalCapabilityRemoteKill` reads only
+the SDK cache, without fetching or emitting exposure events. Missing/unknown
+values leave defaults on. The normal SDK refresh owns delivery latency; in-flight
+local model calls may finish. This never grants absent cloud-vector entitlement.
+No new PostHog row or production remote configuration is created here. The backend
+follow-up must add macOS to this existing row's registry surfaces (the current
+registry lists backend only) and retain `FREE_TIER_EMERGENCY_STOP` server-side.
 
-## Storage and hybrid search
+Route and local embedding fallback telemetry stores only bounded decisions and
+emits on changes. There is no per-frame event or hourly heartbeat, content, path,
+query, or unknown raw plan identity.
 
-`LocalEmbeddingStore` owns `local_embeddings`, `transcript_chunks` + FTS5, and
-`memories_fts`. `LocalHybridSearch` filters by `sourceKind` so
-`search_screen_history` stays screen-only. Transcript chunks (window 8 /
-stride 6) and memories are indexed by `LocalEmbeddingIndexer`. Session
-finalize and memory insert-or-update capture the owner snapshot, then
-schedule indexing on a background Task — they never await NLCE. Backfill is
-AC-bounded like OCR embeddings.
+## Conversation summaries and funding
 
-## Benchmark
+`FreeTierLocalProcessingFlag` defaults on in every channel. Explicit
+`OMI_FREE_TIER_LOCAL_PROCESSING=0` or `freeTierLocalProcessing=false` stops local
+projection attachment. `OMI_DISABLE_LOCAL_INFERENCE=1` / `disableLocalInference`
+stops generation; the existing deterministic minimum remains available. AFM is
+selected only when its availability probe succeeds (macOS 26+, Apple Intelligence
+ready). macOS 14 and unavailable AFM retain the existing loopback-engine then
+deterministic-minimum fallback; no cloud fallback is introduced.
 
-`LocalEmbeddingBenchmark` uses in-repo synthetic fixtures only (no personal
-data). Headless: `./scripts/omi-ctl action local_embedding_benchmark` on a
-non-production bundle. JSON reports recall@10 and nDCG@10 for FTS, vector, and
-hybrid slices. Label every number `synthetic`.
+`LocalProjectionFinalization.fundingUnavailable` consumes the subscription's
+`transcription_allowance`: `managed` keeps uploads unchanged. `on_device` with
+zero remaining seconds and `usage_budget_exhausted` proves a ladder shared cap.
+Legacy `plan_allowance_exhausted` / `subscription_inactive` attach only for basic;
+a paid user's legacy STT cap does not prove summary funding is exhausted. Unknown
+reasons, `allowance_unavailable`, `usage_invalid`, malformed or blocked allowance
+do not classify a funded user as unfunded. Without this
+field, only identified basic without BYOK takes the current-main legacy local
+processing path. BYOK leaves processing server-owned.
+
+TODO(#21488 follow-up): after #21488 and the backend fold, consume a dedicated
+funded-processing capability if introduced. #21488 projects the ladder shared
+funding answer through `transcription_allowance` with `usage_budget_exhausted`.
+Its legacy shared-cap path reuses `plan_allowance_exhausted`, which is ambiguous
+with current main's STT-only snapshot: paid legacy overflow needs a dedicated
+funding signal in the follow-up. Current main's transcription exhaustion alone
+does not enforce a shared cloud-processing cap on the server.
+
+Upload reuses the existing schema-v1 `client_processing` projection and transcript
+hash contract (`backend/models/client_processing.py`, read-only inspection).
+Projections remain display-only, never canonical `structured`, task/memory/vector
+input. Stored retry bytes and thermal stored-only behavior are unchanged. Backend
+policy chooses whether to display a projection; this client change neither changes
+backend admission nor guarantees it is active in production.
+
+## Rollout and measurement gates
+
+Parent PR must remain draft: Beta first, inspect local/hybrid/FTS routes, vectorless
+sync, and funded-versus-local upload behavior; then explicitly promote Stable.
+Backend dependency: #21488 (open at implementation) followed by the entitlement
+and capability fold of `BASIC_PLAN_GATE_PROXY_EMBED_ENABLED`,
+`BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED`, and `FREE_TIER_LOCAL_PROCESSING`.
+No deployment, remote flag, production channel or account was changed here.
+
+The default-on ruling supersedes #13456's default-off implementation, but does
+**not** supply its measurement evidence: current real-Rewind-DB retrieval/latency
+and an actual eight-hour energy measurement remain production acceptance gates.
+#13473's historical one-Beta-DB results are not current measurements. Hermetic
+fixtures and synthetic hash benchmarks establish correctness only, never model
+quality or energy. Do not read customer databases to fill this evidence gap.

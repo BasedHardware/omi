@@ -1,6 +1,7 @@
 """Unit tests for rate limiting config and logic."""
 
 import asyncio
+import ast
 import importlib
 import os
 import sys
@@ -872,7 +873,21 @@ class TestRouterWiring(unittest.TestCase):
     def test_sensitive_read_page_caps(self):
         developer_source = open("routers/developer.py", encoding='utf-8').read()
         mcp_source = open("routers/mcp.py", encoding='utf-8').read()
-        self.assertIn("limit = max(1, min(limit, 200))", developer_source)
+        # Pin the route's shared-clamp cap independently of formatting.
+        # test_external_list_cache exercises its negative/oversized inputs.
+        tree = ast.parse(developer_source)
+        handler = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'get_conversations'
+        )
+        clamps = [
+            node
+            for node in ast.walk(handler)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'clamp_list_page'
+        ]
+        self.assertEqual(len(clamps), 1)
+        self.assertEqual(ast.literal_eval(clamps[0].args[2]), 200)
         self.assertIn("min(limit, 200)", mcp_source)
 
     def test_integration_router_has_rate_limits(self):

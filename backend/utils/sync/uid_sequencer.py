@@ -13,6 +13,7 @@ from typing import Any
 from prometheus_client import Counter
 
 from database import sync_backfill_sequencer as registry
+from database import sync_redrive
 from database.sync_jobs import (
     TERMINAL_STATUSES,
     SyncLedgerFenceMode,
@@ -91,7 +92,7 @@ def _claim_next(
     uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _ClaimProgress | None = None
 ) -> dict[str, Any] | None:
     progress = progress if progress is not None else _ClaimProgress()
-    if retire_expired_enabled():
+    if retire_expired_enabled() or sync_redrive.enabled():
         for _ in range(min(MAX_EXPIRED_RETIREMENTS, max(0, retire_limit))):
             head = registry.pending_head(uid)
             if head is None:
@@ -249,7 +250,7 @@ def reconcile_uid(
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'invalid'
     state = owner.get('active_state')
-    if retire_expired_enabled() and state == 'dispatching':
+    if (retire_expired_enabled() or sync_redrive.enabled()) and state == 'dispatching':
         retirement = _retire_expired(uid, job_id, epoch=epoch)
         if retirement is _RetirementOutcome.RETIRED:
             kick(uid, retire_limit=retire_limit, progress=progress)
@@ -301,6 +302,8 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
     """One bounded Scheduler tick; each UID is independent and transaction-fenced."""
     if not registry.production_stage():
         return {'disabled': 1}
+    if sync_redrive.enabled():
+        sync_redrive.refresh_metrics()
     now = datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
     pending_retired = 0
@@ -351,7 +354,7 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
             accepted_at = job.get('accepted_at')
             if (
                 newest_first(job['uid'])
-                and retire_expired_enabled()
+                and (retire_expired_enabled() or sync_redrive.enabled())
                 and isinstance(accepted_at, datetime)
                 and accepted_at <= now - timedelta(days=1)
             ):

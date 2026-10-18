@@ -59,7 +59,9 @@ Wiring and defaults only — no new product surface:
    leads with the postcard section. Chat remains fully available.
 2. **Retired treatments.** Interject and the context director were removed in
    the 2026-10-03 proactivity v2 cut. Their treatment and flag overrides no longer
-   exist. The shared JIT canonical-memory authority remains unchanged.
+   exist. This experiment does not depend on the retired JIT processing or
+   ledger-drain paths; the independent demand-driven processing system remains
+   unchanged.
 3. **Generic web Q&A starved** in the agent prompt: a memory-identity
    response instruction (answers not requiring the user's day are one short
    sentence pointing back to their day) plus no public-web routing prefix
@@ -73,8 +75,7 @@ The Hold/PTT surface is unchanged; its events are only tagged.
 
 ## Kill switch
 
-PostHog server-side flags, tri-state fail-closed, following the production
-pattern (`utils/jit_rollout.py`): **`exp-002-desktop-identity-v1`** (exposure)
+PostHog server-side flags, tri-state fail-closed: **`exp-002-desktop-identity-v1`** (exposure)
 and **`exp-002-desktop-identity-kill-v1`** (revoke). Absent, unknown, or
 false ⇒ no enrollment and control chrome. Flag off → paint control, leave
 existing assignments in place. No PostHog person/cohort targeting of new
