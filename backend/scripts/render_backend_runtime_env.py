@@ -82,7 +82,7 @@ def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check
     hosts.append(('gke/backend-listen', listener))
     errors = []
     for scope, host in hosts:
-        if _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('env', {}):
+        if _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('env', {}) or _SYNC_LINEAGE_ALLOWLIST_KEY in host.get('secrets', {}):
             errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be absent; membership lives in Firestore')
     if check_chart:
         values_file = listener.get('values_file')
