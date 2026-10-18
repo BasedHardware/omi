@@ -11523,6 +11523,7 @@
     "paywallTrialCta": "{price}க்குத் தொடங்கவும்",
     "paywallTrialSecondary": "இலவச திட்டத்துடன் தொடரவும்",
     "paywallTrialCancelNote": "எந்த நேரத்திலும் ரத்து செய்யவும். கட்டணங்கள் இல்லை, அபராதங்கள் இல்லை.",
+    "paywallTrialStarted": "Omi Pro-வின் உங்கள் {days}-நாள் இலவச சோதனை தொடங்கிவிட்டது.",
     "paywallCancelAnytime": "எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.",
     "connectAnAgent": "ஒரு ஏஜென்டை இணைக்கவும்",
     "connectAnAgentSubtitle": "Claude, ChatGPT, Codex அல்லது எந்த ஏஜென்டுக்கும் அமைவு ப்ராம்ப்டைப் பெறுங்கள்",

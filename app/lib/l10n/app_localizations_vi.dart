@@ -13376,6 +13376,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Bản dùng thử miễn phí $days ngày của Omi Pro của bạn đã bắt đầu.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Hủy bất cứ lúc nào.';
 
   @override

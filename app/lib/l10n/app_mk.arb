@@ -11523,6 +11523,7 @@
     "paywallTrialCta": "Започнете за {price}",
     "paywallTrialSecondary": "Продолжете со бесплатниот план",
     "paywallTrialCancelNote": "Откажете во секое време. Без надоместоци, без казни.",
+    "paywallTrialStarted": "Вашиот {days}-дневен бесплатен пробен период на Omi Pro започна.",
     "paywallCancelAnytime": "Откажете во секое време.",
     "connectAnAgent": "Поврзете агент",
     "connectAnAgentSubtitle": "Добијте упатство за поставување за Claude, ChatGPT, Codex или кој било агент",

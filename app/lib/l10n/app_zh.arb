@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "以 {price} 开始",
     "paywallTrialSecondary": "继续使用免费计划",
     "paywallTrialCancelNote": "随时取消。无费用，无罚款。",
+    "paywallTrialStarted": "您的 Omi Pro {days} 天免费试用已开始。",
     "paywallCancelAnytime": "随时取消。",
     "connectAnAgent": "连接智能体",
     "connectAnAgentSubtitle": "获取适用于 Claude、ChatGPT、Codex 或任何智能体的设置提示词",

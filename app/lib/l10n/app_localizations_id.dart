@@ -13388,6 +13388,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get paywallTrialCancelNote => 'Batalkan kapan saja. Tanpa biaya, tanpa penalti.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Uji coba gratis $days hari Omi Pro Anda telah dimulai.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Batalkan kapan saja.';
 
   @override

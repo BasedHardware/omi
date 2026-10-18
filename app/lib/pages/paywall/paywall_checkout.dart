@@ -86,7 +86,13 @@ abstract final class PaywallCheckout {
         PlatformManager.instance.analytics.upgradeCancelled();
         return PaywallCheckoutOutcome.cancelled;
       }
-      if (context.mounted) report(l10n.subscriptionSuccessfulCharged, error: false);
+      if (context.mounted) {
+        // A trial checkout charges nothing today; say so instead of the paid-checkout message.
+        report(
+          trialDays != null && trialDays > 0 ? l10n.paywallTrialStarted(trialDays) : l10n.subscriptionSuccessfulCharged,
+          error: false,
+        );
+      }
       PlatformManager.instance.analytics
           .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
       await provider.fetchSubscription();

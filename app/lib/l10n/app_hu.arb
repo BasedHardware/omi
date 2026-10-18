@@ -4196,6 +4196,7 @@
     "paywallTrialCta": "Kezdd el {price}-ért",
     "paywallTrialSecondary": "Folytatás az ingyenes csomaggal",
     "paywallTrialCancelNote": "Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.",
+    "paywallTrialStarted": "Elindult az Omi Pro {days} napos ingyenes próbaverziója.",
     "paywallCancelAnytime": "Bármikor lemondható.",
     "connectAnAgent": "Ügynök csatlakoztatása",
     "connectAnAgentSubtitle": "Beállítási prompt Claude-hoz, ChatGPT-hez, Codexhez vagy bármely ügynökhöz",

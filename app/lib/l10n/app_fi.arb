@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Aloita hintaan {price}",
     "paywallTrialSecondary": "Jatka ilmaisella suunnitelmalla",
     "paywallTrialCancelNote": "Peruuta milloin tahansa. Ei maksuja, ei sakkoja.",
+    "paywallTrialStarted": "Omi Pro -palvelun {days} päivän ilmainen kokeilujaksosi on alkanut.",
     "paywallCancelAnytime": "Peruuta milloin tahansa.",
     "connectAnAgent": "Yhdistä agentti",
     "connectAnAgentSubtitle": "Hae asetuskehote Claudelle, ChatGPT:lle, Codexille tai mille tahansa agentille",

@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Začnite za {price}",
     "paywallTrialSecondary": "Pokračovať s bezplatným plánom",
     "paywallTrialCancelNote": "Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.",
+    "paywallTrialStarted": "Vaša {days}-dňová bezplatná skúška Omi Pro sa začala.",
     "paywallCancelAnytime": "Zrušte kedykoľvek.",
     "connectAnAgent": "Pripojiť agenta",
     "connectAnAgentSubtitle": "Získajte pokyny na nastavenie pre Claude, ChatGPT, Codex alebo iného agenta",

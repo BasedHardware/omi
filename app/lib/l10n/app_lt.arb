@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Pradėti už {price}",
     "paywallTrialSecondary": "Tęsti su nemokamu planu",
     "paywallTrialCancelNote": "Atšaukti bet kada. Jokių mokesčių, jokių baudų.",
+    "paywallTrialStarted": "Jūsų {days} dienų nemokamas Omi Pro bandomasis laikotarpis prasidėjo.",
     "paywallCancelAnytime": "Atšaukite bet kada.",
     "connectAnAgent": "Prijungti agentą",
     "connectAnAgentSubtitle": "Gaukite sąrankos užklausą Claude, ChatGPT, Codex ar bet kuriam agentui",

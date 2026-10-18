@@ -11523,6 +11523,7 @@
     "paywallTrialCta": "התחל ב-{price}",
     "paywallTrialSecondary": "המשך עם התוכנית החינמית",
     "paywallTrialCancelNote": "בטל בכל עת. ללא עמלות, ללא קנסות.",
+    "paywallTrialStarted": "התחילה תקופת הניסיון החינמית שלך בת {days} ימים של Omi Pro.",
     "paywallCancelAnytime": "ניתן לבטל בכל עת.",
     "connectAnAgent": "חיבור סוכן",
     "connectAnAgentSubtitle": "קבלו הנחיית הגדרה עבור Claude, ‏ChatGPT, ‏Codex או כל סוכן",

@@ -23787,6 +23787,12 @@ abstract class AppLocalizations {
   /// **'Cancel anytime. No fees, no penalties.'**
   String get paywallTrialCancelNote;
 
+  /// Toast after a trial checkout completes; days is the trial length
+  ///
+  /// In en, this message translates to:
+  /// **'Your {days}-day free trial of Omi Pro has started.'**
+  String paywallTrialStarted(int days);
+
   /// Caption under the upgrade button on the Outline paywall variant
   ///
   /// In en, this message translates to:

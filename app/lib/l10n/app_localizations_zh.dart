@@ -13172,6 +13172,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
 
   @override
+  String paywallTrialStarted(int days) {
+    return '您的 Omi Pro $days 天免费试用已开始。';
+  }
+
+  @override
   String get paywallCancelAnytime => '随时取消。';
 
   @override

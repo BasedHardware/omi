@@ -13373,6 +13373,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'دوره آزمایشی رایگان $days روزه Omi Pro شما آغاز شد.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'هر زمان که بخواهید لغو کنید.';
 
   @override

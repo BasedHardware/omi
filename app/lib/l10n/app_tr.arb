@@ -4135,6 +4135,7 @@
     "paywallTrialCta": "{price} karşılığında başlayın",
     "paywallTrialSecondary": "Ücretsiz planla devam et",
     "paywallTrialCancelNote": "İstediğiniz zaman iptal edin. Ücret yok, ceza yok.",
+    "paywallTrialStarted": "Omi Pro'nun {days} günlük ücretsiz deneme süreniz başladı.",
     "paywallCancelAnytime": "İstediğin zaman iptal et.",
     "connectAnAgent": "Bir Ajan Bağla",
     "connectAnAgentSubtitle": "Claude, ChatGPT, Codex veya herhangi bir ajan için kurulum istemi alın",

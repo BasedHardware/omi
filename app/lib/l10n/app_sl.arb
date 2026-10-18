@@ -11523,6 +11523,7 @@
     "paywallTrialCta": "Začnite za {price}",
     "paywallTrialSecondary": "Nadaljujte z brezplačnim načrtom",
     "paywallTrialCancelNote": "Prekličite kadar koli. Brez stroškov, brez kazni.",
+    "paywallTrialStarted": "Vaša {days}-dnevna brezplačna preizkusna različica Omi Pro se je začela.",
     "paywallCancelAnytime": "Prekličite kadar koli.",
     "connectAnAgent": "Poveži agenta",
     "connectAnAgentSubtitle": "Pridobite poziv za nastavitev za Claude, ChatGPT, Codex ali katerega koli agenta",

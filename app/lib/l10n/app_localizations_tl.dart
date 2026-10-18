@@ -13483,6 +13483,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paywallTrialCancelNote => 'Magkansela anumang oras. Walang bayad, walang multa.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Ang iyong $days-araw na libreng pagsubok ng Omi Pro ay nagsimula na.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Kanselahin anumang oras.';
 
   @override

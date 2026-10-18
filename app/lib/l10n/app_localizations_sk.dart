@@ -13374,6 +13374,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get paywallTrialCancelNote => 'Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Vaša $days-dňová bezplatná skúška Omi Pro sa začala.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Zrušte kedykoľvek.';
 
   @override

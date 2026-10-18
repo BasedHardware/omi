@@ -13402,6 +13402,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallTrialCancelNote => 'Atšaukti bet kada. Jokių mokesčių, jokių baudų.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Jūsų $days dienų nemokamas Omi Pro bandomasis laikotarpis prasidėjo.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Atšaukite bet kada.';
 
   @override

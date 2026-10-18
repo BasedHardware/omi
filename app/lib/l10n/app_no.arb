@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Start for {price}",
     "paywallTrialSecondary": "Fortsett med gratisplanen",
     "paywallTrialCancelNote": "Avbryt når som helst. Ingen gebyrer, ingen straff.",
+    "paywallTrialStarted": "Din {days}-dagers gratis prøveperiode av Omi Pro har startet.",
     "paywallCancelAnytime": "Avbryt når som helst.",
     "connectAnAgent": "Koble til en agent",
     "connectAnAgentSubtitle": "Få en oppsettsprompt for Claude, ChatGPT, Codex eller en hvilken som helst agent",

@@ -13430,6 +13430,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'మీ $days-రోజుల Omi Pro ఉచిత ట్రయల్ ప్రారంభమైంది.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'ఎప్పుడైనా రద్దు చేసుకోవచ్చు.';
 
   @override

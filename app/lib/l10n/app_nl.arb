@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Start voor {price}",
     "paywallTrialSecondary": "Ga verder met het gratis abonnement",
     "paywallTrialCancelNote": "Annuleer op elk moment. Geen kosten, geen boetes.",
+    "paywallTrialStarted": "Je {days} dagen gratis proefperiode van Omi Pro is gestart.",
     "paywallCancelAnytime": "Opzeggen kan altijd.",
     "connectAnAgent": "Een agent koppelen",
     "connectAnAgentSubtitle": "Krijg een installatieprompt voor Claude, ChatGPT, Codex of elke andere agent",

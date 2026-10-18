@@ -13430,6 +13430,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallTrialCancelNote => 'Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Elindult az Omi Pro $days napos ingyenes próbaverziója.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Bármikor lemondható.';
 
   @override

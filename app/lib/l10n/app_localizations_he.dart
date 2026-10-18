@@ -13284,6 +13284,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallTrialCancelNote => 'בטל בכל עת. ללא עמלות, ללא קנסות.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'התחילה תקופת הניסיון החינמית שלך בת $days ימים של Omi Pro.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'ניתן לבטל בכל עת.';
 
   @override

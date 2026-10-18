@@ -4135,6 +4135,7 @@
     "paywallTrialCta": "Commencez pour {price}",
     "paywallTrialSecondary": "Continuer avec le plan gratuit",
     "paywallTrialCancelNote": "Annulez à tout moment. Sans frais ni pénalités.",
+    "paywallTrialStarted": "Votre essai gratuit de {days} jours d'Omi Pro a commencé.",
     "paywallCancelAnytime": "Annulez à tout moment.",
     "connectAnAgent": "Connecter un agent",
     "connectAnAgentSubtitle": "Obtenez une invite de configuration pour Claude, ChatGPT, Codex ou tout autre agent",

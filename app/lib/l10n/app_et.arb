@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Alusta hinnaga {price}",
     "paywallTrialSecondary": "Jätka tasuta plaaniga",
     "paywallTrialCancelNote": "Tühista igal ajal. Ei mingeid tasusid ega trahve.",
+    "paywallTrialStarted": "Sinu {days}-päevane Omi Pro tasuta prooviperiood on alanud.",
     "paywallCancelAnytime": "Tühista igal ajal.",
     "connectAnAgent": "Ühenda agent",
     "connectAnAgentSubtitle": "Hangi seadistusjuhis Claude'i, ChatGPT, Codexi või mõne muu agendi jaoks",

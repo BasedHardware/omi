@@ -13387,6 +13387,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez penala.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Vaša $days-dnevna besplatna proba Omi Pro je počela.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Откажите било када.';
 
   @override

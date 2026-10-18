@@ -13392,6 +13392,11 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallTrialCancelNote => 'کسی بھی وقت منسوخ کریں۔ کوئی فیس نہیں، کوئی جرمانہ نہیں۔';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Omi Pro کا آپ کا $days روزہ مفت ٹرائل شروع ہو گیا ہے۔';
+  }
+
+  @override
   String get paywallCancelAnytime => 'کسی بھی وقت منسوخ کریں۔';
 
   @override

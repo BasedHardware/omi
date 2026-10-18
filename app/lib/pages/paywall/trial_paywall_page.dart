@@ -135,7 +135,13 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _dismiss();
+        // Popped from outside (the host navigated away): the widget stays mounted through the exit
+        // animation, so mark it dismissed now and let any pending checkout or restore settle silently.
+        if (didPop) {
+          _dismissed = true;
+          return;
+        }
+        _dismiss();
       },
       child: Scaffold(
         backgroundColor: _Paper.background,

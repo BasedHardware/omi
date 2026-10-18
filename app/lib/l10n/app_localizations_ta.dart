@@ -13468,6 +13468,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paywallTrialCancelNote => 'எந்த நேரத்திலும் ரத்து செய்யவும். கட்டணங்கள் இல்லை, அபராதங்கள் இல்லை.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Omi Pro-வின் உங்கள் $days-நாள் இலவச சோதனை தொடங்கிவிட்டது.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.';
 
   @override

@@ -13461,6 +13461,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paywallTrialCancelNote => 'Ακύρωση ανά πάσα στιγμή. Χωρίς χρεώσεις, χωρίς ποινές.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Η δωρεάν δοκιμή $days ημερών του Omi Pro έχει ξεκινήσει.';
+  }
+
+  @override
   String get paywallCancelAnytime => 'Ακύρωση ανά πάσα στιγμή.';
 
   @override

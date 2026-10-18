@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Bắt đầu với {price}",
     "paywallTrialSecondary": "Tiếp tục với gói miễn phí",
     "paywallTrialCancelNote": "Hủy bất cứ lúc nào. Không phí, không phạt.",
+    "paywallTrialStarted": "Bản dùng thử miễn phí {days} ngày của Omi Pro của bạn đã bắt đầu.",
     "paywallCancelAnytime": "Hủy bất cứ lúc nào.",
     "connectAnAgent": "Kết nối tác nhân",
     "connectAnAgentSubtitle": "Nhận lời nhắc thiết lập cho Claude, ChatGPT, Codex hoặc bất kỳ tác nhân nào",

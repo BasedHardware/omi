@@ -13375,6 +13375,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paywallTrialCancelNote => 'যেকোনো সময় বাতিল করুন। কোনো ফি নেই, কোনো জরিমানা নেই।';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'আপনার Omi Pro-এর $days-দিনের ফ্রি ট্রায়াল শুরু হয়েছে।';
+  }
+
+  @override
   String get paywallCancelAnytime => 'যেকোনো সময় বাতিল করুন।';
 
   @override

@@ -13196,6 +13196,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
+  String paywallTrialStarted(int days) {
+    return 'Omi Pro의 $days일 무료 체험이 시작되었습니다.';
+  }
+
+  @override
   String get paywallCancelAnytime => '언제든지 해지할 수 있습니다.';
 
   @override

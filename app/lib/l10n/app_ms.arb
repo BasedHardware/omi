@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Mula dengan {price}",
     "paywallTrialSecondary": "Teruskan dengan pelan percuma",
     "paywallTrialCancelNote": "Batal bila-bila masa. Tiada yuran, tiada penalti.",
+    "paywallTrialStarted": "Percubaan percuma {days} hari anda untuk Omi Pro telah bermula.",
     "paywallCancelAnytime": "Batalkan pada bila-bila masa.",
     "connectAnAgent": "Sambungkan Ejen",
     "connectAnAgentSubtitle": "Dapatkan gesaan persediaan untuk Claude, ChatGPT, Codex atau mana-mana ejen",

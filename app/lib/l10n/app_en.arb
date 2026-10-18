@@ -16102,6 +16102,15 @@
     "@paywallTrialCancelNote": {
         "description": "Paywall footnote"
     },
+    "paywallTrialStarted": "Your {days}-day free trial of Omi Pro has started.",
+    "@paywallTrialStarted": {
+        "description": "Toast after a trial checkout completes; days is the trial length",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
     "paywallCancelAnytime": "Cancel anytime.",
     "@paywallCancelAnytime": {
         "description": "Caption under the upgrade button on the Outline paywall variant"

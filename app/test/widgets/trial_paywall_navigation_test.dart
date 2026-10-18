@@ -107,6 +107,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a purchase settling during the exit animation of an external pop does not pop the host', (tester) async {
+    final pending = Completer<PaywallCheckoutOutcome>();
+    final (_, pops) = await _pump(tester, checkout: () => pending.future);
+    await tester.tap(find.byKey(const Key('trial_paywall_cta')));
+    await tester.pump();
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.pop();
+    await tester.pump(); // exit animation started; the page is still mounted
+    expect(find.byType(TrialPaywallPage), findsOneWidget);
+    final popsBefore = pops.results.length;
+    pending.complete(PaywallCheckoutOutcome.purchased);
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(pops.results.length, popsBefore, reason: 'the host route beneath must not be popped');
+    expect(find.text('open'), findsOneWidget, reason: 'the host page is still there');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a purchase pops the page exactly once', (tester) async {
     final (_, pops) = await _pump(tester, checkout: () async => PaywallCheckoutOutcome.purchased);
     await tester.tap(find.byKey(const Key('trial_paywall_cta')));

@@ -4100,6 +4100,7 @@
     "paywallTrialCta": "Începe pentru {price}",
     "paywallTrialSecondary": "Continuă cu planul gratuit",
     "paywallTrialCancelNote": "Anulează oricând. Fără taxe, fără penalități.",
+    "paywallTrialStarted": "Perioada ta de încercare gratuită de {days} zile pentru Omi Pro a început.",
     "paywallCancelAnytime": "Anulează oricând.",
     "connectAnAgent": "Conectează un agent",
     "connectAnAgentSubtitle": "Obține un prompt de configurare pentru Claude, ChatGPT, Codex sau orice agent",
