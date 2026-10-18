@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from config import ladder_v1 as policy, plan_catalog as catalog
 from utils import ladder_v1 as ladder
+import utils.mcp_server.transport as mcp_transport
 
 
 @pytest.fixture
@@ -287,6 +288,7 @@ def test_api_enforcement_keeps_the_daily_cap_and_skips_the_budget(monkeypatch):
     monkeypatch.setenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', 'true')
     calls = []
     assert 'enforce_budget' not in inspect.getsource(dependencies._enforce_ladder_api)
+    assert 'enforce_budget' not in inspect.getsource(mcp_transport._handle_tool_call)
     monkeypatch.setattr(
         dependencies,
         'enforce_daily_cap',

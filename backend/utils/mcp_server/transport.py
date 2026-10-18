@@ -68,7 +68,7 @@ from utils.mcp_server.versions import (
     unsupported_version_error,
 )
 from utils.other.endpoints import check_rate_limit_context, check_rate_limit_inline
-from utils.ladder_v1 import enforce_daily_cap, enforce_budget
+from utils.ladder_v1 import enforce_daily_cap
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,8 @@ def _handle_tool_call(
     daily: dict | None = None
     try:
         require_tool_scope(auth_context, tool_name)
-        enforce_budget(auth_context.uid)
+        # Hosted tool calls share the daily request count. They do not draw
+        # the monthly usage budget.
         daily = enforce_daily_cap(auth_context.uid)
         result = execute_tool(auth_context.uid, tool_name, arguments, auth_context=auth_context.memory_context)
     except ToolExecutionError as e:
