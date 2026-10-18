@@ -30,6 +30,7 @@ prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from utils.observability.sync_upload import SyncUploadMetricsMiddleware
+from utils.observability.external_lists import ExternalListMetricsMiddleware
 from routers import messaging
 from routers import (
     fleet_telemetry,
@@ -385,6 +386,7 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
+app.add_middleware(ExternalListMetricsMiddleware)
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 

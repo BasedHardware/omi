@@ -13827,4 +13827,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Något gick fel när det här samtalet skulle sammanfattas.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved av $total ljud sparat';
+  }
 }

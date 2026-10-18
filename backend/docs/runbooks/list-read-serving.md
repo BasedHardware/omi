@@ -84,6 +84,10 @@ a per-attempt timeout. These are not the chosen solution.
 
 ## Sibling paths and deadlines
 
+Developer API/MCP caching, offset bounds and route outcome measurement are documented in
+[external list reads](external-list-reads.md); their default-on kill switches are independent of the
+indexed-list rollout above.
+
 Every budgeted Firestore stream, batch get, document get, and action-item count
 RPC disables SDK retries; the supplied remaining timeout must bound the whole
 attempt. Completed stream prefixes are retained when a deadline interrupts a

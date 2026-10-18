@@ -1,6 +1,7 @@
 """Private OIDC batch worker RPC. Rollback closes intake, never accepted leases."""
 
 from dataclasses import asdict
+import logging
 import os
 import time
 from typing import Literal
@@ -18,6 +19,8 @@ from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.sync.stage import current_stage, require_http_stage
+
+logger = logging.getLogger(__name__)
 
 
 def verify_worker(request: Request) -> int:
@@ -179,7 +182,10 @@ async def enrichment_response(payload: dict):
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     try:
         status = await run_blocking(sync_executor, run_enrichment, document_id, token)
-        return JSONResponse(status_code=503 if status == 'busy' else 200, content={'status': status})
+        if status == 'busy':
+            logger.info('event=batch_enrichment_sync_reprocess outcome=busy')
+            return JSONResponse(status_code=409, content={'status': status})
+        return JSONResponse(status_code=200, content={'status': status})
     except (ValueError, TypeError):
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     except Exception:
