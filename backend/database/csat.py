@@ -28,6 +28,7 @@ the only client read path. The doc is cached 60s like app_review_config so
 admin copy edits reach clients within one poll (~5 min) plus the cache.
 """
 
+import logging
 import time
 from typing import Any, Dict, Tuple, cast
 
@@ -35,6 +36,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict
 
 from database._client import get_firestore_client
 from database.cache import get_memory_cache
+
+logger = logging.getLogger(__name__)
 
 CONFIG_COLLECTION = 'csat_config'
 CONFIG_DOC = 'product'
@@ -97,16 +100,23 @@ def normalize_config(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     }
 
 
-def _fetch_config() -> Dict[str, Any]:
-    doc = get_firestore_client().collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
+def _fetch_config(firestore_client: Any = None) -> Dict[str, Any]:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    try:
+        doc = client.collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
+    except Exception as err:
+        logger.warning('Failed to fetch CSAT config from store, falling back to defaults: %s', type(err).__name__)
+        return dict(DEFAULT_CONFIG)
     if not getattr(doc, 'exists', False):
         return dict(DEFAULT_CONFIG)
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else dict(DEFAULT_CONFIG)
 
 
-def get_product_config() -> Dict[str, Any]:
+def get_product_config(*, firestore_client: Any = None) -> Dict[str, Any]:
     """Return the product CSAT config, normalized, cached for 60s."""
+    if firestore_client is not None:
+        return normalize_config(_fetch_config(firestore_client=firestore_client))
     fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
     raw = cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else dict(DEFAULT_CONFIG)
     return normalize_config(raw)
@@ -120,6 +130,7 @@ def submit_rating(
     score: int,
     comment: str,
     revision: int,
+    firestore_client: Any = None,
 ) -> Tuple[str, bool]:
     """Create the user's one rating doc for the platform.
 
@@ -128,19 +139,39 @@ def submit_rating(
     Returns `(doc_id, created)`; `created=False` means a rating already
     existed and was left untouched.
     """
-    config = get_product_config()
-    effective_comment = comment if score <= config['comment_max_score'] else ''
-    doc_id = f'{platform}_{uid}'
+    if not uid or not isinstance(uid, str) or not uid.strip() or '/' in uid.strip():
+        raise ValueError(f'Invalid uid: {uid!r}')
+    cleaned_uid = uid.strip()
+
+    if not platform or not isinstance(platform, str):
+        raise ValueError(f'Invalid platform: {platform!r}')
+    cleaned_platform = platform.strip().lower()
+    if cleaned_platform not in PLATFORMS:
+        raise ValueError(f'Platform must be one of {sorted(PLATFORMS)}, got {platform!r}')
+
+    try:
+        int_score = int(score)
+    except (TypeError, ValueError):
+        raise ValueError(f'Score must be an integer, got {score!r}')
+    if not 1 <= int_score <= 5:
+        raise ValueError(f'Score must be between 1 and 5, got {score!r}')
+
+    config = get_product_config(firestore_client=firestore_client)
+    raw_comment = str(comment or '').strip()[:MAX_COMMENT_LENGTH]
+    effective_comment = raw_comment if int_score <= config['comment_max_score'] else ''
+
+    doc_id = f'{cleaned_platform}_{cleaned_uid}'
     payload: Dict[str, Any] = {
-        'uid': uid,
-        'platform': platform,
-        'app_version': app_version[:MAX_APP_VERSION_LENGTH],
-        'score': score,
+        'uid': cleaned_uid,
+        'platform': cleaned_platform,
+        'app_version': str(app_version or '').strip()[:MAX_APP_VERSION_LENGTH],
+        'score': int_score,
         'comment': effective_comment,
-        'revision': max(0, revision),
+        'revision': max(0, _clamped_int(revision, 0, 0, 1_000_000_000)),
         'created_at': int(time.time()),
     }
-    ref = get_firestore_client().collection(RATINGS_COLLECTION).document(doc_id)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection(RATINGS_COLLECTION).document(doc_id)
     try:
         ref.create(payload)
     except (AlreadyExists, Conflict):
