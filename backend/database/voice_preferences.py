@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from google.api_core.exceptions import GoogleAPICallError
+
 from config.assistant_voices import DEFAULT_ASSISTANT_VOICE, normalize_assistant_voice
 from database._client import get_data_plane_firestore_client
 
@@ -25,9 +27,10 @@ def get_assistant_voice(uid: str, *, firestore_client: Any = None) -> str:
     try:
         snapshot = client.collection('users').document(uid).get()
         data = snapshot.to_dict() if snapshot.exists else None
-    except Exception:
-        # A transient data-plane outage must not break the caller's voice
-        # lookup — fall back to the catalog default rather than raise.
+    except (GoogleAPICallError, OSError, TimeoutError):
+        # A data-plane outage must not break the caller's voice lookup —
+        # fall back to the catalog default rather than raise. Programming
+        # errors (AttributeError etc.) still propagate.
         logger.warning('assistant voice read failed', exc_info=True)
         return DEFAULT_ASSISTANT_VOICE
     stored = data.get(_ASSISTANT_VOICE_FIELD) if isinstance(data, dict) else None

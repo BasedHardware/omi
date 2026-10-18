@@ -99,3 +99,16 @@ class TestWriteGuard:
         monkeypatch.setattr(voice_preferences, 'get_data_plane_firestore_client', lambda: None)
         with pytest.raises(RuntimeError, match='data plane unavailable'):
             voice_preferences.set_assistant_voice('u3', 'Charon')
+
+
+def test_programming_error_propagates_not_falls_back():
+    """The narrowed except must not swallow bugs — only data-plane faults."""
+
+    class _BoomClient:
+        def collection(self, name):
+            raise AttributeError('misconfigured client object')
+
+    import pytest
+
+    with pytest.raises(AttributeError):
+        voice_preferences.get_assistant_voice('u1', firestore_client=_BoomClient())
