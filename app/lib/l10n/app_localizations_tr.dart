@@ -13786,4 +13786,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Bu konuşma özetlenirken bir sorun oluştu.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Sesin $saved kadarı kaydedildi (toplam $total)';
+  }
 }

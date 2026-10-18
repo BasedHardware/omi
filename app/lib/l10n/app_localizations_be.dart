@@ -13808,4 +13808,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Падчас падсумоўвання гэтай размовы нешта пайшло не так.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Захавана $saved з $total аўдыя';
+  }
 }

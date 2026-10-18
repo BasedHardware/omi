@@ -11644,5 +11644,6 @@
     "summaryLimitTitle": "Dosežena omejitev povzetkov",
     "summaryLimitBody": "V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.",
     "summaryFailedTitle": "Povzemanje ni uspelo",
-    "summaryFailedBody": "Pri povzemanju tega pogovora je prišlo do napake."
+    "summaryFailedBody": "Pri povzemanju tega pogovora je prišlo do napake.",
+    "playbackPartialAudioSaved": "Shranjeno {saved} od {total} zvoka"
 }

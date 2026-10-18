@@ -13805,4 +13805,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Apkopojot šo sarunu, radās kļūda.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Saglabāts $saved no $total audio';
+  }
 }

@@ -4221,5 +4221,6 @@
     "summaryLimitTitle": "تم بلوغ حد الملخصات",
     "summaryLimitBody": "لقد أعدت إنشاء عدة ملخصات خلال الساعة الماضية. حاول مرة أخرى لاحقًا.",
     "summaryFailedTitle": "تعذر التلخيص",
-    "summaryFailedBody": "حدث خطأ ما أثناء تلخيص هذه المحادثة."
+    "summaryFailedBody": "حدث خطأ ما أثناء تلخيص هذه المحادثة.",
+    "playbackPartialAudioSaved": "تم حفظ {saved} من {total} من الصوت"
 }

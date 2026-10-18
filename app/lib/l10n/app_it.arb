@@ -4221,5 +4221,6 @@
     "summaryLimitTitle": "Limite di riassunti raggiunto",
     "summaryLimitBody": "Hai rigenerato diversi riassunti nell'ultima ora. Riprova più tardi.",
     "summaryFailedTitle": "Impossibile riassumere",
-    "summaryFailedBody": "Si è verificato un problema durante il riassunto di questa conversazione."
+    "summaryFailedBody": "Si è verificato un problema durante il riassunto di questa conversazione.",
+    "playbackPartialAudioSaved": "Salvati {saved} di {total} di audio"
 }

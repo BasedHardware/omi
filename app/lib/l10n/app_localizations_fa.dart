@@ -13771,4 +13771,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'هنگام خلاصه‌سازی این گفتگو مشکلی پیش آمد.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved از $total صدا ذخیره شد';
+  }
 }

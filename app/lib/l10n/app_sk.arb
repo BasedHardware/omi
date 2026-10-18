@@ -4221,5 +4221,6 @@
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",
     "summaryFailedTitle": "Zhrnutie sa nepodarilo",
-    "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo."
+    "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo.",
+    "playbackPartialAudioSaved": "Uložené {saved} z {total} zvuku"
 }

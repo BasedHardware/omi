@@ -4256,5 +4256,6 @@
     "summaryLimitTitle": "Osiągnięto limit podsumowań",
     "summaryLimitBody": "W ciągu ostatniej godziny kilkakrotnie wygenerowano ponownie podsumowania. Spróbuj ponownie później.",
     "summaryFailedTitle": "Nie udało się podsumować",
-    "summaryFailedBody": "Coś poszło nie tak podczas podsumowywania tej rozmowy."
+    "summaryFailedBody": "Coś poszło nie tak podczas podsumowywania tej rozmowy.",
+    "playbackPartialAudioSaved": "Zapisano {saved} z {total} dźwięku"
 }

@@ -4221,5 +4221,6 @@
     "summaryLimitTitle": "Limit für Zusammenfassungen erreicht",
     "summaryLimitBody": "Du hast in der letzten Stunde mehrere Zusammenfassungen neu erstellt. Versuche es später erneut.",
     "summaryFailedTitle": "Zusammenfassung fehlgeschlagen",
-    "summaryFailedBody": "Beim Zusammenfassen dieses Gesprächs ist ein Fehler aufgetreten."
+    "summaryFailedBody": "Beim Zusammenfassen dieses Gesprächs ist ein Fehler aufgetreten.",
+    "playbackPartialAudioSaved": "{saved} von {total} Audio gespeichert"
 }

@@ -13822,4 +13822,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Нещо се обърка при обобщаването на този разговор.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Запазени $saved от $total аудио';
+  }
 }

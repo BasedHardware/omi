@@ -13872,4 +13872,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'இந்த உரையாடலைச் சுருக்கும்போது ஏதோ தவறு நடந்தது.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ஆடியோ சேமிக்கப்பட்டது, மொத்தம் $total';
+  }
 }

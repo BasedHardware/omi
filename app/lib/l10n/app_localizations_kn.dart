@@ -13816,4 +13816,9 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು $total';
+  }
 }

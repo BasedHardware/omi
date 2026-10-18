@@ -13804,4 +13804,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Під час підсумовування цієї розмови сталася помилка.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Збережено $saved з $total аудіо';
+  }
 }

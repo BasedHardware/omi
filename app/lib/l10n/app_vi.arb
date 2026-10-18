@@ -4221,5 +4221,6 @@
     "summaryLimitTitle": "Đã đạt giới hạn tóm tắt",
     "summaryLimitBody": "Bạn đã tạo lại nhiều bản tóm tắt trong giờ qua. Hãy thử lại sau.",
     "summaryFailedTitle": "Không thể tóm tắt",
-    "summaryFailedBody": "Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này."
+    "summaryFailedBody": "Đã xảy ra lỗi khi tóm tắt cuộc trò chuyện này.",
+    "playbackPartialAudioSaved": "Đã lưu {saved} trên {total} âm thanh"
 }

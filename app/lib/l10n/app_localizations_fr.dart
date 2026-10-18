@@ -13883,4 +13883,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Un problème est survenu lors du résumé de cette conversation.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved sur $total d\'audio enregistré';
+  }
 }

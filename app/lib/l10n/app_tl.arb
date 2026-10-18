@@ -11644,5 +11644,6 @@
     "summaryLimitTitle": "Naabot na ang limitasyon ng buod",
     "summaryLimitBody": "Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.",
     "summaryFailedTitle": "Hindi ma-summarize",
-    "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito."
+    "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito.",
+    "playbackPartialAudioSaved": "{saved} sa {total} ng audio ang na-save"
 }
