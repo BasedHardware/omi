@@ -97,6 +97,7 @@ def test_whisper_cancel_keeps_inflight_batch_and_following_tail():
         transcripts = []
         started = threading.Event()
         release = threading.Event()
+        emitted = asyncio.Event()
 
         def runner(pcm: bytes) -> str:
             calls.append(len(pcm))
@@ -106,16 +107,17 @@ def test_whisper_cancel_keeps_inflight_batch_and_following_tail():
                 return "batch"
             return "tail"
 
+        def on_transcript(text: str) -> None:
+            transcripts.append(text)
+            emitted.set()
+
         queue: asyncio.Queue[bytes] = asyncio.Queue()
         queue.put_nowait(b"\x00" * _BATCH_BYTES)
         transcriber = WhisperTranscriber(runner=runner)
-        task = asyncio.create_task(transcriber.run(queue, transcripts.append))
+        task = asyncio.create_task(transcriber.run(queue, on_transcript))
         await _wait_for_thread_event(started)
         release.set()
-        for _ in range(50):
-            if transcripts:
-                break
-            await asyncio.sleep(0)
+        await asyncio.wait_for(emitted.wait(), 1)
         assert transcripts == ["batch"]
 
         queue.put_nowait(_pcm(1))
