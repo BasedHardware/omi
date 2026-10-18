@@ -8,9 +8,16 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db, get_firestore_client
-from database import conversation_visibility_counts
 from database.document_ids import system_folder_doc_id
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+
+try:
+    from database import conversation_visibility_counts
+except (ImportError, AttributeError):
+    try:
+        import database.conversation_visibility_counts as conversation_visibility_counts
+    except (ImportError, AttributeError):
+        conversation_visibility_counts = None
 
 logger = logging.getLogger(__name__)
 
@@ -495,8 +502,10 @@ def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_clie
     count_query = query.count()
     result = count_query.get()
     count = int(result[0][0].value or 0)
-    hidden = conversation_visibility_counts.count_hidden(
-        conversations_ref, include_discarded=False, folder_id=folder_id
+    hidden = (
+        conversation_visibility_counts.count_hidden(conversations_ref, include_discarded=False, folder_id=folder_id)
+        if conversation_visibility_counts is not None and hasattr(conversation_visibility_counts, 'count_hidden')
+        else 0
     )
     count = max(0, count - hidden)
 

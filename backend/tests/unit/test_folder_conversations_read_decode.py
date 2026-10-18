@@ -23,6 +23,14 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 import pytest
 
+# Defend against preceding test files that stubbed top-level packages without __file__
+for _pkg in ["models", "database", "utils", "google"]:
+    if _pkg in sys.modules and getattr(sys.modules[_pkg], "__file__", None) is None:
+        del sys.modules[_pkg]
+        for _sub in list(sys.modules):
+            if _sub.startswith(f"{_pkg}."):
+                del sys.modules[_sub]
+
 from database import folders as folders_db
 from models.conversation import Conversation, TranscriptSegment
 
