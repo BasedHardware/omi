@@ -103,10 +103,10 @@ def test_desktop_backend_cors_middleware_enforces_allowlist(monkeypatch):
     assert 'access-control-allow-origin' not in denied.headers
     exposed_headers = {name.strip().lower() for name in exposed.headers['access-control-expose-headers'].split(',')}
     assert {
-        'x-omi-memory-belief-enabled',
         'x-omi-memory-next-cursor',
         'x-omi-list-truncated',
     } <= exposed_headers
+    assert 'x-omi-memory-belief-enabled' not in exposed_headers
     assert 'access-control-allow-origin' not in without_origin.headers
 
 
@@ -194,7 +194,7 @@ def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
     assert 'omi_client_journey_accepted_total' in response.text
 
 
-def test_desktop_startup_and_retired_routes_need_no_v2_redis(monkeypatch):
+def test_desktop_startup_and_removed_jit_routes_need_no_v2_redis(monkeypatch):
     from unittest.mock import AsyncMock, Mock
     from database import proactivity_redis, redis_db
 
@@ -210,7 +210,6 @@ def test_desktop_startup_and_retired_routes_need_no_v2_redis(monkeypatch):
     monkeypatch.setattr(desktop_backend, 'shutdown_managed_spend_ledger', AsyncMock())
     monkeypatch.setattr(desktop_backend, 'close_all_clients', AsyncMock())
     monkeypatch.setattr(desktop_backend.reservation_state, 'aclose', AsyncMock())
-    monkeypatch.setattr(desktop_backend, 'close_posthog_control_plane', lambda: None)
     monkeypatch.setattr(desktop_backend, 'close_free_tier_control_plane', lambda: None)
     # Readiness continues to probe the existing desktop Redis, independent of v2.
     monkeypatch.setenv('REDIS_DB_HOST', 'synthetic-desktop.example')
@@ -222,8 +221,8 @@ def test_desktop_startup_and_retired_routes_need_no_v2_redis(monkeypatch):
         assert client.get('/health').status_code == 200
         assert client.get('/ready').status_code == 200
         assert client.post('/v1/desktop/proactivity/completions', content=b'not json').status_code == 429
-        assert client.post('/v1/jit/proactivity/reservations', content=b'not json').status_code == 410
-        assert client.post('/v1/jit/trigger-feedback', content=b'not json').status_code == 410
+        assert client.post('/v1/jit/proactivity/reservations', content=b'not json').status_code == 404
+        assert client.post('/v1/jit/trigger-feedback', content=b'not json').status_code == 404
         assert client.get('/v1/proactivity/feed').status_code == 404
         assert client.post('/v1/proactivity/items/item/outcomes', json={}).status_code == 404
     normal_ping.assert_called_once()
