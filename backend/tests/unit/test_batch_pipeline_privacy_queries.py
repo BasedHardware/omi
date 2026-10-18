@@ -81,6 +81,12 @@ def test_identifier_rejects_empty_or_non_string_values(value):
         queries.sanitize_identifier(value, 'test_field')
 
 
+@pytest.mark.parametrize('value', ['ns/child', '/leading', 'trailing/', 'a/b/c'])
+def test_identifier_rejects_path_separators(value):
+    with pytest.raises(ValueError, match='test_field must not contain path separators'):
+        queries.sanitize_identifier(value, 'test_field')
+
+
 # --- Bounded Limit Tests ---
 
 
@@ -221,3 +227,38 @@ def test_stream_errors_propagate_to_preserve_crash_and_retry_semantics(builder_c
     failing_client = RecordingClient(fail_stream=True)
     with pytest.raises(RuntimeError, match='synthetic Firestore timeout'):
         builder_call(failing_client)
+
+
+# --- Pagination Termination Tests ---
+
+
+def test_owner_documents_pagination_termination_on_empty_page():
+    class TwoPageClient:
+        def __init__(self):
+            self.call_count = 0
+
+        def collection(self, path):
+            return self
+
+        def where(self, filter=None):
+            return self
+
+        def start_after(self, cursor):
+            return self
+
+        def limit(self, bound):
+            return self
+
+        def stream(self):
+            self.call_count += 1
+            if self.call_count == 1:
+                doc = type('Doc', (), {'id': 'doc_1'})()
+                return [doc]
+            return []
+
+    client = TwoPageClient()
+    first_page = queries.owner_documents(client, 'ns', 'jobs', 'key')
+    assert len(first_page) == 1
+    second_page = queries.owner_documents(client, 'ns', 'jobs', 'key', after=first_page[-1])
+    assert second_page == []
+

@@ -15,7 +15,10 @@ def sanitize_identifier(value: Any, field: str) -> str:
     """
     if isinstance(value, bool) or not isinstance(value, str) or not value.strip():
         raise ValueError(f'{field} must be a non-empty string')
-    return value.strip()
+    stripped = value.strip()
+    if '/' in stripped:
+        raise ValueError(f'{field} must not contain path separators')
+    return stripped
 
 
 def bounded_limit(limit: Any) -> int:
