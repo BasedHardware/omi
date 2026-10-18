@@ -6,8 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.sync import empty_recovery as recovery
 from utils.stt.outcomes import TranscriptionFailure
 
@@ -34,7 +32,7 @@ def test_zero_strict_spans_is_the_only_silence_without_paid_call(tmp_path, monke
     path = setup_audio(tmp_path, monkeypatch, [], rate=rate, width=width)
     dispatch, authorize = Mock(), Mock()
     words, language, duration, spans = recovery.recover(path, transcribe=dispatch, authorize=authorize)
-    assert words == [] and spans == [] and duration == pytest.approx(1, abs=0.001)
+    assert words == [] and spans == [] and abs(duration - 1) <= 0.001
     dispatch.assert_not_called()
     authorize.assert_not_called()
 
