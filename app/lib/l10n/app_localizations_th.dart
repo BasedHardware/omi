@@ -13103,6 +13103,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'เชื่อมต่อ Omi ของคุณ';
+
+  @override
+  String get firstCaptureConnectDescription => 'จับคู่ Omi เพื่อบันทึกบทสนทนาแบบแฮนด์ฟรีตลอดวัน';
+
+  @override
+  String get firstCaptureConnect => 'เชื่อมต่อ Omi ของฉัน';
+
+  @override
+  String get firstCaptureNoDevice => 'ฉันยังไม่มี Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

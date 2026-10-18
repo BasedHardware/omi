@@ -13179,6 +13179,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Hubungkan Omi Anda';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Pasangkan Omi Anda, Omi merekam percakapan Anda bebas genggam, sepanjang hari.';
+
+  @override
+  String get firstCaptureConnect => 'Hubungkan Omi saya';
+
+  @override
+  String get firstCaptureNoDevice => 'Saya belum punya Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

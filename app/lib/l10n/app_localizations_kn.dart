@@ -13208,6 +13208,19 @@ class AppLocalizationsKn extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'ನಿಮ್ಮ Omi ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'ನಿಮ್ಮ Omi ಜೋಡಿಸಿ, ಅದು ದಿನವಿಡೀ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಹ್ಯಾಂಡ್ಸ್-ಫ್ರೀ ಆಗಿ ಸೆರೆಹಿಡಿಯುತ್ತದೆ.';
+
+  @override
+  String get firstCaptureConnect => 'ನನ್ನ Omi ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get firstCaptureNoDevice => 'ನನ್ನ ಬಳಿ ಇನ್ನೂ Omi ಇಲ್ಲ';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

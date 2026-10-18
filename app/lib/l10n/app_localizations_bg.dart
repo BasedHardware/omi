@@ -13217,6 +13217,19 @@ class AppLocalizationsBg extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Свържете своя Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Сдвоете своя Omi и той ще записва разговорите ви без ръце, през целия ден.';
+
+  @override
+  String get firstCaptureConnect => 'Свържи моя Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Все още нямам Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

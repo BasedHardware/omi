@@ -13274,6 +13274,19 @@ class AppLocalizationsTl extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Ikonekta ang iyong Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Ipares ang iyong Omi at awtomatiko nitong kukuhain ang iyong mga pag-uusap nang walang gamit ang kamay, buong araw.';
+
+  @override
+  String get firstCaptureConnect => 'Ikonekta ang aking Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Wala pa akong Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

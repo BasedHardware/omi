@@ -13208,6 +13208,19 @@ class AppLocalizationsPl extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Połącz swoje Omi';
+
+  @override
+  String get firstCaptureConnectDescription =>
+      'Sparuj swoje Omi, a będzie nagrywać Twoje rozmowy bez użycia rąk przez cały dzień.';
+
+  @override
+  String get firstCaptureConnect => 'Połącz moje Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Nie mam jeszcze Omi';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

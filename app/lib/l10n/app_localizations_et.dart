@@ -13163,6 +13163,18 @@ class AppLocalizationsEt extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Ühenda oma Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Paarista Omi ja see salvestab vestlused käed-vabalt kogu päeva.';
+
+  @override
+  String get firstCaptureConnect => 'Ühenda minu Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Mul ei ole veel Omit';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

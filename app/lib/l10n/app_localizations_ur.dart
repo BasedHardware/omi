@@ -13183,6 +13183,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'اپنی اومی کو جوڑیں';
+
+  @override
+  String get firstCaptureConnectDescription => 'اومی کو جوڑیں اور یہ دن بھر آپ کی گفتگو کو ہینڈز فری ریکارڈ کرے گی۔';
+
+  @override
+  String get firstCaptureConnect => 'میری اومی کو جوڑیں';
+
+  @override
+  String get firstCaptureNoDevice => 'میرے پاس ابھی اومی نہیں ہے۔';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override

@@ -13174,6 +13174,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get firstCaptureWatch => 'Apple Watch';
 
   @override
+  String get firstCaptureConnectTitle => 'Yhdistä Omi';
+
+  @override
+  String get firstCaptureConnectDescription => 'Yhdistä Omi, niin se tallentaa keskustelusi hands-free koko päivän.';
+
+  @override
+  String get firstCaptureConnect => 'Yhdistä Omi';
+
+  @override
+  String get firstCaptureNoDevice => 'Minulla ei ole vielä Omia';
+
+  @override
   String get firstCaptureSkip => 'Skip for Now';
 
   @override
