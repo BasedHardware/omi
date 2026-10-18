@@ -28,6 +28,7 @@ from database.firestore_index_registry import (
     ACTION_ITEMS_CREATED_RANGE_QUERY,
 )
 from ._client import db, get_firestore_client
+from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.observability.fallback import record_fallback
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 
@@ -491,11 +492,13 @@ def _list_scan_budget(row_budget: int) -> int:
 
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
     """Active-first product order (see get_action_items)."""
+    due_at = coerce_utc_datetime(item.get('due_at'))
+    created_at = coerce_utc_datetime(item.get('created_at'))
     return (
         bool(item.get('completed')),
-        item.get('due_at') is None,
-        item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-        -((item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+        due_at is None,
+        due_at or datetime.max.replace(tzinfo=timezone.utc),
+        -((created_at or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
     )
 
 
@@ -1389,7 +1392,10 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
         data['id'] = doc.id
         synced_items.append(prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
-    synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    synced_items.sort(
+        key=lambda x: coerce_utc_datetime(x.get('updated_at')) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
 
     return {"pending_export": pending_export, "synced_items": synced_items}
 
@@ -1569,12 +1575,12 @@ def get_scores(
 
     for data in deleted_items:
         completed = data.get('completed') is True
-        due_at = data.get('due_at')
-        if isinstance(due_at, datetime) and day_start <= due_at < day_end:
+        due_at = coerce_utc_datetime(data.get('due_at'))
+        if due_at is not None and day_start <= due_at < day_end:
             daily_total -= 1
             daily_completed -= int(completed)
-        created_at = data.get('created_at')
-        if isinstance(created_at, datetime) and week_start <= created_at < day_end:
+        created_at = coerce_utc_datetime(data.get('created_at'))
+        if created_at is not None and week_start <= created_at < day_end:
             weekly_total -= 1
             weekly_completed -= int(completed)
         overall_total -= 1

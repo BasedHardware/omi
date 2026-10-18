@@ -79,3 +79,33 @@ def test_action_item_list_sort_key_handles_none_created_at():
     ]
     sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
     assert [item['id'] for item in sorted_items] == ['valid-created', 'null-created']
+
+
+def test_action_item_list_sort_key_handles_naive_and_string_due_at():
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    items = [
+        {'id': 'string-due', 'completed': False, 'due_at': '2026-10-25T14:00:00Z', 'created_at': now},
+        {'id': 'naive-due', 'completed': False, 'due_at': datetime(2026, 10, 24, 14, 0), 'created_at': now},
+        {
+            'id': 'aware-due',
+            'completed': False,
+            'due_at': datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc),
+            'created_at': now,
+        },
+    ]
+    sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
+    assert [item['id'] for item in sorted_items] == ['naive-due', 'string-due', 'aware-due']
+
+
+def test_action_item_list_sort_key_handles_string_created_at():
+    items = [
+        {'id': 'string-created', 'completed': False, 'due_at': None, 'created_at': '2026-10-25T14:00:00Z'},
+        {
+            'id': 'dt-created',
+            'completed': False,
+            'due_at': None,
+            'created_at': datetime(2026, 10, 24, 14, 0, tzinfo=timezone.utc),
+        },
+    ]
+    sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
+    assert [item['id'] for item in sorted_items] == ['string-created', 'dt-created']
