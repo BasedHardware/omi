@@ -1,7 +1,7 @@
-"""Developer action-item cache fence at the SDK commit boundary.
+"""Redis generations and writer tickets for Developer action-item pages.
 
-Every document mutation, batch, transaction, async commit and BulkWriter batch
-passes this boundary, including dynamic-collection undo and recursive deletion.
+SDK installation lives in action_item_write_fence, keeping response-cache
+imports independent of the Firestore SDK classes.
 A random version cannot alias a cached page after expiry/eviction. Overlapping
 writers keep the version busy until all have completed. Uncertain Redis replies
 poison caching instead of publishing an unfenced version. Never stores task data.
@@ -9,21 +9,12 @@ poison caching instead of publishing an unfenced version. Never stores task data
 
 import functools
 import hashlib
-import inspect
 import logging
 from uuid import uuid4
 from typing import Any
 
-from google.cloud.firestore_v1.batch import WriteBatch
-from google.cloud.firestore_v1.transaction import Transaction
-from google.cloud.firestore_v1.async_batch import AsyncWriteBatch
-from google.cloud.firestore_v1.async_transaction import AsyncTransaction
-from google.cloud.firestore_v1.bulk_batch import BulkWriteBatch
-from google.cloud.firestore_v1.document import DocumentReference
-from google.cloud.firestore_v1.async_document import AsyncDocumentReference
 
 from database.redis_connection import create_bounded_redis_client
-from utils.executors import db_executor, run_blocking
 from database.fsr_cache_telemetry import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -103,66 +94,3 @@ def finish(uid: str, ticket: tuple[str, bool]) -> None:
         _redis().eval(_END, 2, key, key + ':writers', ticket[0], int(ticket[1]), uuid4().hex, VERSION_TTL)
     except Exception:
         _unavailable()
-
-
-def _owners(batch: Any) -> set[str]:
-    owners = set()
-    # Inspect the actual pending Write protobufs before commit clears them.
-    if hasattr(batch, '_write_pbs'):
-        paths = [write.delete or write.update.name or write.transform.document for write in batch._write_pbs]
-    else:
-        # DocumentReference.delete bypasses WriteBatch and commits directly.
-        paths = [batch._document_path]
-    for path in paths:
-        parts = path.split('/')
-        if len(parts) == 9 and parts[4:6] == ['documents', 'users'] and parts[7] == 'action_items':
-            owners.add(parts[6])
-    return owners
-
-
-def _wrap(original: Any) -> Any:
-    if getattr(original, '_omi_action_item_fence', False):
-        return original
-    wrapped: Any
-    if inspect.iscoroutinefunction(original):
-
-        @functools.wraps(original)
-        async def async_commit(batch: Any, *args: Any, **kwargs: Any) -> Any:
-            tickets = []
-            try:
-                for uid in sorted(_owners(batch)):
-                    tickets.append((uid, await run_blocking(db_executor, begin, uid)))
-                return await original(batch, *args, **kwargs)
-            finally:
-                for uid, ticket in tickets:
-                    await run_blocking(db_executor, finish, uid, ticket)
-
-        wrapped = async_commit
-    else:
-
-        @functools.wraps(original)
-        def sync_commit(batch: Any, *args: Any, **kwargs: Any) -> Any:
-            tickets = [(uid, begin(uid)) for uid in sorted(_owners(batch))]
-            try:
-                return original(batch, *args, **kwargs)
-            finally:
-                # Invalidate even on partial/ambiguous commit or transaction retry.
-                for uid, ticket in tickets:
-                    finish(uid, ticket)
-
-        wrapped = sync_commit
-    setattr(wrapped, '_omi_action_item_fence', True)
-    return wrapped
-
-
-def install_write_fences() -> None:
-    for cls, method in (
-        (WriteBatch, 'commit'),
-        (Transaction, '_commit'),
-        (AsyncWriteBatch, 'commit'),
-        (AsyncTransaction, '_commit'),
-        (BulkWriteBatch, 'commit'),
-        (DocumentReference, 'delete'),
-        (AsyncDocumentReference, 'delete'),
-    ):
-        setattr(cls, method, _wrap(getattr(cls, method)))

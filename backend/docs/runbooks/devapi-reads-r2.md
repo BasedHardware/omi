@@ -25,7 +25,9 @@ are disabled, protecting enabled readers and subsequent re-enablement.
 
 ## Task writer coverage
 
-`database.action_item_versions` installs SDK commit fences from `database._client`.
+`database.action_item_write_fence` installs SDK commit fences from `database._client`.
+The response cache imports only the pure Redis version protocol in
+`database.action_item_versions`; it does not require SDK classes.
 It inspects actual pending Write protobuf document paths, rather than trusting a
 list of route names or a post-write callback. One version per UID covers the
 entire `users/{uid}/action_items` collection. Document set/create/update and field

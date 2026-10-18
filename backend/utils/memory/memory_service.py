@@ -118,6 +118,7 @@ from utils.memory.knowledge_ledger import (
     save_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
+from utils.memory.category_reads import read_category_window
 from utils.memory.read_resilience import (
     MemoryBackingStoreStream,
     MemoryBackingStoreUnavailable,
@@ -2658,34 +2659,16 @@ class MemoryService:
         )
         if category_filter is None:
             return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
-        # One admitted operation owns the sparse category scan. Individual
-        # windows retain the SAME RPC/document budget and provider evidence;
-        # they do not spend a new whole-operation retry ticket for each chunk.
-        target = max(0, offset) + max(1, limit)
-        if target > HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW:
-            raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
-        matched: List[MemoryDB] = []
-        scanned = 0
-        size = min(500, max(25, target))
-        exhausted = False
-        try:
-            while scanned < 5000 and len(matched) < target:
-                take = min(size, 5000 - scanned)
-                if budget is not None:
-                    budget.check()
-                batch = self._read_compatibility_window(uid, limit=take, offset=scanned, **kwargs)
-                scanned += len(batch)
-                matched.extend(row for row in batch if row.category.value in category_filter)
-                if len(batch) < take:
-                    exhausted = True
-                    break
-                size = min(500, size * 2)
-        except ListReadBudgetExhausted as exc:
-            if budget is not None:
-                budget.mark_exhausted(exc.reason)
-        if not exhausted and len(matched) < target and budget is not None and not budget.truncated:
-            budget.mark_exhausted('documents')
-        return matched[max(0, offset) : target]
+        # One admission owns all internal windows and their shared budget.
+        return read_category_window(
+            self._read_compatibility_window,
+            uid,
+            limit=limit,
+            offset=offset,
+            category_filter=category_filter,
+            max_window=HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
+            **kwargs,
+        )
 
     def _read_compatibility_window(
         self,

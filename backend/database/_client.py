@@ -114,7 +114,7 @@ _install_document_read_probe()
 def _install_action_item_write_fences() -> None:
     # Match the SDK read probe's import-isolation seam. No clients or IO here.
     try:
-        from database.action_item_versions import install_write_fences
+        from database.action_item_write_fence import install_write_fences
     except ImportError:
         return
     install_write_fences()
