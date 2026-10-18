@@ -13149,7 +13149,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get paywallYourPlan => 'Paket Anda';
 
   @override
-  String get paywallNotNow => 'Nanti Saja';
+  String get paywallNotNow => 'Nanti saja';
 
   @override
   String get paywallTryAgain => 'Try again';

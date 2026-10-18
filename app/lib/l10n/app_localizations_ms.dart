@@ -13170,7 +13170,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get paywallYourPlan => 'Pelan anda';
 
   @override
-  String get paywallNotNow => 'Bukan Sekarang';
+  String get paywallNotNow => 'Bukan sekarang';
 
   @override
   String get paywallTryAgain => 'Try again';

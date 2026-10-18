@@ -70,38 +70,49 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
 
   Future<void> _process() async {
     if (_busy) return;
-    final backlog = widget.backlog;
-    final l10n = context.l10n;
-    final confirmed = await showOmiConfirm(
-      context,
-      title: l10n.processingAction,
-      message: [
-        l10n.processingEstimate(
-          processingEstimateNumber(context, backlog.estimatedHours),
-          processingPercentNumber(context, backlog.estimatedPercent),
-        ),
-        if (backlog.exceedsRemaining) l10n.processingNewestFirst,
-      ].join('\n\n'),
-      confirmLabel: l10n.processingAction,
-      cancelLabel: l10n.paywallNotNow,
-    );
-    if (!mounted) return;
-    if (!confirmed) {
-      _cancelDecision();
-      return;
+    var label = '';
+    try {
+      final backlog = widget.backlog;
+      final l10n = context.l10n;
+      label = l10n.processingAction;
+      final confirmed = await showOmiConfirm(
+        context,
+        title: l10n.processingAction,
+        message: [
+          l10n.processingEstimate(
+            processingEstimateNumber(context, backlog.estimatedHours),
+            processingPercentNumber(context, backlog.estimatedPercent),
+          ),
+          if (backlog.exceedsRemaining) l10n.processingNewestFirst,
+        ].join('\n\n'),
+        confirmLabel: l10n.processingAction,
+        cancelLabel: l10n.paywallNotNow,
+      );
+      if (!mounted) return;
+      if (!confirmed) {
+        _cancelDecision();
+        return;
+      }
+      // An entitlement refresh may have changed the choice while the dialog was open.
+      if (!widget.backlog.isWaitingChoice) return;
+      if (widget.backlog.toJson().toString() != backlog.toJson().toString()) {
+        // A changed estimate is a new decision: confirm it with a fresh identity.
+        _cancelDecision();
+        return _process();
+      }
+      setState(() => _busy = true);
+      try {
+        final success = await (widget.onProcess?.call() ?? context.read<UsageProvider>().processBacklog());
+        if (!mounted) return;
+        if (!success) OmiFeedback.error(context, l10n.somethingWentWrong);
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+    } catch (error, stack) {
+      // The tap handler stays synchronous so the confirm dialog does not spin the
+      // button. Failures still take OmiButton's reporter instead of the zone.
+      OmiButton.reportOnPressedError(error, stack, label: label);
     }
-    // An entitlement refresh may have changed the choice while the dialog was open.
-    if (!widget.backlog.isWaitingChoice) return;
-    if (widget.backlog.toJson().toString() != backlog.toJson().toString()) {
-      // A changed estimate is a new decision: confirm it with a fresh identity.
-      _cancelDecision();
-      return _process();
-    }
-    setState(() => _busy = true);
-    final success = await (widget.onProcess?.call() ?? context.read<UsageProvider>().processBacklog());
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (!success) OmiFeedback.error(context, l10n.somethingWentWrong);
   }
 
   @override
@@ -154,6 +165,7 @@ class _ProcessingBacklogViewState extends State<ProcessingBacklogView> {
                 isLoading: _busy,
                 // The button spins from [_busy] only after confirm. Returning
                 // this Future would spin the label for the whole dialog.
+                // [_process] reports failures through OmiButton.reportOnPressedError.
                 onPressed: _busy
                     ? null
                     : () {

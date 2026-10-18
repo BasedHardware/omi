@@ -13244,7 +13244,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paywallYourPlan => 'Ang plan mo';
 
   @override
-  String get paywallNotNow => 'Hindi Ngayon';
+  String get paywallNotNow => 'Hindi ngayon';
 
   @override
   String get paywallTryAgain => 'Try again';

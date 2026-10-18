@@ -583,6 +583,64 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
+  testWidgets('processing failure is reported without spinning behind the dialog', (tester) async {
+    final reported = <FlutterErrorDetails>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = (details) {
+      reported.add(details);
+      previous?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = previous);
+
+    final gate = Completer<void>();
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    var calls = 0;
+    await pump(
+        tester,
+        ProcessingBacklogView(
+            backlog: backlog('waiting_choice'),
+            surface: 'a',
+            onUpgrade: () {},
+            onProcess: () async {
+              calls++;
+              await gate.future;
+              throw StateError('process failed');
+            }));
+    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(reported, isEmpty);
+
+    await tester.tap(find.text('Process waiting recordings').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    gate.complete();
+    await tester.pump();
+    expect(tester.takeException(), isA<StateError>());
+    expect(reported, hasLength(1));
+    expect(reported.single.library, 'omi ui');
+    expect(reported.single.exception, isA<StateError>());
+    expect(reported.single.context.toString(), contains('Process waiting recordings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byKey(const Key('processing_backlog_process_a')), findsOneWidget);
+    expect(calls, 1);
+
+    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.textContaining('About 2.5 hours of processing'), findsOneWidget);
+    await tester.tap(find.text('Not now').last);
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(reported, hasLength(1));
+  });
+
   testWidgets('unknown allowance pauses without claiming the monthly budget is exhausted', (tester) async {
     await pump(
         tester,
