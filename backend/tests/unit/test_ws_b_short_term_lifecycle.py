@@ -117,7 +117,7 @@ class _Document:
         self.db = db
         self.path = path
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_kwargs):
         if self.path not in self.db.docs:
             return _Snapshot(None, exists=False)
         return _Snapshot(self.db.docs[self.path])

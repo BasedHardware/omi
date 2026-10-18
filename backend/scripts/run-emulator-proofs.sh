@@ -64,6 +64,8 @@ run_proof() {
 
 run_proof "daily-sweep (crash / deletion / generation / paid-wipe)" \
   "$PYTHON" scripts/daily_memory_sweep_emulator_test.py
+run_proof "canonical apply-control read retry (transient / exhausted / wipe race)" \
+  "$PYTHON" scripts/canonical_apply_control_retry_emulator_test.py
 run_proof "destructive gate contention (same-kind block / stale takeover fence)" \
   "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
