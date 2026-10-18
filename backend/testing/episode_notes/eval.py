@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from testing.episode_notes.cache import validate_output_path, write_json
-from testing.episode_notes.prompts import CANDIDATE_MODEL, SCORING_MODEL
+from testing.episode_notes.prompts import CANDIDATE_MODEL, GENERATION_REVIEW_PROMPT, SCORING_MODEL
 from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT, evaluate
 from testing.episode_notes.schema import FIXTURES, LLMCallError, LLMResult, load_fixtures
 from config.episode_writer import EFFORTS
@@ -189,8 +189,6 @@ def main(argv: list[str] | None = None) -> None:
             ('judge', args.judge_model),
         ]
     }
-
-    from testing.episode_notes.systemone import GENERATION_REVIEW_PROMPT
 
     jev = None
     from threading import Lock

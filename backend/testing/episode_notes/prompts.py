@@ -29,7 +29,10 @@ from utils.llm.episode_notes_prompts import (
     episode_static_instructions,
     episode_volatile_instructions,
 )
+
 from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
+
+GENERATION_REVIEW_PROMPT = 'episode_generation_review_v1'
 
 CANDIDATE_MODEL = 'openai/gpt-6-luna'
 SCORING_MODEL = 'openai/gpt-6-sol'

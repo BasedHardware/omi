@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -49,3 +51,29 @@ async def test_lookup_errors_fail_closed():
 
     assert result.rollout is TriState.UNKNOWN
     assert result.kill_switch is TriState.UNKNOWN
+
+
+def test_client_is_built_once_for_concurrent_first_reads():
+    created = []
+
+    class Client:
+        def get_feature_variants(self, _uid):
+            return {'rollout': True, 'kill': False}
+
+    def factory():
+        time.sleep(0.02)
+        created.append(Client())
+        return created[-1]
+
+    provider = PostHogPairedFlagProvider(
+        rollout_flag_key='rollout',
+        kill_switch_flag_key='kill',
+        client_factory=factory,
+    )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(provider._read, (f'owner-{index}' for index in range(8))))
+
+    assert len(created) == 1
+    assert all(result.rollout is TriState.ENABLED for result in results)
+    assert all(result.kill_switch is TriState.DISABLED for result in results)

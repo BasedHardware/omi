@@ -6,6 +6,7 @@ import asyncio
 import importlib
 import logging
 import os
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -48,6 +49,7 @@ class PostHogPairedFlagProvider:
         self.timeout_seconds = timeout_seconds
         self.client_factory = client_factory or self._build_client
         self._client: Any | None = None
+        self._client_lock = threading.Lock()
 
     def _build_client(self) -> Any | None:
         api_key = (os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY') or '').strip()
@@ -64,7 +66,9 @@ class PostHogPairedFlagProvider:
 
     def _read(self, uid: str) -> PairedFlagEvaluation:
         if self._client is None:
-            self._client = self.client_factory()
+            with self._client_lock:
+                if self._client is None:
+                    self._client = self.client_factory()
         if self._client is None:
             raise LookupError('posthog_unconfigured')
         flags = self._client.get_feature_variants(uid)

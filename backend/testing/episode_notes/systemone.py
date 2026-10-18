@@ -8,8 +8,6 @@ from config.jev_decisions import JEV_MODEL, JEV_CLIENT_TIMEOUT_SECONDS
 from testing.episode_notes.schema import LLMCallError, LLMResult
 from utils.llm.jev_client import _validated_answers
 
-GENERATION_REVIEW_PROMPT = 'episode_generation_review_v1'
-
 
 class SystemOneEndpoint:
     def __init__(self, *, key, base_url):

@@ -11,6 +11,7 @@ from testing.episode_notes.prompts import (
     BASELINE_PROMPT,
     CANDIDATE_MODEL,
     CANDIDATE_PROMPT,
+    GENERATION_REVIEW_PROMPT,
     SCORING_MODEL,
     SOURCE_FIELDS,
 )
@@ -129,7 +130,6 @@ def evaluate(
     provider_default_effort: bool = False,
 ) -> dict:
     from testing.episode_notes.gateway_parity import CandidateEffortParity
-    from testing.episode_notes.systemone import GENERATION_REVIEW_PROMPT
 
     llm = CandidateEffortParity(
         llm,
