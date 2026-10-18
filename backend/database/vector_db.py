@@ -616,12 +616,12 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
     return True
 
 
-def delete_canonical_memory_vectors_by_ids(uid: str, memory_ids: List[str]) -> int:
-    """Delete one user's canonical vectors for these ids in a single filter call.
+def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> int:
+    """Delete one user's canonical vectors for these observed commits in one call.
 
-    Search hydrates ``memproj:`` rows. One metadata delete matches those rows
-    and any legacy row that still carries ``uid`` and ``memory_id``. A provider
-    failure raises once instead of turning into a per-id timeout loop.
+    Each pair is ``(memory_id, projection_commit_id)``. A replacement upsert
+    writes a new projection commit on the same provider id, so this filter
+    does not remove that replacement. A provider failure raises once.
     """
 
     if index is None:
@@ -629,21 +629,35 @@ def delete_canonical_memory_vectors_by_ids(uid: str, memory_ids: List[str]) -> i
         return 0
     if not uid.strip():
         raise ValueError('uid is required')
-    ids: List[str] = []
+    clauses: List[Dict[str, Any]] = []
     seen: set[str] = set()
-    for memory_id in memory_ids:
-        if not memory_id or not str(memory_id).strip() or memory_id in seen:
+    for observed_pair in observed:
+        memory_id, projection_commit_id = observed_pair
+        if (
+            not memory_id
+            or not str(memory_id).strip()
+            or not projection_commit_id
+            or not str(projection_commit_id).strip()
+            or memory_id in seen
+        ):
             continue
         seen.add(memory_id)
-        ids.append(memory_id)
-    if not ids:
+        clauses.append(
+            {
+                '$and': [
+                    {'memory_id': {'$eq': memory_id}},
+                    {'projection_commit_id': {'$eq': projection_commit_id}},
+                ]
+            }
+        )
+    if not clauses:
         return 0
     index.delete(
-        filter={'$and': [{'uid': {'$eq': uid}}, {'memory_id': {'$in': ids}}]},
+        filter={'$and': [{'uid': {'$eq': uid}}, {'$or': clauses}]},
         namespace=MEMORIES_NAMESPACE,
     )
-    logger.info('delete_canonical_memory_vectors_by_ids count=%d', len(ids))
-    return len(ids)
+    logger.info('delete_canonical_memory_vectors_by_ids count=%d', len(clauses))
+    return len(clauses)
 
 
 def query_memory_vector_candidates(

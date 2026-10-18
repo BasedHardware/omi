@@ -951,10 +951,14 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
     )
     deleted = []
 
-    def fake_canonical_delete(uid, memory_ids):
-        deleted.append((uid, list(memory_ids)))
-        return len(memory_ids)
+    def fake_canonical_delete(uid, observed):
+        deleted.append((uid, list(observed)))
+        return len(observed)
 
+    monkeypatch.setattr(
+        'utils.memory.vector_search_service.assert_account_deletion_permitted',
+        lambda uid, **kwargs: None,
+    )
     monkeypatch.setattr(
         'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
         fake_canonical_delete,
@@ -977,7 +981,12 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
         required_account_generation=0,
     )
 
-    assert deleted == [('u1', ['missing', 'tombstoned'])]
+    assert deleted == [
+        (
+            'u1',
+            [('missing', missing.ledger_commit_id), ('tombstoned', tombstoned.ledger_commit_id)],
+        )
+    ]
     assert response['stale_index_deleted_count'] == 2
     assert [item['memory_id'] for item in response['items']] == ['live']
 
@@ -992,16 +1001,72 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
     monkeypatch.setattr('database.vector_db.index', _Index())
     from database.vector_db import delete_canonical_memory_vectors_by_ids
 
-    deleted = delete_canonical_memory_vectors_by_ids('u1', ['stale-a', 'stale-b', 'stale-a', ''])
+    deleted = delete_canonical_memory_vectors_by_ids(
+        'u1',
+        [('stale-a', 'commit-a'), ('stale-b', 'commit-b'), ('stale-a', 'commit-a'), ('', 'commit-a')],
+    )
 
     assert deleted == 2
     assert calls == [
         {
             'ids': None,
-            'filter': {'$and': [{'uid': {'$eq': 'u1'}}, {'memory_id': {'$in': ['stale-a', 'stale-b']}}]},
+            'filter': {
+                '$and': [
+                    {'uid': {'$eq': 'u1'}},
+                    {
+                        '$or': [
+                            {
+                                '$and': [
+                                    {'memory_id': {'$eq': 'stale-a'}},
+                                    {'projection_commit_id': {'$eq': 'commit-a'}},
+                                ]
+                            },
+                            {
+                                '$and': [
+                                    {'memory_id': {'$eq': 'stale-b'}},
+                                    {'projection_commit_id': {'$eq': 'commit-b'}},
+                                ]
+                            },
+                        ]
+                    },
+                ]
+            },
             'namespace': 'ns2',
         }
     ]
+
+
+def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
+    from database.legal_holds import LegalHoldActive
+
+    now = datetime.now(timezone.utc)
+    missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
+    deleted = []
+
+    def blocked(uid, **kwargs):
+        raise LegalHoldActive('held')
+
+    monkeypatch.setattr('utils.memory.vector_search_service.assert_account_deletion_permitted', blocked)
+    monkeypatch.setattr(
+        'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
+        lambda uid, observed: deleted.append((uid, list(observed))) or len(observed),
+    )
+
+    response = fetch_default_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=_FirestoreFake({}),
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(hits=[_hit(missing, score=0.9)]),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert deleted == []
+    assert response['stale_index_deleted_count'] == 0
+    assert response['items'] == []
+    assert response['decisions']['missing'] == 'missing_authoritative_item'
 
 
 def test_hydration_bounds_stale_index_deletes_and_ignores_deleter_failures():

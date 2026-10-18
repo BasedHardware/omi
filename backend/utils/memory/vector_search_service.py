@@ -9,15 +9,23 @@ Neutral ``vector_search_service`` is the source of truth. Canonical vector searc
 import logging
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Set, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
 try:
-    from database.vector_db import delete_canonical_memory_vectors_by_ids, query_memory_vector_candidates
+    from database.vector_db import query_memory_vector_candidates
 except ModuleNotFoundError:
-    delete_canonical_memory_vectors_by_ids = None
     query_memory_vector_candidates = None
 
+try:
+    from database.vector_db import delete_canonical_memory_vectors_by_ids
+except (ModuleNotFoundError, ImportError):
+    delete_canonical_memory_vectors_by_ids = None
 
+from database.legal_holds import (
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+    assert_account_deletion_permitted,
+)
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from utils.log_sanitizer import sanitize_pii
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
@@ -96,7 +104,7 @@ def fetch_default_vector_memory_search(
     all_hits: List[SearchVectorHit] = []
     hydrated_items: Dict[str, MemoryItem] = {}
     missing_authoritative_memory_ids: Set[str] = set()
-    stale_index_memory_ids: List[str] = []
+    stale_index_memory_ids: List[Tuple[str, str]] = []
     hydration_read_count = 0
     timeout_exhausted = False
     vector_query_budget_exhausted = False
@@ -327,7 +335,7 @@ def _hydrate_vector_candidate_items_by_id(
     hits: List[SearchVectorHit],
     hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],
-    stale_index_memory_ids: List[str],
+    stale_index_memory_ids: List[Tuple[str, str]],
     max_candidate_hydration_reads: int,
     candidate_hydration_read_count: int,
     deadline: Optional[float],
@@ -353,7 +361,7 @@ def _hydrate_vector_candidate_items_by_id(
             # historical_overrides here: that second lookup is the paired
             # NOT_FOUND, and the index delete below stops the repeat.
             missing_authoritative_memory_ids.add(hit.memory_id)
-            _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id)
+            _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id, hit.projection_commit_id)
             continue
         item = MemoryItem.model_validate(payload)
         if item.uid != uid:
@@ -362,7 +370,7 @@ def _hydrate_vector_candidate_items_by_id(
             # The item document already suppresses. Do not re-read
             # historical_overrides. Drop the stale vector so the next query
             # does not hydrate this id again. Access policy still excludes it.
-            _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id)
+            _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id, hit.projection_commit_id)
         hydrated_items[item.memory_id] = item
     return {
         'candidate_hydration_read_count': candidate_hydration_read_count,
@@ -371,28 +379,40 @@ def _hydrate_vector_candidate_items_by_id(
     }
 
 
-def _note_stale_index_memory_id(stale_index_memory_ids: List[str], memory_id: str) -> None:
-    if memory_id and memory_id not in stale_index_memory_ids:
-        stale_index_memory_ids.append(memory_id)
+def _note_stale_index_memory_id(
+    stale_index_memory_ids: List[Tuple[str, str]],
+    memory_id: str,
+    projection_commit_id: str,
+) -> None:
+    if not memory_id or not projection_commit_id or not projection_commit_id.strip():
+        return
+    if any(existing_id == memory_id for existing_id, _commit_id in stale_index_memory_ids):
+        return
+    stale_index_memory_ids.append((memory_id, projection_commit_id))
 
 
-def _delete_stale_canonical_memory_vectors(uid: str, memory_ids: List[str]) -> int:
-    """Delete stale rows with one canonical metadata filter call.
+def _delete_stale_canonical_memory_vectors(uid: str, observed: List[Tuple[str, str]]) -> int:
+    """Delete stale rows with one commit-fenced metadata filter call.
 
-    Search reads ``memproj:<hash>`` vectors. ``delete_memory_vectors_batch``
-    only removes the legacy ``{uid}-{memory_id}`` id. A per-id loop would also
-    turn one provider outage into dozens of timeouts on the search request.
+    The filter matches the projection commit observed on the hit. A later
+    reactivation upserts a new commit on the same provider id and is left in
+    place. An active legal hold or an unreadable hold record skips the delete.
     """
 
+    try:
+        assert_account_deletion_permitted(uid)
+    except (LegalHoldActive, LegalHoldAuthorityUnavailable):
+        logger.warning('stale memory vector delete skipped; legal-hold authority did not permit it')
+        return 0
     if delete_canonical_memory_vectors_by_ids is None:
         return 0
-    return delete_canonical_memory_vectors_by_ids(uid, memory_ids)
+    return delete_canonical_memory_vectors_by_ids(uid, observed)
 
 
 def _delete_stale_vector_index_ids(
     *,
     uid: str,
-    memory_ids: List[str],
+    memory_ids: List[Tuple[str, str]],
     deleter: Optional[Callable[[str, List[str]], Any]],
 ) -> int:
     """Delete a bounded batch of stale memory vectors after hydration.
@@ -403,14 +423,21 @@ def _delete_stale_vector_index_ids(
     repeat Firestore lookup. Failures stay off the search result.
     """
 
-    bounded = [memory_id for memory_id in memory_ids if memory_id][:MAX_STALE_INDEX_DELETES_PER_REQUEST]
+    bounded = [
+        (memory_id, projection_commit_id)
+        for memory_id, projection_commit_id in memory_ids
+        if memory_id and projection_commit_id
+    ][:MAX_STALE_INDEX_DELETES_PER_REQUEST]
     if not bounded:
         return 0
-    delete = deleter if deleter is not None else _delete_stale_canonical_memory_vectors
-    if delete is None:
-        return 0
+    if deleter is not None:
+        delete = deleter
+        delete_argument: Any = [memory_id for memory_id, _projection_commit_id in bounded]
+    else:
+        delete = _delete_stale_canonical_memory_vectors
+        delete_argument = bounded
     try:
-        deleted = delete(uid, bounded)
+        deleted = delete(uid, delete_argument)
     except Exception:
         logger.warning(
             'stale memory vector index delete failed uid=%s count=%d',
