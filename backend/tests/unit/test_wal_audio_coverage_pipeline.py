@@ -1444,7 +1444,7 @@ async def test_s1_valid_claims_bind_each_segment_to_planned_target(coordinator, 
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
     monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)], frame_values=range(2))
     resolver_calls = []
     monkeypatch.setattr(
         pipeline,
@@ -1466,7 +1466,7 @@ async def test_s1_valid_claims_bind_each_segment_to_planned_target(coordinator, 
         return fake_process(path, uid, response, lock, errors, *args, **kwargs)
 
     pipeline.process_segment = tracking_process
-    await _run_batch(module, stubs, tmp_path)
+    await _run_batch(module, stubs, tmp_path, claims={BIN_NAME: _claim(frame_count=2)})
     assert resolver_calls == []
     assert len(planned) == 1
     assert len(planned[0]) == len(state.processed)
