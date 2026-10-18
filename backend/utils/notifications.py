@@ -42,6 +42,18 @@ PERMANENT_FAILURE_CODES = frozenset(
         'UNREGISTERED',  # App uninstalled
         'INVALID_REGISTRATION_TOKEN',  # Token format invalid
         'NOT_FOUND',  # FCM/APNs token no longer maps to a valid registration
+        # The upstream webpush service refuses the subscription forever: the
+        # browser/OS revoked the web-push permission or cleared the site's
+        # data, and sender-ID mismatches (token minted by another Firebase
+        # project) are equally terminal. Both surface as the FCM v1 gRPC
+        # PERMISSION_DENIED status on the per-message send result. No repeat
+        # send can converge, so the token joins the removal latch instead of
+        # being re-dialed and re-logged on every future notification
+        # (2026-10: 'FCM send failed: Permission denied by the third party
+        # webpush service.(PERMISSION_DENIED)' x28/30m with the dead token
+        # kept). Auth/key faults stay UNAUTHENTICATED and throttling stays
+        # RESOURCE_EXHAUSTED/QUOTA_EXCEEDED — neither removes a token.
+        'PERMISSION_DENIED',
     ]
 )
 

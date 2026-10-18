@@ -5006,3 +5006,34 @@ error=<Type>: <bounded message>` (previously `App integration error: ` with an
 empty exception string for message-less `httpx.ConnectError`, unattributable
 and unalertable) — and the same bounded token feeds `record_app_webhook_failure`
 so webhook-health rows carry the failure kind too.
+
+### FCM push-token permission-revocation latch
+
+`utils/notifications.py` prunes permanently dead FCM tokens from the send
+result of every per-user and bulk notification. Its `PERMANENT_FAILURE_CODES`
+latch knew the FCM per-token terminal codes (`UNREGISTERED`,
+`INVALID_REGISTRATION_TOKEN`, `NOT_FOUND`) but not the gRPC status the FCM v1
+API reports when the upstream webpush service refuses the subscription — the
+browser or OS withdrew the web-push permission (or cleared the site's data)
+while the token row survived in Firestore. `SenderIdMismatchError` (a token
+minted by another Firebase sender) reports the same status and is equally
+terminal per token. Since 2026-10, `PERMISSION_DENIED` is a member of the
+latch: the first refusal removes the token through the existing path (the
+`Invalid token removed` log and the `Push Token Status` `invalidated`
+analytics event), so the send either succeeds or shrinks the user's token
+set — the prod signature `FCM send failed: Permission denied by the third
+party webpush service.(PERMISSION_DENIED)` no longer re-fires for the same
+device on every future notification. Retryable upstream shapes stay retryable
+and observable: `QUOTA_EXCEEDED`/`RESOURCE_EXHAUSTED` (the SDK's
+`QuotaExceededError`) and `UNAUTHENTICATED` keep their `FCM send failed`
+ERROR line, and an unknown or missing error code never removes a token.
+
+Failure-Class: FC-permanent-write-rejection-retried-forever — sibling instance
+in `backend/utils/notifications.py` (prod [pusher] 2026-10,
+`FCM send failed: Permission denied by the third party webpush
+service.(PERMISSION_DENIED)` x28/30m): the FCM v1 per-message send result is a
+per-token storage rejection no repeat send can satisfy, but the removal latch
+lacked the permission-revocation status, so the dead subscription was re-dialed
+and re-logged on every future notification with the token row kept forever —
+the notification-pipeline twin of the oversized-conversation write that
+replays its doomed write on every sweep.
