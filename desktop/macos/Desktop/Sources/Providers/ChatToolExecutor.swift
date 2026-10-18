@@ -1853,6 +1853,7 @@ class ChatToolExecutor {
 
   struct SemanticSearchDependencies: Sendable {
     var runtime: LocalEmbeddingRuntime = .makeDefault()
+    var policy: ScreenEmbeddingPolicy? = nil
     var legacySearch:
       @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
         query, start, end, app, topK in
@@ -1887,7 +1888,8 @@ class ChatToolExecutor {
 
     do {
       let runtime = dependencies.runtime
-      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime) { engine in
+      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime, policy: dependencies.policy) {
+        engine in
         guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
           throw LocalMutationAuthorizationError.revoked
         }
@@ -2061,6 +2063,9 @@ class ChatToolExecutor {
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerID) else {
+      return authorizedOwnerChangedResult()
+    }
     guard let query = args["query"] as? String, !query.isEmpty else {
       return "Error: query is required"
     }
@@ -2087,7 +2092,7 @@ class ChatToolExecutor {
       // instead of the old staged-first/action-fallback guessing that returned an
       // unrelated task when action_item and staged_task rowids collided.
       let queryEmbedding = try await EmbeddingService.shared.embed(
-        text: query, taskType: "RETRIEVAL_QUERY")
+        text: query, taskType: "RETRIEVAL_QUERY", authorization: authorization)
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
       // Search the in-memory index (action_items + staged_tasks share this index)
