@@ -13179,22 +13179,22 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Recomandat';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Vezi toate planurile';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Vezi planurile';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Planul tău';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Nu acum';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13843,4 +13843,408 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'A apărut o problemă la rezumarea acestei conversații.';
+
+  @override
+  String get noContentToDisplay => 'Nu există conținut de afișat';
+
+  @override
+  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Ai atins limita lunii acesteia';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi încă înregistrează. Alege cum va fi transcris restul lunii.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Utilizarea se resetează pe $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transcrie pe acest telefon';
+
+  @override
+  String get onDeviceIncluded => 'Inclus';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Rulează în timp ce telefonul se încarcă.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
+
+  @override
+  String get onDeviceAtCapFooter => 'Oricum ai alege, nu se pierde nimic. Poți schimba asta în Setări › Transcriere.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Pasul $step din $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi descarcă un model de vorbire o singură dată. După aceea, înregistrările tale sunt transformate în text chiar aici, fără să conteze la utilizare.';
+
+  @override
+  String get onDeviceSpeechModel => 'Model de vorbire';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Se descarcă prin Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Se descarcă · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Mai sunt aproximativ $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Se așteaptă Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Descărcarea nu s-a încheiat';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Nedescărcat';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Instalat · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Încă indisponibil pe acest telefon';
+
+  @override
+  String get onDeviceSetupKeepRecording =>
+      'Continuă să înregistrezi în timpul descărcării. Nimic nu așteaptă după asta.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Audio rămâne pe telefon până este transcris.';
+
+  @override
+  String get onDeviceWifiOnly => 'Descarcă doar prin Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Descarcă modelul de vorbire';
+
+  @override
+  String get onDeviceScheduleTitle => 'Când să transcrie';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Când ar trebui să transcrie Omi?';
+
+  @override
+  String get onDeviceScheduleBody => 'Poți schimba oricând.';
+
+  @override
+  String get onDeviceScheduleCharging => 'În timpul încărcării';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Transcrierile apar după ce conectezi încărcătorul, de obicei peste noapte.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterie: aproape deloc';
+
+  @override
+  String get onDeviceScheduleHours => 'La câteva ore';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Recuperează în reprize scurte pe baterie, astfel că transcrierile rareori întârzie mai mult de câteva ore.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterie: aproximativ $percent% pe zi';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'În timp ce vorbești';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Transcrie regulat cât timp Omi este deschis.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterie: aproximativ $percent% pe oră de conversație';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration în așteptarea transcrierii';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Vor fi gata după ce pui telefonul la încărcat. Înregistrarea continuă normal.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi recuperează la fiecare câteva ore. Înregistrarea continuă normal.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Se așteaptă un încărcător, deoarece bateria e descărcată. Înregistrarea continuă normal.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transcrie acum';
+
+  @override
+  String get onDeviceUsesBattery => 'Consumă bateria';
+
+  @override
+  String get onDeviceTranscribing => 'Se transcrie…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Se așteaptă încărcătorul';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Așteaptă transcrierea';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Salvat, se așteaptă configurarea';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transcris pe acest iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transcris pe acest telefon';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transcris și rezumat pe acest iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Rezumat de Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'De ce s-a făcut asta pe telefonul tău';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Ai atins limita lunii acesteia, așa că Omi a transcris asta pe telefonul tău.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Ai ales să transcrii pe acest telefon ca să economisești utilizarea.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Rezumatul a fost scris tot pe acest iPhone.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Păstrezi totul pe acest telefon, deci nu există rezumat.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'De ce a scris Omi Cloud acest rezumat';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Acest iPhone nu poate face singur rezumate (e nevoie de un iPhone 15 Pro sau mai nou). Transcrierea a fost făcută pe telefonul tău și doar textul ei a fost trimis la Omi pentru rezumat. Nu se socotește la utilizare.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Acest telefon nu poate face singur rezumate. Transcrierea a fost făcută pe telefonul tău și doar textul ei a fost trimis la Omi pentru rezumat. Nu se socotește la utilizare.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Refă cu Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
+
+  @override
+  String get onDeviceKeepEverything => 'Păstrează totul pe acest telefon';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Doar transcrieri, fără rezumate';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Când atingi limita';
+
+  @override
+  String get onDeviceWhen => 'Când';
+
+  @override
+  String get onDeviceSummaries => 'Rezumate';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Pe acest iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'De Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transcrie întotdeauna pe acest telefon';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Economisește utilizarea. Fără etichete de vorbitori.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Pe acest telefon';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio în așteptare pe telefon';
+
+  @override
+  String get onDeviceRemoveModel => 'Elimină modelul de vorbire';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Elimini modelul de vorbire?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Înregistrările vor aștepta pe acest telefon până îl descarci din nou sau utilizarea se resetează.';
+
+  @override
+  String get onDeviceRemove => 'Elimină';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Finalizează configurarea pentru a vedea transcrierile';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Ai atins limita lunii acesteia. Omi încă înregistrează și salvează audio pe telefonul tău. Descarcă modelul de vorbire și va recupera.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Descărcare de $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Acest telefon nu poate rula încă modelul de vorbire. Audio rămâne salvat până se resetează utilizarea sau faci upgrade.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Când atingi limita, transcrie pe acest telefon';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% folosit · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% folosit · au rămas aproximativ $hours ore de înregistrare · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Obțineți mai multă utilizare';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Se pregătește vorbirea · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Ai atins limita acestei luni. Înregistrările tale sunt salvate și vor fi transcrise după resetarea limitei pe $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Înregistrările noi vor fi transcrise pe acest telefon. Înregistrările în așteptare vor fi transcrise după resetarea limitei pe $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Înregistrare, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · În așteptarea transcrierii';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Transcrierea în cloud este întreruptă';
+
+  @override
+  String get heldAudioLiveBody => 'Ai atins limita acestei luni. Omi continuă să înregistreze.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min înregistrate de la limită';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Se transcrie după resetarea limitei pe $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration în așteptare';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transcris după resetarea limitei pe $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration în așteptarea transcrierii';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'și încă $count',
+      one: 'și încă 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Se transcriu înregistrările tale în așteptare';
+
+  @override
+  String get processingPaused => 'Procesarea este în pauză. Ai atins limita pentru această lună.';
+
+  @override
+  String get processingStored =>
+      'Înregistrările și transcrierile tale sunt salvate. Înregistrările în așteptare vor rămâne așa până alegi să le procesezi.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration în așteptare · Procesarea acum folosește aproximativ $percent% din această lună';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Aproximativ $hours ore de procesare · $percent% din cota acestei luni.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Vom procesa mai întâi cele mai noi înregistrări, în limita cotei disponibile. Restul vor rămâne în așteptare.';
+
+  @override
+  String get processingAction => 'Procesează înregistrările în așteptare';
+
+  @override
+  String get processingProgress => 'Se procesează înregistrările în așteptare…';
+
+  @override
+  String get processingDeferred => 'În așteptarea procesării';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversații în așteptare',
+      one: '1 conversație în așteptare',
+    );
+    return '$_temp0';
+  }
 }

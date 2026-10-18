@@ -1,3 +1,4 @@
+import 'package:omi/pages/chat/widgets/chat_budget_pause.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -176,7 +177,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     final provider = context.read<MessageProvider>();
     if (mounted && provider.isChatQuotaExceeded && !_quotaSheetShown) {
       _quotaSheetShown = true;
-      _showPlansSheetOnQuotaExceeded();
+      if (provider.chatAtCap == null) _showPlansSheetOnQuotaExceeded();
     } else if (!provider.isChatQuotaExceeded) {
       _quotaSheetShown = false;
     }
@@ -309,6 +310,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                   ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
                                   : _buildTranscript(provider),
                     ),
+                    const ChatBudgetPause(),
                     _buildComposer(context, provider, connectivityProvider),
                   ],
                 ),
@@ -399,6 +401,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   /// The composer card: the field (or the voice waveform) on top; attach, who answers, and the
   /// mic or send button underneath.
   Widget _buildComposer(BuildContext context, MessageProvider provider, ConnectivityProvider connectivityProvider) {
+    if (provider.chatAtCap != null) return const SizedBox.shrink();
     return Consumer<VoiceRecorderProvider>(
       builder: (context, voiceRecorderProvider, child) {
         final voiceActive = voiceRecorderProvider.isActive;

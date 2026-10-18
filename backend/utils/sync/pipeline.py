@@ -17,6 +17,7 @@ import io
 import logging
 import os
 import shutil
+from utils.other.owned_paths import owned_scratch_path
 import threading
 import time
 import uuid
@@ -143,7 +144,7 @@ from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
-from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
@@ -987,6 +988,7 @@ def retrieve_vad_segments(
     source_frame_map: dict | None = None,
     segment_source_maps: dict | None = None,
     segment_source_lock: threading.Lock | None = None,
+    keep_short: bool = False,
 ):
     try:
         start_timestamp = get_timestamp_from_path(path)
@@ -1009,7 +1011,11 @@ def retrieve_vad_segments(
 
     try:
         for i, segment in enumerate(segments):
-            if segment['end'] - segment['start'] < 1 and not (source_frame_map or {}).get('coverage_trimmed'):
+            if (
+                segment['end'] - segment['start'] < 1
+                and not keep_short
+                and not (source_frame_map or {}).get('coverage_trimmed')
+            ):
                 continue
             segment_timestamp = start_timestamp + segment['start']
             # Two distinct source files can independently compute the same absolute
@@ -1031,7 +1037,12 @@ def retrieve_vad_segments(
                     if segment_path in segment_source_maps:
                         segment_source_maps[segment_path] = None
                     elif source_frame_map is not None:
-                        segment_source_maps[segment_path] = (source_frame_map, int(segment['start'] * aseg.frame_rate))
+                        first = (
+                            int(aseg.frame_count(ms=segment['start'] * 1000))
+                            if source_frame_map.get('live_source_slice')
+                            else int(segment['start'] * aseg.frame_rate)
+                        )
+                        segment_source_maps[segment_path] = (source_frame_map, first)
                     else:
                         segment_source_maps[segment_path] = None
             # Explicitly delete segment to free memory immediately
@@ -1553,7 +1564,18 @@ def process_segment(
             geolocation=geolocation,
         )
         incoming = Conversation(
-            id=chunk_identity(uid, source, client_device_id, is_locked, timestamp),
+            id=chunk_identity(
+                uid,
+                source,
+                client_device_id,
+                is_locked,
+                timestamp,
+                **(
+                    {'capture_partition': cap_recovery_checkpoint['capture_partition']}
+                    if cap_recovery_checkpoint and cap_recovery_checkpoint.get('capture_partition')
+                    else {}
+                ),
+            ),
             created_at=started_at,
             structured=build_deterministic_minimum_structured(create_memory),
             **create_memory.model_dump(),
@@ -3358,8 +3380,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 await run_blocking(storage_executor, _cleanup_files, wav_paths)
                 try:
-                    if job_dir and os.path.isdir(job_dir):
-                        await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
+                    if job_dir:
+                        safe_job_dir = owned_scratch_path(job_dir)
+                        if os.path.isdir(safe_job_dir):
+                            await run_blocking(storage_executor, shutil.rmtree, safe_job_dir, True)
                 except Exception as e:
                     logger.error(
                         'event=sync_cleanup outcome=failed exception_type=%s',

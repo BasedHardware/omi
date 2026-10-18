@@ -13229,22 +13229,22 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Inirerekomenda';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Tingnan ang lahat ng plan';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Tingnan ang mga plano';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Ang plan mo';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Hindi Ngayon';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13892,4 +13892,411 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
+
+  @override
+  String get noContentToDisplay => 'Walang content na ipapakita';
+
+  @override
+  String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Naabot mo na ang limitasyon ngayong buwan';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Nagre-record pa rin ang Omi. Piliin kung paano ita-transcribe ang natitirang bahagi ng buwan.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Nare-reset ang paggamit mo sa $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'I-transcribe sa phone na ito';
+
+  @override
+  String get onDeviceIncluded => 'Kasama';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Tumatakbo habang nagcha-charge ang telepono.';
+
+  @override
+  String get onDeviceUpgradeBody =>
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Walang mawawala alinman ang piliin mo. Mababago mo ito sa Mga Setting › Transcription.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Hakbang $step sa $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Nagda-download ang Omi ng speech model nang isang beses. Pagkatapos, nagiging text ang mga recording mo dito mismo, nang hindi binibilang sa paggamit mo.';
+
+  @override
+  String get onDeviceSpeechModel => 'Speech model';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Nagda-download sa Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Nagda-download · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Mga $time pa';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Naghihintay ng Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Hindi natapos ang download';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Hindi pa na-download';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Naka-install · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Hindi pa available sa phone na ito';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Patuloy na mag-record habang nagda-download. Walang naghihintay dito.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Mananatili ang audio sa phone mo hanggang ma-transcribe ito.';
+
+  @override
+  String get onDeviceWifiOnly => 'Mag-download lang sa Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'I-download ang Speech Model';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kailan Ita-transcribe';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kailan dapat mag-transcribe ang Omi?';
+
+  @override
+  String get onDeviceScheduleBody => 'Maaari mo itong baguhin anumang oras.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Habang nagcha-charge';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Lalabas ang mga transcript pagkatapos mong mag-charge, kadalasan magdamag.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterya: halos wala';
+
+  @override
+  String get onDeviceScheduleHours => 'Bawat ilang oras';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Humahabol nang paunti-unti habang naka-baterya, kaya bihirang mahuli ang mga transcript nang higit sa ilang oras.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterya: mga $percent% bawat araw';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Habang nagsasalita ka';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Regular na nagtatranscribe habang bukas ang Omi.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterya: mga $percent% bawat oras ng usapan';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration na naghihintay ma-transcribe';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Magiging handa ang mga ito pagkatapos mong i-charge ang phone mo. Tuloy ang pagre-record gaya ng dati.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Humahabol ang Omi bawat ilang oras. Tuloy ang pagre-record gaya ng dati.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Naghihintay ng charger dahil mahina na ang baterya. Tuloy ang pagre-record gaya ng dati.';
+
+  @override
+  String get onDeviceTranscribeNow => 'I-transcribe Ngayon';
+
+  @override
+  String get onDeviceUsesBattery => 'Gumagamit ng baterya';
+
+  @override
+  String get onDeviceTranscribing => 'Nagta-transcribe…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Naghihintay ng charger';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Naghihintay ma-transcribe';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Na-save, naghihintay ng setup';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Na-transcribe sa iPhone na ito';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Na-transcribe sa phone na ito';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Na-transcribe at na-buod sa iPhone na ito';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Binuod ng Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Bakit ito ginawa sa phone mo';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Naabot mo na ang limitasyon ngayong buwan, kaya ni-transcribe ito ng Omi sa telepono mo.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Pinili mong mag-transcribe sa teleponong ito para makatipid sa paggamit.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Sa iPhone na ito rin isinulat ang buod.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Itinatago mo ang lahat sa phone na ito, kaya walang buod.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Bakit Omi Cloud ang sumulat ng buod na ito';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Hindi kayang mag-buod ng iPhone na ito nang mag-isa (kailangan nito ng iPhone 15 Pro o mas bago). Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi ito binibilang sa paggamit mo.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Hindi kayang mag-buod ng phone na ito nang mag-isa. Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi ito binibilang sa paggamit mo.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Ulitin gamit ang Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint =>
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+
+  @override
+  String get onDeviceKeepEverything => 'Itago ang lahat sa phone na ito';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Mga transcript lang, walang buod';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Kapag naabot mo ang limitasyon';
+
+  @override
+  String get onDeviceWhen => 'Kailan';
+
+  @override
+  String get onDeviceSummaries => 'Mga buod';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Sa iPhone na ito';
+
+  @override
+  String get onDeviceSummariesCloud => 'Sa Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Palaging i-transcribe sa teleponong ito';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Nakakatipid sa paggamit. Walang label ng nagsasalita.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Sa phone na ito';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio na naghihintay sa phone';
+
+  @override
+  String get onDeviceRemoveModel => 'Alisin ang Speech Model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Alisin ang Speech Model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Maghihintay ang mga recording sa teleponong ito hanggang i-download mo itong muli o ma-reset ang paggamit mo.';
+
+  @override
+  String get onDeviceRemove => 'Alisin';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Tapusin ang setup para makita ang mga transcript mo';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Naabot mo na ang limitasyon ngayong buwan. Nagre-record at nagse-save pa rin ng audio ang Omi sa telepono mo. I-download ang speech model at huhabol ito.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size na download';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Hindi pa kayang patakbuhin ng teleponong ito ang speech model. Nananatiling naka-save ang audio hanggang ma-reset ang paggamit mo o mag-upgrade ka.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kapag naabot mo ang limitasyon, i-transcribe sa teleponong ito';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% nagamit · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% nagamit · mga $hours oras ng recording ang natitira · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Kumuha ng higit pang paggamit';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Inihahanda ang pananalita · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Naabot mo na ang limitasyon ngayong buwan. Naka-save ang mga recording mo at ita-transcribe pagkatapos i-reset ang limitasyon sa $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Ang mga bagong recording ay ita-transcribe sa teleponong ito. Ang naghihintay na recording ay ita-transcribe pagkatapos i-reset ang limitasyon sa $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Recording, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Naghihintay na i-transcribe';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Naka-pause ang cloud transcription';
+
+  @override
+  String get heldAudioLiveBody => 'Naabot mo na ang limitasyon ngayong buwan. Patuloy na nagre-record ang Omi.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min na naitala mula nang maabot ang limitasyon';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Ita-transcribe pagkatapos i-reset ang limitasyon sa $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration naghihintay';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Ita-transcribe pagkatapos i-reset ang limitasyon sa $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration na naghihintay ma-transcribe';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'at $count pa',
+      one: 'at 1 pa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Isinasalin sa teksto ang mga naghihintay mong recording';
+
+  @override
+  String get processingPaused => 'Naka-pause ang pagproseso. Naabot mo na ang limitasyon ngayong buwan.';
+
+  @override
+  String get processingStored =>
+      'Naka-save ang iyong mga recording at transcript. Mananatiling naghihintay ang mga recording hanggang piliin mong iproseso ang mga ito.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration ang naghihintay · Ang pagproseso ngayon ay gagamit ng humigit-kumulang $percent% ngayong buwan';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Humigit-kumulang $hours oras ng pagproseso · $percent% ng allowance ngayong buwan.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Uunahin naming iproseso ang pinakabagong mga recording hanggang sa kasya sa natitirang allowance. Maghihintay ang iba.';
+
+  @override
+  String get processingAction => 'Iproseso ang naghihintay na mga recording';
+
+  @override
+  String get processingProgress => 'Pinoproseso ang iyong naghihintay na mga recording…';
+
+  @override
+  String get processingDeferred => 'Naghihintay ng pagproseso';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pag-uusap ang naghihintay',
+      one: '1 pag-uusap ang naghihintay',
+    );
+    return '$_temp0';
+  }
 }

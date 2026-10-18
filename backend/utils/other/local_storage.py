@@ -9,6 +9,7 @@ import threading
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote
+from utils.other.owned_paths import owned_scratch_path
 
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
@@ -80,13 +81,14 @@ class LocalBlob:
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
 
     def upload_from_filename(self, filename: str, *_args, **_kwargs) -> None:
+        source = owned_scratch_path(filename, include_harness=True)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(filename, self.path)
+        shutil.copyfile(source, self.path)
 
     def download_to_filename(self, filename: str, *_args, **_kwargs) -> None:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
-        destination = Path(filename)
+        destination = Path(owned_scratch_path(filename, include_harness=True))
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(self.path, destination)
 

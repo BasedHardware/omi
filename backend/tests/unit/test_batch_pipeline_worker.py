@@ -742,10 +742,12 @@ def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkey
     assert words.calls == [[2]]
 
 
-def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch):
+@pytest.mark.parametrize('dispatch', [False, True])
+def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch, dispatch):
     from utils.batch_pipeline.contracts import HeldWork
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     worker, words, saved, _, diarized, failures = setup_worker()
     checks = []
 

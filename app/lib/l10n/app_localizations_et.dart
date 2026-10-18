@@ -13118,22 +13118,22 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Soovitatud';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Vaata kõiki plaane';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Vaata pakette';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Teie plaan';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Mitte praegu';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13777,4 +13777,406 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Selle vestluse kokkuvõtte tegemisel läks midagi valesti.';
+
+  @override
+  String get noContentToDisplay => 'Sisu pole kuvamiseks';
+
+  @override
+  String get processingTakingLonger => 'Ikka käimas — see võtab kauem aega kui tavaliselt.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Oled jõudnud selle kuu limiidini';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi salvestab endiselt. Valige, kuidas ülejäänud kuu transkribeeritakse.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Sinu kasutus lähtestatakse $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transkribeeri selles telefonis';
+
+  @override
+  String get onDeviceIncluded => 'Hinnas';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Töötab, kui telefon laeb.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Mõlemal juhul ei lähe midagi kaduma. Saate seda muuta jaotises Seaded › Transkriptsioon.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Samm $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi laadib kõnemudeli alla ühe korra. Pärast seda muudetakse sinu salvestused siinsamas tekstiks, ilma et need kasutuse hulka läheksid.';
+
+  @override
+  String get onDeviceSpeechModel => 'Kõnemudel';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Allalaadimine Wi-Fi kaudu · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Allalaadimine · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Umbes $time jäänud';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Ootab Wi-Fi-t';
+
+  @override
+  String get onDeviceDownloadFailed => 'Allalaadimine ei lõppenud';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Pole alla laaditud';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Installitud · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Selles telefonis veel pole saadaval';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Salvestage allalaadimise ajal edasi. Miski ei oota selle järel.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Heli jääb teie telefoni, kuni see on transkribeeritud.';
+
+  @override
+  String get onDeviceWifiOnly => 'Laadi alla ainult Wi-Fi kaudu';
+
+  @override
+  String get onDeviceDownloadModel => 'Laadi kõnemudel alla';
+
+  @override
+  String get onDeviceScheduleTitle => 'Millal transkribeerida';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Millal peaks Omi transkribeerima?';
+
+  @override
+  String get onDeviceScheduleBody => 'Saad seda igal ajal muuta.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Laadimise ajal';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Transkriptsioonid ilmuvad pärast laadijasse ühendamist, tavaliselt üleöö.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Aku: peaaegu ei kulu';
+
+  @override
+  String get onDeviceScheduleHours => 'Iga paari tunni järel';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Teeb akutoitel lühikeste hoogudega järele, nii et transkriptsioonid jäävad harva rohkem kui paar tundi maha.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Aku: umbes $percent% päevas';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Rääkimise ajal';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Transkribeerib regulaarselt, kui Omi on avatud.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Aku: umbes $percent% vestlustunni kohta';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration ootab transkribeerimist';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Need on valmis pärast telefoni laadijasse ühendamist. Salvestamine jätkub tavapäraselt.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi teeb iga paari tunni järel järele. Salvestamine jätkub tavapäraselt.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Ootab laadijat, sest aku on tühjenemas. Salvestamine jätkub tavapäraselt.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transkribeeri kohe';
+
+  @override
+  String get onDeviceUsesBattery => 'Kulutab akut';
+
+  @override
+  String get onDeviceTranscribing => 'Transkribeerimine…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Ootab laadijat';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Ootab transkribeerimist';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Salvestatud, ootab seadistamist';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transkribeeritud selles iPhone\'is';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transkribeeritud selles telefonis';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transkribeeritud ja kokku võetud selles iPhone\'is';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Kokku võtnud Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Miks seda tehti teie telefonis';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => 'Jõudsid selle kuu limiidini, seega transkribeeris Omi selle sinu telefonis.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Valisid selles telefonis transkribeerimise, et kasutust säästa.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Ka kokkuvõte koostati selles iPhone\'is.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Hoiate kõike selles telefonis, seega kokkuvõtet pole.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Miks Omi Cloud selle kokkuvõtte koostas';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'See iPhone ei suuda ise kokkuvõtteid teha (selleks on vaja iPhone 15 Pro või uuemat). Transkriptsioon tehti teie telefonis ja kokkuvõtte jaoks saadeti Omile ainult selle tekst. See ei lähe sinu kasutuse hulka.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'See telefon ei suuda ise kokkuvõtteid teha. Transkriptsioon tehti teie telefonis ja kokkuvõtte jaoks saadeti Omile ainult selle tekst. See ei lähe sinu kasutuse hulka.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Tee uuesti Omi Cloudiga';
+
+  @override
+  String get onDeviceRedoHint => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
+
+  @override
+  String get onDeviceKeepEverything => 'Hoia kõike selles telefonis';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Ainult transkriptsioonid, kokkuvõtteid pole';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Kui jõuad oma limiidini';
+
+  @override
+  String get onDeviceWhen => 'Millal';
+
+  @override
+  String get onDeviceSummaries => 'Kokkuvõtted';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Selles iPhone\'is';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloudi abil';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transkribeeri alati selles telefonis';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Säästab kasutust. Kõneleja silte pole.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Selles telefonis';
+
+  @override
+  String get onDeviceAudioWaiting => 'Telefonis ootav heli';
+
+  @override
+  String get onDeviceRemoveModel => 'Eemalda kõnemudel';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Kas eemaldada kõnemudel?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Salvestused ootavad selles telefonis, kuni laed selle uuesti alla või sinu kasutus lähtestatakse.';
+
+  @override
+  String get onDeviceRemove => 'Eemalda';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Transkriptsioonide nägemiseks lõpetage seadistamine';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Oled jõudnud selle kuu limiidini. Omi salvestab heli endiselt sinu telefoni. Laadi kõnemudel alla ja see jõuab järele.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Allalaadimine $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'See telefon ei saa kõnemudelit veel käitada. Heli jääb salvestatuks, kuni sinu kasutus lähtestatakse või täiendad.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kui jõuad limiidini, transkribeeri selles telefonis';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% kasutatud · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% kasutatud · salvestamist on jäänud umbes $hours tundi · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Hangi rohkem kasutust';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Kõne ettevalmistamine · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Oled jõudnud selle kuu limiidini. Sinu salvestused on alles ja transkribeeritakse pärast limiidi lähtestamist $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Uued salvestused transkribeeritakse selles telefonis. Ootel salvestused transkribeeritakse pärast limiidi lähtestamist $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Salvestus, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Ootab transkribeerimist';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Pilvetranskriptsioon on peatatud';
+
+  @override
+  String get heldAudioLiveBody => 'Oled jõudnud selle kuu limiidini. Omi jätkab salvestamist.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min salvestatud pärast limiiti';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Transkribeeritakse pärast limiidi lähtestamist $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration ootel';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Transkribeeritakse pärast limiidi lähtestamist $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration ootab transkribeerimist';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ja veel $count',
+      one: 'ja veel 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Sinu ootel salvestiste transkribeerimine';
+
+  @override
+  String get processingPaused => 'Töötlus on peatatud. Oled jõudnud selle kuu piiranguni.';
+
+  @override
+  String get processingStored =>
+      'Sinu salvestised ja transkriptsioonid on salvestatud. Ootel salvestised jäävad ootele, kuni valid nende töötlemise.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration ootel · Kohe töötlemine kasutab umbes $percent% selle kuu mahust';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Umbes $hours tundi töötlust · $percent% selle kuu mahust.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Töötleme esmalt uusimad salvestised saadaoleva mahu piires. Ülejäänud jäävad ootele.';
+
+  @override
+  String get processingAction => 'Töötle ootel salvestisi';
+
+  @override
+  String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
+
+  @override
+  String get processingDeferred => 'Ootab töötlemist';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust ootel',
+      one: '1 vestlus ootel',
+    );
+    return '$_temp0';
+  }
 }

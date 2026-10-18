@@ -354,5 +354,15 @@
     "provider": "deepgram",
     "source": "origin/main@f876d1cf324 config/stt_provider_policy.py STREAMING includes Modulate, Soniox, Deepgram, Parakeet; live_stt_registry.py ramps/env and utils/stt/live_router.py language, health, capacity prevent a fixed Free share; no plan-specific provider restriction",
     "note": "Use conservative maximum because expected Free accepted-speech routing shares are not determinable from configuration. Display callers may supply their routed speech_provider_shares."
+  },
+  "recording": {
+    "background_share": "0.98",
+    "units_per_recorded_hour": {
+      "live": "130",
+      "batch": "130"
+    },
+    "on_device_transcription_units_per_hour": 0,
+    "status": "provisional",
+    "source": "David ruling 2026-10-14; replace batch with measured fully loaded worn-hour rate only after batch is live; includes LLM/infra overhead, not just STT"
   }
 }

@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.contracts import (
     BatchWorker,
     HEARTBEAT_SECONDS,

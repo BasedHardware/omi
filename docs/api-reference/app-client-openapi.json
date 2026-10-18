@@ -7502,6 +7502,68 @@
         "title": "ChartDataset",
         "type": "object"
       },
+      "ChatAtCap": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "reset_line": {
+            "title": "Reset Line",
+            "type": "string"
+          },
+          "state": {
+            "const": "paused",
+            "default": "paused",
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "const": "usage_budget",
+            "default": "usage_budget",
+            "title": "Trigger",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Label"
+          },
+          "upgrade_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Plan"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "reset_at",
+          "reset_line"
+        ],
+        "title": "ChatAtCap",
+        "type": "object"
+      },
       "ChatEvidenceEnvelope": {
         "description": "Versioned transport envelope for supplemental chat evidence.",
         "properties": {
@@ -7954,6 +8016,16 @@
             "title": "Allowed",
             "type": "boolean"
           },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "is_overage_plan": {
             "default": false,
             "title": "Is Overage Plan",
@@ -8000,6 +8072,11 @@
           "used": {
             "title": "Used",
             "type": "number"
+          },
+          "uses_shared_budget": {
+            "default": false,
+            "title": "Uses Shared Budget",
+            "type": "boolean"
           }
         },
         "required": [
@@ -8816,6 +8893,11 @@
             ],
             "title": "Processing Conversation Id"
           },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
+          },
           "processing_memory_id": {
             "anyOf": [
               {
@@ -9297,6 +9379,11 @@
           "meeting_treatment_eligible": {
             "default": false,
             "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
             "type": "boolean"
           },
           "status": {
@@ -10071,6 +10158,11 @@
               }
             ],
             "title": "Processing Conversation Id"
+          },
+          "processing_deferred": {
+            "default": false,
+            "title": "Processing Deferred",
+            "type": "boolean"
           },
           "processing_memory_id": {
             "anyOf": [
@@ -11150,6 +11242,18 @@
             "description": "Start time in seconds (e.g., 0.0, 1.5, 60.2)",
             "title": "Start",
             "type": "number"
+          },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
           },
           "text": {
             "description": "The text spoken in this segment",
@@ -18089,6 +18193,76 @@
         "title": "HasSpeechProfileResponse",
         "type": "object"
       },
+      "HeldAudioRecording": {
+        "description": "One recording the server is keeping until reset or upgrade. No audio bytes.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "started_at",
+          "seconds"
+        ],
+        "title": "HeldAudioRecording",
+        "type": "object"
+      },
+      "HeldAudioSummary": {
+        "description": "Additive held-audio totals. Absent until funded-STT dispatch enforcement is holding audio.\n\n``count`` is the exact number of holds, including ones past the newest page.\n``recordings`` is that page, newest first.",
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "recordings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HeldAudioRecording"
+            },
+            "title": "Recordings",
+            "type": "array"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "retain_live": {
+            "title": "Retain Live",
+            "type": "boolean"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "state": {
+            "default": "paused",
+            "enum": [
+              "paused",
+              "recovering"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seconds",
+          "reset_at",
+          "retain_live"
+        ],
+        "title": "HeldAudioSummary",
+        "type": "object"
+      },
       "IgnoredVoice": {
         "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
         "properties": {
@@ -24565,6 +24739,16 @@
             ],
             "title": "Desktop Grandfather Until"
           },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",
             "type": "integer"
@@ -24577,6 +24761,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processing_backlog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingBacklog"
               },
               {
                 "type": "null"
@@ -25198,6 +25392,81 @@
           }
         },
         "title": "ProcessConversationRequest",
+        "type": "object"
+      },
+      "ProcessingBacklog": {
+        "properties": {
+          "budget_exhausted": {
+            "default": false,
+            "title": "Budget Exhausted",
+            "type": "boolean"
+          },
+          "deferred_conversations": {
+            "default": 0,
+            "title": "Deferred Conversations",
+            "type": "integer"
+          },
+          "deferred_seconds": {
+            "default": 0,
+            "title": "Deferred Seconds",
+            "type": "integer"
+          },
+          "estimated_hours": {
+            "default": 0,
+            "title": "Estimated Hours",
+            "type": "number"
+          },
+          "estimated_percent": {
+            "default": 0,
+            "title": "Estimated Percent",
+            "type": "number"
+          },
+          "estimated_units": {
+            "default": 0,
+            "title": "Estimated Units",
+            "type": "number"
+          },
+          "exceeds_remaining": {
+            "default": false,
+            "title": "Exceeds Remaining",
+            "type": "boolean"
+          },
+          "held_audio_count": {
+            "default": 0,
+            "title": "Held Audio Count",
+            "type": "integer"
+          },
+          "held_audio_seconds": {
+            "default": 0,
+            "title": "Held Audio Seconds",
+            "type": "integer"
+          },
+          "remaining_units": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Units"
+          },
+          "state": {
+            "enum": [
+              "capped",
+              "waiting_choice",
+              "processing",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ProcessingBacklog",
         "type": "object"
       },
       "ProductMemorySearchItem": {
@@ -31180,6 +31449,44 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
+      "StorefrontCapChoice": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "dont_ask_again_label": {
+            "title": "Dont Ask Again Label",
+            "type": "string"
+          },
+          "on_device_label": {
+            "title": "On Device Label",
+            "type": "string"
+          },
+          "on_device_upgrade_line": {
+            "title": "On Device Upgrade Line",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "title": "Upgrade Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "upgrade_label",
+          "on_device_label",
+          "dont_ask_again_label",
+          "on_device_upgrade_line"
+        ],
+        "title": "StorefrontCapChoice",
+        "type": "object"
+      },
       "StorefrontCurrent": {
         "properties": {
           "cancel_at_period_end": {
@@ -31255,6 +31562,20 @@
           "amount_minor": {
             "title": "Amount Minor",
             "type": "integer"
+          },
+          "confirm_lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Lines"
           },
           "cta_label": {
             "anyOf": [
@@ -31339,9 +31660,29 @@
       },
       "StorefrontResponse": {
         "properties": {
+          "at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCapChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "catalog_revision": {
             "title": "Catalog Revision",
             "type": "integer"
+          },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current": {
             "anyOf": [
@@ -31496,6 +31837,17 @@
       },
       "StorefrontUsage": {
         "properties": {
+          "hours_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Left"
+          },
           "kind": {
             "default": "unavailable",
             "enum": [
@@ -31505,6 +31857,11 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "mcp_cap_reached": {
+            "default": false,
+            "title": "Mcp Cap Reached",
+            "type": "boolean"
           },
           "meter_line": {
             "anyOf": [
@@ -31516,6 +31873,17 @@
               }
             ],
             "title": "Meter Line"
+          },
+          "more_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "More Label"
           },
           "nudge_line": {
             "anyOf": [
@@ -36387,6 +36755,16 @@
             ],
             "title": "Desktop Grandfather Until"
           },
+          "held_audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HeldAudioSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "insights_gained_limit": {
             "title": "Insights Gained Limit",
             "type": "integer"
@@ -36399,6 +36777,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processing_backlog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingBacklog"
               },
               {
                 "type": "null"
@@ -76032,6 +76420,94 @@
           }
         ],
         "summary": "Set Private Cloud Sync",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/processing-backlog/process": {
+      "post": {
+        "operationId": "process_waiting_recordings_v1_users_processing_backlog_process_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 8,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessingBacklog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Process Waiting Recordings",
         "tags": [
           "v1"
         ]

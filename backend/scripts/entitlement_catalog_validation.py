@@ -11,10 +11,29 @@ def validate_entitlement_versions(catalog: Mapping[str, Any]) -> list[str]:
     if versions['legacy'] != {'budget': None}:
         errors.append('entitlement_versions.legacy: legacy has no usage-unit budget')
     ladder = versions['ladder_v1']
-    if not isinstance(ladder, dict) or set(ladder) != {'rate_card_version', 'unit_usd_micros', 'monthly_budgets'}:
+    if not isinstance(ladder, dict) or set(ladder) != {
+        'rate_card_version',
+        'unit_usd_micros',
+        'monthly_budgets',
+        'mcp_daily_caps',
+    }:
         return errors + ['entitlement_versions.ladder_v1: invalid keys']
     if ladder['rate_card_version'] != 'v1' or ladder['unit_usd_micros'] != 1000:
         errors.append('entitlement_versions.ladder_v1: expected v1 at $0.001/unit')
+    if ladder.get('mcp_daily_caps') != {'basic': 100, 'plus': 500, 'operator': 5000, 'architect': 5000}:
+        errors.append('ladder_v1.mcp_daily_caps: expected ratified caps')
+    bindings_config = catalog.get('ladder_v1_price_bindings')
+    expected = {
+        f'ladder_v1_{tier}_{interval}': {
+            'plan_id': plan,
+            'interval': interval,
+            'env_var': f'LADDER_V1_{tier.upper()}_{interval.upper()}_PRICE_ID',
+        }
+        for tier, plan in [('plus', 'plus'), ('pro', 'operator'), ('architect', 'architect')]
+        for interval in ('month', 'year')
+    }
+    if bindings_config != expected:
+        errors.append('ladder_v1_price_bindings: expected six lookup-key bindings')
     budgets = ladder['monthly_budgets']
     if not isinstance(budgets, dict) or set(budgets) != {'basic', 'plus', 'operator', 'architect'}:
         return errors + ['entitlement_versions.ladder_v1.monthly_budgets: invalid plans']
