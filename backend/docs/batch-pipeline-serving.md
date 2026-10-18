@@ -383,11 +383,17 @@ by a flag rollback; correct them only through the normal reviewed content path.
 `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED=false` is the CPU recovery
 kill switch. Deploy the worker from the same change first: its exhausted
 `RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
-lease CAS. Recovery pins/persists its provider before dispatch. With the flag on,
-positive strict local VAD, affirmative GPU padded-empty evidence, and a validated
-empty **multilingual** response produce `no_recoverable_speech`. Timeouts, malformed
-responses, uncertain calls, missing evidence, and provider failures stay held.
-There are no additional calls after exhaustion and no paid-intent resets.
+lease CAS only when the GPU padded retry actually ran and returned empty; units
+whose padded length exceeds `min(120, max_padded_seconds)` (>116s) skip that
+retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. Recovery
+pins/persists its provider before dispatch. With the flag on, positive strict
+local VAD, affirmative GPU padded-empty evidence, and a validated empty
+**multilingual** response produce `no_recoverable_speech`. Oversized units that
+skipped the GPU padded retry still run strict VAD and multilingual recovery, but
+an empty multilingual response stays `failed_held` rather than terminal-empty.
+Timeouts, malformed responses, uncertain calls, missing evidence, and provider
+failures stay held. There are no additional calls after exhaustion and no
+paid-intent resets.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.

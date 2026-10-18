@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Soniox transport exceptions log once at the first socket death, with bounded
+`operation`, `exception_class`, `received_close_code`, `sent_close_code`,
+`close_cause`, and `session_age_bucket` fields. `-1` means no close frame was
+observed in that direction; an empty received close frame is reported as `1005`
+(no status received). The WebSocket library's keepalive timeout is a sent `1011`
+and has `close_cause=keepalive_ping_timeout`. These diagnostics omit exception
+text and provider close reasons, and retain the existing typed failure and
+recovery behavior.
+
 ## Default-off funded transcription cap
 
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
@@ -5443,9 +5452,14 @@ volume before any future enablement. There is no new client polling loop.
 
 The default-off `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED` permits a
 `no_recoverable_speech` result only after positive strict VAD, a GPU padded retry
-that returned empty, and an empty independent multilingual recovery. The worker
-persists padded-empty evidence under its lease; CPU recovery pins the paid
-provider before dispatch. This terminal empty span is distinct from silence,
+that actually ran and returned empty, and an empty independent multilingual
+recovery. The worker persists `worker_empty_evidence.padded_retry=empty` under
+its lease only when the padded retry ran; units exceeding `min(120,
+max_padded_seconds)` (>116s) skip the GPU padded retry and persist
+`padded_retry=skipped_oversize` (`padded_retry_empty=False`), so CPU recovery
+still attempts strict VAD / multilingual STT on them without terminal-completing
+an empty multilingual response. CPU recovery pins the paid provider before
+dispatch. This terminal empty span is distinct from silence,
 adds no transcript words and no transcription usage, and releases successful
 siblings through normal projection/client completion. The encrypted artifact
 retains VAD and closed exhaustion evidence; correctness metrics count its captured

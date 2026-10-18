@@ -311,8 +311,22 @@ class Scheduler:
         return accepted
 
     def fail(
-        self, segment_id: str, token: str, now: float, *, quarantine: bool = False, padded_retry_empty: bool = False
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        *,
+        quarantine: bool = False,
+        padded_retry_empty: bool = False,
+        padded_retry: str | None = None,
     ) -> bool:
+        if padded_retry is None and padded_retry_empty:
+            padded_retry = 'empty'
+        elif padded_retry == 'empty' and not padded_retry_empty:
+            padded_retry_empty = True
+        if padded_retry not in {None, 'empty', 'skipped_oversize'} or (padded_retry_empty and padded_retry != 'empty'):
+            raise ValueError('invalid padded retry evidence')
+
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
@@ -332,8 +346,8 @@ class Scheduler:
                     quarantined_at=now,
                     recovery_state='held',
                 )
-                if quarantine and padded_retry_empty:
-                    job['worker_empty_evidence'] = {'padded_retry': 'empty', 'version': 1}
+                if quarantine and padded_retry in {'empty', 'skipped_oversize'}:
+                    job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
                 job.pop('retry_started_at', None)
                 tx.put('owners', job['owner_key'], owner)
             else:

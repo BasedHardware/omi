@@ -167,8 +167,8 @@ words whose midpoint is in synthetic padding are excluded. Original VAD speech
 accounting, diarization input, privacy checks and persistence are unchanged.
 `event=batch_asr_recovery` contains only segment ID, original closed empty reason,
 sample count, original ASR count, recovered word count, original window count,
-minimum/maximum window sample lengths, speech sample count and recovered/empty
-outcome. It and the shared
+minimum/maximum window sample lengths, speech sample count and
+`recovered|empty|skipped_oversize` outcome. It and the shared
 fallback metric emit outside exception handlers; observability failure never
 discards healthy results. A retry exception is labeled `stage=asr_recovery` and
 fatal CUDA still fences the entire chain. Remaining empties never become silence

@@ -14,6 +14,7 @@ import { PostHogManager } from '@/lib/analytics/posthog';
 import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
 import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatCitationCards } from './ChatCitationCards';
 import { ChatEvidenceCard } from './ChatEvidenceCard';
 import { PanelReveal } from '@/components/ui/PanelReveal';
 
@@ -373,6 +374,7 @@ export function ChatPanel() {
                                 {message.text}
                               </ChatMarkdown>
                             </div>
+                            <ChatCitationCards memories={message.memories} />
                             <ChatEvidenceCard
                               envelope={parseChatEvidenceFromRecord(message)}
                             />
