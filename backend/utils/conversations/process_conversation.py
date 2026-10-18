@@ -549,6 +549,10 @@ def _get_structured(
                 and not getattr(main_conv, 'photos', None)
                 and recovery_transcript_below_content_floor(main_conv)
             ):
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
+                    )
                 if recovery_minimum_fallback_observer is not None:
                     recovery_minimum_fallback_observer()
                 return (
