@@ -894,6 +894,15 @@ _add(
         base={'uid': UID, 'start_timestamp': 1767225600, 'end_timestamp': 1767312000},
     )
 )
+_add(
+    DriverEntry(
+        'database.sync_live_overlap.find_sync_live_overlap_candidates',
+        base={
+            'user_ref': ref_document(f'users/{UID}'),
+            'incoming': {'started_at': T0, 'finished_at': T1, 'client_device_id': 'device-1', 'source': 'omi'},
+        },
+    )
+)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(

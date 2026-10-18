@@ -43,6 +43,8 @@ from utils.manual_speaker_assignments import (
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
+from database.sync_live_overlap import find_sync_live_overlap_candidates
+from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -89,7 +91,6 @@ from .first_open_obligations import (
     initialize_first_open_work,
 )
 from config.translation import resolve_ondemand_config
-from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current
 from utils.llm.model_constants import LUNA_MODEL
 
@@ -3425,18 +3426,13 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
-        if (
-            live_segments is not None
-            and sync_lineage_resolve_active_for(uid)
-            and current.get('sync_live_target')
-            and current.get('sync_content_revision') is not None
-            and accepted != persisted
-        ):
+        if live_segments is not None and current.get('sync_live_target') and accepted != persisted:
             # Sync and live now share this transcript. A processor that read
             # before fresh live speech must lose the same revision fence as
             # one that read before a sync append. Retries with no change do
-            # not invalidate a current processor.
-            update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
+            # not invalidate a current processor. Adoption is fleet-wide, so
+            # this fence must not depend on the lineage rollout allowlist.
+            update_payload['sync_content_revision'] = (current.get('sync_content_revision') or 0) + 1
         if score_updates and match_scores.enabled():
             try:
                 score_current = dict(current)
@@ -4009,6 +4005,10 @@ def assign_sync_conversation(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
+    live_candidate_ids: tuple[str, ...] = ()
+    if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+        live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+
     score_snapshots: dict = {}
 
     def decode(raw):
@@ -4055,6 +4055,7 @@ def assign_sync_conversation(
             encode=encode,
             invalidate=clear_client_processing,
             full_ids=full_ids,
+            live_candidate_ids=live_candidate_ids,
         )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
