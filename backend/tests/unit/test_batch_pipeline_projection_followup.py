@@ -268,7 +268,9 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
     f.binding = replace(f.binding, native_record=False)
     f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, f.binding)
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
-    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 0.2)
+    # Leave enough startup headroom for executor-backed claim/read phases to
+    # reach the deliberately stalled step under xdist contention.
+    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 2)
     f.receipts['head']['audio_required'] = True
     f.projector.playback = Mock()
     target = {
@@ -279,6 +281,7 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
     }[phase]
     real = projection_followup.run_blocking
     cancelled = asyncio.Event()
+    stalled_started = asyncio.Event()
     stalled = True
 
     async def blocking(executor, fn, *args, **kwargs):
@@ -287,6 +290,7 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
         is_head = is_head or (phase == 'bridge' and len(args) > 1 and args[1] == 'head')
         if stalled and fn is target and is_head:
             stalled = False
+            stalled_started.set()
             try:
                 await asyncio.Event().wait()
             finally:
@@ -295,13 +299,14 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
 
     monkeypatch.setattr(projection_followup, 'run_blocking', blocking)
     await f.runner.schedule()
+    await asyncio.wait_for(stalled_started.wait(), 3)
 
     async def drain():
         while f.runner.tasks:
             await asyncio.gather(*list(f.runner.tasks.values()))
         await asyncio.sleep(0)
 
-    await asyncio.wait_for(drain(), 2)
+    await asyncio.wait_for(drain(), 3)
     assert cancelled.is_set()
     assert not f.runner.closed
     assert not f.owner_claim
