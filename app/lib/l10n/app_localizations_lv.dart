@@ -13376,9 +13376,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Mēs jums atgādināsim pirms izmēģinājuma perioda beigām.';
-
-  @override
   String get paywallTrialEndsBody =>
       'Izmēģinājuma periods beidzas. Jums tiks iekasēta maksa, ja neatcelsiet abonementu.';
 

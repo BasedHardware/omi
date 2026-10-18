@@ -13352,9 +13352,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Vi påminner dig innan din provperiod avslutas.';
-
-  @override
   String get paywallTrialEndsBody => 'Provperioden avslutas. Du debiteras om du inte avbryter.';
 
   @override

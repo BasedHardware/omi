@@ -13386,9 +13386,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Przypomnimy Ci, zanim Twój okres próbny się zakończy.';
-
-  @override
   String get paywallTrialEndsBody => 'Okres próbny się kończy. Zostaniesz obciążony, chyba że anulujesz subskrypcję.';
 
   @override

@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} दिन मुफ़्त",
     "paywallTrialFreeDaysBody": "{days} दिनों के लिए Omi Pro, हमारी तरफ से।",
     "paywallTrialInDaysTitle": "{days} दिनों में",
-    "paywallTrialReminderBody": "आपका ट्रायल खत्म होने से पहले हम आपको याद दिलाएंगे।",
     "paywallTrialEndsBody": "ट्रायल समाप्त। रद्द न करने पर आपसे शुल्क लिया जाएगा।",
     "paywallTrialFeatureModels": "नवीनतम AI मॉडल",
     "paywallTrialFeatureAsk": "असीमित Ask Omi",

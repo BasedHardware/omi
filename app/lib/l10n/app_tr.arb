@@ -4126,7 +4126,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} gün ücretsiz",
     "paywallTrialFreeDaysBody": "{days} gün Omi Pro, bizden.",
     "paywallTrialInDaysTitle": "{days} gün içinde",
-    "paywallTrialReminderBody": "Deneme süreniz bitmeden size hatırlatacağız.",
     "paywallTrialEndsBody": "Deneme süresi sona erer. İptal etmezseniz ücretlendirilirsiniz.",
     "paywallTrialFeatureModels": "En yeni yapay zeka modelleri",
     "paywallTrialFeatureAsk": "Sınırsız Ask Omi",

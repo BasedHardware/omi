@@ -13349,9 +13349,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Připomeneme vám, než vaše zkušební verze skončí.';
-
-  @override
   String get paywallTrialEndsBody => 'Zkušební verze končí. Budete účtováni, pokud nezrušíte.';
 
   @override

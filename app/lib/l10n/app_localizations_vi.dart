@@ -13345,9 +13345,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Chúng tôi sẽ nhắc bạn trước khi thời gian dùng thử kết thúc.';
-
-  @override
   String get paywallTrialEndsBody => 'Dùng thử kết thúc. Bạn sẽ bị tính phí trừ khi hủy.';
 
   @override

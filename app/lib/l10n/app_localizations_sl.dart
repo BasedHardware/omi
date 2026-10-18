@@ -13377,9 +13377,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Opomnili vas bomo, preden se preizkusna doba izteče.';
-
-  @override
   String get paywallTrialEndsBody => 'Preizkusna doba se izteče. Brez preklica vam bomo zaračunali.';
 
   @override

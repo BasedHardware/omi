@@ -13446,9 +13446,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Wir erinnern Sie, bevor Ihre Testphase endet.';
-
-  @override
   String get paywallTrialEndsBody => 'Testphase endet. Ihnen wird der Betrag berechnet, wenn Sie nicht kündigen.';
 
   @override

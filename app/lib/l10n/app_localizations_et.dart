@@ -13341,9 +13341,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Tuletame sulle meelde enne prooviperioodi lõppu.';
-
-  @override
   String get paywallTrialEndsBody => 'Prooviperiood lõpeb. Sulle esitatakse arve, kui sa ei tühista.';
 
   @override

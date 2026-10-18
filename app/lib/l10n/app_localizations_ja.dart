@@ -13160,9 +13160,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'トライアル終了前にお知らせします。';
-
-  @override
   String get paywallTrialEndsBody => 'トライアル終了。キャンセルしない限り課金されます。';
 
   @override

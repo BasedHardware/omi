@@ -13353,9 +13353,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'तुमची चाचणी संपण्यापूर्वी आम्ही तुम्हाला आठवण करून देऊ.';
-
-  @override
   String get paywallTrialEndsBody => 'चाचणी संपेल. तुम्ही रद्द न केल्यास तुम्हाला शुल्क आकारले जाईल.';
 
   @override

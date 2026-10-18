@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} tasuta päeva",
     "paywallTrialFreeDaysBody": "{days} päeva Omi Pro'd, meie kulul.",
     "paywallTrialInDaysTitle": "{days} päeva pärast",
-    "paywallTrialReminderBody": "Tuletame sulle meelde enne prooviperioodi lõppu.",
     "paywallTrialEndsBody": "Prooviperiood lõpeb. Sulle esitatakse arve, kui sa ei tühista.",
     "paywallTrialFeatureModels": "Uusimad AI mudelid",
     "paywallTrialFeatureAsk": "Piiramatu Ask Omi",

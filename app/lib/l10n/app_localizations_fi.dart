@@ -13352,9 +13352,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Muistutamme sinua ennen kokeilujakson päättymistä.';
-
-  @override
   String get paywallTrialEndsBody => 'Kokeilujakso päättyy. Sinua veloitetaan, ellet peruuta tilausta.';
 
   @override

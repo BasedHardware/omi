@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} dní zadarmo",
     "paywallTrialFreeDaysBody": "{days} dní Omi Pro, na nás.",
     "paywallTrialInDaysTitle": "Za {days} dní",
-    "paywallTrialReminderBody": "Pripomenieme vám to pred skončením skúšobnej verzie.",
     "paywallTrialEndsBody": "Skúšobná verzia končí. Budete spoplatnení, pokiaľ nezrušíte.",
     "paywallTrialFeatureModels": "Najnovšie modely AI",
     "paywallTrialFeatureAsk": "Neobmedzené Ask Omi",

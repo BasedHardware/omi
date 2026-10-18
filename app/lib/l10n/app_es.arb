@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} días gratis",
     "paywallTrialFreeDaysBody": "{days} días de Omi Pro, por nuestra cuenta.",
     "paywallTrialInDaysTitle": "En {days} días",
-    "paywallTrialReminderBody": "Te recordaremos antes de que termine tu prueba.",
     "paywallTrialEndsBody": "La prueba termina. Se te cobrará a menos que canceles.",
     "paywallTrialFeatureModels": "Los últimos modelos de IA",
     "paywallTrialFeatureAsk": "Unlimited Ask Omi",

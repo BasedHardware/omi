@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} ngày miễn phí",
     "paywallTrialFreeDaysBody": "{days} ngày dùng Omi Pro, miễn phí.",
     "paywallTrialInDaysTitle": "Trong {days} ngày",
-    "paywallTrialReminderBody": "Chúng tôi sẽ nhắc bạn trước khi thời gian dùng thử kết thúc.",
     "paywallTrialEndsBody": "Dùng thử kết thúc. Bạn sẽ bị tính phí trừ khi hủy.",
     "paywallTrialFeatureModels": "Các mô hình AI mới nhất",
     "paywallTrialFeatureAsk": "Unlimited Ask Omi",

@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} ημέρες δωρεάν",
     "paywallTrialFreeDaysBody": "{days} ημέρες Omi Pro, δωρεάν από εμάς.",
     "paywallTrialInDaysTitle": "Σε {days} ημέρες",
-    "paywallTrialReminderBody": "Θα σας υπενθυμίσουμε πριν λήξει η δοκιμή σας.",
     "paywallTrialEndsBody": "Η δοκιμή λήγει. Θα χρεωθείτε εκτός αν ακυρώσετε.",
     "paywallTrialFeatureModels": "Τα πιο πρόσφατα μοντέλα AI",
     "paywallTrialFeatureAsk": "Unlimited Ask Omi",

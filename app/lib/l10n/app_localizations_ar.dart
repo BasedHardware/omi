@@ -13273,9 +13273,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'سنذكرك قبل انتهاء تجربتك.';
-
-  @override
   String get paywallTrialEndsBody => 'تنتهي التجربة. سيتم تحصيل الرسوم منك ما لم تقم بالإلغاء.';
 
   @override

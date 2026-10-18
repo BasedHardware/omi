@@ -13165,9 +13165,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => '체험 기간이 끝나기 전에 알려드립니다.';
-
-  @override
   String get paywallTrialEndsBody => '체험 기간 종료. 취소하지 않으면 요금이 부과됩니다.';
 
   @override

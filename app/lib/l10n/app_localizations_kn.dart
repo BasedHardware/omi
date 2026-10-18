@@ -13386,9 +13386,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'ನಿಮ್ಮ ಪ್ರಯೋಗ ಮುಗಿಯುವ ಮೊದಲು ನಾವು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ.';
-
-  @override
   String get paywallTrialEndsBody => 'ಪ್ರಯೋಗ ಮುಗಿಯುತ್ತದೆ. ನೀವು ರದ್ದುಗೊಳಿಸದಿದ್ದರೆ ನಿಮಗೆ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುತ್ತದೆ.';
 
   @override

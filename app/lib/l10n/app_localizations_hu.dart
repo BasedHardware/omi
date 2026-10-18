@@ -13399,9 +13399,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Emlékeztetni fogunk, mielőtt lejár a próbaidőszakod.';
-
-  @override
   String get paywallTrialEndsBody => 'A próbaidőszak lejár. Terhelésre kerül a számlád, hacsak nem mondod le.';
 
   @override

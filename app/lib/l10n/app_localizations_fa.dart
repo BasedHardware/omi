@@ -13342,9 +13342,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'قبل از پایان دوره آزمایشی به شما یادآوری می‌کنیم.';
-
-  @override
   String get paywallTrialEndsBody => 'دوره آزمایشی به پایان می‌رسد. در صورت عدم لغو، هزینه از شما کسر خواهد شد.';
 
   @override

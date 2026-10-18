@@ -11514,7 +11514,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} дена бесплатно",
     "paywallTrialFreeDaysBody": "{days} дена Omi Pro, од нас.",
     "paywallTrialInDaysTitle": "За {days} дена",
-    "paywallTrialReminderBody": "Ќе ве потсетиме пред да заврши вашиот пробен период.",
     "paywallTrialEndsBody": "Пробниот период завршува. Ќе ви биде наплатено освен ако не откажете.",
     "paywallTrialFeatureModels": "Најновите AI модели",
     "paywallTrialFeatureAsk": "Неограничен Ask Omi",

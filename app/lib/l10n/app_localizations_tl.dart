@@ -13452,9 +13452,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Ipapaalala namin sa iyo bago matapos ang iyong trial.';
-
-  @override
   String get paywallTrialEndsBody => 'Matatapos ang trial. Sisingilin ka maliban kung magkansela ka.';
 
   @override

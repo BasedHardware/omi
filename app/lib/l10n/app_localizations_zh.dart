@@ -13141,9 +13141,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => '我们会在试用期结束前提醒您。';
-
-  @override
   String get paywallTrialEndsBody => '试用期结束。除非您取消，否则将开始收费。';
 
   @override

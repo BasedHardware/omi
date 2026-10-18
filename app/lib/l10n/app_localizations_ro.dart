@@ -13402,9 +13402,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Îți vom aminti înainte ca perioada de probă să se încheie.';
-
-  @override
   String get paywallTrialEndsBody => 'Perioada de probă se încheie. Vei fi taxat, cu excepția cazului în care anulezi.';
 
   @override

@@ -13357,9 +13357,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Kami akan mengingatkan Anda sebelum uji coba berakhir.';
-
-  @override
   String get paywallTrialEndsBody => 'Uji coba berakhir. Anda akan dikenakan biaya kecuali Anda membatalkan.';
 
   @override

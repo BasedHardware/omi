@@ -13328,9 +13328,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'आपका ट्रायल खत्म होने से पहले हम आपको याद दिलाएंगे।';
-
-  @override
   String get paywallTrialEndsBody => 'ट्रायल समाप्त। रद्द न करने पर आपसे शुल्क लिया जाएगा।';
 
   @override

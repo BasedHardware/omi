@@ -13371,9 +13371,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Priminsime jums prieš pasibaigiant bandomajam laikotarpiui.';
-
-  @override
   String get paywallTrialEndsBody => 'Bandomasis laikotarpis baigiasi. Būsite apmokestinti, nebent atšauksite.';
 
   @override

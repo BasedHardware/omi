@@ -13360,9 +13360,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Deneme süreniz bitmeden size hatırlatacağız.';
-
-  @override
   String get paywallTrialEndsBody => 'Deneme süresi sona erer. İptal etmezseniz ücretlendirilirsiniz.';
 
   @override

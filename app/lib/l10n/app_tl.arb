@@ -11514,7 +11514,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} araw na libre",
     "paywallTrialFreeDaysBody": "{days} araw ng Omi Pro, mula sa amin.",
     "paywallTrialInDaysTitle": "Sa loob ng {days} araw",
-    "paywallTrialReminderBody": "Ipapaalala namin sa iyo bago matapos ang iyong trial.",
     "paywallTrialEndsBody": "Matatapos ang trial. Sisingilin ka maliban kung magkansela ka.",
     "paywallTrialFeatureModels": "Ang pinakabagong mga modelo ng AI",
     "paywallTrialFeatureAsk": "Walang limitasyong Ask Omi",

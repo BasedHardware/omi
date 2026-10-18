@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} dagar gratis",
     "paywallTrialFreeDaysBody": "{days} dagar med Omi Pro, på oss.",
     "paywallTrialInDaysTitle": "Om {days} dagar",
-    "paywallTrialReminderBody": "Vi påminner dig innan din provperiod avslutas.",
     "paywallTrialEndsBody": "Provperioden avslutas. Du debiteras om du inte avbryter.",
     "paywallTrialFeatureModels": "De senaste AI-modellerna",
     "paywallTrialFeatureAsk": "Obegränsad Ask Omi",

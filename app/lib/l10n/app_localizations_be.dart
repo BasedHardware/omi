@@ -13382,9 +13382,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Мы нагадаем вам да заканчэння пробнага перыяду.';
-
-  @override
   String get paywallTrialEndsBody =>
       'Пробны перыяд заканчваецца. З вас будзе спагнана плата, калі вы не адменіце падпіску.';
 

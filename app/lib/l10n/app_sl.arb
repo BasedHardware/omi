@@ -11514,7 +11514,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} dni brezplačno",
     "paywallTrialFreeDaysBody": "{days} dni Omi Pro, na naš račun.",
     "paywallTrialInDaysTitle": "Čez {days} dni",
-    "paywallTrialReminderBody": "Opomnili vas bomo, preden se preizkusna doba izteče.",
     "paywallTrialEndsBody": "Preizkusna doba se izteče. Brez preklica vam bomo zaračunali.",
     "paywallTrialFeatureModels": "Najnovejši modeli umetne inteligence",
     "paywallTrialFeatureAsk": "Neomejeno Ask Omi",

@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days}日間無料",
     "paywallTrialFreeDaysBody": "{days}日間のOmi Proを無料でご利用いただけます。",
     "paywallTrialInDaysTitle": "{days}日後",
-    "paywallTrialReminderBody": "トライアル終了前にお知らせします。",
     "paywallTrialEndsBody": "トライアル終了。キャンセルしない限り課金されます。",
     "paywallTrialFeatureModels": "最新のAIモデル",
     "paywallTrialFeatureAsk": "Unlimited Ask Omi",

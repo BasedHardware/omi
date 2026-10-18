@@ -23736,12 +23736,6 @@ abstract class AppLocalizations {
   /// Paywall timeline row body
   ///
   /// In en, this message translates to:
-  /// **'We\'ll remind you before your trial ends.'**
-  String get paywallTrialReminderBody;
-
-  /// Paywall timeline row body
-  ///
-  /// In en, this message translates to:
   /// **'Trial ends. You\'ll be charged unless you cancel.'**
   String get paywallTrialEndsBody;
 

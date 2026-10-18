@@ -13370,9 +13370,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Nós te lembraremos antes que seu teste termine.';
-
-  @override
   String get paywallTrialEndsBody => 'O teste termina. Você será cobrado, a menos que cancele.';
 
   @override

@@ -13361,9 +13361,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'آپ کا ٹرائل ختم ہونے سے پہلے ہم آپ کو یاد دلائیں گے۔';
-
-  @override
   String get paywallTrialEndsBody => 'ٹرائل ختم ہو جائے گا۔ اگر آپ منسوخ نہیں کرتے تو آپ سے چارج کیا جائے گا۔';
 
   @override

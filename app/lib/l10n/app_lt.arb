@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} dienos nemokamai",
     "paywallTrialFreeDaysBody": "{days} dienos Omi Pro, mūsų sąskaita.",
     "paywallTrialInDaysTitle": "Po {days} dienų",
-    "paywallTrialReminderBody": "Priminsime jums prieš pasibaigiant bandomajam laikotarpiui.",
     "paywallTrialEndsBody": "Bandomasis laikotarpis baigiasi. Būsite apmokestinti, nebent atšauksite.",
     "paywallTrialFeatureModels": "Naujausi AI modeliai",
     "paywallTrialFeatureAsk": "Neribotas Ask Omi",

@@ -16056,10 +16056,6 @@
             }
         }
     },
-    "paywallTrialReminderBody": "We'll remind you before your trial ends.",
-    "@paywallTrialReminderBody": {
-        "description": "Paywall timeline row body"
-    },
     "paywallTrialEndsBody": "Trial ends. You'll be charged unless you cancel.",
     "@paywallTrialEndsBody": {
         "description": "Paywall timeline row body"

@@ -13415,9 +13415,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Et recordarem abans que acabi la teva prova.';
-
-  @override
   String get paywallTrialEndsBody => 'La prova finalitza. Se\'t cobrarà tret que cancel·lis.';
 
   @override

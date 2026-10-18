@@ -13383,9 +13383,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'We herinneren je voordat je proefperiode afloopt.';
-
-  @override
   String get paywallTrialEndsBody => 'Proefperiode eindigt. Je wordt gefactureerd, tenzij je annuleert.';
 
   @override

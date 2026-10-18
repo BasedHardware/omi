@@ -13437,9 +13437,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'உங்கள் சோதனை முடிவதற்கு முன் நாங்கள் உங்களுக்கு நினைவூட்டுவோம்.';
-
-  @override
   String get paywallTrialEndsBody => 'சோதனை முடிவடைகிறது. நீங்கள் ரத்து செய்யாவிட்டால் கட்டணம் வசூலிக்கப்படும்.';
 
   @override

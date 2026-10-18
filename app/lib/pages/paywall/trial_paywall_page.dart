@@ -19,9 +19,6 @@ class TrialPaywallPage extends StatefulWidget {
   /// Days before the first charge; the backend only honors it for a first-time subscriber.
   static const int trialDays = 7;
 
-  /// Day on which the reminder lands.
-  static const int reminderDay = 5;
-
   final String source;
 
   /// Test seam: a fixed offer instead of the provider's catalog.
@@ -187,13 +184,6 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                               body: l10n.paywallTrialFreeDaysBody(TrialPaywallPage.trialDays),
                               date: onDay(TrialPaywallPage.trialDays),
                               emphasis: _TimelineEmphasis.accent,
-                            ),
-                            _TimelineRow(
-                              icon: Icons.notifications_none_rounded,
-                              title: l10n.paywallTrialInDaysTitle(TrialPaywallPage.reminderDay),
-                              body: l10n.paywallTrialReminderBody,
-                              date: onDay(TrialPaywallPage.reminderDay),
-                              emphasis: _TimelineEmphasis.plain,
                             ),
                             _TimelineRow(
                               icon: Icons.check_circle_outline_rounded,

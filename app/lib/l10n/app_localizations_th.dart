@@ -13280,9 +13280,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'เราจะเตือนคุณก่อนการทดลองใช้จะสิ้นสุดลง';
-
-  @override
   String get paywallTrialEndsBody => 'การทดลองใช้สิ้นสุดลง คุณจะถูกเรียกเก็บเงินเว้นแต่คุณจะยกเลิก';
 
   @override

@@ -13450,9 +13450,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialReminderBody => 'Nous vous rappellerons avant la fin de votre essai.';
-
-  @override
   String get paywallTrialEndsBody => 'Fin de l\'essai. Vous serez facturé(e) sauf annulation.';
 
   @override

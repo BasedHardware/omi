@@ -4091,7 +4091,6 @@
     "paywallTrialFreeDaysTitle": "+ {days} päivää ilmaiseksi",
     "paywallTrialFreeDaysBody": "{days} päivää Omi Prota, meidän piikkiimme.",
     "paywallTrialInDaysTitle": "{days} päivän kuluttua",
-    "paywallTrialReminderBody": "Muistutamme sinua ennen kokeilujakson päättymistä.",
     "paywallTrialEndsBody": "Kokeilujakso päättyy. Sinua veloitetaan, ellet peruuta tilausta.",
     "paywallTrialFeatureModels": "Uusimmat tekoälymallit",
     "paywallTrialFeatureAsk": "Rajoittamaton Ask Omi",
