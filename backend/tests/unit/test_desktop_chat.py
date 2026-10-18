@@ -80,6 +80,58 @@ def test_request_rejects_messages_with_no_sendable_turn():
         _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'assistant', 'content': ''}]})
 
 
+def test_request_drops_user_turn_with_no_text_or_images():
+    # Anthropic rejects empty content and empty text blocks with 400
+    # invalid_request_error, so a replayed user turn that carried nothing must
+    # not reach the wire as one.
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'first'},
+                {'role': 'user', 'content': ''},
+                {'role': 'user', 'content': None},
+                {'role': 'user', 'content': [{'type': 'text', 'text': ''}]},
+                {'role': 'assistant', 'content': 'hello'},
+                {'role': 'user', 'content': 'question'},
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {'role': 'user', 'content': 'first'},
+        {'role': 'assistant', 'content': [{'type': 'text', 'text': 'hello'}]},
+        {'role': 'user', 'content': 'question'},
+    ]
+
+
+def test_request_keeps_image_when_empty_text_block_precedes_it():
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': [
+                        {'type': 'text', 'text': ''},
+                        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,aGVsbG8='}},
+                    ],
+                },
+            ],
+        }
+    )
+    assert payload['messages'] == [
+        {
+            'role': 'user',
+            'content': [{'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/png', 'data': 'aGVsbG8='}}],
+        }
+    ]
+
+
+def test_request_rejects_user_only_history_left_empty():
+    with pytest.raises(desktop_chat._RequestValidationError):
+        _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': ''}]})
+
+
 def test_request_injects_web_search_for_desktop_opt_in():
     _, payload = _authorized_request(
         {
