@@ -1185,9 +1185,19 @@ def _load_rate_cards() -> dict[tuple[str, str], list[RateCard]]:
     return cards
 
 
-def rate_card_for(provider: str, model: str, *, at: date | None = None) -> RateCard | None:
-    """The card in effect on ``at``. The default is today's UTC date."""
+def rate_card_for(
+    provider: str, model: str, *, at: date | None = None, rate_card_id: str | None = None
+) -> RateCard | None:
+    """The card in effect on ``at``. The default is today's UTC date.
+
+    An explicit ``rate_card_id`` takes precedence over the date: it resolves a
+    card recorded on a persisted ledger event for historical metadata. An
+    unknown ID, or an ID belonging to a different model, returns None rather
+    than falling through to the current price.
+    """
     choices = _load_rate_cards().get((provider.strip().lower(), model.strip()), [])
+    if rate_card_id is not None:
+        return next((card for card in choices if card.rate_card_id == rate_card_id), None)
     as_of = at or datetime.now(timezone.utc).date()
     eligible = [card for card in choices if card.effective_from is None or card.effective_from <= as_of]
     if not eligible:
