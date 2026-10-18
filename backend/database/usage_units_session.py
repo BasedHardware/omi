@@ -62,6 +62,7 @@ class UsageUnitsSession:
             dates = [day] if self.day == day else [self.day, day]
             refs = [user.collection('hourly_usage').document(name) for name in hours]
             refs += [client.collection('llm_gateway_user_days').document(f'{date}_{hashed}') for date in dates]
+            # Historical API day docs only. New requests do not write usage units.
             refs += [user.collection('ladder_v1_api_days').document(date) for date in dates]
             documents = {
                 snap.id: snap.to_dict() or {}

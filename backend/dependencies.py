@@ -15,7 +15,7 @@ from utils.api_key_families import (
     unknown_api_key_detail,
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
-from utils.ladder_v1 import enforce_daily_cap, enforce_budget
+from utils.ladder_v1 import enforce_daily_cap
 from config import ladder_v1 as ladder_policy
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
@@ -728,8 +728,9 @@ async def get_developer_memory_default_memory_batch_write_context(
 
 
 async def _enforce_ladder_api(uid: str, response: Response | None) -> None:
-    if ladder_policy.budget_enforcement_enabled():
-        await run_blocking(db_executor, enforce_budget, uid)
+    # MCP and developer API traffic is bounded by the daily request count and,
+    # once wired, the per-request read limit. It does not draw the monthly
+    # usage budget.
     daily = None
     if ladder_policy.mcp_daily_caps_enabled():
         daily = await run_blocking(db_executor, enforce_daily_cap, uid)

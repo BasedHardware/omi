@@ -16,12 +16,15 @@ def validate_entitlement_versions(catalog: Mapping[str, Any]) -> list[str]:
         'unit_usd_micros',
         'monthly_budgets',
         'mcp_daily_caps',
+        'api_max_reads_per_request',
     }:
         return errors + ['entitlement_versions.ladder_v1: invalid keys']
     if ladder['rate_card_version'] != 'v1' or ladder['unit_usd_micros'] != 1000:
         errors.append('entitlement_versions.ladder_v1: expected v1 at $0.001/unit')
     if ladder.get('mcp_daily_caps') != {'basic': 100, 'plus': 500, 'operator': 5000, 'architect': 5000}:
         errors.append('ladder_v1.mcp_daily_caps: expected ratified caps')
+    if ladder.get('api_max_reads_per_request') != {'basic': 2000, 'plus': 5000, 'operator': 25000, 'architect': 25000}:
+        errors.append('ladder_v1.api_max_reads_per_request: expected per-plan read limits')
     bindings_config = catalog.get('ladder_v1_price_bindings')
     expected = {
         f'ladder_v1_{tier}_{interval}': {

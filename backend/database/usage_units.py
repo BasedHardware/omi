@@ -517,6 +517,8 @@ def read_usage_month(uid, period, client, entitlements):
         days.append(day.date().isoformat())
         day += timedelta(days=1)
     refs = [client.collection('llm_gateway_user_days').document(f'{day}_{hashed}') for day in days]
+    # Already-written day docs still join. New MCP/developer requests count in
+    # Redis and do not record usage units on this collection.
     if entitlements['entitlement_version'] == 'ladder_v1':
         refs.extend(user.collection('ladder_v1_api_days').document(day) for day in days)
     documents = (

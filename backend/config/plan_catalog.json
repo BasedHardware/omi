@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 8,
+  "catalog_revision": 9,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -803,6 +803,12 @@
         "plus": 500,
         "operator": 5000,
         "architect": 5000
+      },
+      "api_max_reads_per_request": {
+        "basic": 2000,
+        "plus": 5000,
+        "operator": 25000,
+        "architect": 25000
       }
     }
   },

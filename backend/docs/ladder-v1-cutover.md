@@ -79,9 +79,10 @@ is `backend/tests/fixtures/ladder_v1_at_cap.json`. Existing goldens are unchange
 when the field is absent. Pro receives Architect checkout only on the exhausted
 `usage_budget` surface, per the existing presentation contract.
 
-Daily API reservations are transactional per UID, not per key. The final allowed
+Daily API reservations are one Redis counter per UID per UTC date, not per key.
+INCR and EXPIREAT (next 00:00 UTC) run in one Lua call. The final allowed
 request reaches the cap; the next request receives structured 429 reset/upgrade
-metadata. At 80%, successful REST responses carry `X-Omi-Usage-State: nudge`,
+metadata and does not increment. At 80%, successful REST responses carry `X-Omi-Usage-State: nudge`,
 `X-Omi-Usage-Reset-At` and `X-Omi-Storefront-Trigger: mcp_daily_cap`; hosted tool
 results carry `_meta.omi_usage`. At 100%, hosted MCP preserves the structured error
 there too. The existing hourly abuse limits and scope checks remain in place.
@@ -97,9 +98,11 @@ On-device funding draws zero transcription units. Cloud extraction from an
 on-device transcript draws only its normal LLM attempt units, never another STT
 charge. Unknown sources remain unknown rather than being mislabeled live.
 Lane totals are diagnostic subdivisions, never additional charges; the existing
-feature/funding projection is summed once. Metered API infra lives in
-`users/{uid}/ladder_v1_api_days/{UTC-date}` and joins the monthly projection only
-for ladder entitlements. Model work from API tools remains separately metered.
+feature/funding projection is summed once. MCP and developer API requests do not
+draw that budget: they are a daily request count plus a per-request read limit.
+Historical `users/{uid}/ladder_v1_api_days/{UTC-date}` documents still join the
+monthly projection for ladder entitlements. Model work from API tools remains
+separately metered.
 
 The shadow projection is still a **partial lower bound**. Direct LLM paths,
 best-effort gateway delivery, STT paths without hourly writers, vendor request

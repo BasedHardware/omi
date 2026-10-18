@@ -1,9 +1,11 @@
 """Cutover policy contracts: dark path, retained legacy entitlements, and cap boundaries."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import inspect
 import json
 from pathlib import Path
 
+import fakeredis
 import pytest
 from fastapi import HTTPException
 
@@ -225,20 +227,103 @@ def test_at_cap_body_preserves_recordings_without_automatic_reset_promise(monkey
 
 
 def test_atomic_daily_reservations_boundary_and_reset():
-    from database.ladder_v1 import reserve_daily_request
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from database.ladder_v1 import daily_cap_reached, reserve_daily_request
 
-    store = StrictFirestore()
-    now = datetime(2026, 10, 14, 23, 59, tzinfo=timezone.utc)
-    first = reserve_daily_request('u', 2, now=now, firestore_client=store)
-    assert first['used'] == 1 and first['allowed']
-    last = reserve_daily_request('u', 2, now=now, firestore_client=store)
-    assert last['used'] == 2 and last['allowed'] and last['state'] == 'nudge'
-    blocked = reserve_daily_request('u', 2, now=now, firestore_client=store)
-    assert not blocked['allowed'] and blocked['used'] == 2
-    assert store.rows[('users', 'u', 'ladder_v1_api_days', '2026-10-14')]['micro_units'] == 2000000
-    reset = reserve_daily_request('u', 2, now=datetime(2026, 10, 15, tzinfo=timezone.utc), firestore_client=store)
-    assert reset['allowed'] and reset['used'] == 1
+    redis = fakeredis.FakeRedis()
+    # EXPIREAT is a wall-clock timestamp, so the sample has to be the current UTC day.
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    first = reserve_daily_request('u', 5, now=now, redis_client=redis)
+    reset_at = int((now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+    assert first == {'allowed': True, 'used': 1, 'limit': 5, 'reset_at': reset_at, 'state': 'within'}
+    assert daily_cap_reached('u', 5, now=now, redis_client=redis) is False
+    for used in (2, 3):
+        step = reserve_daily_request('u', 5, now=now, redis_client=redis)
+        assert step['used'] == used and step['state'] == 'within'
+    nudge = reserve_daily_request('u', 5, now=now, redis_client=redis)
+    assert nudge['used'] == 4 and nudge['allowed'] and nudge['state'] == 'nudge'
+    last = reserve_daily_request('u', 5, now=now, redis_client=redis)
+    assert last['used'] == 5 and last['allowed'] and last['state'] == 'nudge'
+    assert daily_cap_reached('u', 5, now=now, redis_client=redis) is True
+    key = f"ladder_v1:api_daily:u:{now.date().isoformat()}"
+    before = redis.get(key)
+    blocked = reserve_daily_request('u', 5, now=now, redis_client=redis)
+    assert not blocked['allowed'] and blocked['used'] == 5 and blocked['state'] == 'cap'
+    assert redis.get(key) == before
+    other = reserve_daily_request('other', 5, now=now, redis_client=redis)
+    assert other['allowed'] and other['used'] == 1
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    reset = reserve_daily_request('u', 5, now=tomorrow, redis_client=redis)
+    assert reset['allowed'] and reset['used'] == 1 and reset['state'] == 'within'
+    ttl = redis.ttl(key)
+    expected = reset_at - int(datetime.now(timezone.utc).timestamp())
+    assert abs(ttl - expected) <= 2
+
+
+def test_daily_cap_redis_outage_stays_retryable(monkeypatch):
+    import database.ladder_v1 as daily
+
+    monkeypatch.setenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', 'true')
+    monkeypatch.setattr(ladder, 'account', lambda *a, **k: {'plan_id': 'plus'})
+
+    def unavailable(*args, **kwargs):
+        raise ConnectionError('redis down')
+
+    monkeypatch.setattr(daily, 'reserve_daily_request', unavailable)
+    with pytest.raises(HTTPException) as error:
+        ladder.enforce_daily_cap('u')
+    assert error.value.status_code == 503
+    assert error.value.detail == 'usage_unavailable'
+    assert error.value.headers['Retry-After'] == '30'
+
+
+def test_api_enforcement_keeps_the_daily_cap_and_skips_the_budget(monkeypatch):
+    import asyncio
+
+    from fastapi import Response
+
+    import dependencies
+
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    monkeypatch.setenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', 'true')
+    calls = []
+    assert 'enforce_budget' not in inspect.getsource(dependencies._enforce_ladder_api)
+    monkeypatch.setattr(
+        dependencies,
+        'enforce_daily_cap',
+        lambda uid: calls.append('daily') or {'state': 'nudge', 'reset_at': 4102444800},
+    )
+    response = Response()
+    asyncio.run(dependencies._enforce_ladder_api('u', response))
+    assert calls == ['daily']
+    assert response.headers['X-Omi-Usage-State'] == 'nudge'
+    assert response.headers['X-Omi-Usage-Reset-At'] == '4102444800'
+    assert response.headers['X-Omi-Storefront-Trigger'] == 'mcp_daily_cap'
+
+    calls.clear()
+    monkeypatch.delenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', raising=False)
+    monkeypatch.delenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', raising=False)
+    quiet = Response()
+    asyncio.run(dependencies._enforce_ladder_api('u', quiet))
+    assert calls == []
+    assert 'X-Omi-Usage-State' not in quiet.headers
+
+
+@pytest.mark.parametrize(
+    'plan,limit',
+    [('basic', 2000), ('plus', 5000), ('operator', 25000), ('architect', 25000)],
+)
+def test_api_read_limit_follows_the_ladder_plan(bindings, plan, limit):
+    if plan == 'basic':
+        subscription_row = {'plan': 'basic'}
+    else:
+        price = next(key for key, row in bindings.items() if row['plan_id'] == plan)
+        subscription_row = subscription(plan, price)
+    assert ladder.api_max_reads_per_request('u', subscription_row) == limit
+
+
+def test_legacy_prices_resolve_api_read_limit_to_none():
+    price = next(item for item, plan in catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if plan.value == 'plus')
+    assert ladder.api_max_reads_per_request('u', subscription('plus', price)) is None
 
 
 @pytest.fixture

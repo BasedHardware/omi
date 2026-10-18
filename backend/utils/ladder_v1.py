@@ -134,6 +134,19 @@ def feature_allowed(uid: str, feature: str, subscription: Any = _UNRESOLVED) -> 
     return True
 
 
+def api_max_reads_per_request(uid: str, subscription: Any = _UNRESOLVED) -> int | None:
+    """Per-request list-read cap for a ladder account.
+
+    ``None`` means the account is legacy, so callers keep today's shared
+    ListReadBudget default. This is not wired into routes yet.
+    """
+    entitlement = account(uid, subscription)
+    if entitlement is None:
+        return None
+    limits = ENTITLEMENT_VERSIONS['ladder_v1']['api_max_reads_per_request']
+    return int(limits[entitlement['plan_id']])
+
+
 def enforce_daily_cap(uid: str) -> dict | None:
     if not policy.mcp_daily_caps_enabled():
         return None
