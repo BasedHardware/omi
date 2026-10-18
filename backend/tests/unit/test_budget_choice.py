@@ -153,6 +153,13 @@ class TestReadResilience:
 
         assert budget_choice.get_choice('u', '2026-01', firestore_client=_Boom()) is None
 
+    def test_get_choice_swallows_client_construction_failure(self, monkeypatch):
+        def _boom():
+            raise OSError('metadata server unreachable')
+
+        monkeypatch.setattr(budget_choice, 'get_firestore_client', _boom)
+        assert budget_choice.get_choice('u', '2026-01') is None
+
 
 class TestStrictValidation:
     def test_rejects_unknown_choice(self, store):

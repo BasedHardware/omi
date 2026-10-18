@@ -35,8 +35,8 @@ def get_choice(uid: str, period: str, *, firestore_client: Any = None) -> dict[s
     period = _sanitize_period(period)
     if not uid or not period:
         return None
-    client = firestore_client if firestore_client is not None else get_firestore_client()
     try:
+        client = firestore_client if firestore_client is not None else get_firestore_client()
         snapshot = _reference(client, uid).get()
         record = snapshot.to_dict() if snapshot.exists else None
         return current_choice(record, period)
