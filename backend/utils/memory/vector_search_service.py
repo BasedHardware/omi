@@ -22,7 +22,16 @@ except (ModuleNotFoundError, ImportError):
     delete_canonical_memory_vectors_by_ids = None
 
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
-from utils.log_sanitizer import sanitize_pii
+
+try:
+    from utils.log_sanitizer import sanitize_pii
+except ImportError:
+
+    def sanitize_pii(value: object) -> str:
+        del value
+        return '[redacted]'
+
+
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.vector_search_telemetry import (
