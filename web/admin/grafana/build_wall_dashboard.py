@@ -48,9 +48,10 @@ FREE = "Free $/day"
 # a board test keeps them equal). The API flags them stale after 35 days.
 ESTIMATES_AS_OF = "2026-10-16"
 COST = {"GCP": "#5c6b80", "Vertex LLM": "#8494ab", "OpenAI": "#aab6c6", "Anthropic": "#cdd5df"}
-# Estimated lines are drawn apart from invoiced ones: sand, low opacity.
+# Estimated lines are drawn apart from measured/invoiced ones: sand, low opacity.
 ESTIMATE_OPACITY = 55  # invoiced bars use 88
 ESTIMATE = {"STT est.": "#d8b46a", "SaaS est.": "#eedcb3"}  # sand, not the MCP-only yellow
+MEASURED = {"STT measured": "#aab6c6", "SaaS measured (Mercury)": "#8494ab"}
 GOOD_MARK, BAD_MARK = "​", "⁠"  # tone markers set by the series API
 # Cohort curve: one neutral ramp, oldest dimmest → newest brightest and thickest
 # (no platform hue: the curve is not a platform split). Index = cohort age.
@@ -246,10 +247,12 @@ USERS = ("Users are deduplicated persons with qualified use (v2 definitions): a 
 QUALIFIED_MAU = ("MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event "
                  "PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. ")
 ALL_IN = ("All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), "
-          "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is "
-          f"a $5.3K/month estimate from the Soniox console (estimate as of {ESTIMATES_AS_OF}; the FinOps "
-          f"stt_vendor_low model overstated it ~2×). SaaS is a fixed $4.8K/month estimate as of {ESTIMATES_AS_OF}. "
-          "An estimate older than 35 days is marked stale under Margin by plan. ")
+          "Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month "
+          f"Soniox-console estimate as of {ESTIMATES_AS_OF} until a measured FinOps line exists (the FinOps "
+          f"stt_vendor_low model overstated it ~2×). SaaS uses the dated fixed $4.8K/month estimate as of "
+          f"{ESTIMATES_AS_OF} until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). "
+          "Measured lines are labeled by source; "
+          "an estimate older than 35 days is marked stale under Margin by plan. ")
 
 
 def columns():
@@ -351,17 +354,20 @@ def columns():
              [("headline", "netCost", "Cost / day", "currencyUSD", 2),
               ("headline", "costPerMau", "Cost / user", "currencyUSD", 2)]),
         (12, chart("Cost vs revenue",
-                   ALL_IN + "Settled through D−2. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the sand-colored segments. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
+                   ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are sand-colored. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
                    [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
                                               ("vertexLlm", "Vertex LLM", "number"),
                                               ("openai", "OpenAI", "number"), ("anthropic", "Anthropic", "number"),
-                                              ("stt", "STT est.", "number"),
-                                              ("saas", "SaaS est.", "number"),
+                                              ("sttMeasuredUsd", "STT measured", "number"),
+                                              ("sttEstimateUsd", "STT est.", "number"),
+                                              ("saasMeasuredUsd", "SaaS measured (Mercury)", "number"),
+                                              ("saasEstimateUsd", "SaaS est.", "number"),
                                               ("revenuePerDay", "Revenue", "number"),
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
                    unit="currencyUSD", draw="bars", stack=True, time_from="35d",
                    overrides=[*[color(n, h) for n, h in COST.items()],
+                              *[color(n, h) for n, h in MEASURED.items()],
                               *[estimate(n, h) for n, h in ESTIMATE.items()],
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
@@ -428,8 +434,8 @@ def margin_status():
     """Margin by plan's own data-through day and how STT/SaaS were priced."""
     panel = data_through()
     panel["description"] = ("Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, "
-                            "and the date the STT and SaaS estimates were read (\"stale\" after 35 days; "
-                            "\"STT measured\" once FinOps carries a vendor line).")
+                            "and the source used for each all-in line. Estimates are dated and marked stale after "
+                            "35 days; measured SaaS is labeled from Mercury.")
     panel["targets"] = [target("health", "marginStatus", [("text", "Margin status", "string")])]
     panel["fieldConfig"]["defaults"]["noValue"] = "Margin through —"
     return panel

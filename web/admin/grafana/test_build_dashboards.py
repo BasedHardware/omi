@@ -630,11 +630,12 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
 
     def test_cost_stack_counts_every_line_and_marks_estimates(self):
-        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY
+        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY, MEASURED
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "Cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
-        for line in ["gcp", "vertexLlm", "openai", "anthropic", "stt", "saas", "revenuePerDay"]:
+        for line in ["gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttEstimateUsd",
+                     "saasMeasuredUsd", "saasEstimateUsd", "revenuePerDay"]:
             self.assertIn(line, fields)
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
                   for o in cost["fieldConfig"]["overrides"]}
@@ -642,8 +643,13 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
             self.assertNotIn("custom.stacking", styled[name])  # still in the stack
         self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est."})
+        self.assertEqual(set(MEASURED), {"STT measured", "SaaS measured (Mercury)"})
+        for name in MEASURED:
+            self.assertIn(name, styled)
+            self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
         self.assertIn("Soniox console", cost["description"])
+        self.assertIn("measured SaaS (Mercury)", cost["description"])
         self.assertNotIn("FinOps modelled", cost["description"])
 
     def test_status_colors_curve_placeholder_and_data_through(self):
