@@ -299,9 +299,11 @@ or line.
 See `backend/utils/sync/ARCHITECTURE.md`.
 
 Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
-empty admits everyone) limits per-segment binding, the pinned live origin, the
-live revision fence and the open-live enrichment deferral to listed owners; any
-other uid behaves exactly as with the kill switch off, and the kill switch wins.
+empty admits everyone) limits per-segment binding to listed owners; other uids
+use the kill-switch-off binding behavior.
+Sync appends to live targets always preserve the live origin,
+and fresh live speech on any `sync_live_target` always advances its revision,
+independent of this allowlist or kill switch. Open-live enrichment stays deferred.
 The listen origin stamp is metadata only and ignores the list, so widening finds
 lineage stamped. Prod lists one uid on all five identical services (unset
 admits everyone); dev leaves it unset. Refused eligible uploads log
@@ -3641,6 +3643,34 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+
+`SYNC_LIVE_OVERLAP_ENABLED` defaults on. An unstamped upload can adopt a
+completed or in-progress live conversation when its speech interval strictly
+overlaps that row, both rows identify the same known device/source/lock
+partition, and the live row has content and live provenance. Discovery reads
+only interval metadata (up to 128 rows, 10-second RPC deadline); the assignment
+transaction rereads and validates all candidates, preferring the greatest
+overlap. Empty reconnect stubs, touching intervals, other devices and deleted
+rows stay excluded. Explicit targets retain priority. The existing merge path
+owns transcript dedupe, speaker assignments, lifecycle and revision fencing;
+live identities are never donated into each other. Adoption pins `started_at`
+even without `audio_timeline` (production listen has v2 disabled), preserving
+offsets from the listener's cached origin. Earlier sync speech keeps its exact
+negative offset and is marked `unplaced`; it remains visible without claiming
+seek alignment. Fresh live writes advance `sync_content_revision` for every
+adopted target, so an older processor cannot overwrite a delayed live final.
+Neither safeguard depends on the lineage rollout allowlist.
+
+This admission creates no hidden donor and no pending merge debt. Lookup failure
+uses ordinary retained sync publication immediately; live document capacity
+exhaustion uses the existing size-rollover fallback. Captured speech never waits
+for another upload to make a hidden row visible. Storage/commit failures still
+propagate to existing durable job retries. Set `SYNC_LIVE_OVERLAP_ENABLED=false`
+on the four sync writers to restore the old admission path. Bounded
+`event=sync_live_overlap` outcomes distinguish merged, published and lookup-failed
+attempts without account or transcript labels. Other live/live overlap causes
+and cached Home donor eviction are outside this change.
+
 Compatibility is equality of all three fields: two locked captures are compatible,
 so locked chunks merge, append to a locked explicit target and deduplicate on retry
 exactly as unlocked ones do. A mismatch means a field differs.
@@ -5549,6 +5579,22 @@ or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
 
+### Deterministic batch worker validation disposition
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` defaults to `true` and
+ships on in the worker Helm chart. A Pyannote frame wholly beyond a tiny real
+buffer may complete as `silence` only after independent strict local VAD
+validates the real PCM, including a partial final window. Other closed worker
+validation failures stop GPU retries at attempt one, retain `worker_failure`
+stage/reason and enter the existing fenced recovery route. They preserve audio,
+privacy generations, accepted paid intents and ordered projection fencing;
+the held item does not block later results. Empty ASR on speech and positive
+context words outside ownership never establish silence by themselves.
+Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
+retries. Current debt counts only jobs still in `state=quarantined`; historical
+quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
 ### Legacy sync double-empty recovery (dark)
 
 `SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
@@ -5595,3 +5641,58 @@ are independent of new admission; rollback reuses the same queues and receipts.
 See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
 for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
+
+
+### Paid quarantine recovery request lifetime
+
+`BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
+serving reconciliation loop prepares the existing fenced recovery intent and
+queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
+origin, declared separately from the worker audience in dev and prod) plus
+`/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.
+The handler awaits the sole provider call and result persistence before replying,
+so ordinary Cloud Run revision draining sees an active request. Background sweeps
+enqueue prepared work or reconcile running artifacts. Any dispatch failure
+(including missing configuration or a lost enqueue acknowledgement) falls back
+to inline recovery with the same token. The task and inline path race through
+the same transactional start fence, so at most one can invoke paid STT. The
+shared fallback metric records this degraded inline execution. A disabled
+handler host or owner cohort returns retryable HTTP 503, never a successful ack.
+A two-minute wake-name generation repairs exhausted tasks without authorizing a
+second provider call. Existing privacy, lease, content ownership and intent-token
+fences apply to every delivery, including duplicates and admission rollback.
+
+Integration declares a 3,600-second Cloud Run request timeout in both manifests,
+above the 1,500-second task dispatch deadline and application path timeout.
+Modulate has a 300-second client budget. If the application returns 504,
+cancelling the ASGI await does not stop its executor thread: that thread may
+still persist the result while its instance survives. A retry adopts the same
+`running` token and only reconciles artifacts; it never starts a second paid
+call. Ordinary drain protection ends with the request; a timeout followed by
+instance death can still leave uncertain work held (including the existing
+900-second abandonment fence). This is not permission to reset the token.
+
+Kill switch: set `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false` to restore inline
+sweeping. Already enqueued tasks still use the same intent fence. No historical
+`failed_held` intent is reset. An exceptional instance kill can still leave an
+uncertain paid call held; this requires provider result reconciliation or an
+explicit new epoch, never blind retry. Do not weaken the quarantine-to-completion
+gate or exclude censored held work to hide this residual obligation.
+
+### Sync finalize target recovery
+
+`SYNC_FINALIZE_TARGET_RECOVERY_ENABLED` defaults on (unset/blank); explicit off or
+an unrecognized token restores strict donor-refresh failures. After transcript
+assignment and audio persistence, donor refresh follows only the server-authored
+`sync_merged_into` returned by the rejecting transaction, with at most 16 targets.
+Deleted/missing targets without a successor complete without refresh or donor
+retraction. Other refresh errors defer cleanup, preserving donor tasks and the
+pending revision receipt; later appends retry it. Audio copy remains strict.
+The transaction still rejects writes into deleted conversations. Bounded
+`sync_bridge_refresh` reasons expose degraded completion. Remaining internal
+finalize errors are retryable `sync_finalize_failed`, provider/model `unknown`,
+with a class/site-only `sync_finalize_exception` diagnostic. Deleted-target
+acknowledgement belongs only to the legacy post-persistence callback. The shared bridge helper keeps its string-or-superseded contract;
+synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
+the kill switch on every sync-intake service; classification remains internal.

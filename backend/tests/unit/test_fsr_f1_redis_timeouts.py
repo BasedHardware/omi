@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from database import action_items_cache, s5_candidates_cache
+from database import action_items_cache, s5_candidates_cache, staged_promote_cache
 from database import fsr_read_cache as s4_read_cache
 from routers import action_items as router
 
@@ -26,8 +26,9 @@ def blackhole(monkeypatch):
         'FIRESTORE_READ_LEVERS', '{"subscription_cache":100,"candidates_page":100,"action_items_page":100}'
     )
     clients = []
-    accessors = [module._redis for module in (s4_read_cache, s5_candidates_cache, action_items_cache)]
-    for module in (s4_read_cache, s5_candidates_cache, action_items_cache):
+    modules = (s4_read_cache, s5_candidates_cache, action_items_cache, staged_promote_cache)
+    accessors = [module._redis for module in modules]
+    for module in modules:
         module._redis.cache_clear()
         client = module._redis()
         assert module._redis() is client  # Lazy singleton, not a new pool per operation.
@@ -153,3 +154,29 @@ def test_s5_action_items_route_blackhole_falls_back_to_firestore(blackhole, monk
     )
     assert result == {'action_items': [], 'has_more': False, 'truncated': False}
     firestore.assert_called_once()
+
+
+@pytest.mark.parametrize('phase', ['read', 'fill_check', 'fill', 'invalidate'])
+def test_staged_negative_cache_blackhole_preserves_reads_and_writes(blackhole, monkeypatch, phase):
+    client = staged_promote_cache._redis()
+    monkeypatch.delenv('OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED', raising=False)
+    durable = Mock(return_value=[])
+    if phase in ('fill_check', 'fill'):
+        gets = iter([None] if phase == 'fill_check' else [None, 'v'])
+
+        def get(key):
+            value = next(gets, 'timeout')
+            return client.get(key) if value == 'timeout' else value
+
+        def set(key, value, **kwargs):
+            return client.set(key, value, **kwargs) if kwargs.get('pxat') else True
+
+        monkeypatch.setattr(
+            staged_promote_cache, '_redis', lambda: SimpleNamespace(set=set, get=get, eval=lambda *a: 'v')
+        )
+    if phase == 'invalidate':
+        assert bounded(lambda: staged_promote_cache.invalidate_around_write(durable)('u')) == []
+        durable.assert_called_once_with('u')
+    else:
+        assert bounded(lambda: staged_promote_cache.load_projection('u', 7, durable)) == []
+        durable.assert_called_once_with()

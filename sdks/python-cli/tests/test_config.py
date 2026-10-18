@@ -106,6 +106,84 @@ def test_save_refuses_to_overwrite_unreadable_config(config_path: Path) -> None:
     assert config_path.is_dir()
 
 
+def test_load_stat_permission_error_records_error_instead_of_raising(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``sudo omi auth login`` creates ``~/.omi`` for the first time,
+    ``save()`` chmods the directory ``0o700`` owned by root. A subsequent
+    non-root invocation hits ``PermissionError`` before ``config.toml`` can
+    even be stat'd. ``p.exists()`` re-raises ``PermissionError`` instead of
+    returning ``False``, so ``load()`` must open directly inside ``try`` rather
+    than pre-checking ``p.exists()`` outside it."""
+    original_open = Path.open
+
+    def raising_open(self: Path, *args, **kwargs):
+        if self == config_path:
+            raise PermissionError(13, "Permission denied", str(self))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", raising_open)
+    config = cfg.load()
+    assert config.path == config_path
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="POSIX non-root directory traversal permissions only",
+)
+def test_version_succeeds_when_config_parent_dir_is_unsearchable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cli_runner
+) -> None:
+    """Real POSIX reproducer for ``~/.omi`` being mode ``0o000`` / root-owned ``0o700``:
+    ``Path.exists()`` on ``~/.omi/config.toml`` raises ``PermissionError``, which
+    previously escaped ``load()`` before the ``try`` block was reached."""
+    locked_dir = tmp_path / "locked_omi"
+    locked_dir.mkdir()
+    locked_cfg = locked_dir / "config.toml"
+    locked_cfg.write_text('active_profile = "default"\n', encoding="utf-8")
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(locked_cfg))
+    locked_dir.chmod(0o000)
+    try:
+        config = cfg.load()
+        assert config.was_load_error
+        assert config.load_error is not None
+        assert "could not be read" in config.load_error
+
+        result = cli_runner.invoke(app, ["version"])
+        assert result.exit_code == 0, result.output
+        assert "omi-cli" in result.output
+
+        with pytest.raises(PermissionError, match="refusing to overwrite"):
+            cfg.save(config)
+    finally:
+        locked_dir.chmod(0o700)
+
+
+def test_load_file_as_parent_directory_records_error_and_arms_save_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``Path.exists()`` swallows ``NotADirectoryError`` (``ENOTDIR``) and returns
+    ``False``. Opening directly inside ``try`` records the ``NotADirectoryError``
+    on ``load_error`` instead of misreporting the path as a clean missing file."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    bad_cfg_path = blocker / "config.toml"
+    monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(bad_cfg_path))
+
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.load_error is not None
+    assert "could not be read" in config.load_error
+
+    with pytest.raises(PermissionError, match="refusing to overwrite"):
+        cfg.save(config)
+
+
 def test_save_refuses_to_overwrite_malformed_config(config_path: Path) -> None:
     """save() must refuse to overwrite a file that failed to parse on load:
     a write command would otherwise silently destroy profiles/credentials the

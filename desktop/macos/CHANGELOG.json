@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.502",
+      "date": "2026-10-18",
+      "changes": [
+        "When Claude rejects an expired or revoked sign-in, Settings now offers Connect Claude instead of still showing Connected"
+      ]
+    },
+    {
       "version": "0.12.501",
       "date": "2026-10-18",
       "changes": [

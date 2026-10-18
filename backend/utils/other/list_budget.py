@@ -111,7 +111,14 @@ def resolve_list_read_budget_seconds() -> float:
     return LIST_READ_DEFAULT_BUDGET_SECONDS
 
 
-def resolve_list_read_max_documents() -> int:
+def resolve_list_read_max_documents(*, owner_uid: Optional[str] = None, context: Any = None) -> int:
+    """Single injectable document-limit authority for request budgets.
+
+    API routes supply the authenticated owner and authorization context, never
+    a client header/query identity. A future api_max_reads_per_request entitlement
+    belongs here; no plan lookup or extra read is performed today. Existing env
+    overrides and the 25,000-document fallback keep their released semantics.
+    """
     override = _env_int('OMI_LIST_READ_MAX_DOCUMENTS')
     if override is not None and override > 0:
         return override
@@ -164,6 +171,8 @@ class ListReadBudget:
         route: str,
         seconds: Optional[float] = None,
         max_documents: Optional[int] = None,
+        owner_uid: Optional[str] = None,
+        context: Any = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> "ListReadBudget":
         """Build the route's budget from the middleware-stamped request start."""
@@ -176,7 +185,11 @@ class ListReadBudget:
             # Direct handler calls (tests) have no middleware stamp.
             started = now
         budget_seconds = resolve_list_read_budget_seconds() if seconds is None else max(0.0, float(seconds))
-        docs = resolve_list_read_max_documents() if max_documents is None else int(max_documents)
+        docs = (
+            resolve_list_read_max_documents(owner_uid=owner_uid, context=context)
+            if max_documents is None
+            else int(max_documents)
+        )
         return cls(
             deadline_monotonic=float(started) + budget_seconds,
             max_documents=docs,
@@ -274,6 +287,8 @@ def list_read_budget_for_request(
     route: str,
     seconds: Optional[float] = None,
     max_documents: Optional[int] = None,
+    owner_uid: Optional[str] = None,
+    context: Any = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> ListReadBudget:
     """Route-facing factory: the one budget shared by a list GET's reads."""
@@ -282,6 +297,8 @@ def list_read_budget_for_request(
         route=route,
         seconds=seconds,
         max_documents=max_documents,
+        owner_uid=owner_uid,
+        context=context,
         clock=clock,
     )
 
