@@ -6053,3 +6053,84 @@ async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release()
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marker():
+    """Thread: after an unconfirmed strict release the terminal-job deferral
+    must not route through the deferred-marker write. update_sync_job refuses
+    terminal states by contract, so the marker path can only ever degrade to
+    the marker_failed 409 — spending every short-backoff queue retry against
+    the surviving lock with no replacement scheduled behind them, sticking a
+    completed direct backfill job's per-UID slot until its ~2-day TTL. The
+    terminal variant schedules the one cleanup replacement directly: no
+    marker write is attempted, the replacement carries the bumped chain
+    count, and the task acks instead of looping 409."""
+
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=RuntimeError('pipeline must not complete'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+        },
+    )
+
+    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    strict_calls = []
+
+    def _strict_release(job_id, token):
+        strict_calls.append((job_id, token))
+        return 0  # EVAL: token no longer owns the key — release unconfirmed
+
+    try:
+        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
+        module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
+        # Production contract: update_sync_job returns None for terminal
+        # states, so any marker write on the completed job cannot apply.
+        module.update_sync_job = MagicMock(return_value=None)
+        reads = {'n': 0}
+
+        def _job_read(job_id):
+            reads['n'] += 1
+            status = 'completed' if reads['n'] > 2 else ('queued' if reads['n'] == 1 else 'processing')
+            return {
+                'job_id': job_id,
+                'status': status,
+                'lane': 'fresh',
+                'ledger_fence_mode': module.SyncLedgerFenceMode.ACTIVE.value,
+                'stt_provider': 'deepgram',
+                'stt_model': 'nova-3',
+            }
+
+        module.get_sync_job = MagicMock(side_effect=_job_read)
+
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS}
+        assert strict_calls == [('job-1', '1:lock-token')]
+        # The structurally impossible marker write is never attempted…
+        module.update_sync_job.assert_not_called()
+        # …while the promised cleanup replacement is scheduled with the
+        # bumped chain count, past the preserved lock's TTL.
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
+        payload, schedule_at = module.enqueue_sync_job_budget_replacement.call_args.args
+        assert payload[module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] == 1
+        assert schedule_at > 0
+        assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for name, original in saved_modules.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original

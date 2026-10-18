@@ -2402,13 +2402,21 @@ async def _clear_deferral_marker_after_failed_replacement(
 
 
 async def _defer_sync_job_after_handler_budget_expiry(
-    request: Request, attempt_state: Optional[dict] = None
+    request: Request, attempt_state: Optional[dict] = None, *, terminal_cleanup: bool = False
 ) -> JSONResponse:
     """Ack a budget-expired attempt against a replacement scheduled past the
     preserved run lock's TTL. Queue-level retries cannot outlive that lock, so
     spending them now would exhaust the task on lock-held 409s; when no
     replacement can be scheduled, the 409 fallback keeps the queue — not this
-    handler — owning the retry."""
+    handler — owning the retry.
+
+    ``terminal_cleanup=True`` is the terminal-job variant used after a strict
+    lock release could not be confirmed: the job is already terminal, so the
+    deferred-marker write is both unnecessary (no stale status poll can
+    terminalize a terminal job) and structurally impossible
+    (``update_sync_job`` refuses to mutate terminal states), and the
+    replacement's redelivery hits the terminal branch's retry-only cleanup
+    either way — the deferral schedules that one replacement directly."""
     if not is_cloud_tasks_dispatch_enabled():
         return _budget_deferral_fallback('dispatch_disabled', 'degraded')
     try:
@@ -2507,6 +2515,38 @@ async def _defer_sync_job_after_handler_budget_expiry(
     payload[SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY] = deferrals + 1
     enqueue_started = False
     marker_write: Optional[asyncio.Future] = None
+    if terminal_cleanup:
+        # The terminal-job variant skips the marker entirely: the write's
+        # stale-poll protection is moot on a job whose status poll is already
+        # answered, and update_sync_job's terminal-state refusal would turn
+        # this deferral into a permanent marker_failed 409 loop — spending
+        # every short-backoff queue retry against the surviving lock with no
+        # scheduled replacement behind them.
+        logger.info(
+            'event=sync_transcription_job outcome=handler_budget_terminal_cleanup_replacement_deferred '
+            'job_status=terminal deferrals=%d',
+            deferrals + 1,
+        )
+        try:
+            async with asyncio.timeout_at(post_budget_deadline):
+                await run_blocking(db_executor, enqueue_sync_job_budget_replacement, payload, schedule_at)
+        except Exception as error:
+            uncertain_enqueue = _is_uncertain_enqueue_error(error)
+            logger.warning(
+                'event=sync_transcription_job outcome=handler_budget_terminal_cleanup_replacement_failed '
+                'exception_type=%s uncertain=%s',
+                type(error).__name__,
+                int(uncertain_enqueue),
+            )
+            if uncertain_enqueue:
+                return _budget_deferral_fallback('enqueue_uncertain', 'degraded')
+            return _budget_deferral_fallback('enqueue_failed', 'degraded')
+        logger.info(
+            'event=sync_transcription_job outcome=handler_budget_deferred replacement_at=%d deferrals=%d',
+            schedule_at,
+            deferrals + 1,
+        )
+        return JSONResponse(status_code=200, content={'status': SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
     try:
         async with asyncio.timeout_at(post_budget_deadline):
             # Marker first, and required: the preserved run lock expires before
@@ -2734,7 +2774,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
                         'job_status=%s',
                         expired_job.get('status'),
                     )
-                    return await _defer_sync_job_after_handler_budget_expiry(request, state)
+                    return await _defer_sync_job_after_handler_budget_expiry(request, state, terminal_cleanup=True)
                 return JSONResponse(
                     status_code=500,
                     content={'status': 'terminal_cleanup_retry', 'job_status': expired_job.get('status')},
