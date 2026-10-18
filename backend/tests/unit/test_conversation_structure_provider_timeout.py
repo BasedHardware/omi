@@ -36,6 +36,7 @@ The seam here is the provider client: it enforces the deadline the production fu
 exactly as httpx does, against a provider that needs longer than the background deadline to answer.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -206,3 +207,36 @@ def test_every_user_waiting_conversation_summary_feature_declares_the_deadline()
 
     # A background feature keeps the bounded transport deadline it was sized for.
     assert model_config.feature_request_timeout('conv_folder') is None
+
+
+def test_notes_loop_deadline_covers_the_whole_transport_recovery_budget():
+    """Sixth instance of the class (2026-10-18, gcp group timeouts.py:115 through
+    ``_get_structured``): the shaped notes mount reused the per-attempt transport
+    deadline as run_loop's total deadline, so structuring that outlived one attempt
+    died as a bare ``TimeoutError`` instead of letting the client-owned deadline —
+    and the direct lane's single retry — govern inside the route budget."""
+    assert processing.notes_mount().budget.deadline_seconds == 2 * processing.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+
+
+def test_first_attempt_past_the_per_attempt_deadline_still_summarizes(monkeypatch):
+    """A model turn slower than one per-attempt deadline but inside the mount's whole
+    recovery budget must still produce the summary; before the fix run_loop cancelled
+    it at the single-attempt mark."""
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+
+    @asynccontextmanager
+    async def isolated_fake(model):
+        yield model
+
+    monkeypatch.setattr(processing, 'isolated_notes_model', isolated_fake)
+    # Per-attempt 0.1s, mount deadline 0.2s: the turn at 0.15s is past one attempt
+    # yet inside the budget the transport owns.
+    monkeypatch.setattr(processing, 'CONVERSATION_STRUCTURE_TIMEOUT_SECONDS', 0.1)
+
+    async def _slow_invoke(_payload):
+        await asyncio.sleep(0.15)
+        return AIMessage(content=_RESPONSE_JSON)
+
+    monkeypatch.setattr(processing, 'get_llm', lambda *args, **kwargs: RunnableLambda(_slow_invoke))
+
+    _summarizes(_conversation_notes())

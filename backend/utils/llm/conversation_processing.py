@@ -281,6 +281,16 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
+# The notes run_loop deadline is the transport's whole recovery budget, not one
+# attempt. get_llm('conv_structure') already enforces the per-attempt deadline
+# above — the seam this class's earlier fixes designated — and the direct lane
+# retries once inside the route's 120s budget, so a loop deadline equal to a
+# single attempt fired while that attempt or its retry was still in flight and
+# ended whole-transcript structuring as a bare TimeoutError (2026-10-18 prod:
+# asyncio/timeouts.py:115 surfacing at _get_structured's llm_input_dedupe.notes
+# call). messaging.summarize sizes its mount the same way at 2x its lane's
+# per-attempt deadline.
+NOTES_LOOP_DEADLINE_SECONDS = 2 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
@@ -384,7 +394,7 @@ person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
 """ + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
-        budget=Budget(turns=1, tool_calls=0, deadline_seconds=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS),
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=NOTES_LOOP_DEADLINE_SECONDS),
     )
 
 
