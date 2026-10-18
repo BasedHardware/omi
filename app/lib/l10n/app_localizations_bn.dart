@@ -13818,4 +13818,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'এই কথোপকথনের সারসংক্ষেপ করার সময় কিছু ভুল হয়েছে।';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved অডিও সংরক্ষিত, মোট $total';
+  }
 }

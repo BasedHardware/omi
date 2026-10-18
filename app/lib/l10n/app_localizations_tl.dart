@@ -13929,4 +13929,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved sa $total ng audio ang na-save';
+  }
 }

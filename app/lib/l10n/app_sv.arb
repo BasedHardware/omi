@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "Gränsen för sammanfattningar har nåtts",
     "summaryLimitBody": "Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.",
     "summaryFailedTitle": "Det gick inte att sammanfatta",
-    "summaryFailedBody": "Något gick fel när det här samtalet skulle sammanfattas."
+    "summaryFailedBody": "Något gick fel när det här samtalet skulle sammanfattas.",
+    "playbackPartialAudioSaved": "{saved} av {total} ljud sparat"
 }

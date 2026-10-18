@@ -13810,4 +13810,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Noget gik galt under opsummeringen af denne samtale.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved af $total lyd gemt';
+  }
 }

@@ -156,9 +156,9 @@ env:
   - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED
-    value: "false"
+    value: "true"
   - name: BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED
-    value: "false"
+    value: "true"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -244,6 +244,8 @@ env:
   - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
     value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
+    value: "true"
+  - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
     value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"

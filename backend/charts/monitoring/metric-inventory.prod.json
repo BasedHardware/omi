@@ -923,6 +923,7 @@
     "listen_finalization_jobs",
     "listen_finalization_oldest_blocked_byok_age_seconds",
     "listen_finalization_oldest_nonterminal_age_seconds",
+    "listen_finalization_summary_last_success_timestamp_seconds",
     "listen_finalization_retries_created",
     "listen_finalization_retries_total",
     "listen_finalization_stale_processing_reconciliations_created",
@@ -1485,7 +1486,9 @@
     "omi_stt_cost_routing_stage",
     "omi_stt_cost_routing_state_known",
     "omi_stt_cost_routing_votes_total",
+    "omi_stt_fleet_health_write_attempted_total",
     "omi_stt_fleet_health_write_dropped_total",
+    "omi_stt_fleet_health_write_written_total",
     "omi_stt_language_constraint_total",
     "omi_stt_leg_attempts_total",
     "omi_stt_leg_transcript_outcome_total",
@@ -1997,6 +2000,14 @@
     "workqueue_work_duration_seconds_bucket",
     "workqueue_work_duration_seconds_count",
     "workqueue_work_duration_seconds_sum"
+  ],
+  "declared_metrics": [
+    "omi_listen_lb_attached_ready_endpoints",
+    "omi_listen_lb_exporter_errors_total",
+    "omi_listen_lb_exporter_last_success_timestamp_seconds",
+    "omi_listen_lb_neg_attached",
+    "omi_listen_lb_neg_endpoints",
+    "omi_listen_lb_ready_pods"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {

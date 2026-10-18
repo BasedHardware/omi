@@ -11,6 +11,7 @@ from google.cloud.firestore_v1 import FieldFilter
 import database.goals as goals_db
 from database.candidates import candidate_has_lapsed
 from database._client import get_firestore_client
+from database.staged_promote_cache import invalidate_around_write
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
@@ -840,6 +841,7 @@ def list_continuation_checkpoints(
     return parse_snapshots(ContinuationCheckpoint, snapshots)
 
 
+@invalidate_around_write
 def resolve_workstream_candidate(
     uid: str,
     candidate: CandidateRecord,

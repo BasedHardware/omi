@@ -11651,5 +11651,6 @@
     "summaryLimitTitle": "הגעת למגבלת הסיכומים",
     "summaryLimitBody": "יצרת מחדש כמה סיכומים בשעה האחרונה. אפשר לנסות שוב מאוחר יותר.",
     "summaryFailedTitle": "לא ניתן היה לסכם",
-    "summaryFailedBody": "משהו השתבש בעת סיכום השיחה הזו."
+    "summaryFailedBody": "משהו השתבש בעת סיכום השיחה הזו.",
+    "playbackPartialAudioSaved": "נשמרו {saved} מתוך {total} של אודיו"
 }

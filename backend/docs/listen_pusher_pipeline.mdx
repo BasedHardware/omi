@@ -5579,6 +5579,22 @@ or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
 
+### Deterministic batch worker validation disposition
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` defaults to `true` and
+ships on in the worker Helm chart. A Pyannote frame wholly beyond a tiny real
+buffer may complete as `silence` only after independent strict local VAD
+validates the real PCM, including a partial final window. Other closed worker
+validation failures stop GPU retries at attempt one, retain `worker_failure`
+stage/reason and enter the existing fenced recovery route. They preserve audio,
+privacy generations, accepted paid intents and ordered projection fencing;
+the held item does not block later results. Empty ASR on speech and positive
+context words outside ownership never establish silence by themselves.
+Set `worker.workerValidationDispositionEnabled=false` to restore bounded GPU
+retries. Current debt counts only jobs still in `state=quarantined`; historical
+quarantine timestamps and counters include subsequently recovered results.
+Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
+
 ### Legacy sync double-empty recovery (dark)
 
 `SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
@@ -5625,3 +5641,21 @@ are independent of new admission; rollback reuses the same queues and receipts.
 See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
 for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
+
+
+### Sync finalize target recovery
+
+`SYNC_FINALIZE_TARGET_RECOVERY_ENABLED` defaults on (unset/blank); explicit off or
+an unrecognized token restores strict donor-refresh failures. After transcript
+assignment and audio persistence, donor refresh follows only the server-authored
+`sync_merged_into` returned by the rejecting transaction, with at most 16 targets.
+Deleted/missing targets without a successor complete without refresh or donor
+retraction. Other refresh errors defer cleanup, preserving donor tasks and the
+pending revision receipt; later appends retry it. Audio copy remains strict.
+The transaction still rejects writes into deleted conversations. Bounded
+`sync_bridge_refresh` reasons expose degraded completion. Remaining internal
+finalize errors are retryable `sync_finalize_failed`, provider/model `unknown`,
+with a class/site-only `sync_finalize_exception` diagnostic. Deleted-target
+acknowledgement belongs only to the legacy post-persistence callback. The shared bridge helper keeps its string-or-superseded contract;
+synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
+the kill switch on every sync-intake service; classification remains internal.

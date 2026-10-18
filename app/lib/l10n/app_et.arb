@@ -4228,5 +4228,6 @@
     "summaryLimitTitle": "Kokkuvõtete limiit on täis",
     "summaryLimitBody": "Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.",
     "summaryFailedTitle": "Kokkuvõtet ei õnnestunud teha",
-    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti."
+    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti.",
+    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist"
 }

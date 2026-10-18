@@ -40,7 +40,8 @@ description: "Create and retrieve conversations via the Developer API"
     | Parameter | Type | Default | Description |
     |-----------|------|---------|-------------|
     | `limit` | integer | 25 | Maximum number to return |
-    | `offset` | integer | 0 | Number to skip |
+    | `offset` | integer | 0 | Number to skip. Large offsets may exhaust the read budget and return an incomplete page. |
+    | `cursor` | string | - | Opaque `X-Omi-Next-Cursor` from the previous page; use with `offset=0`, `include_transcript=false`, and no folder/starred filter. Keep date/category filters unchanged. |
     | `start_date` | datetime | - | Filter by start date (inclusive) |
     | `end_date` | datetime | - | Filter by end date (inclusive) |
     | `include_transcript` | boolean | false | Include full transcript segments |
@@ -49,6 +50,14 @@ description: "Create and retrieve conversations via the Developer API"
     | `starred` | boolean | - | Filter by starred status. `true` for starred only, `false` for non-starred only. Omit to return all. |
   </Accordion>
 </AccordionGroup>
+
+Prefer cursor pagination for exports and repeated page reads. Start with `offset=0` and follow
+`X-Omi-Next-Cursor` until `X-Omi-Has-More` is `false`. Nonzero offsets also return
+`X-Pagination-Guidance`. If `X-Omi-List-Truncated: true` is present, the page is incomplete even when it is
+empty. Start a cursor traversal from offset zero; for transcript, folder, or starred reads, narrow the date
+window. Repeating a large offset cannot advance past the same budget boundary.
+
+List results may be up to 10 seconds stale after any write. Response bodies remain arrays.
 
 <Tabs>
   <Tab title="cURL">
@@ -845,12 +854,12 @@ This action is permanent. Deleted conversations and their associated photos cann
     #!/bin/bash
     API_KEY="omi_dev_your_api_key"
 
-    # Export all conversations with transcripts
-    curl -H "Authorization: Bearer $API_KEY" \
+    # Fetch only the first page, not a complete backup. Inspect the saved
+    # X-Omi-Has-More and X-Omi-List-Truncated headers before paging further.
+    curl --fail-with-body --dump-header conversations_first_page.headers -H "Authorization: Bearer $API_KEY" \
       "https://api.omi.me/v1/dev/user/conversations?limit=1000&include_transcript=true" \
-      > conversations_backup.json
-
-    echo "Exported conversations to conversations_backup.json"
+      > conversations_first_page.json &&
+      echo "Saved first page; inspect conversations_first_page.headers"
     ```
   </Tab>
   <Tab title="Python">
@@ -876,6 +885,12 @@ This action is permanent. Deleted conversations and their associated photos cann
             }
         )
 
+        response.raise_for_status()
+        if response.headers.get("X-Omi-List-Truncated", "").lower() == "true":
+            raise RuntimeError(
+                "Export incomplete; no backup saved. Use narrower date windows "
+                "for transcript/folder/starred exports."
+            )
         conversations = response.json()
         if not conversations:
             break
@@ -907,6 +922,13 @@ This action is permanent. Deleted conversations and their associated photos cann
           { headers: { Authorization: `Bearer ${API_KEY}` } }
         );
 
+        if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
+        if (response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true') {
+          throw new Error(
+            'Export incomplete; no backup saved. Use narrower date windows ' +
+            'for transcript/folder/starred exports.'
+          );
+        }
         const conversations = await response.json();
         if (conversations.length === 0) break;
 
