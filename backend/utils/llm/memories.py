@@ -1,9 +1,7 @@
-import json
 import re
-from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
-from uuid import uuid4
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
@@ -21,7 +19,6 @@ from utils.prompts import extract_memories_prompt, extract_learnings_prompt, ext
 from utils.llms.memory import get_prompt_memories
 from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import Features, track_usage
-from utils.observability.fallback import record_fallback
 from .clients import get_llm
 import logging
 

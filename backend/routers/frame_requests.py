@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import time
 from io import BytesIO
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
@@ -46,7 +45,6 @@ from utils.retrieval.frame_request_storage import (
     TEMPORARY_STORAGE_PREFIX,
     copy_frame_request_pixels_to_permanent,
     delete_frame_request_pixels,
-    download_frame_request_pixels,
     upload_frame_request_pixels,
 )
 

@@ -4,7 +4,6 @@ import json
 from datetime import timezone
 from typing import Any
 
-from config.episode_writer import EpisodeWriterSettings
 from utils.conversations.episode_compaction import compact_episode_items
 from utils.conversations.episode_selection import deterministic_episode_selection
 

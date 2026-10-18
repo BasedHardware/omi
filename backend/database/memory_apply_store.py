@@ -10,7 +10,7 @@ import hashlib
 import hmac
 import logging
 import os
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar, TypedDict, cast
+from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, TypedDict, cast
 
 from pydantic import BaseModel
 
@@ -57,7 +57,6 @@ from models.memory_apply import (
 from models.memory_operations import (
     MemoryLedgerReopenReceipt,
     MemoryOperation,
-    MemoryOperationStatus,
     MemoryOperationType,
 )
 from models.memory_promotion import MemoryGraphAssertion, PromotionGraphPlan, build_memory_graph_assertion

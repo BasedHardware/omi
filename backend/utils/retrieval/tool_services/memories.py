@@ -76,7 +76,6 @@ def get_memories_text(
         scan_offset = 0
         visible = []
         max_scan = 5000
-        page_size = 500
         scan_truncated = False
         while scan_offset < max_scan and len(visible) < target_end:
             batch_limit = min(500, max_scan - scan_offset)

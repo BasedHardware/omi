@@ -17,6 +17,7 @@ from models.knowledge_ledger_policy import (
     PLAYBOOK_HANDLE_CHARACTER_LIMIT,
     PROFILE_CHARACTER_BUDGET,
     canonicalize_ledger_slot,
+    normalize_playbook_handle,
     render_bounded_profile,
 )
 from models.memory_evidence import MemoryEvidence

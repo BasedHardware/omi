@@ -52,7 +52,6 @@ from models.knowledge_ledger_search import (
     is_ledger_row_admissible as is_ledger_row_admissible,
     ledger_row_is_rejected,
 )
-from models.memory_apply import WriterMode
 from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
@@ -110,11 +109,9 @@ from utils.memory.product_memory_read_service import (
 from utils.memory.knowledge_ledger import (
     LEDGER_SCHEMA_VERSION,
     LedgerProvenance,
-    LedgerWrite,
     amend_user_fact as amend_fact,
     evidence_id_for_ledger_provenance,
     reopen_standalone_fact,
-    save_fact,
 )
 from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.memory.read_resilience import (
@@ -129,7 +126,6 @@ from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
