@@ -221,6 +221,62 @@ def test_maximum_overlap_wins_without_merging_live_identities():
     assert choose_live_overlap([first, longer], chunk('wal', 1005)) == 'longer'
 
 
+def test_discovery_returns_empty_stub_so_transaction_reads_and_fences_it():
+    # A same-device stub that has not written its first transcript yet must be a
+    # discovery hint, so the assignment transaction reads that document and
+    # Firestore commit contention can fence a listen writer adding content
+    # concurrently. The stub itself is still not adopted while it stays empty:
+    # eligibility stays authoritative in the transaction, never in discovery.
+    stub = live_row()
+    stub.pop('capture_evidence')
+    stub['has_content'] = False
+    stub['transcript_segments'] = []
+    from utils.sync.live_overlap import discoverable_live_overlap
+
+    assert discoverable_live_overlap(stub, chunk('wal', 1002))
+    assert choose_live_overlap([stub], chunk('wal', 1002)) is None
+    store = seeded(stub)
+    incoming = dict(chunk('wal', 1002), data_protection_level='standard')
+    row, created, _ = assign(store, incoming)
+    assert created and row['id'] == 'wal'
+    assert store.rows[('users', 'u', 'conversations', 'live')]['has_content'] is False
+
+
+def test_stub_becoming_eligible_is_adopted_by_the_transactional_revalidation():
+    # Same race one step later: discovery saw an empty stub, the listen writer
+    # landed its first transcript (with live capture provenance, as the
+    # production writer does) before the transaction re-read it. The
+    # in-transaction eligibility check is the authority, so the upload appends
+    # into the live row instead of publishing a twin.
+    stub = live_row('in_progress')
+    stub.pop('capture_evidence')
+    stub['has_content'] = False
+    stub['transcript_segments'] = []
+    store = seeded(stub)
+    landed = live_row('in_progress')
+    store.rows[('users', 'u', 'conversations', 'live')].update(
+        has_content=True,
+        capture_evidence=landed['capture_evidence'],
+        transcript_segments=deepcopy(landed['transcript_segments']),
+    )
+    incoming = dict(chunk('wal', 1002), data_protection_level='standard')
+    row, created, _ = assign(store, incoming)
+    assert not created and row['id'] == 'live' and row['has_content']
+
+
+def test_discovery_excludes_other_partitions_and_off_lifecycle_rows():
+    stub = live_row()
+    stub.pop('capture_evidence')
+    stub['has_content'] = False
+    from utils.sync.live_overlap import discoverable_live_overlap
+
+    assert discoverable_live_overlap(stub, chunk('wal', 1002))
+    assert not discoverable_live_overlap(dict(stub, deleted=True), chunk('wal', 1002))
+    assert not discoverable_live_overlap(dict(stub, status='processing'), chunk('wal', 1002))
+    assert not discoverable_live_overlap(dict(stub, client_device_id='other'), chunk('wal', 1002))
+    assert not discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
+
+
 @pytest.mark.parametrize('fleet,lineage', [('off', 'on'), ('on', 'on'), ('off', 'off')])
 def test_same_transcript_as_explicit_target_for_each_existing_merge_mode(monkeypatch, fleet, lineage):
     monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', fleet)

@@ -5,7 +5,7 @@ import logging
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.sync.live_overlap import choose_live_overlap
+from utils.sync.live_overlap import discoverable_live_overlap
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -28,9 +28,6 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict) -> tuple[str, ..
         'deleted',
         'sync_merged_into',
         'status',
-        'capture_evidence.origin',
-        'sync_live_target',
-        'has_content',
     ]
     try:
         query = (
@@ -42,9 +39,12 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict) -> tuple[str, ..
             .limit(128)
         )
         rows = [dict(doc.to_dict(), id=doc.id) for doc in query.stream(timeout=10)]
-        # Keep all eligible hints so a concurrent deletion can choose the next
-        # live row, rather than publishing a twin of that row.
-        return tuple(row['id'] for row in rows if choose_live_overlap([row], incoming))
+        # Keep every same-partition overlapping live hint — including a stub
+        # whose first transcript write has not landed yet — so the assignment
+        # transaction reads that document and Firestore commit contention can
+        # fence a listen writer adding content concurrently. The transaction's
+        # revalidation stays authoritative; a still-empty stub is not adopted.
+        return tuple(row['id'] for row in rows if discoverable_live_overlap(row, incoming))
     except Exception:
         logger.warning('event=sync_live_overlap outcome=lookup_failed')
         record_fallback(
