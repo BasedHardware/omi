@@ -139,14 +139,14 @@ async def gpu_idle(body: IdleRequest):
 
 @router.post('/reconcile', include_in_schema=False)
 async def reconcile(body: WorkerRequest):
-    await run_blocking(sync_executor, body.service().reconcile, recover_quarantine=True)
+    await body.service().reconcile_async(recover_quarantine=True)
     return {'status': 'reconciled'}
 
 
 @router.get('/metrics', include_in_schema=False)
 async def metrics():
     service = serving_for_stage(current_stage())
-    await run_blocking(sync_executor, service.reconcile)
+    await service.reconcile_async()
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 

@@ -8,7 +8,7 @@ import uuid
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts
+from config.batch_pipeline import shared_live_enabled, scheduler_control_key, max_worker_attempts, head_priority_enabled
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -19,6 +19,7 @@ LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+HEAD_LOOKAHEAD = 64
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +48,42 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     tx.put('queues', queue_key, queue)
     activate(tx, control, job['priority'], job['available_at'])
     tx.put('control', scheduler_control_key(job['owner_key']), control)
+
+
+def _prefer_merge_head(tx: Transaction, queue: dict, job: dict) -> dict:
+    """Splice the ready ordered head ahead of later queued work, bounded to 64 reads.
+
+    No new queue class, tombstones or lease takeover: rollback reads an ordinary
+    FIFO. Priorities, DRR charges and pool/privacy checks still apply to the
+    selected job. Quarantine is not merge_pending and is never selected here.
+    """
+    head = tx.first_pending(job['owner_key'])
+    if (
+        not head
+        or head['segment_id'] == job['segment_id']
+        or head['state'] != 'ready'
+        or head['priority'] != job['priority']
+    ):
+        return job
+    previous = job
+    for _ in range(HEAD_LOOKAHEAD):
+        sid = previous.get('next')
+        if not sid:
+            break
+        candidate = tx.get('jobs', sid)
+        if not candidate:
+            break
+        if sid == head['segment_id']:
+            previous['next'] = candidate['next']
+            tx.put('jobs', previous['segment_id'], previous)
+            if queue['tail'] == sid:
+                queue['tail'] = previous['segment_id']
+            candidate['next'] = queue['head']
+            queue['head'] = sid
+            tx.put('jobs', sid, candidate)
+            return candidate
+        previous = candidate
+    return job
 
 
 def owns_lease(job: dict, token: str, now: float) -> bool:
@@ -200,6 +237,10 @@ class Scheduler:
                     continue
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
+                    if head_priority_enabled():
+                        job = _prefer_merge_head(tx, queue, job)
+                        tx.put('queues', queue_key, queue)
+                    job.setdefault('unit_kind', 'conversation')
                     try:
                         tx.check_privacy(
                             job['owner_id'],
