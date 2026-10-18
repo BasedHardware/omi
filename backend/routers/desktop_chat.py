@@ -809,6 +809,21 @@ class _RequestValidationError(ValueError):
     pass
 
 
+def _record_history_repair(*, dropped: str, reason: str) -> None:
+    # The direct-path translation silently adapts malformed or Anthropic-
+    # incompatible history shapes (see _request); the fallback telemetry
+    # contract (backend/AGENTS.md, .github/agent-docs/fallback-telemetry.md)
+    # requires every fail-open repair to stay observable through the shared
+    # counter instead of inventing a new one.
+    record_fallback(
+        component='other',
+        from_mode=dropped,
+        to_mode='none',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
 def _request(
     body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable'
 ) -> tuple[str, dict[str, object]]:
@@ -839,16 +854,20 @@ def _request(
             return
         assistant, unanswered, results = pending_assistant, pending_unanswered, pending_results
         pending_assistant, pending_unanswered, pending_results = None, set(), []
+        if not translated:
+            # The conversation must open with a user turn, so an assistant turn
+            # with nothing before it is dropped together with the tool results that
+            # already answered it — kept, they would arrive without their tool_use.
+            _record_history_repair(dropped='assistant_tool_round', reason='local_heal')
+            return
         if unanswered:
+            _record_history_repair(dropped='tool_use', reason='malformed')
             assistant['content'] = [
                 block
                 for block in cast(list[dict[str, object]], assistant['content'])
                 if block.get('id') not in unanswered
             ]
-        # The conversation must open with a user turn, so an assistant turn
-        # with nothing before it is dropped together with the tool results that
-        # already answered it — kept, they would arrive without their tool_use.
-        if assistant['content'] and translated:
+        if assistant['content']:
             translated.append(assistant)
             translated.extend(results)
 
@@ -898,6 +917,10 @@ def _request(
                 pending_unanswered = {cast(str, block['id']) for block in content if block['type'] == 'tool_use'}
             elif translated:
                 translated.append({'role': 'assistant', 'content': content})
+            else:
+                # A legal OpenAI history may open with an assistant turn; Anthropic
+                # requires the first message to use the user role, so it is dropped.
+                _record_history_repair(dropped='assistant_turn', reason='local_heal')
         elif role == 'tool':
             tool_call_id = message.get('tool_call_id')
             if not isinstance(tool_call_id, str):
@@ -907,6 +930,7 @@ def _request(
                 # the immediately preceding assistant turn; a result that lost
                 # its assistant half (client-side trimming, or a duplicate)
                 # must not reach the wire.
+                _record_history_repair(dropped='tool_result', reason='malformed')
                 continue
             pending_unanswered.discard(tool_call_id)
             pending_results.append(

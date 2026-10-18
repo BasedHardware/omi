@@ -133,9 +133,11 @@ def test_request_rejects_user_only_history_left_empty():
         _authorized_request({'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': ''}]})
 
 
-def test_request_drops_leading_assistant_turn():
+def test_request_drops_leading_assistant_turn(monkeypatch):
     # OpenAI-format histories may open with an assistant turn; Anthropic
     # rejects a first message that is not role user (400 invalid_request_error).
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
     _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
@@ -146,11 +148,22 @@ def test_request_drops_leading_assistant_turn():
         }
     )
     assert payload['messages'] == [{'role': 'user', 'content': 'hello'}]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'assistant_turn',
+            'to_mode': 'none',
+            'reason': 'local_heal',
+            'outcome': 'degraded',
+        }
+    ]
 
 
-def test_request_drops_leading_assistant_tool_round_with_its_results():
+def test_request_drops_leading_assistant_tool_round_with_its_results(monkeypatch):
     # A leading assistant tool round cannot be repaired by keeping the results:
     # Anthropic would reject them as orphaned once their tool_use is gone.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
     with pytest.raises(desktop_chat._RequestValidationError):
         _authorized_request(
             {
@@ -166,12 +179,23 @@ def test_request_drops_leading_assistant_tool_round_with_its_results():
                 ],
             }
         )
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'assistant_tool_round',
+            'to_mode': 'none',
+            'reason': 'local_heal',
+            'outcome': 'degraded',
+        }
+    ]
 
 
-def test_request_drops_tool_result_without_preceding_tool_use():
+def test_request_drops_tool_result_without_preceding_tool_use(monkeypatch):
     # Anthropic rejects a tool_result that answers no tool_use in the
     # immediately preceding assistant turn (400 invalid_request_error); a
     # client-side history trim can start the window on a tool message.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
     _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
@@ -186,11 +210,22 @@ def test_request_drops_tool_result_without_preceding_tool_use():
         {'role': 'user', 'content': 'question'},
         {'role': 'assistant', 'content': [{'type': 'text', 'text': 'answer'}]},
     ]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_result',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
 
 
-def test_request_strips_tool_use_whose_result_never_arrived():
+def test_request_strips_tool_use_whose_result_never_arrived(monkeypatch):
     # A trim that keeps the assistant tool-call turn but cuts its tool result
     # would leave an unanswered tool_use on the wire; the turn's text survives.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
     _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
@@ -210,11 +245,22 @@ def test_request_strips_tool_use_whose_result_never_arrived():
         {'role': 'assistant', 'content': [{'type': 'text', 'text': 'Let me check.'}]},
         {'role': 'user', 'content': 'any luck?'},
     ]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_use',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
 
 
-def test_request_strips_only_unanswered_tool_use_in_partial_round():
+def test_request_strips_only_unanswered_tool_use_in_partial_round(monkeypatch):
     # When one of two tool calls lost its result, the answered half of the
     # round stays intact and the unanswered half is removed.
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
     _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
@@ -236,9 +282,20 @@ def test_request_strips_only_unanswered_tool_use_in_partial_round():
     assert [block['id'] for block in payload['messages'][1]['content'] if block['type'] == 'tool_use'] == ['call_1']
     assert payload['messages'][2]['content'][0]['tool_use_id'] == 'call_1'
     assert payload['messages'][3]['content'] == [{'type': 'text', 'text': 'It is sunny.'}]
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_use',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
 
 
-def test_request_drops_duplicate_tool_result():
+def test_request_drops_duplicate_tool_result(monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
     _, payload = _authorized_request(
         {
             'model': 'omi-sonnet',
@@ -257,6 +314,15 @@ def test_request_drops_duplicate_tool_result():
     tool_results = [message for message in payload['messages'] if message['role'] == 'user'][1:]
     assert len(tool_results) == 1
     assert tool_results[0]['content'][0]['content'] == 'sunny'
+    assert fallbacks == [
+        {
+            'component': 'other',
+            'from_mode': 'tool_result',
+            'to_mode': 'none',
+            'reason': 'malformed',
+            'outcome': 'degraded',
+        }
+    ]
 
 
 def test_request_injects_web_search_for_desktop_opt_in():
