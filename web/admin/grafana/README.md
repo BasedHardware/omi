@@ -76,8 +76,12 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   `cost.net_day` / `cost.per_mau_month`): GCP net of committed-use credits minus
   one-time incident excess (a service-day ≥2× and ≥$500 over its 14-day median),
   Vertex LLM, OpenAI and Anthropic invoices, STT at $5.3K/month from the
-  Soniox console (October 2026, read 2026-10-16; no invoice feed yet, labelled
-  "STT est.") and SaaS at a fixed $4.8K/month ("SaaS est."), both amber. Unsourced lines are named in the reason, never dropped.
+  Soniox console (October 2026, read 2026-10-16; the dated fallback is labelled
+  "STT est.", while measured rows are labelled "STT measured") and SaaS from
+  complete, fresh Mercury daily aggregates, with the dated fixed $4.8K/month
+  fallback labelled "SaaS est.". Measured SaaS is labelled "SaaS measured
+  (Mercury)" and drawn as a solid blue-grey segment. Unsourced lines are named
+  in the reason, never dropped.
 - Cold-load rules match the wall and converge across Cloud Run instances
   (`lib/wall-series-store.ts`). Each leg's last-good value, retry schedule and
   the day's successful reads live in one doc in the admin Firestore payload cache

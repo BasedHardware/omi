@@ -558,6 +558,12 @@ environment_shared:
         BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+          value: 'false'
+          category: rollout
+        BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+          value: 'false'
+          category: rollout
         BATCH_PIPELINE_RECOVERY_MODE:
           value: 'off'
           category: rollout
@@ -1366,6 +1372,12 @@ environment_shared:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -1786,6 +1798,12 @@ environment_shared:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2171,6 +2189,12 @@ environment_shared:
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
+            value: 'false'
+            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
@@ -2488,6 +2512,12 @@ environment_shared:
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_HEAD_PRIORITY_ENABLED:
+            value: 'false'
+            category: rollout
+          BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
