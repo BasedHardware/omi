@@ -1743,9 +1743,23 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     # A read can reconcile a proven content completion without rewriting Redis,
     # binding a run lease or competing with the worker's terminal authority.
     from utils.sync.completed_status import get_completed_legacy_status
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
     try:
         completed = get_completed_legacy_status(job_id, uid, job)
+    except BatchPrivacyBlocked as error:
+        # A denied proof is not a failed read. Resume the pre-reconciliation
+        # contract (Redis status or expired/404), preserving its cleanup and
+        # stale-worker rules. Never turn a privacy denial into a synthetic ACK.
+        logger.warning('event=sync_status_reconciliation outcome=privacy_blocked fence_reason=%s', error.reason.value)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='durable_completion',
+            to_mode='redis_status',
+            reason='policy',
+            outcome='degraded',
+        )
+        completed = None
     except Exception as error:
         logger.error('event=sync_status_reconciliation outcome=retrying exception_type=%s', type(error).__name__)
         raise _sync_finalization_retrying()
