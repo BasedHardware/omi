@@ -2211,6 +2211,8 @@ environment_shared:
             category: rollout
         provisional: true
       backend-integration:
+        flags:
+          --timeout: 3600s
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET

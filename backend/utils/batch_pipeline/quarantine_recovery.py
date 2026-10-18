@@ -272,19 +272,34 @@ class QuarantineRecovery:
             return 'cancelled'
         except ProjectionBlocked:
             return 'held'
+        except Exception as error:
+            # A lost create-task acknowledgement can race delivery. Both paths
+            # adopt the SAME intent; only RecoveryStore.start may spend it.
+            logger.warning(
+                'event=batch_quarantine_recovery action=dispatch outcome=inline exception_type=%s',
+                type(error).__name__,
+            )
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='cloud_tasks',
+                to_mode='inline',
+                reason='enqueue_failed',
+                outcome='degraded',
+            )
+            return self.recover(segment_id, owner_id)
 
     def _dispatch(self, segment_id, owner_id):
         if not recovery_enabled_for(owner_id):
             return 'disabled'
         # prepare() is the existing durable privacy/ownership fence. Enqueue
-        # acknowledgement loss never spends the intent; only the HTTP handler
-        # may transition prepared -> running and invoke the provider.
+        # acknowledgement loss never spends the intent. The HTTP handler or
+        # inline fallback must win prepared -> running before a provider call.
         job = self.protocol.prepare(segment_id, owner_id, self.clock())
         if job is None:
             return 'held'
         if job['recovery_state'] == 'running':
             return self.recover(segment_id, owner_id)  # Artifact reconciliation only.
-        audience = os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip()
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         target = urlsplit(audience)
         if (
             target.scheme != 'https'

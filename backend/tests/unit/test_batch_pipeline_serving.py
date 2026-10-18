@@ -323,6 +323,7 @@ async def test_recovery_request_awaits_paid_intent_before_response_and_projectio
 
     _, store = api
     service = routes.serving_for_stage('dev')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     entered, release = threading.Event(), threading.Event()
 
     def recover(segment, owner):
@@ -364,10 +365,14 @@ def test_recovery_invoker_cannot_gain_worker_authority(monkeypatch, path, expect
     from starlette.requests import Request
     from utils import cloud_tasks
 
-    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', 'https://worker.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://integration.run.app')
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', 'worker-sa')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'tasks-sa')
     verify = Mock(return_value=0)
     monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verify)
     module.verify_worker(Request({'type': 'http', 'path': path, 'headers': []}))
     assert verify.call_args.kwargs['invoker_sa'] == expected
+    assert verify.call_args.kwargs['audience'] == (
+        'https://integration.run.app' if expected == 'tasks-sa' else 'https://worker.run.app'
+    )

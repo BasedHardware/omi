@@ -9,6 +9,8 @@ raises and verification returns 403 — the handler ships in the shared image
 to services that must never accept task traffic. A caller that has already
 staged audio must not start an inline worker after an enqueue exception: a
 lost create-task acknowledgement can mean the deterministic named task exists.
+Quarantine recovery is separately fenced by RecoveryStore.start: its task and
+inline fallback adopt the same paid token and cannot both invoke the provider.
 """
 
 from config import audio_archive
