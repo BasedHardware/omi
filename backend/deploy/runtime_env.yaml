@@ -35,8 +35,8 @@ environments:
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -329,9 +329,9 @@ environments:
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -364,8 +364,8 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -747,8 +747,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -957,9 +957,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -1029,8 +1029,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -1258,9 +1258,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -1326,8 +1326,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -1540,9 +1540,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -1604,8 +1604,8 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'false', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
@@ -1766,9 +1766,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -2313,8 +2313,8 @@ environments:
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -2603,9 +2603,9 @@ environments:
           BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -2715,8 +2715,8 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -3056,8 +3056,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3263,9 +3263,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -3425,8 +3425,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -3651,9 +3651,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -3797,8 +3797,8 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
@@ -4008,9 +4008,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
@@ -4150,8 +4150,8 @@ environments:
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
-            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+            FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
@@ -4309,9 +4309,9 @@ environments:
             BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'false', category: rollout}
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
-            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
