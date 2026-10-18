@@ -911,6 +911,32 @@
         "same-LB-stream storm and nonstorm partitions preserve unrelated errors without a blanket mute",
         "collector or datastore retirement never happens through these preparation sources"
       ]
+    },
+    {
+      "id": "batch_pipeline_capacity_sim",
+      "risk": "high",
+      "sources": [
+        "backend/testing/pipeline_sim/**",
+        "backend/utils/batch_pipeline/scheduler.py",
+        "backend/utils/batch_pipeline/pump.py",
+        "backend/utils/batch_pipeline/serving.py",
+        "backend/utils/batch_pipeline/merge.py",
+        "backend/utils/batch_pipeline/quarantine_recovery.py",
+        "backend/utils/batch_pipeline/recovery_disposition.py",
+        "backend/utils/batch_pipeline/admission.py",
+        "backend/diarizer/batch_pipeline.py"
+      ],
+      "tests": [
+        "tests/unit/test_pipeline_sim.py",
+        "tests/unit/test_pipeline_sim_scenarios.py",
+        "tests/unit/test_pipeline_sim_revision.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "a healthy mixed fleet passes the fleet-gate outcome metrics in the virtual-clock simulation",
+        "known production capacity failures (serial per-owner burst, provider exhaustion, summaries behind transcription, revision drain) still reproduce, so a fix shows up as a verdict change",
+        "privacy-blocked and deleted targets never spend paid recovery calls"
+      ]
     }
   ]
 }

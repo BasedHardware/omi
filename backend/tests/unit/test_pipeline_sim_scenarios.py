@@ -1,0 +1,84 @@
+"""Each named scenario reproduces its production phenomenon on the simulated pipeline (seeded)."""
+
+from testing.pipeline_sim.scenarios import run
+from testing.pipeline_sim.workload import NORMAL, PRIVACY_AT_ADMISSION
+
+
+def test_burst_owner_drains_serially_and_breaches_the_15_minute_obligation():
+    serial = run('burst_owner_serial_sequencer', 1)
+    assert serial['verdict'] == 'GATE_FAIL obligation_over_15m'
+    assert serial['sim']['sequencer']['max_active_per_owner'] == 1
+    assert serial['sim']['sequencer']['max_pending_per_owner'] >= 360
+    # ~365 sequential jobs: the last capture waits hours, not minutes.
+    assert serial['sim']['accept_to_projection_max_seconds'] > 2 * 3600
+
+    widened = run('burst_owner_serial_sequencer', 1, per_owner_concurrency=32)
+    assert widened['verdict'] == 'GATE_PASS'
+    assert widened['sim']['accept_to_projection_max_seconds'] < 15 * 60
+
+
+def test_mixed_fleet_steady_passes_every_gate():
+    sample = run('mixed_fleet_steady', 1)
+    assert sample['verdict'] == 'GATE_PASS'
+    assert sample['sim']['completion_rate'] == 1.0
+    assert sample['sim']['job_states'] == {'committed': sample['admissions']}
+    assert sample['sim']['accept_to_projection_p95_seconds'] < 120
+    assert sample['sim']['max_paid_calls_per_segment'] <= 1
+
+
+def test_provider_exhaustion_turns_empty_asr_into_paid_recovery_and_a_quarantine_tail():
+    sample = run('provider_exhaustion_window', 1)
+    sim = sample['sim']
+    assert sample['quarantine_projection_cohort_count'] >= 20  # above the gate's low-sample floor
+    assert sample['quarantine_projection_p95_seconds'] > 300
+    assert sample['verdict'] == 'GATE_FAIL quarantine_projection_p95_over_5m'
+    # Every quarantine spent exactly one paid call (the durable intent is never reissued).
+    assert sim['paid_fallback_calls'] == sample['quarantine_projection_cohort_count']
+    assert sim['max_paid_calls_per_segment'] == 1
+    assert set(sim['recovery_states']) <= {'recovered', 'failed_held'}
+    assert sum(sim['recovery_states'].values()) == sim['paid_fallback_calls']
+    assert sim['recovery_states']['recovered'] >= 0.95 * sim['paid_fallback_calls']
+
+
+def test_stale_finalize_targets_are_neither_failures_nor_paid():
+    sample = run('stale_finalize_targets', 1)
+    sim = sample['sim']
+    assert sample['verdict'] == 'GATE_PASS'
+    assert sim['excluded_uploads'].get('deleted_target', 0) > 0
+    assert sim['paid_fallback_calls_on_excluded_segments'] == 0
+    assert sim['paid_fallback_calls_after_privacy_fence'] == 0
+    # Duplicate uploads and duplicate worker/recovery deliveries never double-spend or double-commit.
+    assert sim['counters']['duplicate_uploads_deduplicated'] > 0
+    assert sim['max_paid_calls_per_segment'] <= 1
+    assert sample['errors'] == 0 and sim['completion_rate'] == 1.0
+
+
+def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge():
+    sample = run('stale_finalize_targets', 1, overrides={'purge_on_fence': False})
+    states = sample['sim']['job_states']
+    assert states.get('privacy_blocked', 0) > 0 and states.get('result_ready', 0) > 0
+    assert sample['projection_obligations_over_15m'] > 0
+
+
+def test_privacy_blocked_users_get_no_paid_calls_or_projection_and_are_reported_distinctly():
+    sample = run('privacy_blocked_users', 1)
+    sim = sample['sim']
+    assert sim['upload_status']['rejected_privacy'] > 0
+    assert sim['paid_fallback_calls_by_owner_kind'].get(PRIVACY_AT_ADMISSION, 0) == 0
+    assert sim['paid_fallback_calls_after_privacy_fence'] == 0
+    assert sim['counters']['purged_jobs'] > 0
+    assert sim['paid_fallback_calls_by_owner_kind'][NORMAL] > 0
+    assert sim['excluded_uploads'].get('privacy_blocked', 0) > 0
+    assert sample['verdict'] == 'GATE_PASS'
+
+
+def test_first_summaries_queue_behind_transcription_on_the_shared_executor():
+    shared = run('summary_behind_transcription', 1)
+    isolated = run('summary_behind_transcription', 1, summary_pool='isolated')
+    assert shared['verdict'] == 'GATE_FAIL first_summary_deadline'
+    assert shared['first_summary_breach_rate'] > 0.05
+    assert isolated['verdict'] == 'GATE_PASS'
+    assert isolated['first_summary_deadline_breaches'] == 0
+    shared_wait = shared['sim']['executors']['sync_executor']['p95_wait_seconds']['summary']
+    isolated_wait = isolated['sim']['executors']['summary']['p95_wait_seconds']['summary']
+    assert shared_wait > 60 > isolated_wait
