@@ -223,14 +223,12 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     processing one, and nothing else will finalize it either.
 
     Returns whether the terminal state is assured: ``True`` once the job is
-    failed, was already terminal, vanished (its own expiry owns recovery), a
-    live run lock names another writer that owns the terminal write, or a
-    lost terminalization CAS has settled terminal/absent by the re-read;
-    ``False`` for transient Redis read/write failures — or a lost CAS whose
-    re-read still shows a nonterminal job — which the caller must retry
-    before releasing the owner: after the release no sweep retains an
-    identity for this job, so a skipped handoff would strand the accepted
-    job and its durable claim until the TTL.
+    failed, was already terminal, vanished (its own expiry owns recovery), or
+    a live run lock names another writer that owns the terminal write;
+    ``False`` only for transient Redis read/write failures, which the caller
+    must retry before releasing the owner — after the release no sweep
+    retains an identity for this job, so a skipped handoff would strand the
+    accepted job and its durable claim until the TTL.
     """
     try:
         job = get_sync_job(job_id)
@@ -245,6 +243,26 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
         return True
     if job.get('status') not in ('processing', 'queued'):
         return True
+    # A still-future deferred_until marker means the chain's final scheduled
+    # replacement has not run yet: the persisted count denotes a successfully
+    # enqueued next attempt, not a completed one, and the replacement is
+    # deliberately delayed past this lease (RUN_LOCK_TTL + 60s) — so the sweep
+    # normally lands here first. Terminalizing now would make that already
+    # paid-for final delivery a stale epoch the moment the lane advances.
+    # Sequenced jobs are exempt from stale polling, so nothing else would ever
+    # finalize the job: keep the owner and re-check after the marker horizon.
+    # This check precedes the run-lock fence on purpose — releasing the owner
+    # while the marker is live strands the job even if an attempt holds the
+    # lock, because a capped attempt can no longer defer to re-arm the chain.
+    raw_marker = job.get('deferred_until')
+    marker_until = (
+        float(raw_marker) if isinstance(raw_marker, (int, float)) and not isinstance(raw_marker, bool) else None
+    )
+    if marker_until is not None and time.time() < marker_until:
+        logger.info(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=replacement_pending job_id=%s', job_id
+        )
+        return False
     if sync_job_run_lock_present(job_id):
         # An attempt still holds the run lock under the released lease: its
         # own terminal write (or its deferral) must win, never the sweep's.
@@ -266,26 +284,27 @@ def _finalize_abandoned_budget_chain_job(job_id: str) -> bool:
     if finalized is not None:
         logger.error('event=sync_uid_sequencer action=budget_chain_finalize outcome=failed job_id=%s', job_id)
         return True
-    # A lost CAS is not an assured handoff: detached work kept the job
-    # nonterminal through every retry. Re-read and accept only a job that has
-    # since settled — terminal or gone. Otherwise return False so the caller
-    # retains the owner and the next sweep retries; status polling never
-    # stale-finalizes sequenced dispatch, so releasing here could strand a
-    # nonterminal job until the Redis TTL despite the claimed terminal handoff.
+    # CAS lost: the terminal write did not apply while the job read
+    # nonterminal. Accept only a re-read that proves terminality or absence —
+    # releasing the owner on a lost CAS would strand the accepted job (no
+    # sweep identity remains, polls never stale-finalize sequenced jobs)
+    # until the Redis TTL despite the claimed handoff.
     try:
         settled = get_sync_job(job_id)
     except Exception as error:
         logger.error(
-            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_reread_failed '
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_verify_failed '
             'job_id=%s exception_type=%s',
             job_id,
             type(error).__name__,
         )
         return False
     if isinstance(settled, dict) and settled.get('status') not in TERMINAL_STATUSES:
-        logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
+        logger.warning(
+            'event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost_nonterminal job_id=%s', job_id
+        )
         return False
-    logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost_settled job_id=%s', job_id)
+    logger.warning('event=sync_uid_sequencer action=budget_chain_finalize outcome=cas_lost job_id=%s', job_id)
     return True
 
 
@@ -369,22 +388,16 @@ def reconcile_uid(
         outcome == 'lease_expired'
         and isinstance(deferrals, int)
         and not isinstance(deferrals, bool)
-        and deferrals >= get_sync_tasks_max_attempts()
+        and deferrals + 1 >= get_sync_tasks_max_attempts()
     ):
-        # Only the final delivery's own exhaustion persists this count: the
-        # handler notes deferrals+1 when scheduling each replacement and the
-        # cap itself only when that last whole-budget run expired through the
-        # 409/queue. A count below the cap therefore means the final scheduled
-        # replacement may not have run yet — the lease normally lapses before
-        # its delay elapses, and capping there would mark the job failed and
-        # make that already-enqueued final replacement stale, so those counts
-        # keep redriving instead. At the cap a redrive would copy the maxed
-        # count into a fresh epoch payload and run another full budget, then
-        # redrive again — forever. Backfill allows one in-flight job per UID,
-        # so that loop would also block every later capture for this user.
-        # Release the owner and dispatch the next waiting capture instead; the
-        # deferred job's own marker/lock expiry leaves it to the same recovery
-        # as any other abandoned attempt.
+        # The handler's own bound already refused the next replacement at this
+        # count (its final whole-budget run ends through the 409/queue), so a
+        # redrive would copy the maxed count into a fresh epoch payload and run
+        # another full budget, then redrive again — forever. Backfill allows
+        # one in-flight job per UID, so that loop would also block every later
+        # capture for this user. Release the owner and dispatch the next
+        # waiting capture instead; the deferred job's own marker/lock expiry
+        # leaves it to the same recovery as any other abandoned attempt.
         logger.error(
             'event=sync_uid_sequencer action=sweep outcome=budget_chain_exhausted job_id=%s uid_hash=%s deferrals=%d',
             job_id,

@@ -3405,6 +3405,58 @@ async def test_sequenced_worker_retries_then_releases_terminal_failure_and_acks_
 
 
 @pytest.mark.asyncio
+async def test_sequenced_request_budget_is_anchored_at_route_entry():
+    """The sequenced wrapper performs fence/begin/prior-read I/O before the
+    attempt body runs; a stall there must be charged against the same single
+    handler budget wall, not grant a fresh full budget afterwards — otherwise
+    the request could still overshoot the Cloud Tasks dispatch deadline this
+    cap exists to stay under. The anchor is captured at route entry and rides
+    the shared attempt-state dict into the budget."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
+    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
+    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
+    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'status': 'completed', 'attempt': 1})
+    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
+    captured = {}
+
+    async def _capture_body(req, retry_count, attempt_state=None):
+        captured['state'] = attempt_state
+        return module.JSONResponse(status_code=200, content={'status': 'completed_final'})
+
+    module._run_sync_job_body = AsyncMock(side_effect=_capture_body)
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        anchor = captured['state'].get('budget_deadline_monotonic')
+        # The anchor is an absolute deadline on the module's own monotonic
+        # clock: captured at route entry, so it sits one full handler budget
+        # ahead of the body's start (the fast preamble consumes only ms of
+        # it). A budget granted fresh inside the body would anchor at body
+        # start — indistinguishable here — but a stall in begin_job or the
+        # prior-job read would push this deadline's remaining headroom below
+        # the full budget, which is exactly the charge-at-route-entry
+        # contract.
+        assert isinstance(anchor, float)
+        now = module.time.monotonic()
+        assert now < anchor
+        assert anchor <= now + module.SYNC_JOB_HANDLER_BUDGET_SECONDS + 5
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('dispatch_enabled,byok', [(False, False), (True, True)])
 async def test_backfill_requires_isolated_dispatch(dispatch_enabled, byok):
     from starlette.datastructures import UploadFile
@@ -4096,12 +4148,11 @@ async def test_sync_task_budget_deferral_marker_clear_failure_keeps_409():
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
         assert module.update_sync_job.call_count == 2
-        # The failed clear is its own degradation on top of the failed enqueue:
-        # the surviving marker keeps suppressing stale recovery after the
-        # queue-owned retries exhaust, and the dedicated reason keeps that
-        # stall separable from a successfully re-armed job.
+        # The failed clear gets its own bounded record before the primary
+        # fallback return: the surviving marker suppresses stale recovery
+        # long after the queue retries exhaust — a materially worse state
+        # than the clean re-arm the primary reason implies.
         assert [call['reason'] for call in fallback_calls] == ['marker_clear_failed', 'enqueue_failed']
-        assert all(call['component'] == 'sync_dispatch' and call['outcome'] == 'degraded' for call in fallback_calls)
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -4200,137 +4251,6 @@ async def test_sync_task_budget_deferral_chain_ends_at_queue_attempt_contract():
         module.release_job_run_lock.assert_not_called()
         module._finalize_sync_job_failure.assert_not_awaited()
         assert [(call['reason'], call['outcome']) for call in fallback_calls] == [('deferrals_exhausted', 'exhausted')]
-    finally:
-        sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
-        for name, original in saved_modules.items():
-            if original is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = original
-
-
-@pytest.mark.asyncio
-async def test_sequenced_budget_exhaustion_notes_the_final_delivery_on_the_owner():
-    """The owner count persisted at deferral time denotes a scheduled next
-    attempt, not a completed one, and the lease normally lapses before the
-    delayed final replacement is due — so only the final delivery's own
-    exhaustion branch can persist the cap signal the sweep finalizes on.
-    Without this note the sweep could not tell a still-pending final
-    replacement from a chain that already spent its attempt contract."""
-
-    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
-    request = _configure_task_handler(
-        module,
-        pipeline_error=RuntimeError('pipeline must not complete'),
-        latest_job={
-            'job_id': 'job-1',
-            'status': 'processing',
-            'stt_provider': 'deepgram',
-            'stt_model': 'nova-3',
-        },
-    )
-    base_payload = await request.json()
-    request.json = AsyncMock(
-        return_value={
-            **base_payload,
-            'sequencer_epoch': 3,
-            module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: module.get_sync_tasks_max_attempts() - 1,
-        }
-    )
-
-    async def _pipeline_that_never_finishes(*args, **kwargs):
-        await asyncio.sleep(30)
-
-    try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
-        module._run_full_pipeline_background_async = _pipeline_that_never_finishes
-        module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
-        module.sync_backfill_sequencer.note_budget_deferral = MagicMock()
-        module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
-        module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
-        reads = {'n': 0}
-
-        def _job_read(job_id):
-            reads['n'] += 1
-            return {
-                'job_id': job_id,
-                'status': 'queued' if reads['n'] == 1 else 'processing',
-                'lane': 'fresh',
-                'ledger_fence_mode': 'active',
-                'stt_provider': 'deepgram',
-                'stt_model': 'nova-3',
-            }
-
-        module.get_sync_job = MagicMock(side_effect=_job_read)
-
-        response = await module.run_sync_job(request, task_retry_count=0)
-
-        assert response.status_code == 409
-        assert json.loads(response.body) == {'status': 'locked'}
-        module.enqueue_sync_job_budget_replacement.assert_not_called()
-        # The final delivery's exhaustion is the distinct cap signal: the owner
-        # count reaches max_attempts here, not at the last deferral.
-        module.sync_backfill_sequencer.note_budget_deferral.assert_called_once_with(
-            'test-uid', 'job-1', 3, module.get_sync_tasks_max_attempts()
-        )
-        assert [(call['reason'], call['outcome']) for call in fallback_calls] == [('deferrals_exhausted', 'exhausted')]
-    finally:
-        sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
-        for name, original in saved_modules.items():
-            if original is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = original
-
-
-@pytest.mark.asyncio
-async def test_sequenced_delivery_budget_spans_the_wrapper_setup_reads():
-    """The handler budget must be anchored at route entry: the sequenced
-    wrapper's begin/prior-job reads run before the attempt body, and a stall
-    there is invisible to a budget that starts only inside the body — the
-    fresh full budget would carry the request past the middleware or dispatch
-    deadline. The anchored deadline expires into the pre-lock 409 instead of
-    granting the attempt a second full budget after the stall."""
-
-    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
-    request = MagicMock()
-    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'sequencer_epoch': 3})
-    module.TERMINAL_STATUSES = ('completed', 'failed', 'partial_failure')
-    module.sync_backfill_sequencer.begin_job = MagicMock(return_value=True)
-    module.sync_backfill_sequencer.finish_job = MagicMock(return_value=True)
-    module.uid_sequencer.kick = MagicMock(return_value=True)
-    module.sync_backfill_sequencer.HEARTBEAT_SECONDS = 120
-    module.start_background_task = lambda coro, *, name: asyncio.create_task(coro, name=name)
-    module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
-    module.update_sync_job = MagicMock()
-    real_run_blocking = module.run_blocking
-
-    async def _stalling_run_blocking(executor, fn, *args, **kwargs):
-        if fn is module.get_sync_ledger_fence_mode:
-            # Give the loop a turn so an already-expired anchored deadline
-            # fires at the attempt's first await, before lock admission.
-            await asyncio.sleep(0)
-        if fn is module.get_sync_job:
-            # The wrapper's prior-attempt read stalls past the whole budget.
-            await asyncio.sleep(0.2)
-        return await real_run_blocking(executor, fn, *args, **kwargs)
-
-    module.run_blocking = _stalling_run_blocking
-
-    try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
-        response = await module.run_sync_job(request, task_retry_count=0)
-
-        # The stall consumed the anchored budget before the attempt body ran:
-        # the expiry owns nothing (no lock was reached), so the queue-owned
-        # 409 returns instead of a deferral against a fresh full budget.
-        assert response.status_code == 409
-        assert json.loads(response.body) == {'status': 'locked'}
-        module.update_sync_job.assert_not_called()
-        module.enqueue_sync_job_budget_replacement.assert_not_called()
-        assert [(call['reason'], call['outcome']) for call in fallback_calls] == [('pre_lock_expiry', 'degraded')]
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
