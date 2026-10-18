@@ -55,6 +55,7 @@ def boundary(monkeypatch):
     byok.get_byok_uid = Mock(return_value='user')
     funded = ModuleType('utils.funded_processing')
     funded.processing_allowed = Mock(return_value=False)
+    funded.consent_allows = Mock(return_value=True)
     with stub_modules({'utils.byok': byok, 'utils.funded_processing': funded}):
         generated = load_module_fresh('utils.generated_compute', str(BACKEND / 'utils/generated_compute.py'))
         plan = SimpleNamespace(value='basic')
