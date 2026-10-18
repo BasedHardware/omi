@@ -94,6 +94,7 @@ Future<void> _delete(File file) async {
 }
 
 ImageProvider _cachedImage(String url, Map<String, String> headers) =>
+    // omi-perf-allow: unsized-network-image -- requested at display size, handed to Swift as PNG bytes
     CachedNetworkImageProvider(url, headers: headers);
 
 Future<Uint8List?> _pngBytes(ImageProvider provider) async {

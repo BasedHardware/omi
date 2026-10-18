@@ -71,13 +71,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   final AuthSessionSnapshot? _owner = AuthService.instance.captureSessionSnapshot();
   StreamSubscription<int>? _sessionEvents;
   bool _sessionChanged = false;
-
-  bool get _applies {
-    final owner = _owner;
-    return mounted && !_sessionChanged && (owner == null || AuthService.instance.isSessionSnapshotCurrent(owner));
-  }
-
-  Future<Wrapped2025Response?> _fetch() => (widget.fetchWrapped ?? getWrapped2025)();
+  void _update(VoidCallback update) => setState(update);
 
   @override
   void initState() {
@@ -156,47 +150,6 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         _status = WrappedStatus.notGenerated;
       });
     }
-  }
-
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      if (!_applies) {
-        timer.cancel();
-        return;
-      }
-      final response = await _fetch();
-      // A result for a disposed page or a previous account is never applied.
-      if (!_applies) {
-        timer.cancel();
-        return;
-      }
-      if (response != null) {
-        setState(() {
-          _status = response.status;
-          _result = response.result;
-          _error = response.error;
-          _progress = response.progress;
-        });
-
-        if (_status != WrappedStatus.processing) {
-          timer.cancel();
-          if (_status == WrappedStatus.done && _result != null) {
-            final totalHours = (_result?['total_time_hours'] ?? 0.0) as num;
-            final totalMinutes = (totalHours * 60).toInt();
-            final totalConvs = _result?['total_conversations'] ?? 0;
-            final daysActive = _result?['days_active'] ?? 0;
-            PlatformManager.instance.analytics.wrappedGenerationCompleted(
-              totalConversations: totalConvs,
-              totalMinutes: totalMinutes,
-              daysActive: daysActive,
-            );
-          } else if (_status == WrappedStatus.error) {
-            PlatformManager.instance.analytics.wrappedGenerationFailed(error: _error);
-          }
-        }
-      }
-    });
   }
 
   Future<void> _generateWrapped() async {

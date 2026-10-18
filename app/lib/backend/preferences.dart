@@ -23,6 +23,8 @@ import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
 
+part 'preferences_read.dart';
+
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
 class SharedPreferencesUtil {
@@ -1492,21 +1494,6 @@ class SharedPreferencesUtil {
   }
 
   //--------------------------- Setters & Getters -----------------------------//
-
-  // Native codecs decode arrays without preserving Dart generic arguments.
-  // Validate their elements before normalizing a string-list preference.
-  static bool _isStringList(Object value) => value is List && value.every((element) => element is String);
-
-  T _readOrDefault<T>(String key, T fallback) {
-    final value = _preferences?.get(key);
-    if (value == null) return fallback;
-    if (fallback is List<String> && _isStringList(value)) {
-      return List<String>.from(value as List) as T;
-    }
-    if (value is T) return value as T;
-    if (!PhysicalQualification.enabled) unawaited(_quarantine(key, value, reason: 'type_mismatch'));
-    return fallback;
-  }
 
   String getString(String key, {String defaultValue = ''}) =>
       PhysicalQualification.enabled ? _preferences?.getString(key) ?? defaultValue : _readOrDefault(key, defaultValue);

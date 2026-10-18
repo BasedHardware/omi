@@ -23,7 +23,6 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/home_bottom_bar.dart' show kAskOmiGlyph;
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
-
 part 'conversation_playback_native.dart';
 
 enum ConversationBottomBarMode {
@@ -81,8 +80,7 @@ class ConversationBottomBar extends StatefulWidget {
   /// and records the reader's pending wall position across bar remounts.
   final ConversationPlaybackController? playbackController;
 
-  /// Presentation only. The same player, timeline mapper and retry owner service
-  /// native controls; callbacks are published after layout and must be idempotent.
+  /// Presentation only, over the same player, timeline mapper and retry owner. Called after layout; must be idempotent.
   final ValueChanged<List<NativeRow>>? onNativePresentation;
 
   const ConversationBottomBar({

@@ -865,6 +865,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             fallback: OmiSheetScaffold(
                 title: _blockTitle(block),
                 child: ListView(
+                  // omi-perf-allow: shrink-wrap-list -- one recording block's files, as the classic sheet below
                   shrinkWrap: true,
                   children: [for (final wal in wals) _walRow(wal)],
                 )),
