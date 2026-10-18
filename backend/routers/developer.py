@@ -1,5 +1,6 @@
 from models.developer_transcript import SimpleTranscriptSegment
 import json
+import math
 import uuid
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -456,17 +457,31 @@ def search_memories_vector(
         )
 
     matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
-    items = [
-        {
-            'id': match.memory.id,
-            'content': match.memory.content,
-            'category': (
-                match.memory.category.value if hasattr(match.memory.category, 'value') else match.memory.category
-            ),
-            'relevance_score': round(match.score, 4),
-        }
-        for match in matches
-    ]
+    items = []
+    for match in (matches or []):
+        if match is None or getattr(match, 'memory', None) is None:
+            continue
+        memory = match.memory
+        raw_score = getattr(match, 'score', 0.0)
+        try:
+            val = float(raw_score) if raw_score is not None else 0.0
+            if math.isnan(val) or math.isinf(val):
+                score = 0.0
+            else:
+                score = round(val, 4)
+        except (TypeError, ValueError):
+            score = 0.0
+        category_attr = getattr(memory, 'category', 'other')
+        raw_cat = getattr(category_attr, 'value', category_attr)
+        category_val = str(raw_cat if raw_cat is not None else 'other').strip() or 'other'
+        items.append(
+            {
+                'id': str(getattr(memory, 'id', None) or getattr(memory, 'memory_id', None) or ''),
+                'content': str(getattr(memory, 'content', '') or ''),
+                'category': category_val,
+                'relevance_score': score,
+            }
+        )
     return {
         'items': items,
         'effective_limit': min(limit, 20),

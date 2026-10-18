@@ -5,6 +5,7 @@ from contextvars import ContextVar
 import hashlib
 import json
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -400,17 +401,48 @@ def _legacy_read_memories(uid: str, *, limit: int = 100, offset: int = 0) -> Lis
     return _validate_memory_list(memories)
 
 
+def _is_truthy_flag(val: Any) -> bool:
+    if val is True:
+        return True
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return val == 1
+    if isinstance(val, bytes):
+        try:
+            val = val.decode("utf-8", errors="ignore")
+        except Exception:
+            return False
+    if isinstance(val, str):
+        return val.lower().strip() in {"true", "1", "yes"}
+    return False
+
+
 def _memory_ids_and_scores(
-    matches: List[MemoryPayload],
+    matches: Any,
 ) -> tuple[List[str], Dict[str, float]]:
     memory_ids: List[str] = []
     scores_by_id: Dict[str, float] = {}
+    if not isinstance(matches, (list, tuple)):
+        return memory_ids, scores_by_id
     for match in matches:
-        memory_id = match.get("memory_id")
-        if not isinstance(memory_id, str) or not memory_id:
+        if isinstance(match, dict):
+            memory_id = match.get("memory_id")
+            raw_score = match.get("score")
+        else:
+            memory_id = getattr(match, "memory_id", None)
+            raw_score = getattr(match, "score", None)
+        if not isinstance(memory_id, str) or not memory_id.strip():
             continue
-        memory_ids.append(memory_id)
-        scores_by_id[memory_id] = float(match.get("score") or 0)
+        clean_id = memory_id.strip()
+        memory_ids.append(clean_id)
+        try:
+            val = float(raw_score) if raw_score is not None else 0.0
+            if math.isnan(val) or math.isinf(val):
+                val = 0.0
+            scores_by_id[clean_id] = val
+            scores_by_id[memory_id] = val
+        except (TypeError, ValueError):
+            scores_by_id[clean_id] = 0.0
+            scores_by_id[memory_id] = 0.0
     return memory_ids, scores_by_id
 
 
@@ -425,23 +457,58 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
         return []
 
     memories_data = memory_store_read(memories_db.get_memories_by_ids, uid, memory_ids)
-    memories_data = [
-        memory_api_payload(memory, MemoryApiExposure.LEGACY)
-        for memory in memories_data
-        if not memory.get("is_locked", False)
-    ]
+    if not memories_data:
+        return []
+
+    valid_memories = []
+    for memory in memories_data:
+        if not isinstance(memory, dict):
+            continue
+        if memory.get("is_locked", False):
+            continue
+        raw_status = memory.get("status")
+        status = str(getattr(raw_status, "value", raw_status) or "").lower().strip()
+        raw_redaction = memory.get("redaction_status")
+        redaction_status = str(getattr(raw_redaction, "value", raw_redaction) or "").lower().strip()
+        raw_source_state = memory.get("source_state")
+        source_state = str(getattr(raw_source_state, "value", raw_source_state) or "").lower().strip()
+        if (
+            status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
+            or redaction_status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
+            or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
+            or _is_truthy_flag(memory.get("deleted"))
+            or _is_truthy_flag(memory.get("is_deleted"))
+            or _is_truthy_flag(memory.get("tombstoned"))
+            or _is_truthy_flag(memory.get("is_tombstoned"))
+            or _is_truthy_flag(memory.get("soft_deleted"))
+            or _is_truthy_flag(memory.get("is_soft_deleted"))
+            or _is_truthy_flag(memory.get("purged"))
+            or _is_truthy_flag(memory.get("is_purged"))
+        ):
+            continue
+        payload = cast(Any, memory_api_payload(memory, MemoryApiExposure.LEGACY))
+        if isinstance(payload, dict):
+            valid_memories.append(payload)
 
     results: List[MemorySearchMatch] = []
-    for memory_data in memories_data:
+    for memory_data in valid_memories:
         memory_id = memory_data.get("id")
-        if not isinstance(memory_id, str):
+        if not isinstance(memory_id, str) or not memory_id.strip():
             continue
         try:
             memory_obj = _legacy_memorydb(memory_data)
-        except ValidationError:
+        except (ValidationError, TypeError, ValueError, AttributeError, KeyError):
             continue
-        results.append(MemorySearchMatch(memory=memory_obj, score=scores_by_id.get(memory_id, 0.0)))
-    return results
+        clean_id = memory_id.strip()
+        score_val: Any = scores_by_id.get(clean_id, scores_by_id.get(memory_id, 0.0))
+        try:
+            score = float(score_val) if score_val is not None else 0.0
+            if math.isnan(score) or math.isinf(score):
+                score = 0.0
+        except (TypeError, ValueError):
+            score = 0.0
+        results.append(MemorySearchMatch(memory=memory_obj, score=score))
+    return results[:capped_limit]
 
 
 class LegacyMemoryBackend:

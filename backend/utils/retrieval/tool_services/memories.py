@@ -15,6 +15,7 @@ from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 _MEMORY_TRUNCATION_RESERVE = 256
@@ -248,8 +249,11 @@ def search_memories_text(
         matches = MemoryService(db_client=firestore_db).search(uid, query, **search_kwargs)
         matches = [
             match
-            for match in matches
-            if not match.memory.is_locked and not (belief_model_enabled() and memory_use_suppressed(match.memory))
+            for match in (matches or [])
+            if match is not None
+            and getattr(match, 'memory', None) is not None
+            and not getattr(match.memory, 'is_locked', False)
+            and not (belief_model_enabled() and memory_use_suppressed(match.memory))
         ]
         if not matches:
             return f"No memories found matching '{query}'."
@@ -258,7 +262,17 @@ def search_memories_text(
             memory = match.memory
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
             date_str = format_date(display_date, clock) if display_date else 'Unknown'
-            suffix = f"relevance: {match.score:.2f}, category: {memory.category.value}, date: {date_str}"
+            raw_score = getattr(match, 'score', 0.0)
+            try:
+                score_val = float(raw_score) if raw_score is not None else 0.0
+                if math.isnan(score_val) or math.isinf(score_val):
+                    score_val = 0.0
+            except (TypeError, ValueError):
+                score_val = 0.0
+            category_attr = getattr(memory, 'category', 'other')
+            raw_cat = getattr(category_attr, 'value', category_attr)
+            category_val = str(raw_cat if raw_cat is not None else 'other').strip() or 'other'
+            suffix = f"relevance: {score_val:.2f}, category: {category_val}, date: {date_str}"
             if effective_view != 'released':
                 band = getattr(memory, 'currency_band', None)
                 evidence_date = getattr(memory, 'as_of', None)
@@ -272,7 +286,7 @@ def search_memories_text(
                     suffix += ", historical: true"
             records.append(
                 format_memory_evidence(
-                    memory.content,
+                    getattr(memory, 'content', '') or '',
                     suffix=suffix,
                     subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
                 )
@@ -289,15 +303,22 @@ def search_memories_text(
         if source_sink is not None:
             # Structured client source metadata; not model-facing prose.
             for index in included_indices[:128]:
-                memory = matches[index].memory
+                if not (0 <= index < len(matches)):
+                    continue
+                match = matches[index]
+                if match is None or getattr(match, 'memory', None) is None:
+                    continue
+                memory = match.memory
+                raw_source_id = getattr(memory, 'memory_id', None) or getattr(memory, 'id', None) or 'unknown'
+                source_id_str = str(raw_source_id).strip() if raw_source_id is not None and str(raw_source_id).strip() else 'unknown'
                 source_sink.append(
                     {
                         'kind': 'memory',
-                        'source_id': memory.memory_id or memory.id,
+                        'source_id': source_id_str,
                         'title': 'Memory',
-                        'preview': str(memory.content or '')[:600],
+                        'preview': str(getattr(memory, 'content', '') or '')[:600],
                         'created_at': safe_isoformat(
-                            _memory_read_date(memory, temporal=effective_view != 'released') or memory.created_at
+                            _memory_read_date(memory, temporal=effective_view != 'released') or getattr(memory, 'created_at', None)
                         ),
                     }
                 )
