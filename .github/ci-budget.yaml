@@ -1123,6 +1123,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
+      "budget_p50_minutes": 10,
+      "display_name": "Deploy NEG coverage exporter",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "helm-upgrade",
+      "owner": "Omi backend maintainers",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
       "budget_p50_minutes": 5,
       "display_name": "helm-upgrade",

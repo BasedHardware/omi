@@ -429,6 +429,53 @@ def test_backend_listen_neg_zone_coverage_and_socket_skew_alerts():
     assert skew["labels"]["severity"] == "warning"
 
 
+def test_backend_listen_neg_endpoint_coverage_exporter_alerts():
+    split = _rules(ALERT_SOURCES / "transcription-services.json")
+    combined = _rules(MONITORING / "alert-rules.json")
+    expected = {
+        "omi-listen-neg-endpoint-coverage",
+        "omi-listen-neg-endpoints-unattached",
+        "omi-listen-neg-exporter-stale",
+    }
+
+    assert expected <= split.keys()
+    assert expected <= combined.keys()
+    for uid in expected:
+        rule = split[uid]
+        assert rule == combined[uid]
+        assert rule["data"][0]["datasourceUid"] == "prometheus"
+        assert rule["labels"]["alert_identity"] == uid
+
+    coverage = split["omi-listen-neg-endpoint-coverage"]
+    coverage_expr = coverage["data"][0]["model"]["expr"]
+    assert coverage["for"] == "10m"
+    assert coverage["labels"]["severity"] == "warning"
+    assert "omi_listen_lb_attached_ready_endpoints" in coverage_expr
+    assert "omi_listen_lb_ready_pods" in coverage_expr
+    assert "< bool 0.8" in coverage_expr
+    assert ">= bool 5" in coverage_expr
+    assert coverage["noDataState"] == "OK"
+
+    unattached = split["omi-listen-neg-endpoints-unattached"]
+    unattached_expr = unattached["data"][0]["model"]["expr"]
+    assert unattached["for"] == "5m"
+    assert unattached["labels"]["severity"] == "critical"
+    assert "omi_listen_lb_neg_attached" in unattached_expr
+    assert "omi_listen_lb_neg_endpoints" in unattached_expr
+    assert "== bool 0" in unattached_expr
+    assert "> bool 0" in unattached_expr
+    assert unattached["noDataState"] == "OK"
+
+    stale = split["omi-listen-neg-exporter-stale"]
+    stale_expr = stale["data"][0]["model"]["expr"]
+    assert stale["for"] == "10m"
+    assert stale["labels"]["severity"] == "warning"
+    assert "omi_listen_lb_exporter_last_success_timestamp_seconds" in stale_expr
+    assert "> bool 300" in stale_expr
+    assert "absent(" in stale_expr
+    assert stale["noDataState"] == "Alerting"
+
+
 def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
     for rules in _all_rule_exports().values():
         expression = rules["bfobs1llmgfb01"]["data"][0]["model"]["expr"]
