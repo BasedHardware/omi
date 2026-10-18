@@ -586,3 +586,38 @@ def test_head_lookahead_budget_is_shared_by_all_visited_owners(monkeypatch):
     monkeypatch.setattr(MemoryTransaction, 'first_pending', count)
     assert queue.pull(1)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    'pool,kind,duration', [('batch', 'capture_span', 121), ('live', 'capture_span', 121), ('live', 'conversation', 10)]
+)
+def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch, pool, kind, duration):
+    from dataclasses import replace
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    store = MemoryStore()
+    queue = Scheduler(store, pool=pool)
+    queue.enqueue(replace(item('fifo', capture=20, duration=10), unit_kind='capture_span'), 0)
+    queue.enqueue(replace(item('head', capture=10, duration=duration), unit_kind=kind), 0)
+    queue.enqueue(replace(item('tail', capture=30, duration=10), unit_kind='capture_span'), 0)
+    capacity = PoolCapacity(
+        1,
+        1,
+        max_item_seconds=120,
+        shared_with_live=pool == 'live',
+        memory_headroom_bytes=8 * 1024**3,
+        gpu_id='head-priority-gpu',
+    )
+    lease = queue.pull(1, capacity=capacity)[0]
+    assert lease.item.segment_id == 'fifo'
+    key = f'{int(Priority.DEEP)}_{owner_key("heavy")}'
+    assert store.rows['queues', key]['head'] == 'head'
+    assert store.rows['queues', key]['tail'] == 'tail'
+    assert store.rows['jobs', 'head']['next'] == 'tail'
+    assert store.rows['jobs', 'head']['state'] == 'ready'
+    assert queue.complete(WorkResult('fifo', 'gs://synthetic/result'), lease.token, 2)
+    assert OrderedMerge(store).commit_next('heavy', 3) is None
+    # The ordinary batch pool can still lease the skipped ordered head.
+    assert Scheduler(store).pull(3)[0].item.segment_id == 'head'

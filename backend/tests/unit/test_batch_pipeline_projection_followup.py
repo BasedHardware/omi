@@ -256,3 +256,118 @@ async def test_shutdown_cancellation_does_not_launch_remaining_outbox_wakeups(fo
     await asyncio.sleep(0)
     assert not f.runner.tasks and not f.runner.pending
     assert f.runner.run.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('phase', ['bridge', 'playback', 'enrichment', 'complete'])
+async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_receipt(followup, monkeypatch, phase):
+    from dataclasses import replace
+    from utils.sync import bridge
+
+    f = followup
+    f.binding = replace(f.binding, native_record=False)
+    f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, f.binding)
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 0.2)
+    f.receipts['head']['audio_required'] = True
+    f.projector.playback = Mock()
+    target = {
+        'bridge': bridge.finish_sync_bridges,
+        'playback': f.projector.playback,
+        'enrichment': f.projector.store.mark_enrichment,
+        'complete': f.projector.complete_content,
+    }[phase]
+    real = projection_followup.run_blocking
+    cancelled = asyncio.Event()
+    stalled = True
+
+    async def blocking(executor, fn, *args, **kwargs):
+        nonlocal stalled
+        is_head = args and (args[0] == 'head' or getattr(args[0], 'segment_id', None) == 'head')
+        is_head = is_head or (phase == 'bridge' and len(args) > 1 and args[1] == 'head')
+        if stalled and fn is target and is_head:
+            stalled = False
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        return await real(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(projection_followup, 'run_blocking', blocking)
+    await f.runner.schedule()
+
+    async def drain():
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+
+    await asyncio.wait_for(drain(), 2)
+    assert cancelled.is_set()
+    assert not f.runner.closed
+    assert not f.owner_claim
+    assert [call.args[0] for call in f.projector.complete_content.call_args_list] == ['later']
+    # Timeout did not settle or remove the receipt. A subsequent sweep retries
+    # the same segment, without reloading STT or inventing another assignment.
+    assert f.receipts['head']['state'] == 'persisted'
+    f.projector.store.store.projection_pending.return_value = ['head']
+    await f.runner.schedule()
+    await asyncio.wait_for(drain(), 2)
+    assert [call.args[0] for call in f.projector.complete_content.call_args_list] == ['later', 'head']
+    f.projector.load_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_followup_claim_release_is_also_bounded(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'CLAIM_RELEASE_TIMEOUT_SECONDS', 0.02)
+    real = projection_followup.run_blocking
+
+    async def blocking(executor, fn, *args, **kwargs):
+        if getattr(fn, '__name__', '') == '__exit__':
+            try:
+                await asyncio.Event().wait()
+            finally:
+                # Model a release which eventually runs after the caller gave up.
+                fn(*args, **kwargs)
+        return await real(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(projection_followup, 'run_blocking', blocking)
+    await asyncio.wait_for(f.runner.run('head'), 1)
+    assert not f.owner_claim
+
+
+@pytest.mark.asyncio
+async def test_four_stuck_followups_timeout_without_closing_process_drain(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 0.02)
+    segments = ['stuck-1', 'stuck-2', 'stuck-3', 'stuck-4', 'next']
+    f.runner.candidates = Mock(return_value=segments)
+    cancelled = []
+    completed = []
+
+    async def work(sid):
+        if sid != 'next':
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.append(sid)
+        else:
+            completed.append(sid)
+
+    f.runner._run = work
+    await f.runner.schedule()
+    assert len(f.runner.tasks) == 4
+
+    async def drain():
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+
+    await asyncio.wait_for(drain(), 1)
+    assert set(cancelled) == set(segments[:4])
+    assert completed == ['next']
+    assert not f.runner.closed
+    f.runner._run = AsyncMock()
+    await f.runner.schedule()
+    await asyncio.wait_for(drain(), 1)
+    assert {call.args[0] for call in f.runner._run.await_args_list} == set(segments)

@@ -101,3 +101,73 @@ async def test_async_followup_rechecks_deletion_after_assignment(lane, monkeypat
     assert not lane.published and not lane.tasks
     entry = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
     assert entry['projection']['state'] == 'persisted'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('committed', [False, True])
+async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usage(lane, monkeypatch, committed):
+    import asyncio
+    from database import batch_pipeline_projection_claim as claims, sync_jobs
+    from utils.batch_pipeline.projection import publish_client_completion
+    from utils.batch_pipeline import projection_followup
+    from utils.sync import reprocess
+    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 2)
+    batch = lane.seed()
+    client_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(sync_jobs, 'r', client_redis)
+    sync_jobs.create_sync_job(lane.uid, 1, 1, batch.binding.job_id, content_id=batch.binding.content_id)
+    lane.projector.publish = publish_client_completion
+    lane.finish(batch)
+    sid = batch.ids[0]
+    lane.projector.persist(sid)
+    runner = projection_followup.ProjectionFollowups(lane.projector)
+    real = projection_followup.run_blocking
+    mark = lane.projector.store.mark_enrichment
+    cancelled = asyncio.Event()
+
+    async def interrupted(executor, fn, *args, **kwargs):
+        if fn == mark:
+            if committed:
+                await real(executor, fn, *args, **kwargs)
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        return await real(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(projection_followup, 'run_blocking', interrupted)
+    await runner.schedule()
+    await asyncio.wait_for(asyncio.gather(*list(runner.tasks.values())), 5)
+    await asyncio.sleep(0)
+    assert cancelled.is_set() and not runner.closed and not runner.tasks
+    assert not redis.keys()
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert sync_jobs.get_sync_job(batch.binding.job_id)['status'] == 'queued'
+    entry = lane.projector.store.ref('results', sid).get().to_dict()
+    assert entry['projection']['state'] == ('ready' if committed else 'persisted')
+    outbox = lane.client.collection(reprocess.COLLECTION).document(reprocess.key(lane.uid, active_rows(lane)[0]['id']))
+    version = outbox.get().to_dict()['version'] if committed else None
+    loads = list(lane.loads)
+    monkeypatch.setattr(projection_followup, 'run_blocking', real)
+    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 120)
+    # Re-query the actual durable outbox, including ready-but-not-completed rows.
+    await runner.schedule()
+    await asyncio.wait_for(asyncio.gather(*list(runner.tasks.values())), 10)
+    completed = batch.ledger.get().to_dict()
+    assert completed['status'] == 'completed'
+    client_job = sync_jobs.get_sync_job(batch.binding.job_id)
+    assert client_job['status'] == 'completed'
+    replay_version = outbox.get().to_dict()['version']
+    if committed:
+        assert replay_version == version
+    await runner.run(sid)
+    assert outbox.get().to_dict()['version'] == replay_version
+    assert batch.ledger.get().to_dict()['usage_committed_at'] == completed['usage_committed_at']
+    assert sync_jobs.get_sync_job(batch.binding.job_id) == client_job
+    assert lane.loads == loads
+    assert active_rows(lane)[0]['sync_content_revision'] == 1

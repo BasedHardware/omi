@@ -50,7 +50,15 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 
-def _prefer_merge_head(tx: Transaction, queue: dict, job: dict, budget: list[int]) -> dict:
+def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
+    return job['duration_seconds'] <= max_seconds and not (
+        shared_gpu and job.get('unit_kind', 'conversation') != 'capture_span'
+    )
+
+
+def _prefer_merge_head(
+    tx: Transaction, queue: dict, job: dict, budget: list[int], *, max_seconds: float, shared_gpu: bool
+) -> dict:
     """Splice the ready ordered head, sharing a 64-read budget across this shard.
 
     No new queue class, tombstones or lease takeover: rollback reads an ordinary
@@ -66,6 +74,7 @@ def _prefer_merge_head(tx: Transaction, queue: dict, job: dict, budget: list[int
         or head['segment_id'] == job['segment_id']
         or head['state'] != 'ready'
         or head['priority'] != job['priority']
+        or not _pool_allows(head, max_seconds, shared_gpu)
     ):
         return job
     previous = job
@@ -255,8 +264,9 @@ class Scheduler:
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
                     if head_priority_enabled():
-                        job = _prefer_merge_head(tx, queue, job, head_budget)
-                        tx.put('queues', queue_key, queue)
+                        job = _prefer_merge_head(
+                            tx, queue, job, head_budget, max_seconds=max_seconds, shared_gpu=bool(gpu_key)
+                        )
                     job.setdefault('unit_kind', 'conversation')
                     try:
                         tx.check_privacy(
@@ -264,9 +274,7 @@ class Scheduler:
                             (job['conversation_id'],) if job.get('conversation_id') else (),
                             job.get('privacy_generation'),
                         )
-                        allowed = job['duration_seconds'] <= max_seconds and not (
-                            gpu_key and job['unit_kind'] != 'capture_span'
-                        )
+                        allowed = _pool_allows(job, max_seconds, bool(gpu_key))
                     except BatchPrivacyBlocked:
                         allowed = False
                     if allowed:

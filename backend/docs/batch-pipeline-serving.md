@@ -456,8 +456,9 @@ persisted/ready receipts remain compatible with the synchronous path.
 
 Head priority splices the owner's earliest `merge_pending` job to the front of
 its existing priority queue when it is ready and found within a shared budget
-of 64 head-query/link reads per shard transaction. The
-selected job still pays its actual DRR cost, passes privacy checks, and respects
+of 64 head-query/link reads per shard transaction. Duration, eligible unit kind
+and privacy must pass before any link changes; a head this pool cannot lease
+leaves FIFO intact. The selected job still pays its actual DRR cost, passes privacy checks, and respects
 fresh reservations, duration and shared-GPU capacity. It never steals a live
 lease, changes priority class, invents silence, or resolves an uncertain paid
 intent. Outside the bounded search it retains FIFO. Quarantine already removes
@@ -477,7 +478,13 @@ The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
 use the same async coordinator. Their pass persists the bounded pending page,
 then schedules at most four tracked follow-ups per process without awaiting
 slow effects. A finished task immediately refills its slot from the bounded
-page, without an additional 20-second serving sleep. Cancellation stops refill. Persisted result receipts are the durable outbox. Partial
+page, without an additional 20-second serving sleep. Each follow-up coordinator
+has a 120-second deadline, plus at most two seconds for advisory-claim cleanup.
+Timeout cancels its remaining steps and frees the slot without closing the drain;
+the unchanged persisted/ready receipt is retried on a later sweep. Already-running
+executor calls cannot be forcibly stopped by asyncio cancellation and may finish
+late; receipt/enrichment and ledger transactions retain their replay fences.
+Shutdown cancellation stops refill. Persisted result receipts are the durable outbox. Partial
 assignment rows do not consume follow-up slots; a rotating cursor prevents
 repeated failures at the front of the page from monopolizing those slots.
 A separate advisory segment claim coalesces replicas; it never owns the

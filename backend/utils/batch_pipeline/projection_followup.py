@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 MAX_FOLLOWUPS = 4
+FOLLOWUP_TIMEOUT_SECONDS = 120.0
+CLAIM_RELEASE_TIMEOUT_SECONDS = 2.0
 
 
 class ProjectionFollowups:
@@ -85,6 +87,16 @@ class ProjectionFollowups:
         raise ProjectionBlocked('complete ordered assignment required before follow-up')
 
     async def run(self, segment):
+        try:
+            # Cancel this coordinator, not the drain. The persisted/ready outbox
+            # row remains eligible for a later sweep, including a lost reply
+            # after a side effect committed. Receipt transactions fence retries.
+            async with asyncio.timeout(FOLLOWUP_TIMEOUT_SECONDS):
+                await self._run(segment)
+        except TimeoutError:
+            logger.warning('event=batch_projection_followup outcome=timeout')
+
+    async def _run(self, segment):
         # This is a segment claim, never the owner's assignment claim. Redis
         # remains advisory; identical side effects are replay-safe if unavailable.
         store = self.projector.store
@@ -113,7 +125,13 @@ class ProjectionFollowups:
             logger.error('event=batch_projection_followup outcome=retry exception_type=%s', type(error).__name__)
         finally:
             if entered:
-                await run_blocking(db_executor, claim.__exit__, None, None, None)
+                # Cleanup must not hold a follow-up slot if Redis/the DB pool
+                # stalls. The advisory claim also has its own bounded TTL.
+                try:
+                    async with asyncio.timeout(CLAIM_RELEASE_TIMEOUT_SECONDS):
+                        await run_blocking(db_executor, claim.__exit__, None, None, None)
+                except TimeoutError:
+                    logger.warning('event=batch_projection_followup action=release outcome=timeout')
 
     async def step(self, phase, executor, function, *args, **kwargs):
         with projection_phase(phase):
