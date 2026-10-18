@@ -669,12 +669,12 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
         )
     if not clauses:
         return 0
-    hold_errors = tuple(
-        error
-        for error in (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress)
-        if isinstance(error, type) and issubclass(error, BaseException)
-    )
-    if destructive_operation_gate is None or not hold_errors:
+    if (
+        destructive_operation_gate is None
+        or LegalHoldActive is None
+        or LegalHoldAuthorityUnavailable is None
+        or DestructiveOperationInProgress is None
+    ):
         raise RuntimeError('destructive operation gate is unavailable')
     try:
         with destructive_operation_gate(uid, kind='stale_vector_index_cleanup'):
@@ -682,7 +682,7 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
                 filter={'$and': [{'uid': {'$eq': uid}}, {'$or': clauses}]},
                 namespace=MEMORIES_NAMESPACE,
             )
-    except hold_errors:
+    except (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress):
         logger.warning('canonical memory vector delete by ids skipped; destructive authority did not permit it')
         return 0
     logger.info('delete_canonical_memory_vectors_by_ids count=%d', len(clauses))
