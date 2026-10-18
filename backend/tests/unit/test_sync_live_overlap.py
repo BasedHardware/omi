@@ -139,14 +139,12 @@ def test_merge_size_failure_publishes_immediately_without_hidden_pending_row(mon
 
 
 def test_lookup_failure_is_immediate_visible_fallback(monkeypatch):
-    from database import conversations as db
+    from database import sync_live_overlap as db
 
     user = MagicMock()
     user.collection.side_effect = RuntimeError('unavailable')
     fallback = MagicMock()
-    from utils.observability import fallback as telemetry
-
-    monkeypatch.setattr(telemetry, 'record_fallback', fallback)
+    monkeypatch.setattr(db, 'record_fallback', fallback)
     assert db.find_sync_live_overlap_candidates(user, chunk('wal', 1000)) == ()
     fallback.assert_called_once()
     row, created, _ = assign(seeded(), dict(chunk('wal', 1000), data_protection_level='standard'), candidates=())

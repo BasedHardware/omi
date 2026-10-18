@@ -5,6 +5,9 @@ import logging
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from utils.sync.live_overlap import choose_live_overlap
+from utils.observability.fallback import record_fallback
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,9 +18,6 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict) -> tuple[str, ..
     Discovery failure restores normal visible sync intake immediately; it never
     creates a hidden row or waits for another upload to publish captured speech.
     """
-    from utils.sync.live_overlap import choose_live_overlap
-    from utils.observability.fallback import record_fallback
-
     fields = [
         'id',
         'started_at',

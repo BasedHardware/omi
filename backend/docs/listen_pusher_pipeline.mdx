@@ -3641,6 +3641,29 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+
+`SYNC_LIVE_OVERLAP_ENABLED` defaults on. An unstamped upload can adopt a
+completed or in-progress live conversation when its speech interval strictly
+overlaps that row, both rows identify the same known device/source/lock
+partition, and the live row has content and live provenance. Discovery reads
+only interval metadata (up to 128 rows, 10-second RPC deadline); the assignment
+transaction rereads and validates all candidates, preferring the greatest
+overlap. Empty reconnect stubs, touching intervals, other devices and deleted
+rows stay excluded. Explicit targets retain priority. The existing merge path
+owns transcript dedupe, speaker assignments, lifecycle and revision fencing;
+live identities are never donated into each other. Pinned live audio origins
+remain stable.
+
+This admission creates no hidden donor and no pending merge debt. Lookup failure
+uses ordinary retained sync publication immediately; live document capacity
+exhaustion uses the existing size-rollover fallback. Captured speech never waits
+for another upload to make a hidden row visible. Storage/commit failures still
+propagate to existing durable job retries. Set `SYNC_LIVE_OVERLAP_ENABLED=false`
+on the four sync writers to restore the old admission path. Bounded
+`event=sync_live_overlap` outcomes distinguish merged, published and lookup-failed
+attempts without account or transcript labels. Other live/live overlap causes
+and cached Home donor eviction are outside this change.
+
 Compatibility is equality of all three fields: two locked captures are compatible,
 so locked chunks merge, append to a locked explicit target and deduplicate on retry
 exactly as unlocked ones do. A mismatch means a field differs.

@@ -40,6 +40,7 @@ from utils.sync.live_speech_dedupe import (
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
+from utils.sync.live_overlap import choose_live_overlap, compatible_capture, live_overlap_enabled
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
 from utils.conversation_continuity import intervals_connect
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
@@ -97,13 +98,6 @@ def fragment_rule(segments: list[dict]) -> tuple[Optional[str], str]:
         [s.get('text', '') for s in segments],
         sum(max(0, s['end'] - s['start']) for s in segments),
     )
-
-
-def compatible_capture(left: dict, right: dict) -> bool:
-    # Unknown is a partition, not a wildcard: wildcard equality is non-transitive.
-    return all(left.get(key) == right.get(key) for key in ('source', 'client_device_id')) and bool(
-        left.get('is_locked')
-    ) == bool(right.get('is_locked'))
 
 
 def interval_matches(row: dict, incoming: dict) -> bool:
@@ -305,8 +299,6 @@ def assign_in_transaction(
         target_id, target = resolve(target_id)
     # Discovery is a hint only. Re-read every candidate under the same
     # transaction as the append, so deletion, lifecycle and provenance win.
-    from utils.sync.live_overlap import choose_live_overlap, live_overlap_enabled
-
     temporal_live = False
     if not target_id and live_candidate_ids and live_overlap_enabled():
         live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids]
