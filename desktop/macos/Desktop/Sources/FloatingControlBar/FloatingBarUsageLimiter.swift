@@ -42,8 +42,11 @@ final class FloatingBarUsageLimiter: ObservableObject {
   /// Fetch the user's subscription plan and usage quota from the backend.
   /// Call on app launch, sign-in, and after checkout completes.
   func fetchPlan() async {
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     do {
-      let response = try await APIClient.shared.getUserSubscription()
+      let response = try await APIClient.shared.getUserSubscription(authorizationSnapshot: authorization)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      ScreenCloudEntitlementService.shared.accept(response, authorization: authorization)
       applyPlan(
         plan: response.subscription.plan,
         status: response.subscription.status,

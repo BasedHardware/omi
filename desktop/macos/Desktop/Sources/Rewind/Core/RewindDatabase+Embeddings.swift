@@ -192,33 +192,46 @@ extension RewindDatabase {
   /// Re-open a previously completed backfill when compacted, OCR-bearing rows still lack vectors.
   /// This repairs the historical completed=1/processedCount=0 state without scanning or enqueueing
   /// more than one bounded launch will consume.
-  func rearmScreenshotEmbeddingBackfillIfNeeded(olderThan cutoff: Date) throws -> Bool {
+  func rearmScreenshotEmbeddingBackfillIfNeeded(olderThan cutoff: Date, compacted: Bool = true) throws -> Bool {
     guard let dbQueue = getDatabaseQueue() else {
       throw RewindError.databaseNotInitialized
     }
 
     return try dbQueue.write { db in
-      let missingWinner =
-        try Bool.fetchOne(
-          db,
-          sql: """
-            WITH ranked AS (
-              SELECT embedding,
-                     ROW_NUMBER() OVER (
-                       PARTITION BY appName, COALESCE(windowTitle, ''),
-                                    CAST(strftime('%s', timestamp) AS INTEGER) / 300
-                       ORDER BY LENGTH(ocrText) DESC, id DESC
-                     ) AS bucketRank
-              FROM screenshots
-              WHERE ocrText IS NOT NULL
-                AND LENGTH(ocrText) >= 20
-                AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?
-            )
-            SELECT EXISTS(
-              SELECT 1 FROM ranked WHERE bucketRank = 1 AND embedding IS NULL
-            )
-            """,
-          arguments: [Int64(cutoff.timeIntervalSince1970.rounded(.down))]) ?? false
+      let missingWinner: Bool
+      if compacted {
+        missingWinner =
+          try Bool.fetchOne(
+            db,
+            sql: """
+              WITH ranked AS (
+                SELECT embedding,
+                       ROW_NUMBER() OVER (
+                         PARTITION BY appName, COALESCE(windowTitle, ''),
+                                      CAST(strftime('%s', timestamp) AS INTEGER) / 300
+                         ORDER BY LENGTH(ocrText) DESC, id DESC
+                       ) AS bucketRank
+                FROM screenshots
+                WHERE ocrText IS NOT NULL
+                  AND LENGTH(ocrText) >= 20
+                  AND (CAST(strftime('%s', timestamp) AS INTEGER) / 300 + 1) * 300 <= ?
+              )
+              SELECT EXISTS(
+                SELECT 1 FROM ranked WHERE bucketRank = 1 AND embedding IS NULL
+              )
+              """,
+            arguments: [Int64(cutoff.timeIntervalSince1970.rounded(.down))]) ?? false
+      } else {
+        // Uses idx_screenshots_missing_embedding; do not rank/scan the whole history
+        // to reopen the Stable legacy path after a brief unknown grant.
+        missingWinner =
+          try Bool.fetchOne(
+            db,
+            sql: """
+              SELECT EXISTS(SELECT 1 FROM screenshots
+                WHERE embedding IS NULL AND ocrText IS NOT NULL AND LENGTH(ocrText) >= 20 LIMIT 1)
+              """) ?? false
+      }
       guard missingWinner else { return false }
 
       try db.execute(

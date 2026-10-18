@@ -116,7 +116,8 @@ final class OCREmbeddingServiceFlushTimerTests: XCTestCase {
     writes: TimerFlushWriteSpy
   ) -> OCREmbeddingService {
     OCREmbeddingService(
-      batchEmbedderForTesting: { texts, _ in
+      ownerAuthorityForTesting: EmbeddingTestAuthorization().source,
+      batchEmbedderForTesting: { texts, _, _ in
         try await embedder.embed(texts: texts)
       },
       embeddingWriterForTesting: { screenshotID, _ in
