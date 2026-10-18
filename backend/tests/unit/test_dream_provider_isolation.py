@@ -198,14 +198,6 @@ async def test_stale_cached_content_does_not_buy_second_dream_generation(setup_d
 
     def handler(request):
         calls.append(request)
-        if request.url.path.endswith('/cachedContents'):
-            return httpx.Response(
-                200,
-                json={
-                    'name': request.url.path.removeprefix('/v1/') + '/invented-cache',
-                    'usageMetadata': {'totalTokenCount': 6000},
-                },
-            )
         return httpx.Response(404, json={'error': {'message': 'invented cache expired'}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -219,11 +211,10 @@ async def test_stale_cached_content_does_not_buy_second_dream_generation(setup_d
                 {'role': 'user', 'content': 'invented continuation'},
             ],
         )
-        # Explicit marker ends the system prefix, leaving a real continuation.
+        # Configured Gemini dream lanes stay implicit: a stale-cache-shaped
+        # provider failure must still result in one generation and no cache buy.
         request = provider_request_for(route, route.active_route.primary)
-        request['messages'][0]['content'] = [
-            {'type': 'text', 'text': request['messages'][0]['content'], 'prompt_cache_breakpoint': {'mode': 'explicit'}}
-        ]
+        assert request['_gateway_cache_policy']['mode'] == 'implicit'
         with pytest.raises(ProviderFailure):
             if stream:
                 _ = [
@@ -236,6 +227,8 @@ async def test_stale_cached_content_does_not_buy_second_dream_generation(setup_d
                 await provider.create_chat_completion(
                     request, provider_ref=route.active_route.primary, credentials=credentials(), timeout_ms=10000
                 )
-        assert len(calls) == 2  # One cache creation, exactly one generation.
+        assert len(calls) == 1
         assert len([r for r in calls if '/models/' in r.url.path]) == 1
+        assert not any(r.url.path.endswith('/cachedContents') for r in calls)
+        assert 'cachedContent' not in json.loads(calls[0].content)
         assert provider._content_cache.entries == {}

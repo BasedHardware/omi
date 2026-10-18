@@ -20,6 +20,32 @@ def test_lane_defaults():
     assert lane_cache_policy('omi:auto:unknown') == 'implicit'
 
 
+def test_desktop_vertex_cache_policy_is_provider_aware():
+    lane = 'omi:auto:desktop-vertex-flash-38'
+    assert lane_cache_policy(lane, provider='gemini') == 'implicit'
+    assert lane_cache_policy(lane, provider='openai') == 'explicit'
+
+    for provider, expected_mode in [('gemini', 'implicit'), ('openai', 'explicit')]:
+        model = 'gpt-6-luna' if provider == 'openai' else 'gemini-3.8-flash'
+        request = {
+            'messages': [
+                {'role': 'system', 'content': 'static ' * 1500},
+                {'role': 'user', 'content': 'synthetic request'},
+            ]
+        }
+        apply_lane_cache_policy(request, lane=lane, provider=provider, model=model)
+
+        assert request['_gateway_cache_policy']['mode'] == expected_mode
+        if provider == 'openai':
+            assert request['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+            assert request.get('prompt_cache_key')
+            assert request['messages'][0]['content'][0]['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+        else:
+            assert 'prompt_cache_options' not in request
+            assert 'prompt_cache_key' not in request
+            assert all(isinstance(message.get('content'), str) for message in request['messages'])
+
+
 def test_openai_default_prefix_and_owner_isolation():
     request = {
         'messages': [{'role': 'system', 'content': 'static ' * 1500}, {'role': 'user', 'content': 'invented question'}]

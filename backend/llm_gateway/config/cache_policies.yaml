@@ -3,6 +3,10 @@
 default: implicit
 prefixes:
   omi:auto:desktop-vertex-: implicit
+providers:
+  openai:
+    prefixes:
+      omi:auto:desktop-vertex-: explicit
 lanes:
   omi:auto:dream-reasoning: implicit
   omi:auto:dream-verify: implicit
