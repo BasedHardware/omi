@@ -34,7 +34,8 @@ class _Usage extends UsageProvider {
   @override
   Future<void> loadAvailablePlans() async {}
   @override
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession(
+      {required String priceId, String? promotionCode, int? trialDays}) async {
     sessionPrice = priceId;
     checkedOutPrice = priceId;
     return null; // No browser or real payment in hermetic tests.

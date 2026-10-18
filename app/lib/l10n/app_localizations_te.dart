@@ -13329,6 +13329,110 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallOutlineHeadline => 'ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'మీ ఉచిత ట్రయల్ ఎలా పనిచేస్తుందో ఇక్కడ ఉంది.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Unlimited సారాంశాలు, శాశ్వతంగా భద్రపరచబడతాయి';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'ప్రతి సంభాషణ తదుపరి దశలతో కూడిన స్పష్టమైన సారాంశంగా మారుతుంది, కాబట్టి ఏదీ తప్పిపోదు.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'ఉత్తమమైన ట్రాన్స్‌క్రిప్షన్';
+
+  @override
+  String get paywallTrialChipDetails => 'మరిన్ని వివరాలను పసిగడుతుంది';
+
+  @override
+  String get paywallTrialChipSpeakers => 'మాట్లాడేవారిని వేరు చేస్తుంది';
+
+  @override
+  String get paywallTrialChipNoise => 'శబ్దంతో కూడిన గదులలో కూడా పనిచేస్తుంది';
+
+  @override
+  String get paywallTrialChipAccents => 'యాసలను గుర్తిస్తుంది';
+
+  @override
+  String get paywallTrialChipJargon => 'మీ పరిభాష మరియు పేర్లను తెలుసుకుంటుంది';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'మాట్లాడేవారి పేర్లు, స్వయంచాలకంగా గుర్తించబడతాయి';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'ప్రతి సంభాషణలో Unlimited ప్రశ్నలు';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'ఈ మీటింగ్ నుండి ఫాలో-అప్ ఇమెయిల్‌ను రూపొందించండి.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'జాన్ మంగళవారం చెప్పినదానితో ఏమైనా విభేదాలు ఉన్నాయా?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'మనల్ని నెమ్మదింపజేసే ఏదైనా కనుగొనండి.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'మీకు ఇష్టమైన యాప్‌లతో పనిచేస్తుంది';
+
+  @override
+  String get paywallTrialTodayTitle => 'ఈరోజు';
+
+  @override
+  String get paywallTrialTodayBody => 'Proలోని ప్రతిదీ అన్‌లాక్ చేయబడింది.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days రోజులు ఉచితం';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days రోజుల Omi Pro, మా ఖర్చుతో.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days రోజులలో';
+  }
+
+  @override
+  String get paywallTrialReminderBody => 'మీ ట్రయల్ ముగియడానికి ముందు మేము మీకు గుర్తు చేస్తాము.';
+
+  @override
+  String get paywallTrialEndsBody => 'ట్రయల్ ముగుస్తుంది. మీరు రద్దు చేయకపోతే మీకు ఛార్జ్ చేయబడుతుంది.';
+
+  @override
+  String get paywallTrialFeatureModels => 'తాజా AI మోడల్స్';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'నెలవారీ బిల్ చేయబడుతుంది';
+
+  @override
+  String get paywallTrialBilledYearly => 'వార్షికంగా బిల్ చేయబడుతుంది';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '$amount ఆదా చేయండి';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '$priceకి ప్రారంభించండి';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'ఉచిత ప్లాన్‌తో కొనసాగండి';
+
+  @override
+  String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
+
+  @override
   String get paywallCancelAnytime => 'ఎప్పుడైనా రద్దు చేసుకోవచ్చు.';
 
   @override

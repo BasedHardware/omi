@@ -1729,6 +1729,7 @@ export interface CreateChatSessionRequest {
 export interface CreateCheckoutRequest {
   price_id: string;
   promotion_code?: string | null;
+  trial_days?: number | null;
 }
 
 export interface CreateConversationFromTranscriptRequest {
@@ -4006,6 +4007,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   transcription_allowance?: TranscriptionAllowanceSnapshot | null;
   transcription_seconds_limit: number;
   transcription_seconds_used: number;
+  trial_eligible?: boolean;
   words_transcribed_limit: number;
   words_transcribed_used: number;
 }
@@ -6007,6 +6009,7 @@ export interface UserSubscriptionResponse {
   transcription_allowance?: TranscriptionAllowanceSnapshot | null;
   transcription_seconds_limit: number;
   transcription_seconds_used: number;
+  trial_eligible?: boolean;
   words_transcribed_limit: number;
   words_transcribed_used: number;
 }

@@ -15957,6 +15957,155 @@
     "@paywallOutlineHeadline": {
         "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
     },
+    "paywallTrialBrand": "Omi Pro",
+    "@paywallTrialBrand": {
+        "description": "Paywall header: plan name"
+    },
+    "paywallTrialHeadline": "Here's how your free trial works.",
+    "@paywallTrialHeadline": {
+        "description": "Paywall headline"
+    },
+    "paywallTrialSlideSummariesTitle": "Unlimited summaries, kept forever",
+    "@paywallTrialSlideSummariesTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialSlideSummariesBody": "Every conversation becomes a clean summary with next steps, so nothing slips.",
+    "@paywallTrialSlideSummariesBody": {
+        "description": "Paywall carousel card body"
+    },
+    "paywallTrialSlideTranscriptionTitle": "Best-in-class transcription",
+    "@paywallTrialSlideTranscriptionTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialChipDetails": "Catches more details",
+    "@paywallTrialChipDetails": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipSpeakers": "Tells speakers apart",
+    "@paywallTrialChipSpeakers": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipNoise": "Works in noisy rooms",
+    "@paywallTrialChipNoise": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipAccents": "Handles accents",
+    "@paywallTrialChipAccents": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialChipJargon": "Knows your jargon and names",
+    "@paywallTrialChipJargon": {
+        "description": "Paywall chip"
+    },
+    "paywallTrialSlideSpeakersTitle": "Speaker names, detected automatically",
+    "@paywallTrialSlideSpeakersTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialSlideAskTitle": "Unlimited questions, across every conversation",
+    "@paywallTrialSlideAskTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialBubbleFollowUp": "Draft a follow-up email from this meeting.",
+    "@paywallTrialBubbleFollowUp": {
+        "description": "Paywall example question"
+    },
+    "paywallTrialBubbleConflicts": "Any conflicts with what John said on Tuesday?",
+    "@paywallTrialBubbleConflicts": {
+        "description": "Paywall example question"
+    },
+    "paywallTrialBubbleBlockers": "Find anything that could slow us down.",
+    "@paywallTrialBubbleBlockers": {
+        "description": "Paywall example question"
+    },
+    "paywallTrialSlideAppsTitle": "Works with your favorite apps",
+    "@paywallTrialSlideAppsTitle": {
+        "description": "Paywall carousel caption"
+    },
+    "paywallTrialTodayTitle": "Today",
+    "@paywallTrialTodayTitle": {
+        "description": "Paywall timeline row title"
+    },
+    "paywallTrialTodayBody": "Everything in Pro is unlocked.",
+    "@paywallTrialTodayBody": {
+        "description": "Paywall timeline row body"
+    },
+    "paywallTrialFreeDaysTitle": "+ {days} days free",
+    "@paywallTrialFreeDaysTitle": {
+        "description": "Paywall timeline row title",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "paywallTrialFreeDaysBody": "{days} days of Omi Pro, on us.",
+    "@paywallTrialFreeDaysBody": {
+        "description": "Paywall timeline row body",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "paywallTrialInDaysTitle": "In {days} days",
+    "@paywallTrialInDaysTitle": {
+        "description": "Paywall timeline row title",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "paywallTrialReminderBody": "We'll remind you before your trial ends.",
+    "@paywallTrialReminderBody": {
+        "description": "Paywall timeline row body"
+    },
+    "paywallTrialEndsBody": "Trial ends. You'll be charged unless you cancel.",
+    "@paywallTrialEndsBody": {
+        "description": "Paywall timeline row body"
+    },
+    "paywallTrialFeatureModels": "The latest AI models",
+    "@paywallTrialFeatureModels": {
+        "description": "Paywall feature row"
+    },
+    "paywallTrialFeatureAsk": "Unlimited Ask Omi",
+    "@paywallTrialFeatureAsk": {
+        "description": "Paywall feature row"
+    },
+    "paywallTrialBilledMonthly": "Billed monthly",
+    "@paywallTrialBilledMonthly": {
+        "description": "Paywall plan card footnote"
+    },
+    "paywallTrialBilledYearly": "Billed yearly",
+    "@paywallTrialBilledYearly": {
+        "description": "Paywall plan card footnote"
+    },
+    "paywallTrialSaveAmount": "Save {amount}",
+    "@paywallTrialSaveAmount": {
+        "description": "Paywall plan card saving; amount is a formatted price",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallTrialCta": "Start for {price}",
+    "@paywallTrialCta": {
+        "description": "Paywall primary button; price is a formatted zero price like $0.00",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallTrialSecondary": "Continue with the free plan",
+    "@paywallTrialSecondary": {
+        "description": "Paywall secondary button"
+    },
+    "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
+    "@paywallTrialCancelNote": {
+        "description": "Paywall footnote"
+    },
     "paywallCancelAnytime": "Cancel anytime.",
     "@paywallCancelAnytime": {
         "description": "Caption under the upgrade button on the Outline paywall variant"

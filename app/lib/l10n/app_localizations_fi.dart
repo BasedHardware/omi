@@ -13282,6 +13282,110 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Älä enää koskaan missaa sanaakaan.';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Näin ilmainen kokeilujaksosi toimii.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Rajoittamattomat yhteenvedot, tallessa ikuisesti';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Jokaisesta keskustelusta tulee selkeä yhteenveto seuraavine askelineen, joten mikään ei unohdu.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Luokkansa paras transkriptio';
+
+  @override
+  String get paywallTrialChipDetails => 'Tunnistaa enemmän yksityiskohtia';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Erottaa puhujat toisistaan';
+
+  @override
+  String get paywallTrialChipNoise => 'Toimii meluisissa tiloissa';
+
+  @override
+  String get paywallTrialChipAccents => 'Käsittelee aksentteja';
+
+  @override
+  String get paywallTrialChipJargon => 'Tuntee termistösi ja nimet';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Puhujien nimet tunnistetaan automaattisesti';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Rajoittamattomasti kysymyksiä, jokaisesta keskustelusta';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Laadi seurantaviesti tästä kokouksesta.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Onko ristiriitoja Johnin tiistaina sanoman kanssa?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Etsi kaikki, mikä voisi hidastaa meitä.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Toimii suosikkisovellustesi kanssa';
+
+  @override
+  String get paywallTrialTodayTitle => 'Tänään';
+
+  @override
+  String get paywallTrialTodayBody => 'Kaikki Prossa on avattu.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days päivää ilmaiseksi';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days päivää Omi Prota, meidän piikkiimme.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days päivän kuluttua';
+  }
+
+  @override
+  String get paywallTrialReminderBody => 'Muistutamme sinua ennen kokeilujakson päättymistä.';
+
+  @override
+  String get paywallTrialEndsBody => 'Kokeilujakso päättyy. Sinua veloitetaan, ellet peruuta tilausta.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Uusimmat tekoälymallit';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Rajoittamaton Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Laskutetaan kuukausittain';
+
+  @override
+  String get paywallTrialBilledYearly => 'Laskutetaan vuosittain';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Säästä $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Aloita hintaan $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Jatka ilmaisella suunnitelmalla';
+
+  @override
+  String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
+
+  @override
   String get paywallCancelAnytime => 'Peruuta milloin tahansa.';
 
   @override

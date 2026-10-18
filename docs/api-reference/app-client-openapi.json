@@ -10918,6 +10918,19 @@
               }
             ],
             "title": "Promotion Code"
+          },
+          "trial_days": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Days"
           }
         },
         "required": [
@@ -24803,6 +24816,11 @@
             "title": "Transcription Seconds Used",
             "type": "integer"
           },
+          "trial_eligible": {
+            "default": false,
+            "title": "Trial Eligible",
+            "type": "boolean"
+          },
           "words_transcribed_limit": {
             "title": "Words Transcribed Limit",
             "type": "integer"
@@ -36818,6 +36836,11 @@
           "transcription_seconds_used": {
             "title": "Transcription Seconds Used",
             "type": "integer"
+          },
+          "trial_eligible": {
+            "default": false,
+            "title": "Trial Eligible",
+            "type": "boolean"
           },
           "words_transcribed_limit": {
             "title": "Words Transcribed Limit",

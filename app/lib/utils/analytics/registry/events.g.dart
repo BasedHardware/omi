@@ -2837,7 +2837,8 @@ final class OnboardingStepCompleted extends RegisteredEvent {
 enum PaywallVariantShownVariant {
   control("control"),
   outline("outline"),
-  web("web");
+  web("web"),
+  trial("trial");
   const PaywallVariantShownVariant(this.wireName);
   final String wireName;
 }

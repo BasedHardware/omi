@@ -1514,6 +1514,8 @@ def _user_subscription_response(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
+    # Read from the true plan, before the client remap below.
+    trial_eligible = subscription.plan == PlanType.basic and not users_db.get_stripe_customer_id(uid)
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
@@ -1540,6 +1542,7 @@ def _user_subscription_response(
         insights_gained_limit=insights_gained_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
+        trial_eligible=trial_eligible,
         chat_quota_used=round(chat_snapshot['used'], 4),
         chat_quota_unit=chat_snapshot['unit'],
         chat_quota_percent=chat_percent,

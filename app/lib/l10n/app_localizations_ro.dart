@@ -13332,6 +13332,110 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallOutlineHeadline => 'Nu mai rata niciun cuvânt.';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => 'Iată cum funcționează perioada ta de probă gratuită.';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => 'Rezumat nelimitat, salvat permanent';
+
+  @override
+  String get paywallTrialSlideSummariesBody =>
+      'Fiecare conversație devine un rezumat clar cu pași următori, astfel încât nimic să nu-ți scape.';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => 'Transcrierea de top';
+
+  @override
+  String get paywallTrialChipDetails => 'Captează mai multe detalii';
+
+  @override
+  String get paywallTrialChipSpeakers => 'Distinge vorbitorii';
+
+  @override
+  String get paywallTrialChipNoise => 'Funcționează în încăperi zgomotoase';
+
+  @override
+  String get paywallTrialChipAccents => 'Gestionează accentele';
+
+  @override
+  String get paywallTrialChipJargon => 'Cunoaște jargonul și numele tale';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => 'Numele vorbitorilor, detectate automat';
+
+  @override
+  String get paywallTrialSlideAskTitle => 'Întrebări nelimitate, în fiecare conversație';
+
+  @override
+  String get paywallTrialBubbleFollowUp => 'Redactează un e-mail de follow-up de la această întâlnire.';
+
+  @override
+  String get paywallTrialBubbleConflicts => 'Există conflicte cu ce a spus John marți?';
+
+  @override
+  String get paywallTrialBubbleBlockers => 'Găsește orice ne-ar putea încetini.';
+
+  @override
+  String get paywallTrialSlideAppsTitle => 'Funcționează cu aplicațiile tale preferate';
+
+  @override
+  String get paywallTrialTodayTitle => 'Astăzi';
+
+  @override
+  String get paywallTrialTodayBody => 'Totul în Pro este deblocat.';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days zile gratuite';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '$days zile de Omi Pro, din partea noastră.';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return 'În $days zile';
+  }
+
+  @override
+  String get paywallTrialReminderBody => 'Îți vom aminti înainte ca perioada de probă să se încheie.';
+
+  @override
+  String get paywallTrialEndsBody => 'Perioada de probă se încheie. Vei fi taxat, cu excepția cazului în care anulezi.';
+
+  @override
+  String get paywallTrialFeatureModels => 'Cele mai recente modele AI';
+
+  @override
+  String get paywallTrialFeatureAsk => 'Unlimited Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => 'Facturat lunar';
+
+  @override
+  String get paywallTrialBilledYearly => 'Facturat anual';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return 'Economisește $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return 'Începe pentru $price';
+  }
+
+  @override
+  String get paywallTrialSecondary => 'Continuă cu planul gratuit';
+
+  @override
+  String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
+
+  @override
   String get paywallCancelAnytime => 'Anulează oricând.';
 
   @override
