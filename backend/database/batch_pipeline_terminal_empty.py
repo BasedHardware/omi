@@ -109,10 +109,10 @@ class TerminalEmptyStore:
                 raise ProjectionBlocked('unattempted canary epoch 2 required')
             if outcome == 'no_recoverable_speech' and not exhausted(job, historical_attestation):
                 raise ProjectionBlocked('multilingual exhaustion required')
-            if (
-                outcome == 'no_recoverable_speech'
-                and not historical_attestation
-                and job.get('worker_empty_evidence') != {'padded_retry': 'empty', 'version': 1}
+            if outcome == 'no_recoverable_speech' and not (
+                job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
+                or historical_attestation
+                and not job.get('worker_empty_evidence')
             ):
                 raise ProjectionBlocked('padded retry evidence required')
             job['terminal_disposition'] = {

@@ -858,8 +858,7 @@ runs:
             --base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"
             --final-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
             --ingress-container="$ingress"
-            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"
-            --config-secret=cloud-run-gmp-sync-config
+            --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sidecar.yaml"
             --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
           )
           if [[ -n "$GMP_CANDIDATE_TAG" ]]; then args+=(--tag="$GMP_CANDIDATE_TAG"); fi

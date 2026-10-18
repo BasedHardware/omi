@@ -3388,6 +3388,7 @@ environments:
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            SYNC_DURABLE_STATUS_RECONCILIATION: {value: 'true', category: rollout}
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
