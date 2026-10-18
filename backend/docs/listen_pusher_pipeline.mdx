@@ -5718,7 +5718,15 @@ client wire fields or live STT ownership rules.
 
 `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` defaults to `true`. The 20-second
 serving reconciliation loop prepares the existing fenced recovery intent and
-queues a named HTTP task on `SYNC_TASKS_QUEUE`, using `SYNC_TASKS_INVOKER_SA`.
+queues a named HTTP task on `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` (falling back
+to `SYNC_TASKS_QUEUE` when unset), using `SYNC_TASKS_INVOKER_SA`. Production
+integration declares `batch-quarantine-recovery`; the existing backend deploy
+action provisions it before the integration revision, with four concurrent
+dispatches, four dispatches/second and five attempts. This keeps accepted-work
+recovery independent of legacy sync queue saturation without changing the paid
+intent or provider budget. Dev retains its existing queue. To roll back queue
+isolation, clear `BATCH_PIPELINE_RECOVERY_TASKS_QUEUE` on integration; keep
+request-based recovery enabled. Queued wakes in either queue remain fenced.
 The target is `BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE` (integration's own HTTPS
 origin, declared separately from the worker audience in dev and prod) plus
 `/v2/batch-pipeline/recover-quarantine`; the audience must be an HTTPS origin.

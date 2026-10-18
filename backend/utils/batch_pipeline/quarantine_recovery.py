@@ -315,7 +315,7 @@ class QuarantineRecovery:
         wake = int(self.clock() // 120)
         task_id = f'bpr-{current_stage()}-{hashlib.sha256(segment_id.encode()).hexdigest()}-{token}-{wake}'
         enqueue_named_task(
-            os.getenv('SYNC_TASKS_QUEUE', ''),
+            os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', '').strip() or os.getenv('SYNC_TASKS_QUEUE', ''),
             audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
             task_id,
             {'stage': current_stage(), 'segment_id': segment_id},

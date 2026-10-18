@@ -536,12 +536,16 @@ def test_recovery_tasks_ship_on_with_inline_kill_switch(monkeypatch, enabled):
     assert recovery_tasks_enabled() is (enabled != 'false')
 
 
-def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(setup, monkeypatch):
+@pytest.mark.parametrize('queue', [None, '', '  ', 'batch-quarantine-recovery'])
+def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(setup, monkeypatch, queue):
     from utils.batch_pipeline import quarantine_recovery as module
 
     client, _, binding, artifacts, stt, recovery = setup
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.run.app')
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.delenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', raising=False)
+    if queue is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_QUEUE', queue)
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'synthetic-invoker')
     enqueue = Mock()
     monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
@@ -550,6 +554,7 @@ def test_request_dispatch_persists_intent_and_retries_wake_without_paid_call(set
     assert row(client)['recovery_state'] == 'prepared'
     assert recovery.dispatch('bad', binding.owner_id) == 'queued'
     assert enqueue.call_args_list[0] == enqueue.call_args_list[1]
+    assert enqueue.call_args.args[0] == (queue.strip() if queue and queue.strip() else 'sync-jobs')
     assert enqueue.call_args.args[1] == 'https://synthetic.run.app/v2/batch-pipeline/recover-quarantine'
     assert enqueue.call_args.args[3] == {'stage': 'prod', 'segment_id': 'bad'}
     recovery.clock = lambda: 240
