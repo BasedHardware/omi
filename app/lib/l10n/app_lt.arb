@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Prieš įrašinėdami telefonu, sustabdykite „Transcribe Later“ pakabuke.",
     "captureNotTranscribing": "Neperrašoma",
     "captureAudioSavedTranscribesLater": "Garsas išsaugotas, bus perrašytas vėliau",
+    "captureBannerTryReconnect": "Pabandyti prisijungti iš naujo",
+    "captureBannerRetrySync": "Pakartoti sinchronizavimą",
     "captureBannerWhatsWrong": "Kas vyksta?",
     "captureBannerDismiss": "Slėpti",
     "captureWedgeBleExplanation": "Bluetooth ryšys su jūsų Omi nutrūko, todėl garsas nepasieka programos. Omi toliau įrašinėja įrenginyje ir sinchronizuos, kai ryšys atsistatys. Bandymas iš naujo vėl užmezga ryšį; jei tai ir toliau nepavyksta, patikrinkite įrenginį skiltyje Nustatymai > Įrenginys.",

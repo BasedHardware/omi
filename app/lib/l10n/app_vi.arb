@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Dừng Transcribe Later trên mặt dây trước khi ghi âm bằng điện thoại.",
     "captureNotTranscribing": "Không phiên âm",
     "captureAudioSavedTranscribesLater": "Đã lưu âm thanh, phiên âm sau",
+    "captureBannerTryReconnect": "Thử kết nối lại",
+    "captureBannerRetrySync": "Thử đồng bộ lại",
     "captureBannerWhatsWrong": "Chuyện gì đang xảy ra?",
     "captureBannerDismiss": "Ẩn",
     "captureWedgeBleExplanation": "Kết nối Bluetooth với Omi của bạn đã bị gián đoạn nên âm thanh không tới ứng dụng. Omi vẫn tiếp tục ghi âm trên thiết bị và sẽ đồng bộ khi kết nối được khôi phục. Thử lại sẽ kết nối lại đường truyền; nếu vẫn tiếp tục thất bại, hãy kiểm tra thiết bị của bạn trong Cài đặt > Thiết bị.",

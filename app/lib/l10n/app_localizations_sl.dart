@@ -11113,6 +11113,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Zvok shranjen, prepis pozneje';
 
   @override
+  String get captureBannerTryReconnect => 'Poskusi znova povezati';
+
+  @override
+  String get captureBannerRetrySync => 'Ponovi sinhronizacijo';
+
+  @override
   String get captureBannerWhatsWrong => 'Kaj se dogaja?';
 
   @override

@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Pred nahrávaním telefónom zastavte Transcribe Later na prívesku.",
     "captureNotTranscribing": "Neprepisuje sa",
     "captureAudioSavedTranscribesLater": "Zvuk uložený, prepíše sa neskôr",
+    "captureBannerTryReconnect": "Skúsiť znova pripojiť",
+    "captureBannerRetrySync": "Zopakovať synchronizáciu",
     "captureBannerWhatsWrong": "Čo sa deje?",
     "captureBannerDismiss": "Skryť",
     "captureWedgeBleExplanation": "Bluetoothové prepojenie s vaším zariadením Omi sa zastavilo, takže zvuk sa do aplikácie nedostáva. Omi naďalej nahráva na zariadení a po obnovení prepojenia sa synchronizuje. Opätovný pokus prepojenie znovu naviaže; ak to naďalej zlyháva, skontrolujte zariadenie v Nastavenia > Zariadenie.",

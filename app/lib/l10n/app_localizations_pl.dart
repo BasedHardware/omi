@@ -11119,6 +11119,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Dźwięk zapisany, transkrypcja później';
 
   @override
+  String get captureBannerTryReconnect => 'Spróbuj ponownie połączyć';
+
+  @override
+  String get captureBannerRetrySync => 'Ponów synchronizację';
+
+  @override
   String get captureBannerWhatsWrong => 'Co się dzieje?';
 
   @override

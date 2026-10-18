@@ -11140,6 +11140,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аудиото е зачувано, транскрипција подоцна';
 
   @override
+  String get captureBannerTryReconnect => 'Обиди се да поврзеш повторно';
+
+  @override
+  String get captureBannerRetrySync => 'Повтори ја синхронизацијата';
+
+  @override
   String get captureBannerWhatsWrong => 'Што се случува?';
 
   @override

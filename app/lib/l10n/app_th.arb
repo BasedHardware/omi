@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์",
     "captureNotTranscribing": "ไม่ได้ถอดความ",
     "captureAudioSavedTranscribesLater": "บันทึกเสียงแล้ว จะถอดความภายหลัง",
+    "captureBannerTryReconnect": "ลองเชื่อมต่อใหม่",
+    "captureBannerRetrySync": "ลองซิงค์อีกครั้ง",
     "captureBannerWhatsWrong": "เกิดอะไรขึ้น",
     "captureBannerDismiss": "ปิด",
     "captureWedgeBleExplanation": "การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์",

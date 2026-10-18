@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Před nahráváním telefonem zastavte na přívěsku režim Transcribe Later.",
     "captureNotTranscribing": "Nepřepisuje se",
     "captureAudioSavedTranscribesLater": "Zvuk uložen, přepíše se později",
+    "captureBannerTryReconnect": "Zkusit znovu připojit",
+    "captureBannerRetrySync": "Zopakovat synchronizaci",
     "captureBannerWhatsWrong": "Co se děje?",
     "captureBannerDismiss": "Skrýt",
     "captureWedgeBleExplanation": "Bluetooth spojení s vaším zařízením Omi se zaseklo, takže zvuk se do aplikace nedostává. Omi na zařízení dál nahrává a po obnovení spojení se synchronizuje. Opakování pokusu spojení znovu naváže; pokud to dál nefunguje, zkontrolujte zařízení v Nastavení > Zařízení.",

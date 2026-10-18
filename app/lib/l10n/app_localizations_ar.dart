@@ -11017,6 +11017,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'تم حفظ الصوت، وسيُنسخ لاحقًا';
 
   @override
+  String get captureBannerTryReconnect => 'حاول إعادة الاتصال';
+
+  @override
+  String get captureBannerRetrySync => 'أعد محاولة المزامنة';
+
+  @override
   String get captureBannerWhatsWrong => 'ما الذي يحدث؟';
 
   @override

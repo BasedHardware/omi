@@ -10915,6 +10915,8 @@
     "phoneRecordingBlockedByPendantBatch": "Pred snemanjem s telefonom ustavite Transcribe Later na obesku.",
     "captureNotTranscribing": "Ni prepisa",
     "captureAudioSavedTranscribesLater": "Zvok shranjen, prepis pozneje",
+    "captureBannerTryReconnect": "Poskusi znova povezati",
+    "captureBannerRetrySync": "Ponovi sinhronizacijo",
     "captureBannerWhatsWrong": "Kaj se dogaja?",
     "captureBannerDismiss": "Skrij",
     "captureWedgeBleExplanation": "Bluetooth-povezava z vašim Omijem se je ustavila, zato zvok ne prihaja v aplikacijo. Omi še naprej snema na napravi in se sinhronizira, ko se povezava obnovi. Ponovni poskus ponovno vzpostavi povezavo; če še naprej ne uspeva, preverite napravo v Nastavitve > Naprava.",

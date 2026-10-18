@@ -20151,6 +20151,18 @@ abstract class AppLocalizations {
   /// **'Audio saved, transcribes later'**
   String get captureAudioSavedTranscribesLater;
 
+  /// Banner button that retries the capture recovery in place (BLE/link episodes)
+  ///
+  /// In en, this message translates to:
+  /// **'Try reconnect'**
+  String get captureBannerTryReconnect;
+
+  /// Banner button that retries the pending transfer (phone-storage episodes)
+  ///
+  /// In en, this message translates to:
+  /// **'Retry sync'**
+  String get captureBannerRetrySync;
+
   /// Text button on the capture recovery banner that opens the details sheet explaining the outage.
   ///
   /// In en, this message translates to:

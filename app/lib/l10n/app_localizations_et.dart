@@ -11076,6 +11076,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Heli salvestatud, transkribeeritakse hiljem';
 
   @override
+  String get captureBannerTryReconnect => 'Proovi uuesti ühendada';
+
+  @override
+  String get captureBannerRetrySync => 'Proovi sünkroonimist uuesti';
+
+  @override
   String get captureBannerWhatsWrong => 'Mis toimub?';
 
   @override

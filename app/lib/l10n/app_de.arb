@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Beende Transcribe Later auf deinem Anhänger, bevor du mit dem Telefon aufnimmst.",
     "captureNotTranscribing": "Kein Transkript",
     "captureAudioSavedTranscribesLater": "Audio gespeichert, wird später transkribiert",
+    "captureBannerTryReconnect": "Erneut verbinden versuchen",
+    "captureBannerRetrySync": "Synchronisierung erneut versuchen",
     "captureBannerWhatsWrong": "Was ist los?",
     "captureBannerDismiss": "Ausblenden",
     "captureWedgeBleExplanation": "Die Bluetooth-Verbindung zu deinem Omi ist ins Stocken geraten, deshalb erreicht das Audio die App nicht. Omi nimmt auf dem Gerät weiter auf und synchronisiert, sobald die Verbindung wiederhergestellt ist. Erneut versuchen stellt die Verbindung wieder her; wenn es weiter fehlschlägt, prüfe dein Gerät unter Einstellungen > Gerät.",

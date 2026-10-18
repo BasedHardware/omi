@@ -11075,6 +11075,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Zvuk uložený, prepíše sa neskôr';
 
   @override
+  String get captureBannerTryReconnect => 'Skúsiť znova pripojiť';
+
+  @override
+  String get captureBannerRetrySync => 'Zopakovať synchronizáciu';
+
+  @override
   String get captureBannerWhatsWrong => 'Čo sa deje?';
 
   @override

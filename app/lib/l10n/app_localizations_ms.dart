@@ -11106,6 +11106,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi kemudian';
 
   @override
+  String get captureBannerTryReconnect => 'Cuba sambung semula';
+
+  @override
+  String get captureBannerRetrySync => 'Cuba segerak semula';
+
+  @override
   String get captureBannerWhatsWrong => 'Apa yang berlaku?';
 
   @override

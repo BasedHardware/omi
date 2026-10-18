@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.",
     "captureNotTranscribing": "Transkriptsioon puudub",
     "captureAudioSavedTranscribesLater": "Heli salvestatud, transkribeeritakse hiljem",
+    "captureBannerTryReconnect": "Proovi uuesti ühendada",
+    "captureBannerRetrySync": "Proovi sünkroonimist uuesti",
     "captureBannerWhatsWrong": "Mis toimub?",
     "captureBannerDismiss": "Peida",
     "captureWedgeBleExplanation": "Bluetooth-ühendus sinu Omiga on seiskunud, seega ei jõua heli rakendusse. Omi jätkab salvestamist seadmes ja sünkroonib, kui ühendus taastub. Uuesti proovimine ühendab lingi uuesti; kui see ikka ebaõnnestub, kontrolli seadet jaotises Seaded > Seade.",

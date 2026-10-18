@@ -11094,6 +11094,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ses kaydedildi, sonra metne dökülecek';
 
   @override
+  String get captureBannerTryReconnect => 'Yeniden bağlanmayı dene';
+
+  @override
+  String get captureBannerRetrySync => 'Senkronizasyonu yeniden dene';
+
+  @override
   String get captureBannerWhatsWrong => 'Ne oluyor?';
 
   @override

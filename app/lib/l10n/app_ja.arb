@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "携帯で録音する前に、ペンダントの Transcribe Later を停止してください。",
     "captureNotTranscribing": "文字起こし停止中",
     "captureAudioSavedTranscribesLater": "音声は保存済み、後で文字起こし",
+    "captureBannerTryReconnect": "再接続を試す",
+    "captureBannerRetrySync": "同期を再試行",
     "captureBannerWhatsWrong": "何が起きていますか？",
     "captureBannerDismiss": "非表示",
     "captureWedgeBleExplanation": "OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。",

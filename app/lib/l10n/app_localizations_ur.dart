@@ -11096,6 +11096,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'آڈیو محفوظ، بعد میں ٹرانسکرائب ہوگی';
 
   @override
+  String get captureBannerTryReconnect => 'دوبارہ کنیکٹ کرنے کی کوشش کریں';
+
+  @override
+  String get captureBannerRetrySync => 'ہم وقت کرنے کی دوبارہ کوشش کریں';
+
+  @override
   String get captureBannerWhatsWrong => 'کیا ہو رہا ہے؟';
 
   @override

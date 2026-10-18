@@ -10920,6 +10920,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '오디오 저장됨, 나중에 받아쓰기';
 
   @override
+  String get captureBannerTryReconnect => '다시 연결 시도';
+
+  @override
+  String get captureBannerRetrySync => '동기화 재시도';
+
+  @override
   String get captureBannerWhatsWrong => '무슨 일인가요?';
 
   @override

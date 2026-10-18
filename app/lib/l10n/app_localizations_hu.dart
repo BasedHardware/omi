@@ -11129,6 +11129,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Hang mentve, később lesz átírva';
 
   @override
+  String get captureBannerTryReconnect => 'Próbálja újra a csatlakozást';
+
+  @override
+  String get captureBannerRetrySync => 'Szinkronizálás újrapróbálása';
+
+  @override
   String get captureBannerWhatsWrong => 'Mi történik?';
 
   @override

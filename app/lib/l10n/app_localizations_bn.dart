@@ -11083,6 +11083,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'অডিও সংরক্ষিত, পরে ট্রান্সক্রাইব হবে';
 
   @override
+  String get captureBannerTryReconnect => 'আবার সংযোগের চেষ্টা করুন';
+
+  @override
+  String get captureBannerRetrySync => 'সিঙ্ক আবার চেষ্টা করুন';
+
+  @override
   String get captureBannerWhatsWrong => 'কী হচ্ছে?';
 
   @override

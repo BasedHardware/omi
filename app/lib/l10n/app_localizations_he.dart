@@ -10998,6 +10998,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'השמע נשמר, יתומלל מאוחר יותר';
 
   @override
+  String get captureBannerTryReconnect => 'נסה להתחבר מחדש';
+
+  @override
+  String get captureBannerRetrySync => 'נסה שוב לסנכרן';
+
+  @override
   String get captureBannerWhatsWrong => 'מה קורה?';
 
   @override

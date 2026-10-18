@@ -11178,6 +11178,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Na-save ang audio, ita-transcribe mamaya';
 
   @override
+  String get captureBannerTryReconnect => 'Subukang ikonekta muli';
+
+  @override
+  String get captureBannerRetrySync => 'Subukang i-sync muli';
+
+  @override
   String get captureBannerWhatsWrong => 'Anong nangyayari?';
 
   @override

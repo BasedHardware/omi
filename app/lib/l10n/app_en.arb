@@ -13195,6 +13195,14 @@
     "@captureAudioSavedTranscribesLater": {
         "description": "Home live capture card, line 2 after the timer (e.g. \"0:14 · Audio saved, transcribes later\"): recording continues on the phone and will be transcribed later."
     },
+    "captureBannerTryReconnect": "Try reconnect",
+    "@captureBannerTryReconnect": {
+        "description": "Banner button that retries the capture recovery in place (BLE/link episodes)"
+    },
+    "captureBannerRetrySync": "Retry sync",
+    "@captureBannerRetrySync": {
+        "description": "Banner button that retries the pending transfer (phone-storage episodes)"
+    },
     "captureBannerWhatsWrong": "What's going on?",
     "@captureBannerWhatsWrong": {
         "description": "Text button on the capture recovery banner that opens the details sheet explaining the outage."

@@ -11089,6 +11089,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ljud sparat, transkriberas senare';
 
   @override
+  String get captureBannerTryReconnect => 'Försök ansluta igen';
+
+  @override
+  String get captureBannerRetrySync => 'Försök synka igen';
+
+  @override
   String get captureBannerWhatsWrong => 'Vad händer?';
 
   @override

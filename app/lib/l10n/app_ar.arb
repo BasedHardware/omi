@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.",
     "captureNotTranscribing": "لا يتم النسخ",
     "captureAudioSavedTranscribesLater": "تم حفظ الصوت، وسيُنسخ لاحقًا",
+    "captureBannerTryReconnect": "حاول إعادة الاتصال",
+    "captureBannerRetrySync": "أعد محاولة المزامنة",
     "captureBannerWhatsWrong": "ما الذي يحدث؟",
     "captureBannerDismiss": "تجاهل",
     "captureWedgeBleExplanation": "تعطّل اتصال البلوتوث بجهاز Omi، لذا لا يصل الصوت إلى التطبيق. يواصل Omi التسجيل على الجهاز وسيتمت المزامنة بمجرد استعادة الاتصال. إعادة المحاولة تعيد إنشاء الاتصال؛ إذا استمر الفشل، تحقق من جهازك من الإعدادات > الجهاز.",

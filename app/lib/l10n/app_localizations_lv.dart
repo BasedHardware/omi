@@ -11111,6 +11111,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio saglabāts, tiks transkribēts vēlāk';
 
   @override
+  String get captureBannerTryReconnect => 'Mēģināt savienot vēlreiz';
+
+  @override
+  String get captureBannerRetrySync => 'Atkārtot sinhronizāciju';
+
+  @override
   String get captureBannerWhatsWrong => 'Kas notiek?';
 
   @override

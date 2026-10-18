@@ -10915,6 +10915,8 @@
     "phoneRecordingBlockedByPendantBatch": "قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.",
     "captureNotTranscribing": "رونویسی انجام نمی‌شود",
     "captureAudioSavedTranscribesLater": "صدا ذخیره شد، بعداً رونویسی می‌شود",
+    "captureBannerTryReconnect": "تلاش برای اتصال مجدد",
+    "captureBannerRetrySync": "تلاش برای همگام‌سازی مجدد",
     "captureBannerWhatsWrong": "چه اتفاقی افتاده است؟",
     "captureBannerDismiss": "رد کردن",
     "captureWedgeBleExplanation": "اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.",
