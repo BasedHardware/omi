@@ -400,7 +400,7 @@ the empty-owner exclusion and stagger-aware reconcile code is deployed. No one-o
 ### Durable expiry custody (dark)
 
 `SYNC_DURABLE_REDRIVE_GUARD=false` and
-`SYNC_LEGACY_COMPLETION_CONVERGENCE=false` default off. Enable only through a
+`SYNC_LEGACY_COMPLETION_CONVERGENCE=false` default off in code/dev and are enabled on production `backend-sync` and `backend-sync-backfill` in `backend/deploy/runtime_env/prod.overlay.yaml`. Change only through a
 reviewed configuration rollout. The guard independently enables the existing
 bounded missing-key/run-lock scan even when
 `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM=false`. Its transaction removes an expired
