@@ -19,11 +19,10 @@ from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.projection import projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
-
-from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 
 logger = logging.getLogger(__name__)
 MAX_FOLLOWUPS = 4
