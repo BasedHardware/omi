@@ -1,0 +1,232 @@
+"""Cold WAL admission fence for a registered live record, including rollback.
+
+No frame/segment/pusher path calls this. A named WAL reuses the record result
+only after its PCM is proven covered by that record's pinned raw references.
+An unproven/late tail remains client-owned; it never starts a second GPU job.
+"""
+
+from dataclasses import fields
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from typing import Any
+import io
+import wave
+
+from fastapi.responses import JSONResponse
+
+from config.batch_pipeline import (
+    enabled_for,
+    live_record_admission_enabled,
+    live_record_enabled_for,
+    record_capture_eligible,
+)
+from database.conversations import claim_record_lane_owner
+from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.sync_ledger import LEDGER_RETENTION_DAYS
+from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.intake import artifacts_for, durable_status, start_response
+from utils.batch_pipeline.live import OWNER, record_identity
+from utils.batch_pipeline.capture_decode import decode_units
+from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
+from utils.sync.stage import current_stage
+
+
+class RecordUploadRoute(Enum):
+    LEGACY = 'legacy_owned'
+    BATCH = 'batch_owned'
+
+
+def _pending():
+    return JSONResponse(
+        status_code=503,
+        headers={'Retry-After': '30'},
+        content={
+            'code': 'record_capture_pending',
+            'detail': 'Retain local audio until the registered record is complete',
+        },
+    )
+
+
+def _pcm(wav):
+    with wave.open(io.BytesIO(wav), 'rb') as stream:
+        return stream.readframes(stream.getnframes())
+
+
+def _covered(paths, jobs, artifacts):
+    # Input bundles and raw captures can have different chunk boundaries. Match
+    # their actual sample intervals and bytes, never just timestamps or text.
+    record = [
+        WorkItem(**{field.name: job[field.name] for field in fields(WorkItem) if field.name in job})
+        for job in sorted(jobs, key=lambda job: (job['capture_at'], job['segment_id']))
+    ]
+    # A long recording can have 128 units. Keep one source unit at a time and
+    # fetch only intersections, rather than retaining many hours of decoded PCM.
+    for unit in decode_units(paths):
+        pcm = _pcm(unit.wav)
+        consumed = 0
+        for item in record:
+            cursor = unit.capture_at + consumed / 32000
+            if (
+                item.capture_at + item.duration_seconds <= cursor
+                or item.capture_at >= unit.capture_at + unit.duration_seconds
+            ):
+                continue
+            offset = round((cursor - item.capture_at) * 16000) * 2
+            if offset < 0:
+                return False
+            source = _pcm(artifacts.fetch_audio(item))
+            length = min(len(source) - offset, len(pcm) - consumed)
+            if (
+                length <= 0
+                or memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]
+            ):
+                return False
+            consumed += length
+            del source
+            if consumed == len(pcm):
+                break
+        if consumed != len(pcm):
+            return False
+    return True
+
+
+async def registered_record_response(
+    *,
+    uid,
+    conversation_id,
+    content_id,
+    paths,
+    source,
+    client_device_id,
+    byok_enabled=False,
+    recording_session_id=None,
+    loaded_conversation=None,
+) -> JSONResponse | RecordUploadRoute | None:
+    if not conversation_id and not recording_session_id:
+        return None
+    # No owner-discovery read while dark. Callers can supply ownership from a
+    # snapshot their existing provenance/privacy path already needed.
+    if not live_record_admission_enabled() and not (loaded_conversation or {}).get('record_lane_owner'):
+        return None
+    store = await run_blocking(db_executor, FirestoreStore, f'batch_pipeline_{current_stage()}')
+
+    def target_snapshot() -> tuple[str | None, Any]:
+        user = store.client.collection('users').document(uid)
+        target = conversation_id
+        if not target and recording_session_id:
+            session = user.collection('recording_sessions').document(recording_session_id).get().to_dict() or {}
+            target = session.get('conversation_id')
+        if target is not None and not isinstance(target, str):
+            raise ValueError('invalid registered conversation identity')
+        return (target, user.collection('conversations').document(target).get()) if target else (None, None)
+
+    snapshot = None
+    if loaded_conversation is not None:
+        row = loaded_conversation
+    else:
+        conversation_id, snapshot = await run_blocking(db_executor, target_snapshot)
+        if snapshot is None or conversation_id is None:
+            return _pending() if live_record_enabled_for(uid) else None
+        row = snapshot.to_dict() or {}
+    if row.get('record_lane_owner') != OWNER:
+        if row.get('record_lane_owner') == 'legacy_final_pass_v1':
+            return RecordUploadRoute.LEGACY
+        if row.get('record_lane_owner') == 'batch_sync_v1':
+            return RecordUploadRoute.BATCH
+        # A pre-enable capture can exist without an owner until its finalizer
+        # reserves one. Hold its WAL too: starting sync here would race that
+        # reservation and process the same retained audio through two jobs.
+        awaiting_reservation = (
+            not row.get('record_lane_owner')
+            and row.get('status') in {'in_progress', 'processing'}
+            and not byok_enabled
+            and record_capture_eligible(uid, row)
+        )
+        if awaiting_reservation or (snapshot is not None and not snapshot.exists and live_record_enabled_for(uid)):
+            return _pending()
+        if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
+            # Only enabled admission may establish a new dispatcher.
+            owner = 'batch_sync_v1' if enabled_for(uid) and not byok_enabled else 'legacy_final_pass_v1'
+            revision = await run_blocking(
+                db_executor,
+                claim_record_lane_owner,
+                uid,
+                conversation_id,
+                owner,
+                snapshot.update_time,
+                firestore_client=store.client,
+            )
+            if revision is None:
+                return _pending()
+            return RecordUploadRoute.BATCH if owner == 'batch_sync_v1' else RecordUploadRoute.LEGACY
+        return None
+    if byok_enabled or row.get('uses_custom_stt'):
+        return JSONResponse(
+            status_code=409,
+            content={
+                'code': 'record_capture_byok_conflict',
+                'detail': 'BYOK audio cannot join this capture because server record processing already owns it',
+                'retryable': False,
+            },
+        )
+    if row.get('deleted') or row.get('source') != source or row.get('client_device_id') != client_device_id:
+        return _pending()
+    content, _ = record_identity(uid, conversation_id)
+
+    def read(tx):
+        tx.check_privacy(uid, (conversation_id,))
+        prior = tx.get('content', f'{uid}/{content_id}')
+        if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
+            return prior, []
+        intake = tx.get('intakes', 'bp_' + content)
+        jobs = [tx.get('jobs', segment) for segment in intake.get('segment_ids', [])]
+        return prior, jobs
+
+    try:
+        prior, jobs = await run_blocking(db_executor, store.run, read)
+    except BatchPrivacyBlocked:
+        return JSONResponse(
+            status_code=409,
+            content={
+                'code': 'record_capture_privacy_blocked',
+                'detail': 'Capture is unavailable for server processing',
+            },
+        )
+    if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
+        status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
+        return start_response(status) if status else _pending()
+    if prior:
+        return _pending()
+    if not jobs:
+        return _pending()
+    try:
+        artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
+            return _pending()
+
+        def alias(tx):
+            current = tx.get('content', f'{uid}/{content_id}')
+            original = tx.get('content', f'{uid}/{content}')
+            tx.check_privacy(uid, (conversation_id,))
+            if current and current.get('job_id') != original.get('job_id'):
+                return False
+            tx.put(
+                'content',
+                f'{uid}/{content_id}',
+                {
+                    **original,
+                    'record_content_id': content,
+                    'expires_at': datetime.now(timezone.utc) + timedelta(days=LEDGER_RETENTION_DAYS),
+                },
+            )
+            return True
+
+        if not await run_blocking(db_executor, store.run, alias):
+            return _pending()
+        status = await run_blocking(db_executor, durable_status, store, uid, 'bp_' + content)
+        return start_response(status) if status else _pending()
+    except Exception:
+        # An erased/missing manifest cannot prove WAL coverage. Retain it;
+        # never translate a storage/privacy failure into legacy compute.
+        return _pending()

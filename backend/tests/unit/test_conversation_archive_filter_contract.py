@@ -157,6 +157,9 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
+    from utils.conversations import summary_delivery
+    from database import sync_live_overlap
+    from utils.sync import live_overlap
 
     firestore = _Firestore([])
 
@@ -174,6 +177,7 @@ def conversations_db():
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
+    exceptions_module.FailedPrecondition = type("FailedPrecondition", (Exception,), {})
     exceptions_module.NotFound = type("NotFound", (Exception,), {})
 
     database_client = ModuleType("database._client")
@@ -214,6 +218,10 @@ def conversations_db():
         "database._client": database_client,
         "database.firestore_read_metrics": firestore_read_metrics,
         "database.helpers": database_helpers,
+        # Archive reads do not execute sync admission. Keep the real pure
+        # overlap policy and discovery seam loaded before closing utils paths.
+        "database.sync_live_overlap": sync_live_overlap,
+        "utils.sync.live_overlap": live_overlap,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         "database.speaker_learning_jobs": AutoMockModule("database.speaker_learning_jobs"),
         "database.users": AutoMockModule("database.users"),
@@ -224,6 +232,7 @@ def conversations_db():
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
         "utils.conversations": utils_conversations,
+        "utils.conversations.summary_delivery": summary_delivery,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),

@@ -91,13 +91,19 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    "users:surface_state": (60, 60),  # Multiple devices plus foreground transitions; metadata only.
     "users:budget_choice": (6, 60),  # Shared GET/PUT ceiling before monthly usage reads.
     # A plans sheet opens on user intent; bound accidental polling before provider reads.
     "storefront:plans": (12, 60),
     "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),
-    "conversations:reprocess": (3, 3600),
+    # Reprocess is how users try summary templates and retry a missing Omi
+    # summary: 3/hour blocked comparing a few templates on one conversation.
+    # One run is notes + app result + action items + memories (a handful of
+    # LLM calls, well under :create's STT + ~22 calls), so 10/hour/user keeps
+    # the worst case below the :create ceiling while allowing real exploration.
+    "conversations:reprocess": (10, 3600),
     "conversations:merge": (5, 3600),
     # From-segments: on-device-STT upload path (segments already transcribed, so
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished

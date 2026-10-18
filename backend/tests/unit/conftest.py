@@ -25,6 +25,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Capture the pure resolver boundary before legacy suites replace package objects.
+import config.rollout_cohorts as _rollout_cohorts
+
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
     install_database_client_stub,
@@ -276,3 +279,25 @@ def isolated_dream_dynamic_control(monkeypatch):
     monkeypatch.setattr(dream_control, '_until', float('inf'))
     monkeypatch.setattr(dream_control, '_allowed', True)
     monkeypatch.setattr(dream_control, '_refreshing', False)
+
+
+@pytest.fixture(autouse=True)
+def empty_rollout_cohorts(monkeypatch):
+    """Inject an empty store without importing SDKs or scheduling real reads."""
+    cohorts = _rollout_cohorts
+
+    def membership(uid, name, *, legacy_members=None, legacy_all=False):
+        return cohorts.legacy_membership(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
+
+    def members(name):
+        return tuple(
+            sorted({item.strip() for item in cohorts.COHORT_ENVS[name]().split(',') if cohorts.valid_uid(item.strip())})
+        )
+
+    async def warm(_uid):
+        return None
+
+    monkeypatch.setattr(cohorts, '_membership_resolver', membership)
+    monkeypatch.setattr(cohorts, '_members_resolver', members)
+    monkeypatch.setattr(cohorts, '_load_resolver', lambda _uid: None)
+    monkeypatch.setattr(cohorts, '_warm_resolver', warm)

@@ -386,9 +386,16 @@ stopped and external effects are reconciled.
 ## Shaped context and cache operations
 
 The backend can be deployed while the new indexes build: optional context fails
-open to the existing plain cache-aligned window. Foreground optional reads are
-bounded at 150 ms total. Stored continuity and digest IO run concurrently, with
-at most 75 ms for digest IO; a digest timeout preserves a successful summary. Summarization only runs
+open to the existing plain cache-aligned window. Eligible app/channel turns start
+stored continuity and digest IO before router metadata and prompt/tool setup. Each
+has a one-second overlapping window on a dedicated four-worker, zero-queue context
+executor. Cancellation does not free a worker until its blocking call finishes.
+Every context RPC has an explicit timeout and a Retry predicate that never retries.
+The model samples ready results, then checks fresh session/account/deletion/link and
+generation/revision/incarnation fences in one projected BatchGet (150 ms maximum).
+A failed, late or saturated check discards both components; cap exhaustion is
+`summary_pending`. A pending/failed digest preserves a freshly validated summary. Direct runner callers without the router retain the 150 ms bounded prepare
+seam. Summarization only runs
 after the turn in tracked background tasks, at most two per process and 60 seconds
 per job. Failed/missing indexes, model errors, CAS conflicts and timeouts are logged
 by error type and record degraded fallback; they do not fail the answer.
@@ -414,8 +421,12 @@ Deployment order:
 No new config means legacy admission/cohort/seat behavior stays in force. Existing
 shaped app turns keep the same plain 10–17-message window; optional summaries/digest
 can degrade safely while indexes build. There is no index-dependent app send gate,
-summary model call before streaming or new admission requirement. Optional reads
-may add up to 150 ms; this is a bounded degradation, not identical provider bytes.
+summary model call before streaming or new admission requirement. Router prefetch
+adds no wait for unfinished prefetched data, but the fresh fence check at model mount
+adds up to 150 ms (the pre-prefetch foreground cap). This supersedes the earlier
+zero-wait mount claim. The amount of useful overlap depends on actual
+setup time; measure it with `omi_chat_context_setup_overlap_seconds`. A ready summary
+and digest can change provider input and caching, so provider bytes need not match.
 
 Session `shaped_context` is encrypted. History report/clear/delete/journal edits remove
 it in the same atomic write and bump generation/revision. CAS and active-link/account
@@ -581,9 +592,51 @@ collector. `prod-omi-gke` has namespace `prod-omi-backend`, Ready ExternalSecret
 `prod-omi-backend-secrets`, and KSA `prod-omi-backend-listen` mapped to
 `backend-listen-runtime@based-hardware.iam.gserviceaccount.com`; no backend CronJobs
 are installed. Existing notification/X/FinOps jobs use Cloud Run. Keep cleanup on that
-platform and Scheduler under `backend/deploy/scheduler/jobs.yaml`. The new trigger is
-`lifecycle: planned`, so full reconciliation cannot install it accidentally; explicitly
-select it only after job validation. No new workflow is needed.
+platform and Scheduler under `backend/deploy/scheduler/jobs.yaml`. The installed
+`messaging-maintenance-hourly` trigger omits `lifecycle`, like other
+active jobs. Full CI reconciliation now checks and maintains it; `planned` is only
+for jobs not yet installed. Its invoker is `msg-maintenance-scheduler` (25 characters;
+IAM [service-account IDs](https://docs.cloud.google.com/iam/docs/service-accounts-create)
+must be 6–30 characters). No new workflow is needed.
+
+Install status on 2026-10-16: the job, job-scoped invoker SA, enabled hourly
+Scheduler trigger and six log counters are already installed. One manual cleanup
+succeeded (`proofs=3`); runtime secret access was already present. Do not recreate
+these resources, repeat the secret grant, or repeat that execution. Steps 2–3 below
+are the new-install reference; existing installs need only a reviewed image update
+when the admitted digest changes. The nine operational alerts are also live; keep
+the tenth (context rate) held until the context rollout gate below passes.
+
+The earlier 12:23 UTC audit found that the trigger-SHA label described a newer
+commit than the admitted image. That deployment mismatch has since been corrected:
+production now reports `OMI_BACKEND_RELEASE_SHA=5b0f5a9`, containing #21820, and
+exports the new context metrics. Always use the revision's release SHA, admitted
+workflow receipt and immutable image contents to verify source. A trigger label
+alone is insufficient. Release further context changes through normal GitHub Actions.
+
+`OMI_SHAPED_AGENT_MODE=on` routes all eligible `/v2/messages` app chats to non-shadow
+shaped execution; channel LLM turns always take that runner. Requests rejected
+before execution, ignored events and lightweight acknowledgements do not prepare
+context. Session/history-less invocations are `unscoped`. The single uvicorn process
+and loopback metrics thread share the default registry; no multiprocess or label
+initialization workaround is indicated. Labelled series appear after observations.
+
+The first corrected-release sample (four eligible app turns) lost optional context
+on every turn. At 14:25 UTC, GMP p50/p95 in seconds were: digest .088/.099,
+summary_load .10/.27, refresh_load .225/.86, source_page .6/3. Foreground samples
+are censored by the old 75/150 ms deadlines. The uncensored refresh_load uses the
+old guarded state loader and informed the one-second overlapping window. The old
+loader used three serial document reads for app, four for channel, plus transaction
+overhead. Request prefetch now uses two bounded RPCs: a projected session link lookup
+and a BatchGet of session/user/deletion/link. At use, one additional projected BatchGet
+checks those fences against the snapshot. Background refresh keeps its transaction.
+No request prefetch uses `db_executor`; context capacity cannot queue behind or ahead
+of setup work. Guard reads remain point-in-time: a mutation after the fresh snapshot
+and before/during the provider call can still race, as with any read-based authorization.
+There are no intervening setup awaits after this validation. Digest is one bounded 20-candidate query plus local decryption.
+Background source paging adds guarded access, a logical-ID boundary query, a source
+page and model work; its latency does not belong on the foreground path. No per-RPC
+production timing is available; these counts come from the guarded call graph.
 
 `backend-runtime@based-hardware.iam.gserviceaccount.com` already has
 `roles/datastore.user`. Cleanup needs only Firestore and the existing
@@ -651,7 +704,9 @@ complete desired body, including the image and task template; do not use it to
 preserve ad hoc sidecars or other untracked job configuration. For an existing job,
 `--validate` sends PATCH with `validateOnly=true`; `--apply` sends the same body with
 `validateOnly=false`. Neither starts an execution. Regression tests exercise both
-existing-job paths and the CLI validation path, not only first creation.
+existing-job paths and the CLI validation path. Creation sends the identity in
+`jobId` and omits `Job.name` from the POST body; GET/comparison/PATCH retain the name
+([CreateJobRequest](https://github.com/googleapis/googleapis/blob/master/google/cloud/run/v2/job.proto)).
 
 The sequence below is **for the authorized operator**, from the repository root.
 The operations tool uses the explicitly selected gcloud identity; Scheduler
@@ -697,8 +752,11 @@ permissions as part of this change. Monitoring has no validate-only create API;
 backend rollout, not proof of zero fallbacks. Run the job validation as operator if
 read-only IAM denies Cloud Run validation; do not interpret that denial as job drift.
 
-2. Install the job using the existing production operator identity; no execution
-   starts. Recheck after the asynchronous operation finishes, and require MATCH.
+2. Create/update the job using the human operator identity, or an identity with
+   `iam.serviceAccounts.actAs` on `backend-runtime@based-hardware.iam.gserviceaccount.com`
+   plus the required Cloud Run job permissions. The `prod-operator` tier does **not**
+   have that actAs grant and fails with HTTP 403; do not use it for job validation
+   or apply. No execution starts. Recheck after the asynchronous operation finishes, and require MATCH.
    The read-only identity could not inspect Secret Manager IAM. If validation reports
    missing runtime access to `ENCRYPTION_SECRET`, the human IAM operator must inspect
    that secret's policy and, only if absent, grant its accessor role on that secret:
@@ -716,10 +774,10 @@ gcloud secrets add-iam-policy-binding ENCRYPTION_SECRET --project=based-hardware
 ```
 
    No secret payload is read. Do not add project-wide Secret Accessor. Then rerun
-   validate-only and apply with the production operator identity:
+   validate-only and apply with that actAs-capable human operator identity:
 
 ```sh
-source ~/.local/bin/gcp-agent-env.sh prod-operator
+source ~/.local/bin/gcp-agent-env.sh human
 backend/.venv/bin/python backend/scripts/messaging_operations.py job \
   --image "$ADMITTED_BACKEND_IMAGE" --validate
 backend/.venv/bin/python backend/scripts/messaging_operations.py job \
@@ -740,15 +798,21 @@ backend/.venv/bin/python backend/scripts/messaging_operations.py job \
 ```sh
 source ~/.local/bin/gcp-agent-env.sh human
 gcloud iam service-accounts list --project=based-hardware \
-  --filter='email:messaging-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
+  --filter='email:msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
   --format='value(email)'
 # Only if the account is absent:
-gcloud iam service-accounts create messaging-maintenance-scheduler \
+gcloud iam service-accounts create msg-maintenance-scheduler \
   --project=based-hardware --display-name='Messaging cleanup Scheduler invoker'
 gcloud run jobs add-iam-policy-binding messaging-maintenance-job \
   --project=based-hardware --region=us-central1 \
-  --member='serviceAccount:messaging-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
+  --member='serviceAccount:msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com' \
   --role=roles/run.invoker
+# CI's scheduler reconciler (omi-ci-deployer-prod) patches oauthToken on drift and
+# must be able to act as this account, like the other Scheduler invokers:
+gcloud iam service-accounts add-iam-policy-binding \
+  msg-maintenance-scheduler@based-hardware.iam.gserviceaccount.com --project=based-hardware \
+  --member='serviceAccount:omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' \
+  --role=roles/iam.serviceAccountUser
 backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
   --gcloud-auth --environment prod --project based-hardware --check --jobs messaging-maintenance-hourly
 backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
@@ -757,9 +821,20 @@ backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
   --gcloud-auth --environment prod --project based-hardware --check --jobs messaging-maintenance-hourly
 ```
 
-4. Install the six log counters first, then require a real eligible shaped-turn sample in
-   `omi_chat_context_turns_total` before applying the rate policy. An absent series
-   cannot validate the alert. Review and apply only the six declared counters and ten named Monitoring policies. The tool refuses
+4. Install the six log counters first. Apply the nine operational policies separately
+   from the shaped-context rate policy using `--alert-group` below. After the counters
+   MATCH and notification destinations are approved, the nine can be applied without
+   waiting for shaped traffic. Confirm the admitted source is actually in both serving
+   backend and cleanup images before claiming their new logging is covered. Apply the
+   rate policy only after the release containing prefetch isolation and fresh mount fences is verified, old
+   instances have drained, and a full 30-minute window contains only new outcome
+   semantics. Verify fresh context/read/overlap samples by surface. Require at least
+   20 eligible turns in that window and a summary-loss fraction at or below 5% before
+   calling the fix accepted and applying the tenth policy. If the gate fails, keep it
+   held and investigate setup overlap; do not hide pending summaries in the denominator.
+   The alert itself fires above 5% with a 10-minute dwell. Low-volume surfaces remain
+   below its evaluation floor and need an explicit observation window, not a healthy claim.
+   Missing data cannot validate the alert. Review only the six declared counters and ten named Monitoring policies. The tool refuses
    duplicate managed display names, preserves condition identities on update,
    verifies writes, and leaves every other policy alone. It never prints API error
    bodies. Use the existing authorized Monitoring operator identity; this example
@@ -769,12 +844,31 @@ backend/.venv/bin/python backend/scripts/scheduler_reconcile.py \
 backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
 backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --apply
 backend/.venv/bin/python backend/scripts/messaging_operations.py log-metrics --check
-backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check --alert-group operational \
   --notification-channels \
   projects/based-hardware/notificationChannels/7795172925536204487 \
   projects/based-hardware/notificationChannels/4018667585736557040
-backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --apply \
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --apply --alert-group operational \
   --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check --alert-group operational \
+  --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+```
+
+The nine operational policies are already live: use their check command to verify
+them and apply only for reviewed drift. After the rollout gate above, install only
+the tenth policy with this branch's updated summary-loss numerator:
+
+```sh
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
+  --alert-group context-rate --notification-channels \
+  projects/based-hardware/notificationChannels/7795172925536204487 \
+  projects/based-hardware/notificationChannels/4018667585736557040
+backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --apply \
+  --alert-group context-rate --notification-channels \
   projects/based-hardware/notificationChannels/7795172925536204487 \
   projects/based-hardware/notificationChannels/4018667585736557040
 backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check \
@@ -782,6 +876,14 @@ backend/.venv/bin/python backend/scripts/messaging_operations.py alerts --check 
   projects/based-hardware/notificationChannels/7795172925536204487 \
   projects/based-hardware/notificationChannels/4018667585736557040
 ```
+
+Selection never deletes or disables the unselected policies. Keep the denominator
+as eligible `prepare()` outcomes, not app HTTP requests, completed channel turns or
+provider-token callbacks: these include rejected/lightweight turns or multiple model
+calls and would dilute the context failure rate. Track a separate shaped-traffic/export
+coverage signal when eligible traffic is expected; do not interpret no series as healthy.
+For low-volume channels below the 20-turn floor, consider a separate absolute
+failure-count warning, rather than diluting the rate with unrelated chat traffic.
 
 5. Execute one bounded cleanup, verify success and counts-only output, then observe
    the next scheduled execution. Never run `--prepare-launch` for this no-cap cohort.
@@ -807,18 +909,48 @@ After rollout, query GMP directly (or Grafana after its bridge is repaired):
 sum by (surface, outcome) (increase(omi_chat_context_turns_total{cluster="__run__",namespace="backend"}[24h]))
 histogram_quantile(0.50, sum by (surface, phase, le) (rate(omi_chat_context_read_seconds_bucket{cluster="__run__",namespace="backend"}[1h])))
 histogram_quantile(0.95, sum by (surface, phase, le) (rate(omi_chat_context_read_seconds_bucket{cluster="__run__",namespace="backend"}[1h])))
+histogram_quantile(0.50, sum by (surface, le) (rate(omi_chat_context_setup_overlap_seconds_bucket{cluster="__run__",namespace="backend"}[30m])))
 ```
 
-`unscoped` is excluded from eligible-turn rates; `empty` means a successful read
-with no summary yet; `degraded` includes digest-only loss even when summary survives.
-Read histograms include executor admission and are censored at foreground deadlines;
-they are not raw Firestore RPC latency. Warning logs now carry bounded surface/phase,
-exception type and exact code site, never exception text, IDs or payloads. Background
-refresh warnings must be analyzed separately from foreground turns. The deterministic
-app auto-ID boundary failure and serial summary-discard mechanism should be zero
-after deployment; target eligible foreground degraded rate below 5% per surface
-with at least 20 turns/30 minutes. A total production rate cannot be predicted from
-the old unphased logs. Investigate residual phases before changing either budget.
+`unscoped` is excluded from eligible-turn rates. `summary` means stored continuity
+was available and the digest read succeeded; `empty` means the state read succeeded
+without an existing summary. `digest_degraded` means a stored summary survived but
+the digest failed or was not ready. `empty_digest_degraded` means there was no prior
+summary and the digest failed or was not ready; empty-rate dashboards should include
+both `empty` and `empty_digest_degraded`. Both require a successful fresh fence check. `degraded` means
+a state/fence read failed or the snapshot was invalidated; `summary_pending` means
+a read/check was unfinished or context capacity was exhausted at model mount.
+Only `degraded|summary_pending` enter the alert numerator; every non-unscoped outcome
+enters the denominator. The managed policy name stays unchanged. Never mix old
+`degraded` semantics (which included digest-only failures) into the acceptance window.
+
+Read histograms include executor admission and are censored at the read deadline
+(or cancellation), not raw Firestore RPC latency. Compare
+`omi_chat_context_setup_overlap_seconds` with read latency by surface: a one-second
+window cannot help a 100 ms setup consume a 270 ms load. Full ready outcomes should
+dominate when setup overlap exceeds those reads; the four-turn sample cannot establish
+a post-fix percentage. If summary_pending remains high, begin prefetch earlier in the
+request or investigate batching guarded reads, preserving transaction/generation fences.
+The mount guard costs one fresh projected RPC, capped at 150 ms, and no fresh read
+waits for pool admission. Direct runner helpers without router prefetch keep the
+150 ms total prepare cap; their already-guarded snapshots can be at most that old
+when consumed. All production shaped turns enter through the router and use the
+fresh mount fence. A digest uses a false-predicate Retry rather than `retry=None`,
+which the installed Firestore Query error handler dereferences and masks with an
+AttributeError on GoogleAPICallError.
+
+Persisting a per-session activity digest is deferred: it requires cross-session freshness
+and invalidation rules, adds writes and does not remove the guarded session read.
+Simply extending an awaited foreground budget to one second would add up to one
+second; router prefetch does not add that wait, while its fresh guard adds at most
+150 ms. Verify first-token latency and the `fence_check` histogram after release;
+optional context no longer competes for setup's database workers.
+
+Warning logs carry only bounded surface/phase, exception type and code site. Analyze
+refresh warnings separately. `summary capped` is informational: the model's soft length
+instruction can overrun, but the summary is deterministically clipped to 2,400 characters
+before every checkpoint/save. Empty/invalid summaries still fail without advancing
+the partially summarized page.
 
 Rollback maintenance by pausing only `messaging-maintenance-hourly`; retain the job,
 indexes and all data. Disable these named Monitoring policies if their routing needs

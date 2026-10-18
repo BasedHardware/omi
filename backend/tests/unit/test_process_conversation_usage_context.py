@@ -1130,6 +1130,150 @@ def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatc
     assert [(r.app_id, r.content) for r in conv.apps_results] == [('selected-app', '')]
 
 
+# ---------------------------------------------------------------------------
+# User-reprocess result contract (CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED):
+# replace only the selected app's result, keep the others behind it.
+# ---------------------------------------------------------------------------
+
+
+def _prior_results():
+    return [
+        process_conversation.AppResult(app_id='other-app', content='OTHER TEMPLATE'),
+        process_conversation.AppResult(app_id='selected-app', content='OLD SELECTED'),
+    ]
+
+
+def _run_explicit_replace(conv, selected):
+    process_conversation.trigger_conversation_apps(
+        'user-explicit',
+        conv,
+        is_reprocess=True,
+        app_id=selected.id,
+        explicit_app=selected,
+        usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+        replace_selected_result=True,
+    )
+
+
+def test_replace_mode_keeps_other_apps_and_puts_the_selected_result_first():
+    """Released clients display the first non-empty result, so the fresh selection leads."""
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        _run_explicit_replace(conv, selected)
+
+    app_result_mock.assert_called_once()
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [
+        ('selected-app', 'App result content'),
+        ('other-app', 'OTHER TEMPLATE'),
+    ]
+
+
+def test_legacy_mode_still_wipes_other_apps_results():
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-explicit',
+            conv,
+            is_reprocess=True,
+            app_id=selected.id,
+            explicit_app=selected,
+            usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+        )
+
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [('selected-app', 'App result content')]
+
+
+@pytest.mark.parametrize('failure', ['raises', 'empty'])
+def test_replace_mode_failure_keeps_every_prior_result_and_fails_closed(failure):
+    """A failed or empty run must not count the stale result as success nor evict it."""
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    if failure == 'raises':
+        app_result_mock.side_effect = RuntimeError('LLM unavailable')
+    else:
+        app_result_mock.return_value = '   '
+    with p1, p2, p3, p4, p5, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            _run_explicit_replace(conv, selected)
+
+    assert conv.apps_results == _prior_results()
+
+
+def test_replace_mode_without_any_app_clears_results_so_the_omi_summary_shows():
+    """A plain regenerate asked for the Omi summary; a kept template would shadow it."""
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+
+    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-plain', conv, is_reprocess=True, replace_selected_result=True
+        )
+
+    app_result_mock.assert_not_called()
+    assert conv.apps_results == []
+
+
+def test_replace_mode_preferred_app_leads_and_keeps_other_results():
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
+    conv = _make_trigger_conversation()
+    conv.apps_results = [
+        process_conversation.AppResult(app_id='other-app', content='OTHER TEMPLATE'),
+        process_conversation.AppResult(app_id='preferred-app', content='OLD PREFERRED'),
+    ]
+
+    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-preferred', conv, is_reprocess=True, replace_selected_result=True
+        )
+
+    assert [(r.app_id, r.content) for r in conv.apps_results] == [
+        ('preferred-app', 'App result content'),
+        ('other-app', 'OTHER TEMPLATE'),
+    ]
+
+
+@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
+def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypatch, enabled):
+    if enabled:
+        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
+    else:
+        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+    seen_kwargs: list = []
+
+    def _failing_trigger_apps(uid, conversation, **kwargs):
+        seen_kwargs.append(kwargs)
+        raise process_conversation.ExplicitAppSelectionFailedError('selected-app produced no summary content')
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
+
+    assert seen_kwargs[0]['replace_selected_result'] is enabled
+    if enabled:
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.detail['code'] == 'app_result_failed'
+    else:
+        assert exc_info.value.status_code == 500
+
+
 def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):
     """Only explicit selections fail closed; automatic runs keep log-and-continue."""
     preferred = _make_mock_app('preferred-app', 'PreferredApp')
@@ -1696,3 +1840,65 @@ def test_summary_vector_update_only_keeps_metadata_semantics(monkeypatch, discar
     embed.assert_not_called()
     upsert.assert_not_called()
     update.assert_called_once()
+
+
+def test_demand_visible_completion_leaves_invisible_work_in_existing_outbox(monkeypatch):
+    """Visible notes persist while memory, vector and task writers wait for settlement."""
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    monkeypatch.setenv('DEMAND_PROCESSING_LAZY_ENABLED', 'true')
+    incoming = MagicMock()
+    incoming.source = 'omi'
+    incoming.get_person_ids.return_value = []
+    completed = _explicit_selection_flow_conversation()
+    completed.discarded = False
+    completed.structured = None
+    notes = MagicMock(return_value=(MagicMock(), False))
+    persisted = MagicMock(return_value=True)
+    debt = MagicMock()
+    memory = MagicMock()
+    submit = MagicMock()
+    monkeypatch.setattr(process_conversation, '_get_structured', notes)
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **kw: completed)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+    monkeypatch.setattr(reprocess, 'mark_effects', debt)
+    monkeypatch.setattr(process_conversation, '_extract_memories', memory)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submit)
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', MagicMock())
+    result = process_conversation.process_conversation('uid', 'en', incoming)
+    assert result is completed
+    notes.assert_called_once()
+    persisted.assert_called_once()
+    debt.assert_called_once_with('uid', completed.id, 'en', immediate=False)
+    memory.assert_not_called()
+    deferred = {process_conversation.save_structured_vector, process_conversation._save_action_items}
+    assert all(call.args[1] not in deferred for call in submit.call_args_list)
+
+
+def test_lazy_worker_uses_settled_notes_without_regenerating_them(monkeypatch):
+    from utils.conversations import lazy_enrichment
+
+    completed = MagicMock()
+    completed.get_person_ids.return_value = []
+    completed.model_dump.return_value = {'structured': {'title': 'settled'}, 'transcript_segments': []}
+    row = {'id': 'c', 'status': 'completed'}
+    monkeypatch.setattr(lazy_enrichment, 'deserialize_conversation', lambda _: completed)
+    monkeypatch.setattr(lazy_enrichment.conversations_db, 'get_conversation', lambda *a: row)
+    memory, tasks, vectors, notes = MagicMock(), MagicMock(), MagicMock(return_value=True), MagicMock()
+    monkeypatch.setattr(process_conversation, 'extract_memories', memory)
+    monkeypatch.setattr(process_conversation, '_save_action_items', tasks)
+    monkeypatch.setattr(process_conversation, 'save_structured_vector', vectors)
+    monkeypatch.setattr(process_conversation, '_get_structured', notes)
+    monkeypatch.setattr(
+        lazy_enrichment.conversations_db,
+        'record_demand_enrichment_checkpoint',
+        lambda uid, cid, digest: row.update({lazy_enrichment.CHECKPOINT: digest}),
+    )
+    lazy_enrichment.enrich_settled('uid', 'c', 'en')
+    lazy_enrichment.enrich_settled('uid', 'c', 'en')
+    memory.assert_called_once_with('uid', completed)
+    tasks.assert_called_once()
+    vectors.assert_called_once()
+    notes.assert_not_called()

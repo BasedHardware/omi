@@ -147,7 +147,7 @@ void main() {
 
     built = {};
     service = DeviceService(
-      connectionFactory: (device) {
+      connectionBuilder: (device) {
         final connection = _FakeConnection(device);
         built[device.id] = connection;
         return connection;

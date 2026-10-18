@@ -50,6 +50,9 @@ SECRET_FILES = {
     "openai": "OPENAI_ADMIN_KEY",
     "anthropic": "ANTHROPIC_ADMIN_API_KEY",
     "posthog": "MCP_POSTHOG_API_KEY",
+    "soniox": "SONIOX_API_KEY",
+    "deepgram": "DEEPGRAM_API_KEY",
+    "mercury": "finops-mercury-readonly",
 }
 
 

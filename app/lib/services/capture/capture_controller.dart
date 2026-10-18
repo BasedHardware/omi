@@ -92,6 +92,7 @@ import 'package:omi/backend/schema/message_event.dart'
         FreemiumThresholdReachedEvent,
         SegmentsDeletedEvent;
 
+part 'capture_photo_streaming.dart';
 part 'capture_uplink_policy.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
@@ -996,6 +997,7 @@ class CaptureController extends ChangeNotifier
         if (!_captureControllerDisposed) {
           _syncCaptureHealthTimer(state);
           _syncCalendarGapTimer();
+          _reconcileTranscriptionKeepAlive();
           notifyListeners();
         }
       },
@@ -1238,10 +1240,9 @@ class CaptureController extends ChangeNotifier
     }
     final next = _recordingDevicePreservingNormalizedType(device);
     _recordingDevice = next;
-    // A device cannot hold both roles; when the camera device is promoted to
-    // audio (pendant went offline) it streams its own photos as recording device.
-    // Clear the companion role synchronously so the promotion cannot briefly
-    // leave one device double-booked until the coordinator round-trips.
+    // A device cannot hold both roles; when the camera device is promoted to audio
+    // (pendant went offline) it streams its own photos as recording device. Clear the
+    // companion role synchronously so it is never double-booked until the coordinator round-trips.
     if (next != null && _companionPhotoDevice?.id == next.id) _companionPhotoDevice = null;
     notifyListeners();
     unawaited(_dispatchLogged(DeviceUpdated(device)));
@@ -1253,21 +1254,7 @@ class CaptureController extends ChangeNotifier
   /// previous camera is stopped and the new one started. Otherwise the new
   /// device is picked up by the next [streamDeviceRecording].
   Future<void> updatePhotoDevice(BtDevice? device) async {
-    final companion = device != null && device.id != _recordingDevice?.id ? device : null;
-    final changed = companion?.id != _companionPhotoDevice?.id;
-    _companionPhotoDevice = companion;
-    if (!changed) return;
-    Logger.debug('companion photo device changed to ${companion?.id}');
-
-    if (_photoStreamDeviceId != null && _photoStreamDeviceId != photoDevice?.id) {
-      await _stopDevicePhotoStreaming();
-    }
-    final sessionActive = _recordingDevice != null &&
-        (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause);
-    if (sessionActive) {
-      await _initiateDevicePhotoStreaming();
-    }
-    notifyListeners();
+    if (await _applyPhotoDevice(device)) notifyListeners();
   }
 
   Future _resetStateVariables() async {
@@ -2625,64 +2612,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
-    // Photos ride on the audio session's socket, so a camera without a
-    // recording device has nowhere to send them.
-    final device = photoDevice;
-    if (device == null || _recordingDevice == null) return;
-    if (_blePhotoStream != null && _photoStreamDeviceId == device.id) return;
-    final connection = await _ensureDeviceConnection(device.id);
-    if (connection == null || !await connection.hasPhotoStreamingCharacteristic()) return;
-
-    await _blePhotoStream?.cancel();
-    _blePhotoStream = null;
-    final generation = ++_photoStreamGeneration;
-    _photoStreamDeviceId = device.id;
-    await connection.performCameraStartPhotoController();
-    _blePhotoStream = lifetime.takeSubscription(
-      _blePhotoStream,
-      await connection.performGetImageListener(
-        onImageReceived: (orientedImage) async {
-          if (generation != _photoStreamGeneration) return;
-          final rotatedImageBytes = rotateImage(orientedImage);
-          final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-          final String base64Image = base64Encode(rotatedImageBytes);
-
-          // Add placeholder to UI for immediate feedback
-          photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-          photos = List.from(photos);
-          _segmentsPhotosVersion++;
-          notifyListeners();
-          await emitBase64ImageChunks(
-            base64Image,
-            id: tempId,
-            emit: (payload) async {
-              if (generation != _photoStreamGeneration) return;
-              if (_socket?.state == SocketServiceState.connected) {
-                _socket?.send(payload);
-              }
-            },
-          );
-        },
-      ),
-    );
-    if (_blePhotoStream == null) {
-      await _stopDevicePhotoStreaming();
-    }
-    notifyListeners();
-  }
-
-  /// Cancels the photo listener and tells the camera device to stop capturing.
-  Future<void> _stopDevicePhotoStreaming() async {
-    await _blePhotoStream?.cancel();
-    _blePhotoStream = null;
-    _photoStreamGeneration++;
-    final deviceId = _photoStreamDeviceId;
-    _photoStreamDeviceId = null;
-    if (deviceId == null) return;
-    final connection = await _ensureDeviceConnection(deviceId);
-    if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
-      await connection.performCameraStopPhotoController();
-    }
+    if (await _openDevicePhotoStream()) notifyListeners();
   }
 
   void clearTranscripts() {
@@ -2788,6 +2718,7 @@ class CaptureController extends ChangeNotifier
 
   void updateRecordingState(RecordingState state) {
     recordingState = state;
+    if (state == RecordingState.deviceRecord) _reconcileTranscriptionKeepAlive();
     notifyListeners();
   }
 
@@ -3410,24 +3341,6 @@ class CaptureController extends ChangeNotifier
       if (!_captureSessionIsCurrent(token)) return;
       Logger.debug('[Provider] token refresh after 4001 failed: $e');
     }
-  }
-
-  Future<void> _reconnectDeviceCaptureBody({bool testingProbe = false}) async {
-    final token = _sessionOwner?.token;
-    final device = _recordingDevice;
-    if (device == null || recordingState != RecordingState.deviceRecord || isPaused) return;
-    final stagedPhase = _capture.stagedReadModel.phase;
-    final attestedIdle = testingProbe &&
-        stagedPhase == CapturePhase.idle &&
-        !_capture.stagedReadModel.callActive &&
-        _pendantSuspension == null;
-    if (stagedPhase != CapturePhase.pendantLive && !attestedIdle) return;
-    final deviceRevision = _deviceIdentityRevision;
-    final codec = await _getAudioCodec(device.id);
-    if (!_captureSessionIsCurrent(token) || _deviceIdentityStale(deviceRevision)) return;
-    if (_capture.stagedReadModel.phase != stagedPhase || _recordingDevice?.id != device.id) return;
-    if (!_shouldReconnectTranscriptionSocket) return;
-    await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
   }
 
   Future<void> _reconnectPhoneCaptureBody() async {

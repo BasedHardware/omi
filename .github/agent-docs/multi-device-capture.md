@@ -10,7 +10,7 @@ OmiGlass connected at the same time and feeds both into one conversation.
   `disconnectDevice(id)` and `forgetDevice(id)` are per device. A per-device
   mutex lets an out-of-range pendant hit its 60 s connect timeout without
   holding up the glasses next to the phone.
-- The connection factory is injectable (`DeviceService(connectionFactory: …)`);
+- The connection builder is injectable (`DeviceService(connectionBuilder: …)`);
   `app/test/services/devices/device_service_multi_connection_test.dart` drives it
   with in-memory transports.
 - Native (`OmiBleManager.swift`, `OmiBleManager.kt`) and `BleBridge` were
@@ -21,6 +21,10 @@ OmiGlass connected at the same time and feeds both into one conversation.
 - Two prefs slots: `btDevice` (primary) and `companionBtDevice`.
   `pairedDeviceIds` is the auto-connect set `DeviceProvider.initiateConnection`
   walks (attempts run in parallel).
+- `SavedPendantReconnect` (backoff, resume/adapter-on, manual-disconnect
+  suppression) owns only the primary Bluetooth `btDevice`. The companion gets
+  the one-shot launch attempt plus native auto-reconnect, and is skipped at
+  launch while its persisted forget/disconnect suppression is set.
 - Slots are storage, not roles. `forgetSavedBtDevice(id)` drops a device from
   every slot and promotes the companion when the primary is forgotten.
   `DeviceProvider.forgetDevice(id)` is the single owner of unpairing (prefs,

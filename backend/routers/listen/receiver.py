@@ -24,6 +24,7 @@ from config.capture_evidence import (
     listen_committed_capture_coverage_enabled,
 )
 from routers.listen.contracts import ConversationCaptureOrigin
+from routers.listen.batch_preview import capture_batch_preview
 from routers.listen.demand_routing import attach_live_demand
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
@@ -34,6 +35,7 @@ from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
+from utils.executors import db_executor, run_blocking
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -1244,6 +1246,7 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        capture_batch_preview(self.host, select_provider=False)
         admission = getattr(self, 'cap_admission', None)
         if admission is not None:
             await admission.refresh()
@@ -1252,6 +1255,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self.cap_paused = True
                 return True  # Receive/persist without consulting provider routing.
             self.cap_paused = False
+        capture_batch_preview(self.host)
         self.live_demand = attach_live_demand(self)
         if self.live_demand is not None:
             await self.live_demand.publish()
@@ -2151,6 +2155,19 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
+            from config.demand_processing import enabled as demand_enabled, surface_reporting_enabled
+
+            if (
+                demand_enabled()
+                and surface_reporting_enabled()
+                and demand_enabled(self.host.request.uid)
+                and isinstance(payload.get('surface_open'), bool)
+            ):
+                from utils.conversations.demand_processing import observe_surface
+
+                await run_blocking(
+                    db_executor, observe_surface, self.host.request.uid, str(self.host.session_id), payload
+                )
             telemetry_call(self.host, 'demand_telemetry', 'observe_visibility', payload)
             demand = getattr(self, 'live_demand', None)
             if demand is not None:

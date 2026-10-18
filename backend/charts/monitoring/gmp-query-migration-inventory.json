@@ -1,0 +1,2938 @@
+{
+  "combined_equals_split": true,
+  "consumers": [
+    {
+      "expression": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_dispatch_attempts_total"
+      ],
+      "owner_title": "Backend-sync - sync enqueue uncertainty share high",
+      "owner_uid": "bfobs1syncenq01",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
+      "file": "alerts/cloud-run-ingestion.json",
+      "issues": [
+        "metric-name-regex: retain-local; enumerate exact names before migration"
+      ],
+      "metrics": [],
+      "owner_title": "Cloud Run metrics - names did not normalize",
+      "owner_uid": "omi-cloud-run-metric-names-unnormalized",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "max(stackdriver_monitoring_last_scrape_error{job=\"cloud-run-application-metrics\"}) or vector(0)",
+      "file": "alerts/cloud-run-ingestion.json",
+      "issues": [],
+      "metrics": [
+        "stackdriver_monitoring_last_scrape_error"
+      ],
+      "owner_title": "Cloud Run metrics - egress query rejected by Cloud Monitoring",
+      "owner_uid": "omi-cloud-run-egress-query-rejected",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "min(up{job=\"cloud-run-application-metrics\"}) or vector(0)",
+      "file": "alerts/cloud-run-ingestion.json",
+      "issues": [],
+      "metrics": [],
+      "owner_title": "Cloud Run metrics - egress exporter is down",
+      "owner_uid": "omi-cloud-run-egress-down",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 2 * sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h] offset 24h))) and (sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 100)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_documents_per_operation_sum"
+      ],
+      "owner_title": "Firestore - a read family doubled day-over-day",
+      "owner_uid": "omi-firestore-family-read-step",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[1h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h]))) > bool 0.5) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[5m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))) > bool 0.5) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[1h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.474) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[30m])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m]))) > bool 0.474) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[30m])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live transcription - SLO budget burn (critical)",
+      "owner_uid": "omi-slo-live-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[24h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h]))) > bool 0.237) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[2h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h]))) > bool 0.237) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[24h])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[3d])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d]))) > bool 0.079) * (((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_transcript\"}[6h])) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) * 0)) / sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h]))) > bool 0.079) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) >= bool 20) * (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[3d])) * 0)",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live transcription - SLO budget burn (warning)",
+      "owner_uid": "omi-slo-live-warning",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1)) > bool 0.0864) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[1h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])), 1) * 0)) >= bool 4) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) >= bool 20)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.036) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) >= bool 7) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 40)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0))",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total",
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Mobile chat - SLO budget burn (critical)",
+      "owner_uid": "omi-slo-chat-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "((((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[24h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])), 1)) > bool 0.018) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[2h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])), 1)) > bool 0.018) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[24h])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[3d])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])), 1)) > bool 0.006) * (((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"failure|stale\"}[6h])) or (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1) * 0)) / clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])), 1)) > bool 0.006) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[3d])) * 0))",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total",
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Mobile chat - SLO budget burn (warning)",
+      "owner_uid": "omi-slo-chat-warning",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[1h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h]))) > bool 0.1584) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[5m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]))) > bool 0.1584) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[1h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m])) >= bool 7)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.066) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[30m])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m]))) > bool 0.066) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[30m])) >= bool 16)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Pusher session - SLO budget burn (critical)",
+      "owner_uid": "omi-slo-pusher-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[24h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h]))) > bool 0.033) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[2h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h]))) > bool 0.033) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[24h])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[2h])) >= bool 5)) > 0) or (((((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[3d])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d]))) > bool 0.011) * (((sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\",outcome=~\"failure|cancelled\"}[6h])) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) * 0)) / sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h]))) > bool 0.011) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) >= bool 20) * (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[6h])) >= bool 5)) > 0) or (sum(increase(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[3d])) * 0)",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Pusher session - SLO budget burn (warning)",
+      "owner_uid": "omi-slo-pusher-warning",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "absent(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}) or (((((sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or (((((sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\"}[1h])) or vector(0)) < bool 1) * ((sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[1h])) or vector(0)) > bool 20))) > 0) or vector(0)",
+      "file": "alerts/journey-slos.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_journey_terminal_total",
+        "omi_live_session_transcript_outcome_total",
+        "omi_live_stt_accepted_total"
+      ],
+      "owner_title": "Live transcription - delivery counter silent",
+      "owner_uid": "omi-slo-live-signal-dead",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - provider authentication refusals",
+      "owner_uid": "omi-stt-account-state",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_auth_rejected\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total",
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Live STT - provider authentication refusals",
+      "owner_uid": "omi-stt-account-state",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_admissions_total"
+      ],
+      "owner_title": "Parakeet canary capacity_full \u2014 roll allocation back if sustained",
+      "owner_uid": "omi-stt-window-overflow",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\",outcome=\"overflow\"}[5m])) / clamp_min(sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_admissions_total"
+      ],
+      "owner_title": "Parakeet canary capacity_full \u2014 roll allocation back if sustained",
+      "owner_uid": "omi-stt-window-overflow",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(omi_stt_window_sessions_capacity{job=\"backend-listen-metrics\"})",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_sessions_capacity"
+      ],
+      "owner_title": "Live TDT - sustained session cap",
+      "owner_uid": "omi-stt-window-saturated",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(omi_stt_window_sessions_active{job=\"backend-listen-metrics\"}) / clamp_min(sum(omi_stt_window_sessions_capacity{job=\"backend-listen-metrics\"}), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_sessions_active",
+        "omi_stt_window_sessions_capacity"
+      ],
+      "owner_title": "Live TDT - sustained session cap",
+      "owner_uid": "omi-stt-window-saturated",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_posts_total{job=\"backend-listen-metrics\",outcome!=\"cancelled\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_posts_total"
+      ],
+      "owner_title": "Live TDT - batch POST errors",
+      "owner_uid": "omi-stt-window-post-errors",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_posts_total{job=\"backend-listen-metrics\",outcome=\"error\"}[5m])) / clamp_min(sum(increase(omi_stt_window_posts_total{job=\"backend-listen-metrics\",outcome!=\"cancelled\"}[5m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_posts_total"
+      ],
+      "owner_title": "Live TDT - batch POST errors",
+      "owner_uid": "omi-stt-window-post-errors",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\"}[5m])) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_connect_total",
+        "omi_stt_provider_retired"
+      ],
+      "owner_title": "Live STT - provider leg connection errors",
+      "owner_uid": "omi-stt-leg-error-rate",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"failure\"}[5m])) / clamp_min(sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\"}[5m])), 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_connect_total",
+        "omi_stt_provider_retired"
+      ],
+      "owner_title": "Live STT - provider leg connection errors",
+      "owner_uid": "omi-stt-leg-error-rate",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live transcription working for under 90% of sessions",
+      "owner_uid": "omi-live-transcription-success-low",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[5m])) or vector(0)) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live transcription working for under 90% of sessions",
+      "owner_uid": "omi-live-transcription-success-low",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_rate_limited\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Live STT - Soniox rate limiting",
+      "owner_uid": "omi-soniox-rate-limited",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(omi_live_stt_open_streams{job=\"backend-listen-metrics\",provider=\"soniox\"}) / clamp_min(sum(omi_live_stt_open_streams{job=\"backend-listen-metrics\"}), 1) > 0.9) and on() (sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\",provider!=\"soniox\"}[30m]) unless on(provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1)) or vector(0)) == 0) and on() (sum(increase(omi_live_stt_terminal_total{job=\"backend-listen-metrics\",provider!=\"soniox\",outcome=\"transcribed\"}[30m]) unless on(provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1)) or vector(0)) == 0)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_stt_accepted_total",
+        "omi_live_stt_open_streams",
+        "omi_live_stt_terminal_total",
+        "omi_stt_provider_retired"
+      ],
+      "owner_title": "Live STT - Soniox single-leg risk",
+      "owner_uid": "omi-stt-single-leg-risk",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_soniox_month_ceiling_usd",
+        "omi_soniox_usage_sample_timestamp_seconds"
+      ],
+      "owner_title": "Soniox monthly spend at 70% \u2014 top up Soniox",
+      "owner_uid": "omi-soniox-runway-70",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_soniox_month_ceiling_usd",
+        "omi_soniox_month_spend_usd"
+      ],
+      "owner_title": "Soniox monthly spend at 70% \u2014 top up Soniox",
+      "owner_uid": "omi-soniox-runway-70",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_soniox_month_ceiling_usd",
+        "omi_soniox_usage_sample_timestamp_seconds"
+      ],
+      "owner_title": "Soniox monthly spend at 90% \u2014 top up Soniox",
+      "owner_uid": "omi-soniox-runway-90",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_soniox_month_ceiling_usd",
+        "omi_soniox_month_spend_usd"
+      ],
+      "owner_title": "Soniox monthly spend at 90% \u2014 top up Soniox",
+      "owner_uid": "omi-soniox-runway-90",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_budget_exhausted\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Soniox balance exhausted \u2014 top up now",
+      "owner_uid": "omi-soniox-budget-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",provider=\"modulate\",outcome=\"failure\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Modulate failing \u2014 traffic on Soniox",
+      "owner_uid": "omi-modulate-failing-soniox",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",provider=\"soniox\",outcome=\"success\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Modulate failing \u2014 traffic on Soniox",
+      "owner_uid": "omi-modulate-failing-soniox",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_session_outcome_total"
+      ],
+      "owner_title": "Parakeet canary no_text above 10%",
+      "owner_uid": "omi-stt-window-no-text",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_text\"}[10m])) or vector(0)) / clamp_min(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_session_outcome_total"
+      ],
+      "owner_title": "Parakeet canary no_text above 10%",
+      "owner_uid": "omi-stt-window-no-text",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_first_text_seconds_count{job=\"backend-listen-metrics\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_first_text_seconds_count"
+      ],
+      "owner_title": "Parakeet canary first-text p95 over 30 seconds",
+      "owner_uid": "omi-stt-window-first-text",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_first_text_seconds_bucket{job=\"backend-listen-metrics\"}[10m])))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_first_text_seconds_bucket"
+      ],
+      "owner_title": "Parakeet canary first-text p95 over 30 seconds",
+      "owner_uid": "omi-stt-window-first-text",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live STT - terminal failure after delivered text",
+      "owner_uid": "omi-stt-terminal-after-text",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_live_session_terminal_after_text_total{job=\"backend-listen-metrics\"}[10m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[10m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_session_terminal_after_text_total",
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Live STT - terminal failure after delivered text",
+      "owner_uid": "omi-stt-terminal-after-text",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - mid-session terminal failures",
+      "owner_uid": "omi-stt-mid-session-terminal",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_live_stt_terminal_failures_total{job=\"backend-listen-metrics\",phase=~\"connection|send\"}[10m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total",
+        "omi_live_stt_terminal_failures_total"
+      ],
+      "owner_title": "Live STT - mid-session terminal failures",
+      "owner_uid": "omi-stt-mid-session-terminal",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - paid adapter capacity deaths",
+      "owner_uid": "omi-stt-paid-capacity",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_live_session\",from_mode=~\"soniox|modulate\",reason=\"capacity_full\"}[10m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - paid adapter capacity deaths",
+      "owner_uid": "omi-stt-paid-capacity",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_admissions_total"
+      ],
+      "owner_title": "Live STT - combined admission pressure",
+      "owner_uid": "omi-stt-combined-pressure",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\",outcome=~\"overflow|batch_pressure\"}[10m])) / clamp_min(sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_admissions_total"
+      ],
+      "owner_title": "Live STT - combined admission pressure",
+      "owner_uid": "omi-stt-combined-pressure",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_post_seconds_count{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_post_seconds_count"
+      ],
+      "owner_title": "Live STT - window POST latency",
+      "owner_uid": "omi-stt-window-post-latency",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_post_seconds_bucket{job=\"backend-listen-metrics\"}[5m])))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_post_seconds_bucket"
+      ],
+      "owner_title": "Live STT - window POST latency",
+      "owner_uid": "omi-stt-window-post-latency",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_recovery_attempts_total{job=\"backend-listen-metrics\"}[10m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_recovery_attempts_total"
+      ],
+      "owner_title": "Live STT - replay continuity loss",
+      "owner_uid": "omi-stt-replay-continuity",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_stt_replay_skipped_seconds_total{job=\"backend-listen-metrics\"}[10m])) + sum(increase(omi_stt_replay_successor_closed_total{job=\"backend-listen-metrics\"}[10m]))) / clamp_min(sum(increase(omi_stt_replay_audio_seconds_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_replay_audio_seconds_total",
+        "omi_stt_replay_skipped_seconds_total",
+        "omi_stt_replay_successor_closed_total"
+      ],
+      "owner_title": "Live STT - replay continuity loss",
+      "owner_uid": "omi-stt-replay-continuity",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_settlements_total"
+      ],
+      "owner_title": "Live STT - health evidence persistence gaps (settlement-normalized proxy)",
+      "owner_uid": "omi-stt-evidence-loss",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_emission_ack_errors_total",
+        "omi_stt_cost_routing_evidence_errors_total",
+        "omi_stt_cost_routing_settlements_total",
+        "omi_stt_fleet_health_write_dropped_total"
+      ],
+      "owner_title": "Live STT - health evidence persistence gaps (settlement-normalized proxy)",
+      "owner_uid": "omi-stt-evidence-loss",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_settlements_total"
+      ],
+      "owner_title": "Live STT - health evidence persistence gaps (critical proxy)",
+      "owner_uid": "omi-stt-evidence-loss-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_evidence_errors_total{job=\"backend-listen-metrics\"}[15m])) + sum(increase(omi_stt_cost_routing_emission_ack_errors_total{job=\"backend-listen-metrics\"}[15m]))) / clamp_min(sum(increase(omi_stt_cost_routing_settlements_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_emission_ack_errors_total",
+        "omi_stt_cost_routing_evidence_errors_total",
+        "omi_stt_cost_routing_settlements_total",
+        "omi_stt_fleet_health_write_dropped_total"
+      ],
+      "owner_title": "Live STT - health evidence persistence gaps (critical proxy)",
+      "owner_uid": "omi-stt-evidence-loss-critical",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_opened_total"
+      ],
+      "owner_title": "Live STT - managed leg duplicate settlement",
+      "owner_uid": "omi-stt-leg-lifecycle-gap",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - managed leg duplicate settlement",
+      "owner_uid": "omi-stt-leg-lifecycle-gap",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_open",
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - sustained new managed leg settlement gap",
+      "owner_uid": "omi-stt-leg-settlement-omission",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "clamp_min((omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"} offset 1h) or (0 * omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}), 0)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_open",
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - sustained new managed leg settlement gap",
+      "owner_uid": "omi-stt-leg-settlement-omission",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_cost_routing_decisions_total{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_decisions_total"
+      ],
+      "owner_title": "Live STT - stale, missing or unknown snapshot",
+      "owner_uid": "omi-stt-snapshot-unready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum((up{job=\"backend-listen-metrics\"} == 1) unless on(instance) (omi_stt_cost_routing_snapshot_timestamp_seconds{job=\"backend-listen-metrics\"} >= time() - 60))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_snapshot_timestamp_seconds"
+      ],
+      "owner_title": "Live STT - stale, missing or unknown snapshot",
+      "owner_uid": "omi-stt-snapshot-unready",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "count by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"})",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_stage"
+      ],
+      "owner_title": "Live STT - persistent cross-pod stage disagreement",
+      "owner_uid": "omi-stt-stage-disagreement",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) - min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"})",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_stage"
+      ],
+      "owner_title": "Live STT - persistent cross-pod stage disagreement",
+      "owner_uid": "omi-stt-stage-disagreement",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (target) (increase(omi_stt_cost_routing_decisions_total{job=\"backend-listen-metrics\",reason=\"cost_primary\"}[5m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_decisions_total"
+      ],
+      "owner_title": "Live STT - selected target state unknown",
+      "owner_uid": "omi-stt-enabled-state-unknown",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max by (target) (1 - omi_stt_cost_routing_state_known{job=\"backend-listen-metrics\"})",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_state_known"
+      ],
+      "owner_title": "Live STT - selected target state unknown",
+      "owner_uid": "omi-stt-enabled-state-unknown",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
+      "file": "alerts/owner-recognition.json",
+      "issues": [],
+      "metrics": [
+        "omi_owner_recognition_conversations_total"
+      ],
+      "owner_title": "Owner identified on under half of its 7 day share",
+      "owner_uid": "omi-owner-identified-share-drop",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[2h])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h])), 1)",
+      "file": "alerts/owner-recognition.json",
+      "issues": [],
+      "metrics": [
+        "omi_owner_recognition_conversations_total"
+      ],
+      "owner_title": "Owner identified on under half of its 7 day share",
+      "owner_uid": "omi-owner-identified-share-drop",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[7d])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[7d])), 1)",
+      "file": "alerts/owner-recognition.json",
+      "issues": [],
+      "metrics": [
+        "omi_owner_recognition_conversations_total"
+      ],
+      "owner_title": "Owner identified on under half of its 7 day share",
+      "owner_uid": "omi-owner-identified-share-drop",
+      "panel": null,
+      "pointer": "/data/2/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - terminal failure rate elevated",
+      "owner_uid": "omi-journey-chat-fail",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - terminal failure rate elevated",
+      "owner_uid": "omi-journey-chat-fail",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Pusher session - terminal failure rate elevated",
+      "owner_uid": "omi-journey-pusher-fail",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Pusher session - terminal failure rate elevated",
+      "owner_uid": "omi-journey-pusher-fail",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_live_stt_accepted_total[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_stt_accepted_total"
+      ],
+      "owner_title": "Live transcription - attempt failure rate elevated",
+      "owner_uid": "omi-journey-live-transcription-fail",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_stt_accepted_total",
+        "omi_live_stt_terminal_total"
+      ],
+      "owner_title": "Live transcription - attempt failure rate elevated",
+      "owner_uid": "omi-journey-live-transcription-fail",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (journey) (increase(omi_journey_accepted_total{journey=~\"pusher_session|capture_finalization\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100) or (sum by (journey) (increase(omi_journey_accepted_total{journey=\"chat_response\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}[1h])) > bool 20)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Journey outcomes - a journey stopped reporting while the platform serves traffic",
+      "owner_uid": "omi-journey-signal-dead",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_capture_finalization_failures_total{reason=~\"memory_fence|memory_config\"}[5m])) or vector(0)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_capture_finalization_failures_total"
+      ],
+      "owner_title": "Capture finalization - canonical memory admission failure",
+      "owner_uid": "omi-capture-finalization-memory-fence",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Capture finalization - success rate below paging floor",
+      "owner_uid": "omi-journey-capture-success-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Capture finalization - success rate below paging floor",
+      "owner_uid": "omi-journey-capture-success-critical",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_accepted_total{journey=\"pusher_session\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Pusher session - success rate below paging floor",
+      "owner_uid": "omi-journey-pusher-success-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Pusher session - success rate below paging floor",
+      "owner_uid": "omi-journey-pusher-success-critical",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_accepted_total{journey=\"chat_response\"}[30m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Chat response - success rate below paging floor",
+      "owner_uid": "omi-journey-chat-success-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Chat response - success rate below paging floor",
+      "owner_uid": "omi-journey-chat-success-critical",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Capture finalization - accepted work is not settling",
+      "owner_uid": "omi-journey-capture-settle-gap",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h])) - sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[1h]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total",
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Capture finalization - accepted work is not settling",
+      "owner_uid": "omi-journey-capture-settle-gap",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_queue_oldest_ready_age_seconds",
+        "omi_queue_oldest_ready_sample_unknown"
+      ],
+      "owner_title": "Durable queue - oldest ready item stalled",
+      "owner_uid": "omi-queue-oldest-ready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - provider chain exhaustion standing degradation",
+      "owner_uid": "omi-stt-chain-exhausted-warn",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - provider chain exhaustion standing degradation",
+      "owner_uid": "omi-stt-chain-exhausted-warn",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - provider chain exhaustion outage",
+      "owner_uid": "omi-stt-chain-exhausted-page",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - provider chain exhaustion outage",
+      "owner_uid": "omi-stt-chain-exhausted-page",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[10m])) or vector(0)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total"
+      ],
+      "owner_title": "Redis cache - connection-class write failures",
+      "owner_uid": "omi-redis-cache-conn-warn",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Redis cache - connection-class write failures degrading sessions",
+      "owner_uid": "omi-redis-cache-conn-page",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=~\"backend-listen-metrics|pusher-metrics\",component=\"other\",from_mode=\"cache_write\",reason=~\"auth_error|connection_error|timeout\",outcome=\"degraded\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Redis cache - connection-class write failures degrading sessions",
+      "owner_uid": "omi-redis-cache-conn-page",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
+      "file": "alerts/transcription-services.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_stt_provider_retired"
+      ],
+      "owner_title": "Live STT - a fallback provider recovered zero sessions for 6h",
+      "owner_uid": "omi-stt-fallback-leg-dead",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",to_mode!=\"vendor\"}[6h])) * 0",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total"
+      ],
+      "owner_title": "Live STT - a fallback provider recovered zero sessions for 6h",
+      "owner_uid": "omi-stt-fallback-leg-dead",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}[5m])) > 0 or max by (provider) (omi_stt_provider_circuit_open{job=\"backend-listen-metrics\",kind=\"account\"}) == 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_circuit_open",
+        "omi_stt_provider_retired",
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Live STT - provider budget/quota exhausted (top up)",
+      "owner_uid": "omi-stt-provider-budget",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_audio_decode_failures_total"
+      ],
+      "owner_title": "Transcription Service Error Rate: undecodable audio frames",
+      "owner_uid": "omi-listen-audio-decode-failures",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode=\"vendor\",reason=\"gate_unavailable\",outcome=\"degraded\"}[5m]))",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total"
+      ],
+      "owner_title": "Live STT - demand gate unavailable",
+      "owner_uid": "omi-stt-gate-unavailable",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (zone) (omi_listen_lb_attached_ready_endpoints) / on (zone) sum by (zone) (omi_listen_lb_ready_pods) < bool 0.8) and on (zone) (sum by (zone) (omi_listen_lb_ready_pods) >= bool 5)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_attached_ready_endpoints",
+        "omi_listen_lb_ready_pods"
+      ],
+      "owner_title": "Backend-listen - attached Ready endpoint coverage is below 80%",
+      "owner_uid": "omi-listen-neg-endpoint-coverage",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (zone) (omi_listen_lb_neg_attached) == bool 0) and on (zone) (sum by (zone) (omi_listen_lb_neg_endpoints) > bool 0)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_neg_attached",
+        "omi_listen_lb_neg_endpoints"
+      ],
+      "owner_title": "Backend-listen - zonal NEG endpoints are not attached",
+      "owner_uid": "omi-listen-neg-endpoints-unattached",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_listen_lb_exporter_last_success_timestamp_seconds) > bool 300) or on () absent(omi_listen_lb_exporter_last_success_timestamp_seconds)",
+      "file": "alerts/transcription-services.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_lb_exporter_last_success_timestamp_seconds"
+      ],
+      "owner_title": "Backend-listen - NEG coverage exporter is stale",
+      "owner_uid": "omi-listen-neg-exporter-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[$__range])) / sum(rate(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 2,
+        "title": "Voice capture \u2192 conversation"
+      },
+      "pointer": "/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[$__range])) / sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 3,
+        "title": "Live session (pusher)"
+      },
+      "pointer": "/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(rate(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[$__range])) / sum(rate(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 4,
+        "title": "Chat response"
+      },
+      "pointer": "/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "count(count by (journey) (increase(omi_journey_accepted_total[$__range]) > 0)) or vector(0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 5,
+        "title": "Journeys reporting (of 3)"
+      },
+      "pointer": "/panels/4/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (journey,outcome) (rate(omi_journey_terminal_total[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 6,
+        "title": "Terminal outcomes by journey"
+      },
+      "pointer": "/panels/9/panels/0/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (journey) (rate(omi_journey_accepted_total[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 7,
+        "title": "Accepted vs settled"
+      },
+      "pointer": "/panels/9/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (journey) (rate(omi_journey_terminal_total[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 7,
+        "title": "Accepted vs settled"
+      },
+      "pointer": "/panels/9/panels/1/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (journey) (rate(omi_journey_terminal_total{outcome=\"stale\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 8,
+        "title": "Attempts whose outcome was never recorded (stale)"
+      },
+      "pointer": "/panels/9/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (le,journey) (rate(omi_journey_latency_seconds_bucket[5m])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_latency_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 9,
+        "title": "Journey latency p95"
+      },
+      "pointer": "/panels/9/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_requested\"}[$__range]))) or vector(0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 12,
+        "title": "Cancellation requests"
+      },
+      "pointer": "/panels/10/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range]))) or vector(0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 13,
+        "title": "New subscriptions"
+      },
+      "pointer": "/panels/10/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range])) or vector(0)) - round(sum(increase(omi_subscription_events_total{event=\"ended\"}[$__range])) or vector(0))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 14,
+        "title": "Net change"
+      },
+      "pointer": "/panels/10/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_reverted\"}[$__range]))) or vector(0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 15,
+        "title": "Saves"
+      },
+      "pointer": "/panels/10/panels/4/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (event) (rate(omi_subscription_events_total[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 16,
+        "title": "Lifecycle events over time"
+      },
+      "pointer": "/panels/10/panels/5/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (event, reason) (rate(omi_subscription_events_total{event=~\"ended|payment_failed\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 17,
+        "title": "Cancellations by reason (voluntary vs involuntary)"
+      },
+      "pointer": "/panels/10/panels/6/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (plan) (rate(omi_subscription_events_total{event=\"cancellation_requested\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_subscription_events_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 18,
+        "title": "Cancellation requests by plan"
+      },
+      "pointer": "/panels/10/panels/7/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (outcome) (rate(omi_capture_finalization_reconciliations_total[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_capture_finalization_reconciliations_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 33,
+        "title": "Retries, dead letters, reconciliations"
+      },
+      "pointer": "/panels/17/panels/1/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range])) / sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 36,
+        "title": "PTT transport success"
+      },
+      "pointer": "/panels/18/panels/0/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "round(sum(increase(omi_client_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[$__range])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 37,
+        "title": "PTT attempts"
+      },
+      "pointer": "/panels/18/panels/1/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (le) (rate(omi_client_journey_duration_seconds_bucket{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_duration_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 38,
+        "title": "PTT duration p95 (success)"
+      },
+      "pointer": "/panels/18/panels/2/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "round(sum(increase(omi_client_journey_issues_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[$__range])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_issues_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 39,
+        "title": "PTT issues"
+      },
+      "pointer": "/panels/18/panels/3/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum by (outcome) (rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 40,
+        "title": "PTT terminal outcomes"
+      },
+      "pointer": "/panels/18/panels/4/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum by (issue_class) (rate(omi_client_journey_issues_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_journey_issues_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 41,
+        "title": "PTT issues by class"
+      },
+      "pointer": "/panels/18/panels/5/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum by (client_kind) (rate(omi_client_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 42,
+        "title": "PTT attempts by client kind"
+      },
+      "pointer": "/panels/18/panels/6/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "histogram_quantile(0.10, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_conversation_duration_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 46,
+        "title": "Conversation length p10 / p50 / p90 by source"
+      },
+      "pointer": "/panels/19/panels/0/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.50, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_conversation_duration_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 46,
+        "title": "Conversation length p10 / p50 / p90 by source"
+      },
+      "pointer": "/panels/19/panels/0/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.90, sum by (source, le) (rate(omi_conversation_duration_seconds_bucket[5m])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_conversation_duration_seconds_bucket"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 46,
+        "title": "Conversation length p10 / p50 / p90 by source"
+      },
+      "pointer": "/panels/19/panels/0/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum by (source) (rate(omi_conversation_duration_seconds_bucket{le=\"120.0\"}[5m])) / sum by (source) (rate(omi_conversation_duration_seconds_count[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_conversation_duration_seconds_bucket",
+        "omi_conversation_duration_seconds_count"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 47,
+        "title": "Short conversations (< 2 min) by source"
+      },
+      "pointer": "/panels/19/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (source) (increase(omi_conversation_duration_seconds_count[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_conversation_duration_seconds_count"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 49,
+        "title": "Conversations per day (completed, by source)"
+      },
+      "pointer": "/panels/19/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"backend-listen-metrics\",journey=\"live_transcription\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 51,
+        "title": "Live transcription transport success"
+      },
+      "pointer": "/panels/20/panels/0/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"pusher-metrics\",journey=\"conversation_finalization\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 52,
+        "title": "Conversation finalization settle success"
+      },
+      "pointer": "/panels/20/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"mobile_chat\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 53,
+        "title": "Mobile chat transport success"
+      },
+      "pointer": "/panels/20/panels/2/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_chat\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 54,
+        "title": "Desktop chat transport success"
+      },
+      "pointer": "/panels/20/panels/3/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"success\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=~\"success|failure\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 55,
+        "title": "Desktop proactivity success (success + failure)"
+      },
+      "pointer": "/panels/20/panels/4/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\",outcome=\"degraded\"}[$__range])) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"desktop_proactivity\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 56,
+        "title": "Desktop proactivity degraded share"
+      },
+      "pointer": "/panels/20/panels/5/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "round(sum(increase(omi_client_journey_accepted_total{job=~\"backend-listen-metrics|cloud-run-application-metrics\",journey=\"conversation_finalization\"}[$__range])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 57,
+        "title": "Conversation finalization accepted"
+      },
+      "pointer": "/panels/20/panels/6/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "count(count by (journey) (increase(omi_client_journey_accepted_total[$__range]) > 0)) or vector(0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 58,
+        "title": "Client journeys reporting (of 8)"
+      },
+      "pointer": "/panels/20/panels/7/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\",client_kind=\"unknown\"}[$__range])) / sum(increase(omi_client_journey_accepted_total{journey=~\"live_transcription|conversation_finalization\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 59,
+        "title": "Capture unknown-kind share"
+      },
+      "pointer": "/panels/20/panels/8/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (outcome) (rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"memory_retrieval\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 60,
+        "title": "Memory retrieval \u2014 tool-gated volume"
+      },
+      "pointer": "/panels/20/panels/9/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "round(sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 62,
+        "title": "Pendant sessions accepted"
+      },
+      "pointer": "/panels/21/panels/0/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__range])) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_listen_accepted_total",
+        "omi_listen_audio_outcome_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 63,
+        "title": "Pendant first-audio rate"
+      },
+      "pointer": "/panels/21/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (client_platform) (rate(omi_listen_accepted_total{transcription_source=\"omi\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 64,
+        "title": "Live sessions by platform \u2014 pendant vs phone"
+      },
+      "pointer": "/panels/21/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (client_platform) (rate(omi_listen_accepted_total{transcription_source=\"phone\"}[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 64,
+        "title": "Live sessions by platform \u2014 pendant vs phone"
+      },
+      "pointer": "/panels/21/panels/2/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_daily_summary_resumed_cohort_age_seconds)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_daily_summary_resumed_cohort_age_seconds"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 68,
+        "title": "Resumed cohort age"
+      },
+      "pointer": "/panels/22/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_daily_summary_resumed_cohort_age_seconds)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_daily_summary_resumed_cohort_age_seconds"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 69,
+        "title": "Cohort age now"
+      },
+      "pointer": "/panels/22/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(rate(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__range])) / sum(rate(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__range]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_conversation_summary_vector_upserts_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 70,
+        "title": "Summary vector upsert success %"
+      },
+      "pointer": "/panels/23/panels/0/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (path, outcome) (rate(omi_chat_search_tool_outcomes_total[5m]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_chat_search_tool_outcomes_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 71,
+        "title": "Chat search paths and outcomes"
+      },
+      "pointer": "/panels/23/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[$__rate_interval])), 1)",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 17,
+        "title": "Live transcription working (% of sessions)"
+      },
+      "pointer": "/panels/14/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum by (arm) (increase(omi_stt_window_canary_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[$__rate_interval])) / clamp_min(sum by (arm) (increase(omi_stt_window_canary_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[$__rate_interval])), 1)",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_window_canary_transcript_outcome_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 17,
+        "title": "Live transcription working (% of sessions)"
+      },
+      "pointer": "/panels/14/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (outcome) (increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_live_session_transcript_outcome_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 18,
+        "title": "Live sessions by transcript outcome"
+      },
+      "pointer": "/panels/15/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_live_stt_accepted_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 19,
+        "title": "STT provider sessions served"
+      },
+      "pointer": "/panels/16/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[$__rate_interval])) / clamp_min(sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\"}[$__rate_interval])), 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_provider_connect_total",
+        "omi_stt_provider_retired"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 20,
+        "title": "STT provider connect success % (retired providers excluded)"
+      },
+      "pointer": "/panels/17/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider, kind) (omi_stt_provider_circuit_open{job=\"backend-listen-metrics\"})",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_provider_circuit_open"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 21,
+        "title": "STT breaker open (pods)"
+      },
+      "pointer": "/panels/18/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider, error_class) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"failure\"}[$__rate_interval]))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_provider_connect_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 22,
+        "title": "STT provider connect failures by error class"
+      },
+      "pointer": "/panels/19/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum by (provider, primary_group, arm) (rate(omi_stt_output_language_segments_total{job=\"backend-listen-metrics\",conformance=\"out_of_profile\"}[$__rate_interval])) / clamp_min(sum by (provider, primary_group, arm) (rate(omi_stt_output_language_segments_total{job=\"backend-listen-metrics\",conformance=~\"in_profile|out_of_profile\"}[$__rate_interval])), 0.000001)",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_output_language_segments_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 23,
+        "title": "Out-of-profile language rate by provider, primary group and arm"
+      },
+      "pointer": "/panels/20/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (omi_live_stt_open_streams{job=\"backend-listen-metrics\"})",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [],
+      "metrics": [
+        "omi_live_stt_open_streams"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 24,
+        "title": "Live STT open provider streams"
+      },
+      "pointer": "/panels/21/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_rate_limited\"}[5m]))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 25,
+        "title": "Soniox rate-limited streams/sec"
+      },
+      "pointer": "/panels/22/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.50, sum by (le) (rate(omi_stt_window_first_text_seconds_bucket{job=\"backend-listen-metrics\"}[$__rate_interval])))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_window_first_text_seconds_bucket"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 26,
+        "title": "Windowed TDT first-text p50 / p95"
+      },
+      "pointer": "/panels/23/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_first_text_seconds_bucket{job=\"backend-listen-metrics\"}[$__rate_interval])))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_window_first_text_seconds_bucket"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 26,
+        "title": "Windowed TDT first-text p50 / p95"
+      },
+      "pointer": "/panels/23/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(omi_stt_window_sessions_active{job=\"backend-listen-metrics\"})",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_sessions_active"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 27,
+        "title": "Windowed TDT capacity and overflow"
+      },
+      "pointer": "/panels/24/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(omi_stt_window_sessions_capacity{job=\"backend-listen-metrics\"})",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_window_sessions_capacity"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 27,
+        "title": "Windowed TDT capacity and overflow"
+      },
+      "pointer": "/panels/24/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_window_admissions_total{job=\"backend-listen-metrics\",outcome=\"overflow\"}[$__rate_interval]))",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_window_admissions_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 27,
+        "title": "Windowed TDT capacity and overflow"
+      },
+      "pointer": "/panels/24/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_text\"}[$__rate_interval])) / clamp_min(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[$__rate_interval])), 1)",
+      "file": "dashboards/gke/backend-listen.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_window_session_outcome_total"
+      ],
+      "owner_title": "Backend-listen",
+      "owner_uid": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "panel": {
+        "id": 28,
+        "title": "Windowed TDT no_text and batch GPU utilization"
+      },
+      "pointer": "/panels/25/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (outcome, platform, build_channel) (rate(omi_sync_upload_total[5m]))",
+      "file": "dashboards/omi-services/fleet-telemetry.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_upload_total"
+      ],
+      "owner_title": "Fleet telemetry",
+      "owner_uid": "omi-fleet-telemetry",
+      "panel": {
+        "id": 1,
+        "title": "Server upload admission outcomes"
+      },
+      "pointer": "/panels/0/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (event, outcome, platform) (rate(omi_client_events_total[5m]))",
+      "file": "dashboards/omi-services/fleet-telemetry.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_events_total"
+      ],
+      "owner_title": "Fleet telemetry",
+      "owner_uid": "omi-fleet-telemetry",
+      "panel": {
+        "id": 2,
+        "title": "Client event deltas"
+      },
+      "pointer": "/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (reason) (rate(omi_client_telemetry_rejected_total[5m]))",
+      "file": "dashboards/omi-services/fleet-telemetry.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_telemetry_rejected_total"
+      ],
+      "owner_title": "Fleet telemetry",
+      "owner_uid": "omi-fleet-telemetry",
+      "panel": {
+        "id": 3,
+        "title": "Rejected summaries"
+      },
+      "pointer": "/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (le, platform, build_channel) (rate(omi_client_app_startup_duration_seconds_bucket_total[30m])))",
+      "file": "dashboards/omi-services/fleet-telemetry.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_app_startup_duration_seconds_bucket_total"
+      ],
+      "owner_title": "Fleet telemetry",
+      "owner_uid": "omi-fleet-telemetry",
+      "panel": {
+        "id": 4,
+        "title": "Client startup p95 (seconds)"
+      },
+      "pointer": "/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(rate(omi_translation_requests_total{provider=\"google\"}[$__rate_interval])) / (sum(rate(omi_translation_requests_total[$__rate_interval])) > 0)) * 100",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_requests_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 37,
+        "title": "NLLB \u2192 Google Fallback Rate"
+      },
+      "pointer": "/panels/10/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_requests_total[$__rate_interval])) by (provider)",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_requests_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 21,
+        "title": "Translation Request Rate by Provider"
+      },
+      "pointer": "/panels/28/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.50, sum(rate(omi_translation_latency_seconds_bucket[$__rate_interval])) by (le))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_latency_seconds_bucket"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 22,
+        "title": "Translation End-to-End Latency (p50 / p90 / p99)"
+      },
+      "pointer": "/panels/30/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.90, sum(rate(omi_translation_latency_seconds_bucket[$__rate_interval])) by (le))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_latency_seconds_bucket"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 22,
+        "title": "Translation End-to-End Latency (p50 / p90 / p99)"
+      },
+      "pointer": "/panels/30/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.99, sum(rate(omi_translation_latency_seconds_bucket[$__rate_interval])) by (le))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_latency_seconds_bucket"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 22,
+        "title": "Translation End-to-End Latency (p50 / p90 / p99)"
+      },
+      "pointer": "/panels/30/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_cache_ops_total{result=\"hit\", layer=\"memory\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_cache_ops_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 23,
+        "title": "Cache Hit/Miss Rate (Memory + Redis)"
+      },
+      "pointer": "/panels/31/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_cache_ops_total{result=\"hit\", layer=\"redis\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_cache_ops_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 23,
+        "title": "Cache Hit/Miss Rate (Memory + Redis)"
+      },
+      "pointer": "/panels/31/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_cache_ops_total{result=\"hit\", layer=\"negative\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_cache_ops_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 23,
+        "title": "Cache Hit/Miss Rate (Memory + Redis)"
+      },
+      "pointer": "/panels/31/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_cache_ops_total{result=\"miss\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_cache_ops_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 23,
+        "title": "Cache Hit/Miss Rate (Memory + Redis)"
+      },
+      "pointer": "/panels/31/targets/3/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_cache_ops_total{result=\"hit\"}[$__rate_interval])) / (sum(rate(omi_translation_cache_ops_total[$__rate_interval])) > 0)",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_cache_ops_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 24,
+        "title": "Cache Hit Ratio"
+      },
+      "pointer": "/panels/32/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_errors_total[$__rate_interval])) by (provider, error_type)",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_errors_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 25,
+        "title": "Translation Errors"
+      },
+      "pointer": "/panels/33/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_chars_total[$__rate_interval])) by (provider)",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_chars_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 26,
+        "title": "Characters Translated per Second by Provider"
+      },
+      "pointer": "/panels/34/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_translation_skip_total{target_lang=~\"$target_lang\"}[$__rate_interval])) by (target_lang)",
+      "file": "dashboards/omi-services/omi-translation.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_translation_skip_total"
+      ],
+      "owner_title": "Omi Translation Pipeline",
+      "owner_uid": "omi-translation-pipeline",
+      "panel": {
+        "id": 34,
+        "title": "Translation Skip Rate (Already in Target Language)"
+      },
+      "pointer": "/panels/35/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (component, outcome) (rate(omi_fallback_total[5m]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 2,
+        "title": "Fallback rate by component & outcome"
+      },
+      "pointer": "/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_sync_dispatch_attempts_total{mode=\"enqueue_uncertain\"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_dispatch_attempts_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 3,
+        "title": "Sync dispatch \u2014 enqueue uncertainty share (PAGE SLO)"
+      },
+      "pointer": "/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (journey) (increase(omi_journey_terminal_total{outcome=\"success\"}[$__rate_interval])) / sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval]))) and on (journey) (sum by (journey) (increase(omi_journey_terminal_total{outcome=~\"success|failure\"}[$__rate_interval])) > 0)",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 7,
+        "title": "Journey terminal success rate (success / success + failure)"
+      },
+      "pointer": "/panels/6/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "histogram_quantile(0.95, sum by (journey, le) (rate(omi_journey_latency_seconds_bucket[15m])))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_latency_seconds_bucket"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 8,
+        "title": "Journey acceptance-to-terminal latency (p95)"
+      },
+      "pointer": "/panels/7/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_stt_accepted_total[$__rate_interval])), 1)) and (sum(increase(omi_live_stt_accepted_total[$__rate_interval])) > 0)",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_live_stt_accepted_total",
+        "omi_live_stt_terminal_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 10,
+        "title": "Live STT attempt failure rate (failure / accepted)"
+      },
+      "pointer": "/panels/9/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (journey) (increase(omi_journey_accepted_total[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_accepted_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 14,
+        "title": "Journey signal liveness (accepted attempts \u2014 zero means the alert input is dead)"
+      },
+      "pointer": "/panels/13/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[$__rate_interval])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[$__rate_interval])), 1)) and (sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[$__rate_interval])) > 0)",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 15,
+        "title": "Live STT chain exhaustion ratio (exhausted / listen accepted)"
+      },
+      "pointer": "/panels/14/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",outcome=\"recovered\"}[$__rate_interval])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[$__rate_interval])) * 0) / clamp_min(sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[$__rate_interval])), 1)",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_fallback_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 16,
+        "title": "Live STT fallback-leg recovery by to_mode"
+      },
+      "pointer": "/panels/15/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum(increase(omi_sync_intake_total{outcome=\"created\"}[$__rate_interval])) / clamp_min(sum(increase(omi_sync_intake_total[$__rate_interval])), 1)) and (sum(increase(omi_sync_intake_total[$__rate_interval])) > 0)",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_sync_intake_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 17,
+        "title": "Sync intake created share (created / created+merged)"
+      },
+      "pointer": "/panels/16/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider, reason) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 18,
+        "title": "Live STT provider stream closes by reason"
+      },
+      "pointer": "/panels/17/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (write_path, kind) (increase(omi_stt_fleet_health_write_attempted_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_fleet_health_write_attempted_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 20,
+        "title": "Live STT fleet-health writes by path, kind, and drop reason"
+      },
+      "pointer": "/panels/19/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (write_path, kind) (increase(omi_stt_fleet_health_write_written_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_fleet_health_write_written_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 20,
+        "title": "Live STT fleet-health writes by path, kind, and drop reason"
+      },
+      "pointer": "/panels/19/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (write_path, kind, reason) (increase(omi_stt_fleet_health_write_dropped_total{job=\"backend-listen-metrics\"}[$__rate_interval]))",
+      "file": "dashboards/omi-services/resilience-fallbacks.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_stt_fleet_health_write_dropped_total"
+      ],
+      "owner_title": "Resilience / Fallbacks",
+      "owner_uid": "omi-resilience-fallbacks",
+      "panel": {
+        "id": 20,
+        "title": "Live STT fleet-health writes by path, kind, and drop reason"
+      },
+      "pointer": "/panels/19/targets/2/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    }
+  ],
+  "counts": {
+    "explicit_bridge": 21,
+    "query_consumers": 191
+  },
+  "schema_version": 1,
+  "source": "repository, not live Grafana export"
+}

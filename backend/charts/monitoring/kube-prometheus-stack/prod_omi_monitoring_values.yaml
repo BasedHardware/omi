@@ -492,7 +492,13 @@ prometheus:
         # Cloud Monitoring inline. The default 10s scrape_timeout cut every
         # collection off mid-flight and recorded 0 samples, so the budget has to
         # exceed a slow scrape, and the interval has to exceed the budget.
-        scrape_interval: 60s
+        # Every scrape is a full timeSeries.list of each imported family, billed per
+        # time series returned (SKU 6E35-67F5-C3C6, "Time series billed count"), and
+        # both Prometheus replicas scrape independently. At 60s this cost ~$50/day on
+        # 2026-10-16 for data Cloud Run only writes every 60s anyway. 120s halves the
+        # bill; no rule reads these families over a window shorter than 5m, which
+        # still holds 2-3 samples. Do not drop below 120s without re-pricing.
+        scrape_interval: 120s
         scrape_timeout: 45s
         metrics_path: /metrics
         scheme: http

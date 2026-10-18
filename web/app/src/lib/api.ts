@@ -2266,11 +2266,22 @@ export async function getMcpApiKeys(
   }
 }
 
+/** Default read-only scopes for newly minted MCP API keys. */
+export const MCP_READ_ONLY_SCOPES = [
+  'memories.read',
+  'conversations.read',
+  'action_items.read',
+  'goals.read',
+] as const;
+
 /** Create a new MCP API key */
-export async function createMcpApiKey(name: string): Promise<McpApiKey> {
+export async function createMcpApiKey(
+  name: string,
+  scopes: readonly string[] = MCP_READ_ONLY_SCOPES,
+): Promise<McpApiKey> {
   return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, scopes }),
   });
 }
 

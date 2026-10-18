@@ -1304,10 +1304,9 @@ def test_off_advisory_elapsed_extends_the_legacy_embedding_deadline(env, monkeyp
     monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 60.0)
 
     values = []
-    real_monotonic = time.monotonic
 
     def fake_monotonic():
-        value = real_monotonic() + len(values) * 0.05
+        value = 100.0 + len(values) * 0.05
         values.append(value)
         return value
 
@@ -1422,3 +1421,56 @@ def test_shadow_failure_does_not_withdraw_incumbent_resolution(monkeypatch, env)
     assert c.speaker_resolution.status == 'resolved'
     assert all(s.is_user for s in c.transcript_segments)
     assert all(s.speaker_grouping_shadow is None for s in c.transcript_segments)
+
+
+@pytest.mark.parametrize('mixed', [False, True])
+def test_persisted_batch_authority_survives_rollbacks_and_mixed_live_segments(monkeypatch, mixed):
+    from unittest.mock import Mock
+
+    monkeypatch.delenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', raising=False)
+    monkeypatch.setattr(stage, 'authoritative_for', lambda _: False)
+    monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0, 1], scopes=['final:batch:unit', 'sync:later' if mixed else 'final:batch:unit'])
+    conv.transcript_segments[0].text = 'Edited synthetic text'
+    before = [s.model_dump() for s in conv.transcript_segments]
+    assert stage.resolve_speakers_for_processing('synthetic', conv)
+    assert [s.model_dump() for s in conv.transcript_segments] == before
+    assert conv.speaker_resolution.status == ('unavailable' if mixed else 'capture')
+    resolver.assert_not_called()
+
+
+def test_batch_authority_applies_existing_manual_receipt_without_resolver(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0], scopes=['final:batch:unit'])
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda *args: {'segments': {'s0': {'is_user': False, 'person_id': 'synthetic-person'}}},
+    )
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert conv.transcript_segments[0].person_id == 'synthetic-person'
+    assert conv.transcript_segments[0].speaker_label_source == 'manual'
+    resolver.assert_not_called()
+
+
+def test_batch_authority_reuses_owner_safe_abstention_for_legacy_scopes(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(stage, 'resolution_enabled', lambda: True)
+    resolver = Mock()
+    monkeypatch.setattr(stage, '_resolve', resolver)
+    conv = _conversation([0, 1, 2], scopes=['final:batch:unit', 'sync:one', 'sync:two'])
+    for segment in conv.transcript_segments[1:]:
+        segment.is_user = True
+        segment.speaker_match_source = 'sync_embedding'
+    stage.resolve_speakers_for_processing('synthetic', conv)
+    assert all(not s.is_user for s in conv.transcript_segments)
+    assert conv.transcript_segments[0].speaker_id_scope == 'final:batch:unit'
+    assert conv.speaker_resolution.status == 'unavailable'
+    resolver.assert_not_called()

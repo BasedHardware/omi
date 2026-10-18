@@ -1,6 +1,15 @@
 """Private pull/complete RPC enforces identity and stage while admission is off."""
 
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from dataclasses import asdict
+import json
+import logging
+import threading
+from unittest.mock import Mock
+
+from prometheus_client import CollectorRegistry
 import time
 
 from fastapi import FastAPI
@@ -11,6 +20,7 @@ from routers import batch_pipeline as module
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import PoolCapacity
 from utils.batch_pipeline.serving import Serving
+from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 
 
@@ -193,15 +203,53 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status,code', [('busy', 503), ('completed', 200)])
-async def test_landed_reprocess_busy_response_remains_retryable(monkeypatch, status, code):
+@pytest.mark.parametrize('status,code', [('busy', 409), ('completed', 200)])
+@pytest.mark.parametrize('deadline', ['false', 'true'])
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
+    monkeypatch, caplog, status, code, deadline
+):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
+
+    async def run(executor, func, *args):
+        assert executor is (module.postprocess_executor if deadline == 'true' else module.sync_executor)
+        return func(*args)
+
+    monkeypatch.setattr(module, 'run_blocking', run)
     monkeypatch.setattr(module, 'run_enrichment', Mock(return_value=status))
+    caplog.set_level(logging.INFO, logger=module.__name__)
     response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
     assert response.status_code == code
+    assert json.loads(response.body) == {'status': status}
+    if status == 'busy':
+        messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
+        assert messages == ['event=batch_enrichment_sync_reprocess outcome=busy']
+
+
+@pytest.mark.asyncio
+async def test_summary_runs_while_transcription_executor_is_full(monkeypatch):
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(module, 'run_enrichment', lambda *_: 'processed')
+    release = threading.Event()
+    # Run the real adapter and executors; a route-level mock hides this wait.
+    with ThreadPoolExecutor(max_workers=1) as transcription:
+        transcription.submit(release.wait)
+        monkeypatch.setattr(module, 'sync_executor', transcription)
+        try:
+            response = await asyncio.wait_for(
+                module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32}),
+                timeout=2,
+            )
+            assert response.status_code == 200
+            assert json.loads(response.body) == {'status': 'processed'}
+        finally:
+            release.set()
 
 
 def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api, monkeypatch):
@@ -238,3 +286,128 @@ def test_reconcile_entry_point_requires_existing_worker_oidc(monkeypatch):
     app.include_router(module.router)
     response = TestClient(app).post('/v2/batch-pipeline/reconcile', json={'stage': 'dev'})
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_reconcile_and_metrics_routes_share_flagged_async_coordinator(api, monkeypatch, enabled):
+    from unittest.mock import Mock, AsyncMock
+
+    client, _ = api
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', str(enabled).lower())
+    service = module.serving_for_stage('dev')
+    service.projector = Mock()
+    service.projector.start_followups = AsyncMock()
+    service.recovery = Mock()
+    response = client.post('/v2/batch-pipeline/reconcile', json={'stage': 'dev'})
+    assert response.status_code == 200 and response.json() == {'status': 'reconciled'}
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    assert service.projector.sweep.call_count == 2
+    assert service.projector.start_followups.await_count == (2 if enabled else 0)
+    service.recovery.sweep.assert_called_once()
+
+
+def test_read_only_metrics_serves_fresh_gauges_while_drain_is_blocked(api, monkeypatch):
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    entered, release = threading.Event(), threading.Event()
+
+    def blocked_enrichment():
+        entered.set()
+        assert release.wait(5)
+
+    enrichment = Mock(side_effect=blocked_enrichment)
+    gauges = QueueMetrics(registry=CollectorRegistry())
+    service = Serving(store, metrics=gauges, enrichment_sweep=enrichment)
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+    initial = deepcopy(store.rows)
+    drain = threading.Thread(target=service.reconcile)
+    drain.start()
+    try:
+        assert entered.wait(2)
+        response = client.get('/v2/batch-pipeline/metrics')
+        assert response.status_code == 200
+        assert gauges.refreshed_at.labels(*gauges.scope)._value.get() > 0
+        assert gauges.ready_age.labels('fresh', *gauges.scope)._value.get() >= 0
+        assert enrichment.call_count == 1
+        assert store.rows == initial
+    finally:
+        release.set()
+        drain.join(timeout=2)
+    assert not drain.is_alive()
+
+
+@pytest.mark.parametrize('scrape_flag,serving_flag', [(None, 'true'), ('true', 'false')])
+def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatch, scrape_flag, serving_flag):
+    client, store = api
+    monkeypatch.delenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', raising=False)
+    if scrape_flag is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', scrape_flag)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_flag)
+    service = Mock(store=store)
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    service.reconcile.assert_called_once_with()
+    service.metrics.refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch):
+    import asyncio
+    from routers import batch_pipeline as routes
+
+    _, store = api
+    service = routes.serving_for_stage('dev')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
+    entered, release = threading.Event(), threading.Event()
+
+    def recover(segment, owner):
+        entered.set()
+        assert release.wait(5)
+        return 'recovered'
+
+    service.recovery = Mock()
+    service.recovery.recover.side_effect = recover
+    from unittest.mock import AsyncMock
+
+    service.reconcile_async = AsyncMock()
+    task = asyncio.create_task(routes.recover_quarantine(routes.RedriveRequest(stage='dev', segment_id='synthetic')))
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        assert not task.done()  # The request stays active during the provider call.
+        service.reconcile_async.assert_not_awaited()
+    finally:
+        release.set()
+    assert await task == {'status': 'recovered'}
+    service.reconcile_async.assert_awaited_once_with()
+    assert service.recovery.recover.call_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
+
+
+def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
+    client, _ = api
+    path = '/v2/batch-pipeline/recover-quarantine'
+    assert client.post(path, json={'stage': 'prod', 'segment_id': 'synthetic'}).status_code == 409
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_AUDIENCE', raising=False)
+    app = FastAPI()
+    app.include_router(module.router)
+    assert TestClient(app).post(path, json={'stage': 'dev', 'segment_id': 'synthetic'}).status_code == 403
+
+
+@pytest.mark.parametrize(
+    'path,expected', [('/v2/batch-pipeline/recover-quarantine', 'tasks-sa'), ('/v2/batch-pipeline/pull', 'worker-sa')]
+)
+def test_recovery_invoker_cannot_gain_worker_authority(monkeypatch, path, expected):
+    from starlette.requests import Request
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_AUDIENCE', 'https://worker.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://integration.run.app')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', 'worker-sa')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'tasks-sa')
+    verify = Mock(return_value=0)
+    monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verify)
+    module.verify_worker(Request({'type': 'http', 'path': path, 'headers': []}))
+    assert verify.call_args.kwargs['invoker_sa'] == expected
+    assert verify.call_args.kwargs['audience'] == (
+        'https://integration.run.app' if expected == 'tasks-sa' else 'https://worker.run.app'
+    )

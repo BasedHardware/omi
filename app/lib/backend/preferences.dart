@@ -29,6 +29,8 @@ class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
   static SharedPreferences? _preferences;
   static FlutterSecureStorage? _secureStorage;
+  final _deviceChanges = StreamController<void>.broadcast(sync: true);
+  Stream<void> get deviceChanges => _deviceChanges.stream;
 
   /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
   static String _authTokenCache = '';
@@ -631,63 +633,6 @@ class SharedPreferencesUtil {
       devices.add(value);
     }
     return devices;
-  }
-
-  /// Second device paired next to [btDevice] for multi-modal capture (an
-  /// OmiGlass alongside an Omi pendant). Both slots are auto-connected; which
-  /// one carries audio and which one carries photos is decided at runtime by
-  /// [DevicePairingRoles], not by the slot.
-  BtDevice? get companionBtDevice {
-    final String device = getString('companionBtDevice');
-    if (device.isEmpty) return null;
-    try {
-      final decoded = BtDevice.fromJson(jsonDecode(device));
-      return decoded.id.isEmpty ? null : decoded;
-    } catch (e) {
-      Logger.debug('Error decoding companion device: $e');
-      return null;
-    }
-  }
-
-  set companionBtDevice(BtDevice? value) {
-    if (value == null || value.id.isEmpty) {
-      remove('companionBtDevice');
-      return;
-    }
-    saveString('companionBtDevice', jsonEncode(value.toJson()));
-    final devices = _upsertBtDevice(value);
-    saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
-  }
-
-  /// Ids of every saved device the app should keep connected.
-  List<String> get pairedDeviceIds {
-    final ids = <String>[];
-    final primary = btDevice;
-    if (primary.id.isNotEmpty) ids.add(primary.id);
-    final companion = companionBtDevice;
-    if (companion != null && !ids.contains(companion.id)) ids.add(companion.id);
-    return ids;
-  }
-
-  /// Drops [deviceId] from every saved slot. When the primary slot is
-  /// forgotten, the companion (if any) is promoted so the app keeps
-  /// reconnecting to the device the user still owns.
-  void forgetSavedBtDevice(String deviceId) {
-    if (deviceId.isEmpty) return;
-    final companion = companionBtDevice;
-    if (companion?.id == deviceId) {
-      remove('companionBtDevice');
-    }
-    if (btDevice.id == deviceId) {
-      if (companion != null && companion.id != deviceId) {
-        remove('companionBtDevice');
-        saveString('btDevice', jsonEncode(companion.toJson()));
-      } else {
-        remove('btDevice');
-      }
-    }
-    final devices = btDevices.where((device) => device.id != deviceId).toList();
-    saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
   }
 
   set deviceName(String value) => saveString('deviceName', value);
@@ -1572,7 +1517,12 @@ class SharedPreferencesUtil {
       ? _preferences?.getStringList(key) ?? defaultValue
       : _readOrDefault(key, defaultValue);
 
-  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async {
+    final changed = key == 'btDevice' && _preferences?.getString(key) != value;
+    final write = _preferences?.setString(key, value);
+    if (changed) _deviceChanges.add(null);
+    return await write ?? false;
+  }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 

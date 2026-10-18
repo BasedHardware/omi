@@ -9,16 +9,23 @@ import json
 import logging
 import secrets
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Collection, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
-from database.firestore_index_registry import UNIVERSAL_CANONICAL_LIST_SCAN_QUERY
+from database.firestore_index_registry import (
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
+    UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY,
+)
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import filter_items_by_device_scope
@@ -70,7 +77,13 @@ from database.memory_vector_repair_outbox import build_vector_repair_purge_outbo
 from database.memory_vector_metadata import canonical_memory_provider_id
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
 from utils.other.account_gate_http import account_gate_busy_http_exception
-from utils.other.list_budget import ListReadBudget, budgeted_document_get, budgeted_stream_list
+from utils.other.list_budget import (
+    ListReadBudget,
+    ListReadBudgetExhausted,
+    budgeted_document_get,
+    budgeted_stream_list,
+    indexed_list_reads_enabled,
+)
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
@@ -974,7 +987,7 @@ def read_canonical_scan_page(
 ) -> Tuple[List[CanonicalScanSlot], bool]:
     """Read one bounded canonical raw scan page via Firestore keyset order.
 
-    Each slot corresponds to one raw ``memory_items`` document in newest-first
+    Each slot corresponds to one candidate ``memory_items`` document in newest-first
     ``updated_at DESC, __name__ ASC`` order. ``None`` memory means the row was
     filtered by access/device/pending/archive/lineage policy and must still
     advance the scan cursor. ``snapshot.id`` is the sole ``__name__`` authority;
@@ -993,23 +1006,84 @@ def read_canonical_scan_page(
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=archive_explicit)
 
     items_ref = client.collection(MemoryCollections(uid=uid).memory_items)
-    query = UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(
-        items_ref,
-        {},
-        field_filter_factory=FieldFilter,
-    )
-    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
-    if start_after is not None:
-        cursor_time, cursor_memory_id = start_after
-        if not cursor_memory_id.strip():
-            raise ValueError('canonical scan cursor memory_id must not be blank')
-        query = query.start_after(
-            {
-                'updated_at': _coerce_scan_updated_at(cursor_time),
-                '__name__': items_ref.document(cursor_memory_id),
-            }
+    queries = []
+    if temporal_view == 'released' and not archive_explicit and indexed_list_reads_enabled():
+        # Necessary conditions over fields required by MemoryItem. Keep the
+        # policy checks below authoritative. Expired *processed* Short-term is
+        # still visible, so expires_at must never be a query exclusion.
+        values: Dict[str, Any] = {
+            'status': 'active',
+            'source_state': 'active',
+            'source_states': ['active', 'missing'],
+            'processing_state': 'processed',
+            'tiers': ['short_term', 'long_term'],
+        }
+        if include_pending_processing:
+            # Usually empty: prove the pending branch first so a subsequent
+            # interrupted processed stream can retain its verified prefix.
+            queries.append(
+                UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY.build(
+                    items_ref,
+                    {**values, 'processing_state': 'pending', 'tier': 'short_term', 'required': True},
+                    field_filter_factory=FieldFilter,
+                )
+            )
+        queries.append(
+            UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY.build(
+                items_ref,
+                values,
+                field_filter_factory=FieldFilter,
+            )
         )
-    snapshots = budgeted_stream_list(query.limit(bounded_limit), budget)
+    else:
+        # Explicit Archive can admit pending Archive rows without required
+        # processing. Keep that rarer policy on the raw query, like history.
+        queries.append(UNIVERSAL_CANONICAL_LIST_SCAN_QUERY.build(items_ref, {}, field_filter_factory=FieldFilter))
+
+    def snapshot_key(snapshot: Any) -> Tuple[int, int, str]:
+        stamp = (snapshot.to_dict() or {}).get('updated_at')
+        if not isinstance(stamp, datetime) or stamp.tzinfo is None or stamp.utcoffset() is None:
+            return (0, 0, snapshot.id)
+        # Firestore timestamps have nanosecond precision. Float timestamps can
+        # collapse adjacent revisions and reorder equal-microsecond rows by id.
+        delta = stamp - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        seconds = delta.days * 86400 + delta.seconds
+        nanos = getattr(stamp, 'nanosecond', stamp.microsecond * 1000)
+        return (-seconds, -nanos, snapshot.id)
+
+    interrupted = False
+    snapshots: List[Any] = []
+    incomplete_boundaries: List[Optional[Tuple[int, int, str]]] = []
+    for query in queries:
+        query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
+        if start_after is not None:
+            cursor_time, cursor_memory_id = start_after
+            if not cursor_memory_id.strip():
+                raise ValueError('canonical scan cursor memory_id must not be blank')
+            query = query.start_after(
+                {
+                    'updated_at': _coerce_scan_updated_at(cursor_time),
+                    '__name__': items_ref.document(cursor_memory_id),
+                }
+            )
+        try:
+            branch = budgeted_stream_list(query.limit(bounded_limit), budget)
+        except ListReadBudgetExhausted as exc:
+            branch = getattr(exc, 'partial_snapshots', [])
+            interrupted = True
+            incomplete_boundaries.append(snapshot_key(branch[-1]) if branch else None)
+        snapshots.extend(branch)
+    if len(queries) > 1:
+        snapshots = list({snapshot.id: snapshot for snapshot in snapshots}.values())
+        snapshots.sort(key=snapshot_key)
+    # Only emit a newest-first prefix proven by *both* branch frontiers.
+    # An unread branch has no frontier, so a total outage cannot invent one.
+    if any(boundary is None for boundary in incomplete_boundaries):
+        snapshots = []
+    elif incomplete_boundaries:
+        boundary = min(value for value in incomplete_boundaries if value is not None)
+        snapshots = [snapshot for snapshot in snapshots if snapshot_key(snapshot) <= boundary]
+    snapshots = snapshots[:bounded_limit]
     slots: List[CanonicalScanSlot] = []
     for snapshot in snapshots:
         doc_id = getattr(snapshot, 'id', None)
@@ -1050,22 +1124,30 @@ def read_canonical_scan_page(
         ):
             slots.append((None, scan_cursor))
             continue
-        if temporal_view not in {'history', 'all'} and _canonical_scan_lineage_suppressed(
-            item,
-            uid=uid,
-            db_client=client,
-            policy=policy,
-            now=current_time,
-            include_pending_processing=include_pending_processing,
-            include_archive=archive_explicit,
-            device_scope=device_scope,
-            client_device_id=client_device_id,
-            budget=budget,
-        ):
-            slots.append((None, scan_cursor))
-            continue
+        if temporal_view not in {'history', 'all'}:
+            try:
+                suppressed = _canonical_scan_lineage_suppressed(
+                    item,
+                    uid=uid,
+                    db_client=client,
+                    policy=policy,
+                    now=current_time,
+                    include_pending_processing=include_pending_processing,
+                    include_archive=archive_explicit,
+                    device_scope=device_scope,
+                    client_device_id=client_device_id,
+                    budget=budget,
+                )
+            except ListReadBudgetExhausted:
+                # An unresolved alias cannot bypass lineage policy. Keep the
+                # earlier verified prefix and mark the stream incomplete.
+                interrupted = True
+                break
+            if suppressed:
+                slots.append((None, scan_cursor))
+                continue
         slots.append((memory_item_to_memorydb(item), scan_cursor))
-    exhausted = len(snapshots) < bounded_limit
+    exhausted = not interrupted and len(snapshots) < bounded_limit
     return slots, exhausted
 
 
@@ -3742,6 +3824,38 @@ def _run_immediate_privacy_cleanup(
         )
 
 
+@dataclass
+class _DeferredCanonicalPrivacyFinalization:
+    uid: str
+    db_client: Any
+    memory_ids: List[str]
+
+
+_DEFERRED_CANONICAL_PRIVACY_FINALIZATION: ContextVar[Optional[_DeferredCanonicalPrivacyFinalization]] = ContextVar(
+    "deferred_canonical_privacy_finalization", default=None
+)
+
+
+@contextmanager
+def defer_conversation_privacy_finalization(uid: str, *, db_client: Any) -> Iterator[List[str]]:
+    """Keep retry tombstones until MemoryService purges the complete task set.
+
+    Only provider-proven IDs are collected; no history read is cached. Bind
+    the scope to both the user and client so nested work cannot enlist a
+    different account or database in this task's finalization. The
+    caller must run the mandatory final projection purge after this scope and
+    before removing source-replacement receipts. On failure, both the durable
+    tombstones and receipts remain available to reconstruct cleanup on retry.
+    """
+    client = db_client if db_client is not None else default_db_client
+    pending = _DeferredCanonicalPrivacyFinalization(uid, client, [])
+    token = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.set(pending)
+    try:
+        yield pending.memory_ids
+    finally:
+        _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.reset(token)
+
+
 def purge_canonical_memory_projections(
     uid: str,
     memory_ids: List[str],
@@ -3755,6 +3869,7 @@ def purge_canonical_memory_projections(
 ) -> None:
     """Fail closed until every content-bearing canonical projection is gone."""
 
+    coalesce = firestore_read_levers.lever_enabled('ledger_purge_coalesce', uid)
     unique_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
     for memory_id in unique_ids:
         if revalidate_gate:
@@ -3777,7 +3892,9 @@ def purge_canonical_memory_projections(
             gate_kind=gate_kind,
             reason=reason,
             db_client=db_client,
-            include_legacy_commits=True,
+            # Review/correction cleanup stays live. Only its redundant history
+            # walk is omitted; the mandatory finalizer performs a fresh purge.
+            include_legacy_commits=not coalesce,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
     if revalidate_gate:
@@ -3787,6 +3904,16 @@ def purge_canonical_memory_projections(
 
     if revalidate_gate:
         assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=db_client)
+    pending = _DEFERRED_CANONICAL_PRIVACY_FINALIZATION.get() if coalesce else None
+    if (
+        pending is not None
+        and pending.uid == uid
+        and pending.db_client is (db_client if db_client is not None else default_db_client)
+        and gate_kind == "explicit_memory_deletion"
+        and preserve_source_replacement_receipts
+    ):
+        pending.memory_ids[:] = list(dict.fromkeys(pending.memory_ids + unique_ids))
+        return
     finalize_canonical_privacy_tombstones(
         uid,
         unique_ids,

@@ -17,6 +17,11 @@ from config.capture_evidence import capture_evidence_dark_write_enabled
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
 FLAG = 'CAPTURE_EVIDENCE_V1_DARK_WRITE'
+# The composed manifest is ~4.8k lines; the pure-Python SafeLoader burns ~0.23s
+# CPU per parse, which contention on a loaded CI runner inflated past the 1.0s
+# fast-unit ceiling (run 39109878948, shard 6). CSafeLoader keeps the exact same
+# safe schema for ~1/7 of the cost. Guarded for environments without libyaml.
+_MANIFEST_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 
 S1_SERVICES = (
     'gke/backend-listen',
@@ -33,7 +38,7 @@ def test_code_default_stays_off(monkeypatch):
 
 
 def test_composed_declarations_admit_s1_on_evidence_hosts():
-    composed = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    composed = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=_MANIFEST_LOADER)
     for environment in ('dev', 'prod'):
         env = composed['environments'][environment]
         scopes = {

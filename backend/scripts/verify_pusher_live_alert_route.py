@@ -58,7 +58,9 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-window-post-latency",
     "omi-stt-replay-continuity",
     "omi-stt-evidence-loss",
+    "omi-stt-evidence-loss-critical",
     "omi-stt-leg-lifecycle-gap",
+    "omi-stt-leg-settlement-omission",
     "omi-stt-snapshot-unready",
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
@@ -77,6 +79,14 @@ REQUIRED_JOBS = {"pusher-metrics", "backend-listen-metrics"}
 # relabel namespace and pod. min(up) is applied in process to the series that
 # remain after confirmed deletions are removed. Do not replace this with max(up).
 SERVING_UP_QUERY = 'up{job=~"pusher-metrics|backend-listen-metrics"}'
+# Before publishing, the gate checks the *currently serving* fleet. One missed
+# scrape on any of the many backend-listen pods made a single instant read fail
+# the release (backend-listen-metrics=0 on 2026-10-16/17 with every pod serving).
+# A target therefore counts as up when any scrape succeeded in the last window;
+# a target down for the whole window still fails. Post-rollout keeps instant up.
+PREPUBLISH_UP_WINDOW = "2m"
+PREPUBLISH_UP_QUERY = f"max_over_time({SERVING_UP_QUERY}[{PREPUBLISH_UP_WINDOW}])"
+PREPUBLISH_DEFAULT_ATTEMPTS = 6
 # kube-state-metrics v2.16 emits this gauge only when metadata.deletionTimestamp
 # is set. Labels are namespace, pod, and uid — the same namespace/pod keys as the
 # scrape targets. Both Deployments use terminationGracePeriodSeconds 120 plus a
@@ -703,19 +713,27 @@ def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) ->
             "query": 'count({__name__=~"omi_capture_finalization_failures_total|omi_journey_accepted_total|omi_journey_terminal_total",job=~"pusher-metrics|backend-listen-metrics"}) by (__name__,job)'
         }
     )
+    up_query = PREPUBLISH_UP_QUERY if phase == "prepublish" else SERVING_UP_QUERY
     failures: list[str] = []
     for attempt in range(attempts):
-        failures = validate_live_route(
-            {uid: _request_json(grafana_url, f"/api/v1/provisioning/alert-rules/{uid}", token) for uid in RULE_UIDS},
-            _request_json(grafana_url, "/api/datasources/uid/prometheus/health", token),
-            _prometheus_instant_query(grafana_url, token, SERVING_UP_QUERY),
-            _request_json(grafana_url, metric_query_path, token),
-            _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
-            phase=phase,
-            deletion_query=_prometheus_instant_query_or_error(grafana_url, token, POD_DELETION_TIMESTAMP_QUERY),
-            ksm_presence_query=_prometheus_instant_query_or_error(grafana_url, token, KSM_POD_INFO_COUNT_QUERY),
-            production=grafana_url == "https://monitor.omi.me",
-        )
+        try:
+            failures = validate_live_route(
+                {
+                    uid: _request_json(grafana_url, f"/api/v1/provisioning/alert-rules/{uid}", token)
+                    for uid in RULE_UIDS
+                },
+                _request_json(grafana_url, "/api/datasources/uid/prometheus/health", token),
+                _prometheus_instant_query(grafana_url, token, up_query),
+                _request_json(grafana_url, metric_query_path, token),
+                _request_json(grafana_url, "/api/v1/provisioning/contact-points", token),
+                phase=phase,
+                deletion_query=_prometheus_instant_query_or_error(grafana_url, token, POD_DELETION_TIMESTAMP_QUERY),
+                ksm_presence_query=_prometheus_instant_query_or_error(grafana_url, token, KSM_POD_INFO_COUNT_QUERY),
+                production=grafana_url == "https://monitor.omi.me",
+            )
+        except AlertRouteError as exc:
+            # A transient Grafana/Prometheus request failure is retried like a miss.
+            failures = [str(exc)]
         if not failures or attempt + 1 == attempts:
             break
         time.sleep(5)
@@ -753,6 +771,12 @@ def _run_fleet_coverage(
     return fleet_gate_failures(coverage, gated_uids, fail_on), report
 
 
+def resolve_attempts(requested: int | None, *, mode: str, phase: str | None) -> int:
+    if requested is not None:
+        return requested
+    return PREPUBLISH_DEFAULT_ATTEMPTS if mode == "pusher" and phase == "prepublish" else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--grafana-url", required=True)
@@ -761,7 +785,12 @@ def main() -> int:
     parser.add_argument("--mode", choices=("pusher", "fleet", "import"), default="pusher")
     parser.add_argument("--alert-set", choices=("all", "live-stt"), default="all")
     parser.add_argument("--fail-on", choices=("none", "gated", "all"))
-    parser.add_argument("--attempts", type=int, default=1)
+    parser.add_argument(
+        "--attempts",
+        type=int,
+        default=None,
+        help=f"default {PREPUBLISH_DEFAULT_ATTEMPTS} for --phase prepublish, otherwise 1",
+    )
     args = parser.parse_args()
     if not _approved_grafana_url(args.grafana_url):
         print("FAIL: Grafana URL must be an approved HTTPS monitoring origin")
@@ -782,20 +811,21 @@ def main() -> int:
     report_lines: list[str] = []
     try:
         token = _token(args.token_file)
-        if args.attempts < 1 or args.attempts > 12:
+        attempts = resolve_attempts(args.attempts, mode=args.mode, phase=args.phase)
+        if attempts < 1 or attempts > 12:
             raise AlertRouteError("attempts must be between 1 and 12")
         if args.mode == "pusher":
             phase = args.phase
             if phase is None:
                 raise AlertRouteError("pusher mode requires --phase")
-            failures = _run_pusher_gate(args.grafana_url, token, phase, args.attempts)
+            failures = _run_pusher_gate(args.grafana_url, token, phase, attempts)
         elif args.mode == "import":
             failures = _run_live_stt_import(args.grafana_url, token)
         else:
             if fail_on is None:
                 raise AlertRouteError("fleet mode requires --fail-on none, gated, or all")
             failures, report_lines = _run_fleet_coverage(
-                args.grafana_url, token, args.attempts, fail_on, alert_set=args.alert_set
+                args.grafana_url, token, attempts, fail_on, alert_set=args.alert_set
             )
     except (AlertRouteError, OSError, json.JSONDecodeError) as exc:
         failures = [str(exc)]

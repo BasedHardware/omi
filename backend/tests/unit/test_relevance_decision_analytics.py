@@ -57,6 +57,36 @@ def test_structuring_override_emits_the_final_discard(relevance_io, monkeypatch)
     )
 
 
+def test_emits_the_effective_jev_cutoff_content_free(relevance_io, monkeypatch):
+    capture = Mock()
+    monkeypatch.setattr(relevance_io, 'emit_posthog_event', capture)
+    decision = RelevanceDecision(
+        'discard',
+        'jev',
+        'jev_discard',
+        ProcessingTrigger.SYNC_UPDATE,
+        jev_p_discard=0.8,
+        jev_threshold=0.8,
+        jev_comparison='>=',
+        arm='jev',
+    )
+
+    relevance_io.emit_recorded_decision('user-id', 'conversation-id', decision)
+
+    capture.assert_called_once_with(
+        'user-id',
+        'Relevance Decision Recorded',
+        {
+            'conversation_id': 'conversation-id',
+            'reason': 'jev_discard',
+            'discarded': True,
+            'arm': 'jev',
+            'jev_threshold': 0.8,
+            'jev_comparison': '>=',
+        },
+    )
+
+
 def test_capture_exception_never_propagates(relevance_io, monkeypatch, caplog):
     capture = Mock(side_effect=RuntimeError('sensitive vendor response'))
     monkeypatch.setattr(relevance_io, 'emit_posthog_event', capture)

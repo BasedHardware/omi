@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/preferences_paired_devices.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -16,7 +17,7 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 /// disconnected, and every step is recorded so a test can prove one device's
 /// lifecycle never touched another's.
 class _SlowFakeTransport extends _FakeTransport {
-  _SlowFakeTransport(String deviceId, this._gate) : super(deviceId);
+  _SlowFakeTransport(super.deviceId, this._gate);
 
   final Completer<void> _gate;
   final connectEntered = Completer<void>();
@@ -107,7 +108,7 @@ void main() {
     await SharedPreferencesUtil.init();
     transports = {};
     stateEvents = [];
-    service = DeviceService(connectionFactory: factory);
+    service = DeviceService(connectionBuilder: factory);
     service.start();
     service.subscribe(_RecordingSubscription(stateEvents), stateEvents);
   });
@@ -205,7 +206,7 @@ void main() {
     expect(glass!.device.type, DeviceType.openglass);
   });
 
-  test('forgetDevice waits for an in-flight forced ensureConnection on the same device', () async {
+  test('forgetDevice during an in-flight forced ensureConnection leaves no connection and disposes once', () async {
     SharedPreferencesUtil().btDevice = _device('omi-1');
     final gate = Completer<void>();
     final slowTransport = _SlowFakeTransport('omi-1', gate);

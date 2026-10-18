@@ -75,6 +75,7 @@ from utils.retrieval.tools import (
     save_playbook,
     create_standing_trigger,
     close_fact_tool,
+    process_recent_conversations,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tools.conversation_jit_gate import (
@@ -315,6 +316,7 @@ CORE_TOOLS = [
     save_playbook,
     create_standing_trigger,
     close_fact_tool,
+    process_recent_conversations,
 ]
 
 # JIT-only tools: schemas must not reach the model for users outside the JIT
@@ -1620,6 +1622,10 @@ async def execute_agentic_chat_stream(
             # branches copy CORE_TOOLS (never mutate it) per the prompt-cache
             # optimization contract.
             core_tools = list(CORE_TOOLS)
+            from config.demand_processing import tool_enabled
+
+            if not tool_enabled():
+                core_tools = [tool for tool in core_tools if tool.name != 'process_recent_conversations']
             if not jit_conversation_retrieval_enabled and surface_runtime.get() is None:
                 core_tools = [tool for tool in core_tools if tool.name not in JIT_ONLY_TOOL_NAMES]
 

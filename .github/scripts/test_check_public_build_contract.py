@@ -8,11 +8,13 @@ import contextlib
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import call, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_PATH = ROOT / ".github" / "scripts" / "check_public_build_contract.py"
@@ -1122,6 +1124,107 @@ jobs:
 
         self.assertTrue(True)
 
+    def test_browser_smoke_retries_render_failures_then_passes(self) -> None:
+        failures = (
+            OSError("browser unavailable"),
+            subprocess.TimeoutExpired("fake-browser", 45),
+            SimpleNamespace(returncode=1, stdout=""),
+        )
+        ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
+        for failure in failures:
+            for failed_attempts in (1, 2):
+                with self.subTest(failure=failure, failed_attempts=failed_attempts):
+                    with (
+                        patch.object(SMOKE.subprocess, "run", side_effect=[failure] * failed_attempts + [ready]) as run,
+                        patch.object(SMOKE.time, "sleep") as sleep,
+                    ):
+                        SMOKE.smoke(
+                            target="fake",
+                            base_url="https://candidate.example",
+                            contract_path=self.root / "config/public-build-contract.json",
+                            environment={"OMI_BROWSER_BIN": "fake-browser"},
+                        )
+                    self.assertEqual(run.call_count, failed_attempts + 1)
+                    self.assertEqual([args.args[0][0] for args in run.call_args_list], ["fake-browser"] * run.call_count)
+                    self.assertEqual(sleep.call_args_list, [call(5)] * failed_attempts)
+
+    def test_browser_smoke_does_not_retry_acceptance_failures(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["candidate_acceptance"]["command"].extend(["--expect-sha", "{sha}"])
+        self.write_json("config/public-build-contract.json", contract)
+        for document, reason in (
+            ("<html></html>", "client public-build canary did not become ready"),
+            ('<span data-omi-public-build-canary="fake:ready" />', "client public-build sha did not match"),
+            (
+                '<span data-omi-public-build-canary="fake:ready" data-omi-public-build-sha="old" />',
+                "client public-build sha did not match",
+            ),
+        ):
+            # Even after a transient render failure, a completed render is a
+            # final content verdict: no retry or fallback to the next browser.
+            for transient_first in (False, True):
+                with self.subTest(document=document, transient_first=transient_first):
+                    results = [SimpleNamespace(returncode=1, stdout="")] if transient_first else []
+                    results.append(SimpleNamespace(returncode=0, stdout=document))
+                    with (
+                        patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
+                        patch.object(SMOKE.time, "sleep") as sleep,
+                    ):
+                        with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                            SMOKE.smoke(
+                                target="fake",
+                                base_url="https://candidate.example",
+                                contract_path=self.root / "config/public-build-contract.json",
+                                environment={"OMI_BROWSER_BIN": "fake-browser"},
+                                expect_sha="new",
+                            )
+                    self.assertEqual(str(caught.exception), reason)
+                    self.assertEqual(run.call_count, len(results))
+                    self.assertEqual(sleep.call_args_list, [call(5)] if transient_first else [])
+
+    def test_browser_smoke_exhaustion_preserves_last_reason_and_bounds_runtime(self) -> None:
+        environment = {"OMI_BROWSER_BIN": "fake-browser"}
+        browsers = SMOKE.browser_candidates(environment)
+        for last_failure, reason in (
+            (OSError("sensitive details"), "headless browser did not run"),
+            (
+                subprocess.TimeoutExpired("sensitive command", 19),
+                "headless browser timed out rendering the candidate",
+            ),
+            (SimpleNamespace(returncode=1, stdout=""), "headless browser could not render the candidate"),
+        ):
+            with self.subTest(reason=reason):
+                results = [
+                    subprocess.TimeoutExpired("fake-browser", 45),
+                    OSError("browser unavailable"),
+                    SimpleNamespace(returncode=1, stdout=""),
+                ] * len(browsers)
+                results[-1] = last_failure
+                with (
+                    patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
+                    patch.object(SMOKE.time, "sleep") as sleep,
+                ):
+                    with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                        SMOKE.smoke(
+                            target="fake",
+                            base_url="https://candidate.example",
+                            contract_path=self.root / "config/public-build-contract.json",
+                            environment=environment,
+                        )
+                self.assertEqual(str(caught.exception), reason)
+                self.assertEqual(SMOKE.sanitized_browser_smoke_reason(caught.exception), reason)
+                if isinstance(last_failure, Exception):
+                    self.assertIs(caught.exception.__cause__, last_failure)
+                self.assertEqual(
+                    [args.args[0][0] for args in run.call_args_list],
+                    [browser for browser in browsers for _ in range(3)],
+                )
+                self.assertEqual(sleep.call_args_list, [call(5)] * (2 * len(browsers)))
+                timeouts = [args.kwargs["timeout"] for args in run.call_args_list]
+                self.assertEqual(timeouts[::3], [45] * len(browsers))
+                extra_runtime = sum(timeouts) + sum(args.args[0] for args in sleep.call_args_list) - 45 * len(browsers)
+                self.assertLessEqual(extra_runtime, 240)
+
     def test_browser_smoke_prints_a_sanitized_reason(self) -> None:
         original = SMOKE.smoke
 
@@ -1281,6 +1384,50 @@ class AcceptanceRouteFixture(unittest.TestCase):
         self.assertEqual(STATIC.serving_revision(document), "svc-live")
         self.assertEqual(STATIC.serving_revision({"status": {"traffic": []}}), "")
         self.assertEqual(STATIC.serving_revision({}), "")
+
+    def test_stale_candidate_tags_keep_newest_serving_and_current(self) -> None:
+        traffic = [{"revisionName": "admin-live", "percent": 100}]
+        traffic += [
+            {"revisionName": f"admin-r{run}", "tag": f"public-admin-{run}-1", "percent": 0}
+            for run in (900, 1000, 99, 1001, 1002)
+        ]
+        traffic += [
+            {"revisionName": "admin-live", "tag": "public-admin-5-1"},
+            {"revisionName": "admin-old", "tag": "public-admin-f0bebc2-manual"},
+            {"revisionName": "admin-old2", "tag": "admin-2596a67-d1"},
+            {"revisionName": "admin-r1000", "tag": "public-admin-1000-2"},
+            {"revisionName": "other", "tag": "public-adminx-1-1"},
+            {"revisionName": "other", "tag": "canary"},
+        ]
+        document = {"spec": {"traffic": traffic}}
+        stale = STATIC.stale_candidate_tags(document, target="admin", keep_latest=2, keep_tags=["public-admin-99-1"])
+        # Newest two by (run, attempt): 1002-1, 1001-1. Serving revision and the explicit tag are kept.
+        self.assertEqual(
+            stale,
+            ["public-admin-900-1", "public-admin-1000-1", "public-admin-f0bebc2-manual",
+             "admin-2596a67-d1", "public-admin-1000-2"],
+        )
+        self.assertNotIn("public-adminx-1-1", stale)
+        self.assertNotIn("canary", stale)
+        self.assertEqual(STATIC.stale_candidate_tags({}, target="admin", keep_latest=3), [])
+        self.assertEqual(
+            STATIC.stale_candidate_tags({"status": {"traffic": traffic}}, target="admin", keep_latest=2,
+                                        keep_tags=["public-admin-99-1"]),
+            stale,
+        )
+
+    def test_stale_tags_cli_prints_comma_separated(self) -> None:
+        document = {"spec": {"traffic": [
+            {"revisionName": "a", "percent": 100},
+            {"revisionName": "b", "tag": "public-fake-1-1"},
+            {"revisionName": "c", "tag": "public-fake-2-1"},
+        ]}}
+        result = subprocess.run(
+            [sys.executable, str(ROOT / ".github" / "scripts" / "public_build_acceptance_route.py"),
+             "stale-tags", "--target", "fake", "--keep-latest", "1"],
+            input=json.dumps(document), capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(result.stdout.strip(), "public-fake-1-1")
 
     def test_admin_background_refresh_has_production_cpu_after_the_response(self) -> None:
         target = STATIC.load_contract(STATIC.DEFAULT_CONTRACT).targets["admin"]

@@ -67,6 +67,21 @@ def main() -> int:
         for error in validate_voice_transcription_storage(args.env, config):
             parser.error(error.message)
 
+    if args.check_secrets:
+        missing = check_rendered_secrets(
+            env=args.env,
+            manifest_path=args.manifest,
+            project=args.project,
+        )
+        if missing:
+            for item in missing:
+                print(
+                    f'ERROR [secret/{item.env_name}]: required Secret Manager entry not found; check deployment manifest',
+                    file=sys.stderr,
+                )
+            return 1
+        print(f'secret preflight passed for {args.env}')
+
     if args.legacy_public_binding_services:
         try:
             migrated = migrate_legacy_public_bindings(
@@ -98,22 +113,6 @@ def main() -> int:
             exit_code = 1
         else:
             print('development Cloud Run runtime-binding contract passed')
-
-    if args.check_secrets:
-        missing = check_rendered_secrets(
-            env=args.env,
-            manifest_path=args.manifest,
-            project=args.project,
-        )
-        if missing:
-            for item in missing:
-                print(
-                    f'ERROR [secret/{item.env_name}]: Secret Manager secret {item.secret_name!r} not found',
-                    file=sys.stderr,
-                )
-            exit_code = 1
-        else:
-            print(f'secret preflight passed for {args.env}')
 
     if args.check_traffic or args.repair_traffic:
         results = repair_cloud_run_traffic.repair_live(

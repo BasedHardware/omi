@@ -128,6 +128,14 @@ def test_lint_blocks_new_dead_metric_and_edited_legacy_debt():
     assert b.lint({'fixture': r}, inventory)['failures']
 
 
+def test_declared_metrics_allow_source_backed_rules_without_claiming_observation():
+    r = rule()
+    inventory = {'metrics': [], 'declared_metrics': ['fixture_total']}
+
+    assert not b.lint({'fixture': r}, inventory)['failures']
+    assert inventory['metrics'] == []
+
+
 def test_committed_offline_admission_gate():
     assert not b.lint(b.rules(), json.loads(b.INVENTORY.read_text()))['failures']
 

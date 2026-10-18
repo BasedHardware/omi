@@ -12,6 +12,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/preferences_paired_devices.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/base_provider.dart';

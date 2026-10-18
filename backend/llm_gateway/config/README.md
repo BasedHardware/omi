@@ -135,6 +135,8 @@ or `off`. Existing caller opt-outs win. OpenAI-compatible routes retain
 `prompt_cache_options` and part breakpoints. Keys are additionally hashed with
 the authenticated owner at the provider boundary. BYOK does not acquire a
 Vertex cache; requests without an authenticated owner never create one.
+Provider-scoped entries override lane and prefix defaults when a provider
+fallback shares a lane ID, such as the OpenAI attempt on a desktop-Vertex lane.
 
 Vertex explicit caching moves `systemInstruction`, tools, tool configuration,
 and leading contents through the marked seed boundary into `cachedContents`.

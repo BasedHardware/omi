@@ -108,6 +108,16 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
 
+    def test_cataloged_node_runtime_gate_is_not_stale(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(), flag("ADMIN_GATE_ENABLED", surfaces=["web-admin"])]))
+        self.write("web/admin/lib/flags.ts", "process.env.ADMIN_GATE_ENABLED !== '1'\n")
+        self.assertEqual(self.errors(), [])
+
+    def test_commented_node_runtime_gate_stays_stale(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(), flag("ADMIN_GATE_ENABLED", surfaces=["web-admin"])]))
+        self.write("web/admin/lib/flags.ts", "// process.env.ADMIN_GATE_ENABLED !== '1'\n")
+        self.assertIn("stale registry entry: delete it or restore the read: ADMIN_GATE_ENABLED", self.errors())
+
     def test_hook_git_environment_does_not_redirect_fixture_git_reads(self) -> None:
         with mock.patch.dict(
             os.environ, {"GIT_DIR": "/nonexistent-outer-git-dir", "GIT_WORK_TREE": "/nonexistent-outer-worktree"}

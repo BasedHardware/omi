@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import importlib
 import unittest.mock
+
+from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -41,6 +43,7 @@ from tests.support.firestore_dream_query_drivers import registry_extension as dr
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
+from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -127,6 +130,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '49c9e1328475cf209b188988ba3f179b6a1281ca79b56ef4b21139abf27a15d1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': '73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
@@ -145,6 +150,7 @@ BODY_DIGEST = {
     'database.action_items._harvest_legacy_docs': 'dbd3731b503ea8c2f6b9d98bf7cc4a6ffd85bf530ea09660539fb6569ae98114',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
+    'database.durable_queue_age._publish_queue_ages': '6981674c08c0e133899133a08ad5c7ee8dc34f2be420e134818af4db20d0f644',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
@@ -153,6 +159,9 @@ BODY_DIGEST = {
     'database.smart_merge.absorb_conversation': 'fc5e7e64436af99e10e92c08c4e0ecf763d1d9ff2865c756c79f3a4952771fef',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
+    'database.memory_ledger._append_commit_transaction': 'a30c4549844f8f10865249fc2c4444476c92a4d901191c69d2bac89a657ee7a8',
+    'database.memory_ledger._append_commit_with_builder_transaction': '56a25d5b0c29b9ba6b58ddc4fe5e5fe83a78b54cdf5964b92f3c54e83aef01a3',
+    'database.memory_ledger._assert_legacy_commit_privacy_fences': '59596ea3da66dd82e55c7a08ad949ee894ba1a4fe7714f79ced320955ed22959',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -283,7 +292,7 @@ _add(
         'database.action_items.delete_action_items_for_conversation', base={'uid': UID, 'conversation_id': 'conv-1'}
     )
 )
-_add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}))
+_add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}, neutrals={'budget': _BUDGET}))
 _add(
     DriverEntry(
         'database.action_items.get_action_items',
@@ -335,7 +344,10 @@ _add(
 )
 _add(
     DriverEntry(
-        'database.action_items.get_visible_action_item_ids', base={'uid': UID}, domains={'completed': [False, True]}
+        'database.action_items.get_visible_action_item_ids',
+        base={'uid': UID},
+        domains={'completed': [False, True]},
+        neutrals={'budget': _BUDGET},
     )
 )
 _add(DriverEntry('database.action_items.iter_all_action_items', base={'uid': UID}))
@@ -891,6 +903,15 @@ _add(
         base={'uid': UID, 'start_timestamp': 1767225600, 'end_timestamp': 1767312000},
     )
 )
+_add(
+    DriverEntry(
+        'database.sync_live_overlap.find_sync_live_overlap_candidates',
+        base={
+            'user_ref': ref_document(f'users/{UID}'),
+            'incoming': {'started_at': T0, 'finished_at': T1, 'client_device_id': 'device-1', 'source': 'omi'},
+        },
+    )
+)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
@@ -925,6 +946,12 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_without_photos',
         base={'uid': UID},
+        domains={'list_fields_only': [False, True]},
+        patchers=(
+            lambda client: unittest.mock.patch.object(
+                importlib.import_module('database.conversations'), 'indexed_list_reads_enabled', return_value=True
+            ),
+        ),
         profiles=WITHOUT_PHOTOS_PROFILES,
         neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
     )
@@ -1014,6 +1041,15 @@ _add(
             'database.durable_queue_age.sample_store_wide_oldest_ready_ages',
         ),
         reason='group-scope sampler reached by both wrappers on every call',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.durable_queue_age._publish_queue_ages',
+        covered_by=('database.durable_queue_age.publish_all_queue_oldest_ready_ages',),
+        reason='sample-budget cache wrapper around the same scan+publish path; reached only by the periodic publisher',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.durable_queue_age._publish_queue_ages'],
     )
 )
 _add(
@@ -1462,7 +1498,7 @@ _add(
             'categories': [None, ['one'], ['one', 'two']],
             'extra_field_paths': [None, ('created_at',)],
         },
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
     )
 )
 _add(
@@ -2097,7 +2133,10 @@ def _seed_sync_retirement(client, combo, trial):
         }
 
 
-_SYNC_PROD = (_stub('database.sync_backfill_sequencer.production_stage', True),)
+_SYNC_PROD = (
+    _stub('database.sync_backfill_sequencer.production_stage', True),
+    _stub('database.sync_redrive.enabled', False),
+)
 
 
 def _sync_order_trial(client, combo, trial):
@@ -2108,6 +2147,31 @@ def _sync_order_patch(client):
     return unittest.mock.patch(
         'database.sync_backfill_sequencer.newest_first', side_effect=lambda uid: client.backfill_newest_first
     )
+
+
+def _seed_sync_preparation(client, combo, trial):
+    _sync_order_trial(client, combo, trial)
+    client.documents[f'sync_backfill_sequencer/{UID}'] = {
+        'active_job_id': 'shape-job',
+        'active_epoch': 1,
+        'active_state': 'running',
+    }
+
+
+_add(
+    DriverEntry(
+        'database.sync_backfill_sequencer.preparation_candidates',
+        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1},
+        trials=2,
+        setup=_seed_sync_preparation,
+        patchers=(
+            *_SYNC_PROD,
+            _sync_order_patch,
+            _stub('database.sync_backfill_sequencer.preparation_width', 4),
+            _stub('database.sync_backfill_sequencer.backlog_threshold', 8),
+        ),
+    )
+)
 
 
 _add(
@@ -2481,7 +2545,8 @@ _add(
         base={'uid': UID},
         domains={'limit': [None, 200]},
         neutrals={
-            'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
+            'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
+            'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
         },
     )
 )
@@ -2643,6 +2708,7 @@ _add(
 for entry in (
     *batch_pipeline_entries(),
     *batch_privacy_entries(),
+    *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),
     *outside_drivers.SKIPS.values(),
@@ -2858,7 +2924,18 @@ _add(
         patchers=(_messaging_cleanup, _messaging_decryption),
     )
 )
-_add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
+_add(
+    DriverEntry(
+        'database.channel_visibility.visible_sessions',
+        base={'uid': UID},
+        patchers=(
+            _messaging_visibility,
+            # Drivers run outside serving bootstrap/function fixtures. Model a
+            # successful empty cohort document with the explicit synthetic env fallback.
+            lambda client: unittest.mock.patch('config.rollout_cohorts._membership_resolver', legacy_membership),
+        ),
+    )
+)
 
 _add(
     DriverEntry(
@@ -2994,5 +3071,30 @@ _add(
         'utils.sync.reprocess.sweep',
         neutrals={'now': (T0.timestamp(), 'operand clock only'), 'limit': _LIMIT},
         patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
+    )
+)
+
+
+_add(
+    DriverEntry(
+        'database.summary_debt_queries.due_conversations',
+        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
+        domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
+    )
+)
+
+# Background-only discovery. Each boolean field has its own automatic single-field
+# index; point reads of all memberships on serving requests need no query index.
+_add(
+    DriverEntry(
+        'database.rollout_cohorts.read_cohort_members',
+        domains={
+            'name': [
+                'prod:batch-pipeline-recovery',
+                'prod:dream-agent',
+                'dev:batch-pipeline-recovery',
+                'dev:dream-agent',
+            ]
+        },
     )
 )

@@ -25,11 +25,13 @@ from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synch
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
+from utils.rollout_cohorts import configure_rollout_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,9 @@ class SynchronizedWorker:
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
     if cap_dispatch_enabled():
         registry.register(AUDIO_SECONDS)
+    registry.register(TRANSITIONS)
+    registry.register(DURATION)
+    registry.register(LABELS)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -184,6 +189,9 @@ def main() -> None:
     if not os.getenv('FIRESTORE_EMULATOR_HOST') and not os.getenv('OMI_FIRESTORE_DATA_PLANE_PROJECT'):
         raise RuntimeError('explicit customer data-plane project required')
     store = FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client())
+    # The worker evaluates live-reuse admission (sync_live_dedupe_active_for)
+    # on admitted work items; bind the cached cohort resolver before pumping.
+    configure_rollout_runtime()
     artifacts = create_artifact_store(
         store,
         create_storage_client(),
