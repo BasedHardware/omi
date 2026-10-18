@@ -19,12 +19,151 @@ capability bundle, no approval card, no ledger record — and in release bundles
 | `read_message_history` | `desktop.messaging.read` | dispatch | Full Disk Access |
 | `list_mail_messages` | `desktop.mail.read` | dispatch | Full Disk Access |
 | `send_message` | `desktop.messaging.send` | dispatch | Automation (Messages) |
+| `propose_message` | `desktop.compose.propose` | allow (the Messages composer is the approval) | Messages set up |
+| `propose_email` | `desktop.compose.propose` | allow (the compose window is the approval) | a default email app |
 | `run_applescript` | `desktop.automation.act` | dispatch | Automation (per target app) |
 
-All five are declared in `agent/src/runtime/omi-tool-manifest.ts` and executed by
-`Desktop/Sources/Providers/ChatToolExecutor+DeviceTools.swift`. The generated
+All eight are declared in `agent/src/runtime/omi-tool-manifest.ts`. The two
+`propose_*` tools are executed by
+`Desktop/Sources/Providers/ChatToolExecutor+ComposeProposals.swift`, the others
+by `Desktop/Sources/Providers/ChatToolExecutor+DeviceTools.swift`. The generated
 Swift surfaces come from `agent/scripts/generate-tool-surfaces.mjs`; never
 hand-edit them.
+
+### Draft, you send: `propose_message` and `propose_email`
+
+These open a compose window through `NSSharingService` (`.composeMessage`,
+`.composeEmail`), filled in with the recipients, the subject (email only) and
+the body, and stop there. The person reviews the draft and presses Send. Omi
+has no AppleScript or automation path behind these tools, so it cannot send
+one. Nothing is sent until the person presses Send, but an email app may
+autosave an open draft to the account's Drafts mailbox on the mail server.
+
+**Which app.** On current macOS (verified on 27), `.composeMessage` shows no
+sheet. It places the draft in the Messages app's own composer and reports the
+handoff at once, so Omi cannot see whether the person sends or discards it.
+(If the system showed a sheet instead, Omi would get a Send or Cancel report.
+That path is still handled, but this macOS does not use it.) `.composeEmail`
+hands the draft to whatever app handles `mailto:` links. That may be Mail,
+another mail app such as Outlook, or a browser, which opens its web mail site
+(Outlook on the web, Gmail).
+- The result names that app (`app`, plus `app_is_browser`). It is resolved
+  through `NSWorkspace.urlForApplication(toOpen: mailto:)`, and nothing assumes
+  Mail.
+- When the handler is a browser, the result says the draft opened on its web
+  mail site and that Omi cannot see whether it was sent.
+
+**Routing.** `propose_message` is the default for any request to text or
+message someone. `send_message` is only for when the person asks Omi to send
+it for them. Neither is ever pre-filed through `create_desktop_dispatch`. The
+guidance of all three tools says so.
+
+**Shared with iOS `propose_message`:** the tool name, `to` plus `text`, and
+the "does not send" contract. **Different on the Mac:**
+- the Mac never reports `sent`. Both Messages and the email app take the draft
+  and report a handoff before the person presses Send, so Omi cannot see the
+  send. iOS gets `sent` or `cancelled` from its compose sheet;
+- the Mac returns as soon as the draft is handed off, instead of holding the
+  turn until the person acts;
+- Mac `propose_message` takes no `subject`;
+- the Mac adds `propose_email`.
+
+- **No Omi approval card.** `desktop.compose.propose` is a platform-confirmed
+  write bundle. Apple's window already shows the person the exact recipients
+  and text, and nothing is sent until they press Send, so a card would ask
+  twice for the same effect. The bundle is narrow:
+  - any other write requested beside it keeps its own approval;
+  - the tools are `coordinatorOnly`, so a background or pill worker cannot put
+    a window in front of the person;
+  - an ask-mode service run cannot call them at all.
+- **Recipients must come from the person.** The compose window has no "Omi
+  wants to…" framing, so `send_message`'s rule is enforced in code, not only in
+  the prompt. Every recipient must come from one of:
+  - words the person typed, pasted or dictated in this turn. Voice runs carry
+    the provider transcript as the run text, so this needs no separate path;
+  - the person's one previous turn in the same main chat, so that "yes, that
+    one" can confirm an address;
+  - a `search_contacts` result in the same run, for the same owner;
+  - the signed-in account's own address.
+
+  Anything else returns `recipient_needs_confirmation` and opens nothing. That
+  covers an address the model read in a page, an email or on screen.
+
+  Limits of this check:
+  - **Question-card answers do not count.** On a question card the person
+    clicks a label, but the turn's text is the model-written `preparedAnswer`.
+    Those turns are recognised by their `qri_` turn key and left out, as the
+    current turn and as the previous one.
+  - **Pasted text counts as the person's.** If they paste a thread and ask for
+    a reply, its addresses are grounded. That is the point of pasting, but it
+    also means a pasted page can carry an address in.
+  - **Spoken addresses don't match.** "sam at example dot com" is not an
+    address, so voice users reach people through Contacts.
+  - **Phone numbers match as whole numbers.** The digits must be the same, or
+    one side may add a one-to-three-digit country code to a national number of
+    ten or more digits. Dates, numbers inside an address or word, and numbers
+    after "order", "invoice", "ticket", "#" and similar words never ground a
+    phone number.
+
+  Validation:
+  - a bare name returns `recipient_needs_lookup` with `next_tool:
+    search_contacts`;
+  - addresses use a narrow ASCII form: no `?`, `&`, `%`, `/`, `#` or lookalike
+    Unicode domains.
+- **No handoff while the person is typing.** The Messages composer takes
+  keyboard focus, and **Return sends from it**. A keystroke that lands in the
+  draft can send it before the person has reviewed it, so this guard is
+  load-bearing, not cosmetic.
+  - The coordinator hands a draft off only after 3 s with no key press. The
+    idle time is the system-wide keyDown idle, through `UserInputPresence`.
+  - The last idle check runs with no suspension before the handoff.
+  - It waits at most 8 s for quiet. Otherwise the result is `not_opened` /
+    `person_typing`.
+  - Residual risk: someone who starts typing again after the handoff can still
+    type into the composer.
+- **Limits.** Every limit is per signed-in owner, and a sign-out releases them.
+  - A request (run) opens at most one email draft and one message draft, so
+    "email Sam and text him" works.
+  - At most three drafts open in a minute, or one a minute when there is no run
+    ID.
+  - The same draft is not handed off again within two minutes: same channel,
+    the same recipients in any order or spelling, and the same text. The
+    result is `not_opened` / `draft_already_open`, which tells the model the
+    draft is waiting and the person presses Send there. The coordinator keeps
+    only a SHA-256 digest of the draft. A cancel or failure report clears it,
+    so the person can ask for the same draft again.
+  - Only if the system shows a Messages sheet: while it is still open, no
+    other draft opens (`compose_already_open`), and a sheet that never reports
+    stops blocking after five minutes.
+- **"Send it" after a draft.** The guidance for `propose_message`,
+  `propose_email` and `send_message` says the person sends an open draft
+  themselves. If they say "send" or "send it", the model tells them to press
+  Send in Messages or their email app. It never opens the same draft again and
+  never calls `send_message` or `create_desktop_dispatch` for it.
+  The guidance alone did not hold in a live test, so `send_message` also
+  checks in code, before any send. If the same owner handed a
+  `propose_message` draft to Messages in the last ten minutes, and the send's
+  recipient matches any recipient of that draft, `send_message` returns
+  `not_sent` / `draft_in_messages` and sends nothing. The recipient match uses
+  the same normalisation as the grounding check. The text does not matter. A
+  cancelled draft does not count. This check runs in Swift, so with an
+  approval card in front of `send_message` (the separate approval stack), the
+  card would still appear first.
+- **Results never say sent.** Every result carries `sent_by_omi: false` and a
+  `status`:
+  - `handed_to_email_app`: the email app named in `app` took the draft, which macOS reports before the
+    person presses Send.
+  - `handed_to_messages`: the draft is in Messages for the person to review
+    and send. Whether they send or discard it cannot be observed.
+  - `cancelled`: the person closed the window. Only a system sheet or an email
+    app that reports a cancel produces this.
+  - `open`: the window was still up when the wait ended, or the turn was
+    stopped after the window opened. Only a sheet produces the first case.
+  - `not_opened`: nothing opened. The reason is one of `stopped`,
+    `person_typing`, `draft_already_open`, `compose_already_open`,
+    `draft_limit_reached`, `compose_unavailable`, or a validation reason.
+- **Not supported yet:** CC/BCC and attachments. `NSSharingService` has no CC
+  field, and a `mailto:` fallback would lose the outcome report.
 
 ### Why reads need approval too
 

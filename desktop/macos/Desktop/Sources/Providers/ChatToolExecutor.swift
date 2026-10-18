@@ -527,7 +527,7 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID)
 
     case .searchContacts:
-      return await executeSearchContacts(toolCall.arguments)
+      return await executeSearchContacts(toolCall.arguments, runID: originatingRunId, ownerID: expectedOwnerID)
 
     case .listMessageChats:
       return await executeListMessageChats(toolCall.arguments)
@@ -545,9 +545,13 @@ class ChatToolExecutor {
       guard
         let result = await performOwnerBoundAsyncPhysicalEffect(
           expectedOwnerID: expectedOwnerID,
-          effect: { await executeSendMessage(toolCall.arguments) })
+          effect: { await executeSendMessage(toolCall.arguments, ownerID: expectedOwnerID) })
       else { return authorizedOwnerChangedResult() }
       return result
+
+    case .proposeMessage, .proposeEmail:
+      return await executeComposeProposal(
+        toolCall, userText: originatingUserText, runID: originatingRunId, expectedOwnerID: expectedOwnerID)
 
     case .runApplescript:
       guard
