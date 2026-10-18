@@ -63,6 +63,21 @@ def _notify_import_job(uid: str, job_id: str, title: str, body: str, data: Dict[
         )
 
 
+def is_lifelog_path(name: str) -> bool:
+    """True for real lifelog markdown entries inside an export ZIP.
+
+    Handles both ``lifelogs/...`` and ``something/lifelogs/...`` layouts and
+    skips the macOS metadata a Finder "Compress" adds alongside every real
+    entry: the ``__MACOSX/`` tree and AppleDouble ``._name`` siblings.
+    """
+    return (
+        ('lifelogs/' in name or name.startswith('lifelogs'))
+        and name.endswith('.md')
+        and '__MACOSX' not in name
+        and not Path(name).name.startswith('.')
+    )
+
+
 def parse_lifelog_filename(filename: str) -> Tuple[Optional[datetime], Optional[str]]:
     """
     Extract datetime and title slug from a Limitless lifelog filename.
@@ -328,18 +343,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             logger.info(f"[Limitless Import] ZIP contains {len(all_files)} entries")
             logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")
 
-            # Find all lifelog markdown files
-            # Handle both "lifelogs/..." and "something/lifelogs/..." structures.
-            # Skip macOS archive metadata (__MACOSX/ tree and AppleDouble "._name" files)
-            # that Finder's "Compress" adds alongside every real entry.
-            lifelog_files = [
-                name
-                for name in all_files
-                if ('lifelogs/' in name or name.startswith('lifelogs'))
-                and name.endswith('.md')
-                and '__MACOSX' not in name
-                and not Path(name).name.startswith('.')
-            ]
+            lifelog_files = [name for name in all_files if is_lifelog_path(name)]
 
             logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
             if lifelog_files:

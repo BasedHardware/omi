@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-_STUB = ('database', 'utils', 'firebase_admin', 'google', 'pusher',
+_STUB = ('database', 'firebase_admin', 'google', 'pusher',
          'modal', 'ulid', 'langchain', 'redis', 'sentry_sdk', 'pydub',
          'opuslib', 'pinecone', 'typesense', 'prometheus_client')
 
@@ -54,7 +54,7 @@ _f = _Finder()
 sys.meta_path.insert(0, _f)
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-    import utils.imports.limitless as L
+    import utils.imports.limitless as L  # real module; only its deps are stubbed
 finally:
     sys.meta_path.remove(_f)
 
