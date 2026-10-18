@@ -228,14 +228,21 @@ class Pump:
                         )
                         continue
                     if result is None or isinstance(result, RecoveryWork):
-                        failure_kwargs = (
-                            {'quarantine': True, 'padded_retry_empty': result.padded_retry_empty}
+                        failed = await (
+                            run_blocking(
+                                db_executor,
+                                self.scheduler.fail,
+                                segment,
+                                lease.token,
+                                time.time(),
+                                quarantine=True,
+                                padded_retry_empty=result.padded_retry_empty,
+                                padded_retry=result.padded_retry,
+                            )
                             if isinstance(result, RecoveryWork)
-                            else {}
+                            else run_blocking(db_executor, self.scheduler.fail, segment, lease.token, time.time())
                         )
-                        if await run_blocking(
-                            db_executor, self.scheduler.fail, segment, lease.token, time.time(), **failure_kwargs
-                        ):
+                        if failed:
                             await self.drain_owner(lease.item.owner_id)
                         continue
                     accepted = await run_blocking(

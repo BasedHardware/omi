@@ -13536,6 +13536,43 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onTheWayAlmostReady => 'Почти готово';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Записей: $count',
+      one: '1 запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals в пути';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Загружается: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Почти готово: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Требуют внимания: $count',
+      one: '1 требует внимания',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Пока нет активности';
 
   @override

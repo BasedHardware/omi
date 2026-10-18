@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Soniox transport exceptions log once at the first socket death, with bounded
+`operation`, `exception_class`, `received_close_code`, `sent_close_code`,
+`close_cause`, and `session_age_bucket` fields. `-1` means no close frame was
+observed in that direction; an empty received close frame is reported as `1005`
+(no status received). The WebSocket library's keepalive timeout is a sent `1011`
+and has `close_cause=keepalive_ping_timeout`. These diagnostics omit exception
+text and provider close reasons, and retain the existing typed failure and
+recovery behavior.
+
 ## Default-off funded transcription cap
 
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
@@ -5516,9 +5525,14 @@ volume before any future enablement. There is no new client polling loop.
 
 The default-off `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED` permits a
 `no_recoverable_speech` result only after positive strict VAD, a GPU padded retry
-that returned empty, and an empty independent multilingual recovery. The worker
-persists padded-empty evidence under its lease; CPU recovery pins the paid
-provider before dispatch. This terminal empty span is distinct from silence,
+that actually ran and returned empty, and an empty independent multilingual
+recovery. The worker persists `worker_empty_evidence.padded_retry=empty` under
+its lease only when the padded retry ran; units exceeding `min(120,
+max_padded_seconds)` (>116s) skip the GPU padded retry and persist
+`padded_retry=skipped_oversize` (`padded_retry_empty=False`), so CPU recovery
+still attempts strict VAD / multilingual STT on them without terminal-completing
+an empty multilingual response. CPU recovery pins the paid provider before
+dispatch. This terminal empty span is distinct from silence,
 adds no transcript words and no transcription usage, and releases successful
 siblings through normal projection/client completion. The encrypted artifact
 retains VAD and closed exhaustion evidence; correctness metrics count its captured
@@ -5574,17 +5588,18 @@ or zero capture exposure cannot establish savings. Paid failover remains visible
 in the admitted arm. Disabling the ramp takes effect on reconnect; drain existing
 WebSockets before claiming rollback complete.
 
-`FIRST_SUMMARY_DEADLINE_PERCENT=0` preserves the existing summary allowlist/global
-contract. Positive values add the same percentage bucket to the retained summary
-allowlist independently of batch admission, under
-`FIRST_SUMMARY_DEADLINE_ENABLED`. A positive percentage with an empty summary
-allowlist is cohort-only; at zero an empty list still means global enablement.
-Keep existing allowlists when ramping or rolling back. `SUMMARY_DEBT_REPAIR_ENABLED`
-remains false. The 120-second budget is dispatch, not model completion.
+`FIRST_SUMMARY_DEADLINE_PERCENT=0` admits only explicit `FIRST_SUMMARY_UID_ALLOWLIST`
+owners (an omitted or empty allowlist at zero percent admits nobody). Positive
+values add the same percentage bucket to the retained summary allowlist
+independently of batch admission, under `FIRST_SUMMARY_DEADLINE_ENABLED`. A
+positive percentage with an empty summary allowlist is cohort-only; `100` admits
+all owners. Keep existing allowlists when ramping or rolling back.
+`SUMMARY_DEBT_REPAIR_ENABLED` remains false. The 120-second budget is dispatch,
+not model completion.
 
 The dark [durable expiry custody guard](runbooks/sync-two-lane.md#durable-expiry-custody-dark)
 adds `SYNC_DURABLE_REDRIVE_GUARD` and `SYNC_LEGACY_COMPLETION_CONVERGENCE`
-(default false). Expired accepted requests move atomically into durable
+(code/dev default false; enabled on prod `backend-sync` and `backend-sync-backfill`). Expired accepted requests move atomically into durable
 `redrive_required` custody unless the content ledger already proves completion;
 missing-job worker ACKs retain staged bytes. Scheduler gauges expose unresolved
 custody and its nearest source/attention deadline. Legacy retries can converge
@@ -5606,3 +5621,50 @@ not qualify. The flag does not change admission, integration recovery gates,
 or paid-call authorization. Rollback sets the worker flag to `false`.
 `batch_worker_silence_disposition` records persisted local silence results;
 `omi_fallback_event` records `batch` → `none` / `recovered` at the same boundary.
+
+### Legacy sync double-empty recovery (dark)
+
+`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED` defaults to `false`. When enabled,
+legacy sync keeps its bounded empty-result confirmation, then validates the
+local WAV and uses the same `recovery_disposition.inspect_audio` strict local
+VAD as batch recovery. Only an affirmative zero-span result is silence.
+Positive spans use one independent Modulate multilingual dispatch (`attempts=2`
+disables client retries), with funded sync admission rechecked before dispatch.
+The owner-scoped `sync_empty_recovery` intent is keyed by the existing stable
+segment identity; it has no application TTL. The sole paid call is claimed with
+atomic create and its encrypted response is persisted with a version precondition
+before parsing/assignment. A replay reuses the saved response; an unresolved
+intent fails closed without redispatch. Positive VAD after an already-multilingual
+double-empty stays retryable without a third call.
+Nonempty recovered words enter the existing ordered assignment and durable
+segment checkpoint path. VAD/decode errors, malformed responses, empty alternate
+recognition, or empty postprocessing remain retryable failures and preserve
+retry material. Existing cap-recovery intents retain their separate budget and
+reconciliation path. This flag does not route jobs into batch or change intake.
+Rollback: set the flag to `false`; no historical completion is rewritten.
+
+While enabled, `sync_empty_strict_vad` logs the acoustic verdict **before** funded
+admission or multilingual dispatch: `speech`, `silence`, or `inspection_error`.
+It includes lane, provider, a stable HMAC segment reference, full segment duration,
+strict span count and speech seconds; it never includes owner IDs or content.
+Deduplicate by lane/segment reference within one release window and retain unknown
+inspections separately. Speech / valid inspections measures strict-VAD-positive
+double-empty segments even when recovery later fails; it is not ASR accuracy.
+
+### Dark batch projection follow-ups
+
+`BATCH_PIPELINE_HEAD_PRIORITY_ENABLED` (default `false`) prioritizes a ready
+capture-order head within its existing scheduler class and bounded queue scan;
+duration, eligible unit kind and privacy are checked before any splice, so a
+head this pool cannot lease leaves FIFO intact. Strict ordered merge remains authoritative.
+`BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED` (default `false`) restricts the batch
+owner claim to ordered multipart assignment. Persisted receipts then drive
+bounded tracked async bridge/playback/enrichment follow-ups, including a
+post-playback redirect check for late bridge audio. Each coordinator has a
+120-second deadline and at most two seconds for advisory-claim cleanup; timeout
+frees the slot and retries the durable receipt on a later sweep. All siblings still need
+ready receipts before atomic usage/content/client completion. Both controls
+are independent of new admission; rollback reuses the same queues and receipts.
+See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
+for restart, privacy, ordering and p95 qualification limits. This changes no
+client wire fields or live STT ownership rules.

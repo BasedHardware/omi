@@ -12,7 +12,7 @@ approved version nobody released (PENDING_DEVELOPER_RELEASE) is developer-releas
 phased rollout is attached, so the newest build still ships without discarding an approval.
 Apple now phases every release itself, so the train also advances the live rollout: a
 phased release that started more than IOS_PHASED_JUMP_HOURS ago and is not PAUSED is
-released to everyone (DELETE appStoreVersionPhasedRelease) — exposure is ~1% during the
+released to everyone (PATCH appStoreVersionPhasedReleases/{id} to COMPLETE) — exposure is ~1% during the
 observation window and 100% after it, matching the operator gate's ~4-hour audit cadence
 (the agreed 12-hour exposure window).
 
@@ -90,11 +90,12 @@ STAGED_ROLLOUT_FRACTION = 0.01
 STAGED_ROLLOUT_LADDER = (0.01, 0.10, 0.50, 1.0)
 # Apple's phased release starts at 1% and reaches 100% only on day 7, and its
 # schedule is not customizable. The train therefore releases to everyone once
-# the live rollout has been observable for this many hours: DELETE
-# appStoreVersionPhasedRelease ("release to everyone"). With the gate running
-# every ~4 hours, a candidate gets audited at least twice inside this window
-# before the jump. A PAUSED rollout (the operator brake) never jumps; DELETEing
-# it would both end the operator's hold and complete a rollout they stopped.
+# the live rollout has been observable for this many hours: PATCH
+# appStoreVersionPhasedReleases/{id} to COMPLETE ("release to everyone"; the
+# to-one relationship path is read-only and answers DELETE with 405). With the
+# gate running every ~4 hours, a candidate gets audited at least twice inside
+# this window before the jump. Only an ACTIVE rollout jumps: a PAUSED one is the
+# operator brake, and completing it would end their hold on a rollout they stopped.
 IOS_PHASED_JUMP_HOURS = 12.0
 # Minimum gap between two advancing actions on the same staged rollout (the
 # observation window between exposure steps; the operator gate audits every
@@ -437,11 +438,11 @@ def _phased_started_at(phased: dict[str, object]) -> datetime:
 def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | None = None) -> tuple[bool, str]:
     """Whether the live phased rollout should be released to everyone right now.
 
-    True after IOS_PHASED_JUMP_HOURS with the rollout still ACTIVE (DELETE
-    appStoreVersionPhasedRelease is Apple's "release to everyone"). A PAUSED
-    rollout is the operator brake and never jumps; a SUPPRESSED/COMPLETED
-    rollout is already fully out. Anything unreadable fails closed (False with
-    the reason — never True on an error).
+    True after IOS_PHASED_JUMP_HOURS with the rollout still ACTIVE (COMPLETE is
+    Apple's "release to everyone"). A PAUSED rollout is the operator brake and
+    never jumps; any other state (COMPLETE, INACTIVE, or one Apple adds later)
+    is not a live rollout to advance. Anything unreadable fails closed (False
+    with the reason — never True on an error).
     """
     now = now or datetime.now(timezone.utc)
     try:
@@ -454,8 +455,8 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     state = str(attrs.get("phasedReleaseState"))
     if state == "PAUSED":
         return False, "phased rollout is PAUSED — the operator brake"
-    if state in ("SUPPRESSED", "COMPLETED"):
-        return False, f"phased rollout is already {state}"
+    if state != "ACTIVE":
+        return False, f"phased rollout is {state}, not ACTIVE"
     try:
         started = _phased_started_at(phased)
     except TrainError as exc:
@@ -466,24 +467,49 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     return True, f"phased rollout is {age_hours:.1f}h old; releasing to everyone"
 
 
-def _delete_phased_release(live_version_id: str) -> None:
-    """Release to everyone: DELETE the live version's phased rollout (Apple's completed/jump act)."""
+def _complete_phased_release(live_version_id: str) -> None:
+    """Release to everyone: PATCH the live version's phased rollout to COMPLETE.
+
+    Apple's jump is an update of the appStoreVersionPhasedReleases resource by its
+    own id; DELETE on that resource only cancels a rollout that has not started,
+    and the version's relationship path answers DELETE with 405 (seen live
+    2026-10-18 on 1.0.564). The response is read back so a 200 that did not take
+    is still a failure.
+    """
+    phased = ios_phased_release(live_version_id)
+    if phased is None or not isinstance(phased.get("id"), str):
+        raise TrainError(f"App Store Connect phased release for {live_version_id} has no readable id")
+    phased_id = phased["id"]
     token = _asc_rest_token()
-    url = (
-        "https://api.appstoreconnect.apple.com/v1/appStoreVersions/"
-        f"{live_version_id}/appStoreVersionPhasedRelease"
+    url = f"https://api.appstoreconnect.apple.com/v1/appStoreVersionPhasedReleases/{phased_id}"
+    body = json.dumps(
+        {
+            "data": {
+                "type": "appStoreVersionPhasedReleases",
+                "id": phased_id,
+                "attributes": {"phasedReleaseState": "COMPLETE"},
+            }
+        }
+    ).encode()
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method="PATCH",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
     )
-    request = urllib.request.Request(url, method="DELETE", headers={"Authorization": f"Bearer {token}"})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
-            if response.status not in (200, 202, 204):
-                raise TrainError(f"phased-release delete for {live_version_id}: unexpected HTTP {response.status}")
+            payload = json.load(response)
     except urllib.error.HTTPError as exc:
         raise TrainError(
-            f"App Store Connect phased-release delete failed for {live_version_id}: HTTP {exc.code}"
+            f"App Store Connect phased-release complete failed for {live_version_id}: HTTP {exc.code}"
         ) from exc
     except (urllib.error.URLError, ValueError) as exc:
-        raise TrainError(f"App Store Connect phased-release delete failed for {live_version_id}: {exc}") from exc
+        raise TrainError(f"App Store Connect phased-release complete failed for {live_version_id}: {exc}") from exc
+    data = payload.get("data") if isinstance(payload, dict) else None
+    state = _attributes(data).get("phasedReleaseState") if isinstance(data, dict) else None
+    if state != "COMPLETE":
+        raise TrainError(f"phased-release complete for {live_version_id} read back state {state!r}, not COMPLETE")
 
 
 def _release_approved_version(version_id: str, version: str) -> None:
@@ -774,10 +800,10 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
         jump_note = jump_reason
         if should_complete:
             if dry_run:
-                log("DRY RUN: would delete the live phased rollout (release to everyone)")
+                log("DRY RUN: would complete the live phased rollout (release to everyone)")
                 jump_note = "would release to everyone now (dry run)"
             else:
-                _delete_phased_release(live_id)
+                _complete_phased_release(live_id)
                 log("released the live phased rollout to everyone (jump to 100%)")
                 jump_note = "released to everyone (jump to 100%)"
     if advance_only:
@@ -1080,6 +1106,14 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
             return f"android=completed {staged_version} {codes[0]} 100%"
         log(f"Android production staged now {staged_version} {codes[0]} at {hop:.0%}")
         return f"android=staged {staged_version} {codes[0]} @{hop:.0%}"
+    if advance_only:
+        # The advance mode only moves a rollout that is already in flight.
+        # Starting one from a candidate is the daily gate's audited job: with
+        # no staged release, falling through would put an unaudited build at
+        # 1% of production (the watch passes no pin).
+        waiting = f"; candidate {candidate.version} ({candidate.version_code}) waits for the gate" if candidate else ""
+        log(f"Android live {live}; no staged rollout in flight{waiting}")
+        return f"android=advance (no staged rollout in flight{waiting})"
     if candidate is None:
         if pin is not None and not pin.is_none:
             # The gate pinned an audited build the store no longer offers;

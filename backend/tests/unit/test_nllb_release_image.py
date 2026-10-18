@@ -1,9 +1,11 @@
 """An image rollback must replay the recorded artifact even after failed startup."""
 
+import re
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.nllb_release_image import PREVIOUS_DIGEST, release_values
 
@@ -112,6 +114,22 @@ def test_workflow_rollback_skips_rebuild_but_retains_receipt_and_rollout_gates()
     assert '--set-string "image.tag=${{ steps.vars.outputs.short_sha }}"' in source
     assert 'rollout status' in source
     assert 'runtime_image_contracts.py smoke' in source
+
+
+def test_prod_rollout_strategy_and_wait_cover_startup_probe_budget():
+    root = Path(__file__).resolve().parents[3]
+    values_path = root / 'backend/charts/nllb-translation/prod_omi_nllb_translation_values.yaml'
+    values = yaml.safe_load(values_path.read_text())
+    startup_probe = values['startupProbe']
+    startup_budget = startup_probe['failureThreshold'] * startup_probe['periodSeconds']
+    rollout_workflow = (root / '.github/workflows/gcp_nllb_translation.yml').read_text()
+    timeout = re.search(r'rollout status[^\n]*--timeout=(\d+)s', rollout_workflow)
+
+    assert values['livenessProbe']['httpGet']['path'] == '/live'
+    assert values['readinessProbe']['httpGet']['path'] == '/ready'
+    assert values['strategy']['rollingUpdate'] == {'maxSurge': 0, 'maxUnavailable': 1}
+    assert timeout is not None
+    assert int(timeout.group(1)) > startup_budget
 
 
 def test_retry_preserves_original_rollback_receipt_for_same_candidate():

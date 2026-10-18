@@ -8,5 +8,5 @@ from typing import Final
 
 RATE_CARD_SHA256: Final[dict[str, str]] = {
     'v1': '782edb7e64afdd72be88e81d03cc7346b46df332881de836a5e7cd6fe8ae32a0',
-    'v2': '23a85fd7aebe93724a8044421b09bf1a985b155e456d454ba89c6d21e116ed1d',
+    'v2': '1243f8029abe7e4c2378cb0ec666ea993379cf5598b8a6e7bc4309f65c7e956f',
 }

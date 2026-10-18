@@ -383,11 +383,17 @@ by a flag rollback; correct them only through the normal reviewed content path.
 `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED=false` is the CPU recovery
 kill switch. Deploy the worker from the same change first: its exhausted
 `RecoveryWork` now persists `worker_empty_evidence.padded_retry=empty` under the
-lease CAS. Recovery pins/persists its provider before dispatch. With the flag on,
-positive strict local VAD, affirmative GPU padded-empty evidence, and a validated
-empty **multilingual** response produce `no_recoverable_speech`. Timeouts, malformed
-responses, uncertain calls, missing evidence, and provider failures stay held.
-There are no additional calls after exhaustion and no paid-intent resets.
+lease CAS only when the GPU padded retry actually ran and returned empty; units
+whose padded length exceeds `min(120, max_padded_seconds)` (>116s) skip that
+retry and persist `worker_empty_evidence.padded_retry=skipped_oversize`. Recovery
+pins/persists its provider before dispatch. With the flag on, positive strict
+local VAD, affirmative GPU padded-empty evidence, and a validated empty
+**multilingual** response produce `no_recoverable_speech`. Oversized units that
+skipped the GPU padded retry still run strict VAD and multilingual recovery, but
+an empty multilingual response stays `failed_held` rather than terminal-empty.
+Timeouts, malformed responses, uncertain calls, missing evidence, and provider
+failures stay held. There are no additional calls after exhaustion and no
+paid-intent resets.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.
@@ -442,3 +448,66 @@ flag and stops operator invocation; committed projections are not undone and
 spent intents never become retryable. Inspect completion and terminal-empty
 captured-duration rates before any ramp: terminal completion does not prove ASR
 quality or make the unresolved duration disappear from correctness metrics.
+
+
+## Dark projection tail controls
+
+`BATCH_PIPELINE_HEAD_PRIORITY_ENABLED=false` and
+`BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED=false` are independent accepted-work
+controls, declared on the backend services and listen Helm values. They do not
+admit new work or change recovery spend policy. Enable only on the qualified
+5% cohort's serving/worker RPC host after release approval; neither is enabled
+by this change. Rollback each to false; ordinary queue links and existing
+persisted/ready receipts remain compatible with the synchronous path.
+
+Head priority splices the owner's earliest `merge_pending` job to the front of
+its existing priority queue when it is ready and found within a shared budget
+of 64 head-query/link reads per shard transaction. Duration, eligible unit kind
+and privacy must pass before any link changes; a head this pool cannot lease
+leaves FIFO intact. The selected job still pays its actual DRR cost, passes privacy checks, and respects
+fresh reservations, duration and shared-GPU capacity. It never steals a live
+lease, changes priority class, invents silence, or resolves an uncertain paid
+intent. Outside the bounded search it retains FIFO. Quarantine already removes
+`merge_pending`, so a held quarantine unit is not an ordered-merge blocker;
+settled recovery re-enters the pending set. A slow leased head must finish or
+follow the existing fenced lease/recovery protocol.
+
+Async projection keeps capture-ordered commit and the transactional predecessor
+check unchanged. Only assignment (including all multipart receipts) holds the
+owner claim. Its atomic persist advances the projection watermark; a later
+unit can become visible only after every committed predecessor has persisted
+(or its privacy erasure receipt permits progress). Captures admitted after a
+later commit retain the existing explicit `late_capture` behavior. No disjoint
+segment independence or change to transcript visibility order is assumed.
+
+The serving supervisor, explicit reconcile RPC, and metrics reconciliation all
+use the same async coordinator. Their pass persists the bounded pending page,
+then schedules at most four tracked follow-ups per process without awaiting
+slow effects. A finished task immediately refills its slot from the bounded
+page, without an additional 20-second serving sleep. Each follow-up coordinator
+has a 120-second deadline, plus at most two seconds for advisory-claim cleanup.
+Timeout cancels its remaining steps and frees the slot without closing the drain;
+the unchanged persisted/ready receipt is retried on a later sweep. Already-running
+executor calls cannot be forcibly stopped by asyncio cancellation and may finish
+late; receipt/enrichment and ledger transactions retain their replay fences.
+Shutdown cancellation stops refill. Persisted result receipts are the durable outbox. Partial
+assignment rows do not consume follow-up slots; a rotating cursor prevents
+repeated failures at the front of the page from monopolizing those slots.
+A separate advisory segment claim coalesces replicas; it never owns the
+assignment watermark. Each bridge, playback and enrichment step is offloaded
+separately. After playback a second bridge check copies any late donor audio
+if a concurrent assignment redirected the target. Native records retain their
+fixed target behavior. Privacy checks and the original retained-audio policy
+remain in effect. Enrichment and the ready receipt still commit together;
+usage/client/content completion still requires every sibling ready and commits
+atomically in the content ledger. Completion is retryable after a lost reply,
+process restart, or rollback, without retranscription.
+
+Qualification target: quarantine to **completed content ledger** p95 <=300s
+for all units in the fixed fleet 5% admission cohort, including pending ages.
+This removes queue inversion and owner-wide external-work serialization; it
+is not a numerical production latency guarantee. A live head can renew its
+lease, external effects can exceed the budget, a crashed advisory claim can
+last 300s, and the existing 100-row sweep page can be saturated. Do not add
+stage p95s or exclude held units. Measure the full cohort for at least one hour
+with phase timings before claiming the target or increasing admission.

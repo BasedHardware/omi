@@ -9,6 +9,7 @@ from config.batch_pipeline import (
     authoritative_labels_enabled,
     require_live_target_enabled,
     projection_contention_enabled,
+    async_projection_enabled,
     projection_timing_enabled,
 )
 from collections.abc import Iterator
@@ -188,8 +189,30 @@ class Projector:
         self.store = ProjectionStore(store)
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
+        self.followups = None
+
+    def persist(self, segment_id: str) -> None:
+        """Only ordered assignment holds the owner claim; receipts are the outbox."""
+        with projection_phase('read'):
+            job, entry, binding = self.store.read(segment_id)
+        with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
+            if not acquired:
+                raise ProjectionBlocked('projection assignment claim busy')
+            self._assign(segment_id, job, entry, binding, finish=False)
+
+    async def start_followups(self):
+        # Imported lazily: the synchronous worker seam remains lightweight.
+        from utils.batch_pipeline.projection_followup import ProjectionFollowups
+
+        if self.followups is None:
+            self.followups = ProjectionFollowups(self)
+        await self.followups.schedule()
 
     def project(self, segment_id: str) -> dict | None:
+        if async_projection_enabled():
+            self.persist(segment_id)
+            job, entry, binding = self.store.read(segment_id)
+            return self._finish(segment_id, job, entry, binding)
         with projection_phase('read'):
             job, entry, binding = self.store.read(segment_id)
         if projection_contention_enabled():
@@ -208,6 +231,10 @@ class Projector:
             return self._project(segment_id, job, entry, binding)
 
     def _project(self, segment_id, job, entry, binding):
+        self._assign(segment_id, job, entry, binding)
+        return self._finish(segment_id, job, entry, binding)
+
+    def _assign(self, segment_id, job, entry, binding, *, finish=True):
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock())
         try:
@@ -237,13 +264,19 @@ class Projector:
                     # every post-persist obligation after losing the empty race.
             else:
                 with projection_phase('assignment'):
-                    self.assign_parts(item, entry, binding)
+                    self.assign_parts(item, entry, binding, finish=finish)
+
+    def _finish(self, segment_id, job, entry, binding):
+        item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         entry = self.store.ref('results', segment_id).get().to_dict() or {}
         parts = entry.get('projection_parts')
         for index, receipt in (
             sorted(parts.items(), key=lambda pair: int(pair[0])) if parts else [(None, entry['projection'])]
         ):
             self.finish_part(item, binding, receipt, int(index) if index is not None else None)
+        return self.complete_content(item.segment_id, binding)
+
+    def complete_content(self, segment_id, binding):
         with projection_phase('accounting'):
             accounting = self.store.prepare_accounting(binding, self.clock())
         if accounting is None:
@@ -298,7 +331,7 @@ class Projector:
             retry_contention=projection_contention_enabled(),
         )
 
-    def assign_parts(self, item, entry, binding):
+    def assign_parts(self, item, entry, binding, *, finish=True):
         from database.conversations import get_closest_conversation_to_timestamps
         from utils.batch_pipeline.context import ResolvedContext, resolve_context
         from utils.batch_pipeline.projection_parts import split_result
@@ -392,7 +425,8 @@ class Projector:
                         'event=batch_projection action=assignment outcome=error exception_type=%s', type(error).__name__
                     )
                 raise
-            self.finish_part(item, binding, receipt, index)
+            if finish:
+                self.finish_part(item, binding, receipt, index)
 
     def finish_part(self, item, binding, receipt, index):
         if receipt['state'] == 'ready':
@@ -507,7 +541,11 @@ class Projector:
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
         for segment_id in self.store.store.projection_pending(limit=max(1, min(limit, 100))):
             try:
-                result = self.project(segment_id)
+                if async_projection_enabled():
+                    self.persist(segment_id)
+                    result = None
+                else:
+                    result = self.project(segment_id)
                 counts['completed' if result is not None else 'waiting'] += 1
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1

@@ -10,8 +10,10 @@ the registry and file bytes. Updating the registry alone cannot approve a
 changed card. A later revision requires another version file.
 
 `rate_card_v1.json` remains byte-identical. `rate_card_v2.json` corrects
-Gemini 2.5 Flash to Vertex global standard prices ($0.54 input, $0.054 cached,
-$4.50 output per million tokens) and adds Gemini 3.8 Flash at its standard rate
+Gemini 2.5 Flash to the Vertex AI Gemini 2.5 Standard tab rates verified
+2026-10-18 (https://cloud.google.com/vertex-ai/generative-ai/pricing; $0.30
+input, $0.03 cached, $2.50 output per million tokens), matching the Flash
+rates v1 already carries, and adds Gemini 3.8 Flash at its standard rate
 effective 2027-01-01 ($1.50 / $0.15 / $7.50). Other v1 entries carry forward.
 No vendor feed changes either card. Selecting v2 changes the units charged for
 features using those model rates; it does not alter any plan budget number or

@@ -99,16 +99,15 @@ def inspect_unit(store, artifacts, sid, uid, key, attestation):
     require(spent_canary(job) or exhausted(job, attestation), 'missing_exhaustion_evidence')
     if not spans:
         return 'silence'
-    if spent_canary(job):
-        require(
-            attestation or job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1},
-            'missing_padded_retry_evidence',
-        )
-        return 'canary_recovery'
-    require(
-        attestation or job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1},
-        'missing_padded_retry_evidence',
+    has_padded_empty = (
+        job.get('worker_empty_evidence') == {'padded_retry': 'empty', 'version': 1}
+        or attestation
+        and not job.get('worker_empty_evidence')
     )
+    if spent_canary(job):
+        require(has_padded_empty, 'missing_padded_retry_evidence')
+        return 'canary_recovery'
+    require(has_padded_empty, 'missing_padded_retry_evidence')
     return 'no_recoverable_speech'
 
 

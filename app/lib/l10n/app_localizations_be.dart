@@ -13525,6 +13525,43 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onTheWayAlmostReady => 'Амаль гатова';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Запісаў: $count',
+      one: '1 запіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals у дарозе';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Запампоўваецца: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Амаль гатова: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Патрабуюць увагі: $count',
+      one: '1 патрабуе ўвагі',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Пакуль няма актыўнасці';
 
   @override

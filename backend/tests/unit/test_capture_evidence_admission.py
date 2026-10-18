@@ -33,7 +33,10 @@ def test_code_default_stays_off(monkeypatch):
 
 
 def test_composed_declarations_admit_s1_on_evidence_hosts():
-    composed = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    # Parse the full growing manifest with the equivalent native safe loader.
+    # Keep parsing inside the measured test; don't relax the CPU duration guard.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    composed = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=loader)
     for environment in ('dev', 'prod'):
         env = composed['environments'][environment]
         scopes = {

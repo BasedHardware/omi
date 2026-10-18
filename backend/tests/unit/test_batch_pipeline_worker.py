@@ -290,8 +290,8 @@ def test_recovery_never_truncates_audio_to_fit_budget():
             pytest.fail('oversized recovery must stay held, never transcribe a prefix')
 
     provider = ParakeetWords(Model())
-    assert provider.recover_empty(np.ones(117 * 16000, dtype=np.float32), 272) == []
-    assert provider.recover_empty(np.ones(31 * 16000, dtype=np.float32), 34) == []
+    assert provider.recover_empty(np.ones(117 * 16000, dtype=np.float32), 272) is None
+    assert provider.recover_empty(np.ones(31 * 16000, dtype=np.float32), 34) is None
 
 
 def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
@@ -821,7 +821,7 @@ def test_oversized_recovery_neither_rechecks_nor_counts_unsubmitted_audio(enforc
         272,
         **({'before_dispatch': before, 'after_dispatch': after} if enforce else {}),
     )
-    assert result is None if enforce else result == []
+    assert result is None
     before.assert_not_called()
     after.assert_not_called()
 
@@ -982,3 +982,49 @@ def test_worker_silence_flag_defaults_off(monkeypatch):
 
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', raising=False)
     assert not worker_silence_disposition_enabled()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'duration,expected_calls,expected_empty,expected_retry,expected_evidence',
+    [
+        (10, 2, True, 'empty', {'padded_retry': 'empty', 'version': 1}),
+        (117, 1, False, 'skipped_oversize', {'padded_retry': 'skipped_oversize', 'version': 1}),
+    ],
+)
+async def test_empty_asr_records_padded_retry_empty_only_when_padded_retry_ran(
+    monkeypatch, caplog, duration, expected_calls, expected_empty, expected_retry, expected_evidence
+):
+    from utils.batch_pipeline.contracts import RecoveryWork
+
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    model = Mock()
+    model.transcribe.side_effect = lambda arrays, **_: [
+        SimpleNamespace(text='', timestamp={'word': []}) for _ in arrays
+    ]
+    provider = ParakeetWords(model)
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.ones(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=provider.recover_empty,
+    )
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a', duration), time.time())
+    pump = Pump(queue, worker)
+    with caplog.at_level(logging.INFO):
+        await pump.run_once()
+    assert model.transcribe.call_count == expected_calls
+    assert not saved and not diarized
+    assert failures == [('a', 'BatchValidationError')]
+    assert (
+        f'event=batch_asr_recovery segment_id=a reason=empty_asr samples={duration * 16000} owned_words=0 outcome={expected_retry}'
+        in caplog.text
+    )
+    job = store.rows['jobs', 'a']
+    assert job['state'] == 'quarantined' and job['recovery_state'] == 'held'
+    assert job.get('worker_empty_evidence') == expected_evidence
+    direct = worker.process_batch([item('b', duration)])
+    assert direct == [RecoveryWork('b', padded_retry_empty=expected_empty, padded_retry=expected_retry)]
