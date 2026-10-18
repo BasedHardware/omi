@@ -217,6 +217,10 @@ def _handle_tool_call(
     except ToolExecutionError as e:
         tool_error = e
     except HTTPException as exc:
+        # A Redis outage at admission is the same retryable 503 REST returns.
+        # A reached daily cap stays a model-visible tool result.
+        if exc.status_code == 503 and exc.detail == 'usage_unavailable':
+            raise
         detail: Any = exc.detail
         if isinstance(detail, dict) and detail.get('error') in {'mcp_daily_cap', 'usage_budget_exhausted'}:
             payload = _tool_error_payload(detail['error'], str(detail))
