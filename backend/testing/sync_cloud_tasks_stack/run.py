@@ -2,7 +2,9 @@
 
 Invoke through ``run.sh`` so Firebase owns a fresh Firestore emulator.  The
 supervisor starts private Redis plus independent admission and worker ASGI
-processes; it never probes, reuses, or stops developer services.
+processes; it never probes, reuses, or stops developer services.  The
+batch-lane scenarios (``batch.py``) add a serving ASGI process and a batch
+worker process; ``--only sync|batch`` selects one family.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ SENSITIVE_UID = 'sync-stack-sensitive-uid'
 TRANSCRIPT_TOKEN = 'Sync stack transcript verified.'
 DEVICE_HASH = '01234567'
 DEVICE_ID = f'ios_{DEVICE_HASH}'
-ENCRYPTION_SECRET = 'omi_sync_cloud_tasks_stack_test_secret_32_bytes'
+ENCRYPTION_SECRET = 'omi_sync_cloud_tasks_stack_test_secret_32_bytes'  # pragma: allowlist secret
 
 
 class StackFailure(AssertionError):
@@ -979,6 +981,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized evidence and private process logs')
     parser.add_argument('--keep', action='store_true', help='preserve state after a successful run')
+    parser.add_argument(
+        '--only',
+        choices=('all', 'sync', 'batch'),
+        default='all',
+        help='run only the legacy Sync Cloud Tasks scenarios or only the batch-lane scenarios',
+    )
     args = parser.parse_args()
     if not PYTHON.exists():
         raise SystemExit(f'missing backend virtual environment: {PYTHON}; run backend/scripts/sync-python-deps.sh')
@@ -987,25 +995,38 @@ def main() -> int:
     state_dir.mkdir(parents=True, exist_ok=True)
     succeeded = False
     try:
-        _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
-        _run_scenario(state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work)
-        _run_scenario(state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once)
-        _run_scenario(
-            state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
-        )
-        _run_scenario(
-            state_dir / 'final-attempt-ledger',
-            worker_failures=1,
-            post_ledger_failures=1,
-            scenario=_final_attempt_post_ledger_failure_converges,
-        )
-        _run_scenario(state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully)
-        _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
-        _run_scenario(
-            state_dir / 'nonprod-legacy-backfill',
-            scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
-        )
-        _run_scenario(state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob)
+        if args.only in {'all', 'sync'}:
+            _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
+            _run_scenario(
+                state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work
+            )
+            _run_scenario(
+                state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once
+            )
+            _run_scenario(
+                state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
+            )
+            _run_scenario(
+                state_dir / 'final-attempt-ledger',
+                worker_failures=1,
+                post_ledger_failures=1,
+                scenario=_final_attempt_post_ledger_failure_converges,
+            )
+            _run_scenario(
+                state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
+            )
+            _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
+            _run_scenario(
+                state_dir / 'nonprod-legacy-backfill',
+                scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
+            )
+            _run_scenario(
+                state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob
+            )
+        if args.only in {'all', 'batch'}:
+            from .batch import run_batch_scenarios
+
+            run_batch_scenarios(state_dir / 'batch')
         succeeded = True
         print(f'Sync Cloud Tasks stack gauntlet passed; sanitized evidence: {state_dir}')
         return 0
