@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 os.environ.setdefault('ENCRYPTION_SECRET', '0123456789abcdef0123456789abcdef')
 os.environ.setdefault('OMI_ENV_STAGE', 'prod')
 
+
 # Stub heavy third-party packages not required for status routing tests
 class _MockModule(types.ModuleType):
     def __getattr__(self, name):
@@ -24,12 +25,22 @@ class _MockModule(types.ModuleType):
         setattr(self, name, mock)
         return mock
 
+
 class _StubFinder:
     def find_spec(self, fullname, path, target=None):
         stubs = (
-            'deepgram', 'langchain_google_genai', 'av', 'pinecone',
-            'opuslib', 'pydub', 'stripe', 'modal', 'ulid', 'typesense',
-            'pusher', 'firebase_admin',
+            'deepgram',
+            'langchain_google_genai',
+            'av',
+            'pinecone',
+            'opuslib',
+            'pydub',
+            'stripe',
+            'modal',
+            'ulid',
+            'typesense',
+            'pusher',
+            'firebase_admin',
         )
         for s in stubs:
             if fullname == s or fullname.startswith(s + '.'):
@@ -38,6 +49,7 @@ class _StubFinder:
                 mod.__loader__ = self
                 sys.modules[fullname] = mod
                 import importlib.machinery
+
                 spec = importlib.machinery.ModuleSpec(fullname, None)
                 spec.loader = self
                 return spec
@@ -49,10 +61,12 @@ class _StubFinder:
     def exec_module(self, module):
         pass
 
+
 if not any(isinstance(finder, _StubFinder) for finder in sys.meta_path):
     sys.meta_path.insert(0, _StubFinder())
 
 import database._client as db_client
+
 db_client._firestore_client = MagicMock()
 
 import fakeredis
@@ -108,6 +122,7 @@ def _install_fake_eval(redis):
                 return redis.delete(keys[0])
             return 0
         return [0]
+
     redis.eval = fake_eval
 
 
