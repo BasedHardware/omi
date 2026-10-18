@@ -77,7 +77,7 @@ overlay:
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
         STT_ROUTING_MODE:
-          value: 'off'
+          value: 'on'
         STT_ROUTING_ON_PERCENT:
           value: '100'
         SONIOX_MONTHLY_CEILING_USD:
