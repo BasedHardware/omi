@@ -27,9 +27,9 @@ class KnowledgeGraphApi {
     throw Exception(knowledgeGraphHttpUserMessage(action: action, statusCode: statusCode, body: body));
   }
 
-  /// Read the revision-fenced canonical API, including its memory catalog and
-  /// cursor. Use the compatibility API only for older/legacy-only servers;
-  /// never merge graph records read under different canonical revisions.
+  /// Preserve the compatibility/shared projection (including #12878) when it
+  /// already has a map. Empty/owner-only views recover through the canonical
+  /// catalog and signed pages. Never mix two canonical read revisions.
   /// No read, refresh, or Load More action mutates/rebuilds memory state.
   static Future<Map<String, dynamic>> getKnowledgeGraph({
     String? cursor,
@@ -56,6 +56,17 @@ class KnowledgeGraphApi {
       return response;
     }
 
+    Map<String, dynamic>? legacy;
+    if (cursor == null) {
+      final compatibility = await read(_baseUrl);
+      if (compatibility?.statusCode == 200) {
+        legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility!.body) as Map<String, dynamic>)
+            .toJson();
+        if ((legacy['nodes'] as List).length > 1) {
+          return {...legacy, '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'};
+        }
+      }
+    }
     final uri = Uri.parse('$_baseUrl/canonical').replace(queryParameters: {
       'limit': '100',
       if (cursor != null) 'cursor': cursor,
@@ -82,18 +93,13 @@ class KnowledgeGraphApi {
     }
     // The existing compatibility route serves legacy-only accounts. An empty
     // compatibility response during a canonical outage cannot prove emptiness.
-    if (cursor == null && (response?.statusCode == 404 || response?.statusCode == 503)) {
-      final compatibility = await read('$_baseUrl');
-      if (compatibility?.statusCode == 200) {
-        final legacy =
-            wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility!.body) as Map<String, dynamic>)
-                .toJson();
-        if (response?.statusCode == 404 ||
-            response?.headers['x-omi-knowledge-graph-state'] == 'unestablished' ||
-            (legacy['nodes'] as List).isNotEmpty) {
-          return {...legacy, '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'};
-        }
-      }
+    if (cursor == null &&
+        legacy != null &&
+        (response?.statusCode == 404 ||
+            (response?.statusCode == 503 &&
+                (response?.headers['x-omi-knowledge-graph-state'] == 'unestablished' ||
+                    (legacy['nodes'] as List).isNotEmpty)))) {
+      return {...legacy, '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'};
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }

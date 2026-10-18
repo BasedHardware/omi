@@ -408,6 +408,7 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
   }
 
   Future<void> _loadGraph({bool silent = false, bool loadMore = false}) async {
+    if (!mounted) return;
     if (loadMore && _loadingMore) return;
     final cursor = loadMore ? _graphData['next_cursor'] as String? : null;
     if (loadMore && cursor == null) return;

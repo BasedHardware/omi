@@ -1,6 +1,7 @@
 # Mobile Mind Map reads and recovery
 
-The mobile Mind Map consumes `GET /v1/knowledge-graph/canonical`, a bounded,
+The mobile Mind Map preserves a nonempty compatibility/shared graph. Empty or
+owner-only results recover through `GET /v1/knowledge-graph/canonical`, a bounded,
 revision-fenced projection of eligible, processed Long-term memories. Entity
 nodes and relationships come only from server graph assertions. The separate
 `catalog_nodes` collection represents saved memories even when their text cannot
@@ -29,7 +30,8 @@ promotion receipts, assertions, or subscription state.
   Its synthetic status is not proof that a map is populated.
 - #12878 proposes macOS UI and account-wide shared-projection rebuilding. It
   does not implement mobile catalog presentation, pagination, or refresh races.
-  This mobile recovery does not require that PR. Deploy the additive absence
+  A working shared graph remains visible through the compatibility read.
+  The canonical catalog recovery does not require that PR. Deploy the additive absence
   header before releasing mobile so legacy-only empty accounts remain distinct
   from failed canonical reads.
 - #20481 and #20463 remain the customer verification trackers. This change

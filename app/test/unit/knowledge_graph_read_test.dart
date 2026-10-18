@@ -38,11 +38,11 @@ void main() {
     expect(result['edges'], isEmpty);
     expect((result['catalog_nodes'] as List).single['label'], 'I enjoy hiking');
     expect(result['has_more'], true);
-    expect(urls.length, 1);
+    expect(urls.length, 2);
     expect(urls.any((url) => url.contains('rebuild')), false);
   });
 
-  test('a canonical page never merges a separate potentially stale graph read', () async {
+  test('a working compatibility graph remains usable, including shared projections', () async {
     final result = await KnowledgeGraphApi.getKnowledgeGraph(
         apiCaller: (url) async => _ok(
               url.contains('/canonical')
@@ -52,7 +52,7 @@ void main() {
                       'edges': []
                     },
             ));
-    expect((result['nodes'] as List).map((n) => n['label']), ['Corrected']);
+    expect((result['nodes'] as List).map((n) => n['label']), ['Old', 'shared']);
   });
 
   test('Load More uses only the signed cursor read and safely encodes it', () async {
