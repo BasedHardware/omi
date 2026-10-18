@@ -3,7 +3,7 @@
 import math
 import time
 
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.stt_cap_dispatch import sync_allowed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease

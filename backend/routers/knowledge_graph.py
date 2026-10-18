@@ -1,3 +1,4 @@
+from utils.generated_compute import generated_compute_allowed, require_generated_compute, generated_compute_enabled
 import importlib
 import sys
 from enum import Enum
@@ -251,6 +252,8 @@ def _rebuild_graph_task(uid: str, user_name: str) -> None:
     # The gate is re-checked here because it was last answered before the response
     # was returned. Bailing out must leave the graph exactly as it was, so nothing
     # upstream of `rebuild_knowledge_graph` may delete it.
+    if not generated_compute_allowed(uid, 'knowledge_graph'):
+        return
     if _legacy_graph_mutation_decision(uid) is not LegacyGraphMutation.ALLOWED:
         return
     memories: MemoryPayloads = [
@@ -266,6 +269,7 @@ def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
+    require_generated_compute(uid, 'knowledge_graph')
     _require_legacy_graph_mutation(uid)
     user_name = get_user_name(uid) or ""
     # No eager delete here: `rebuild_knowledge_graph` clears the graph itself as its
@@ -294,6 +298,8 @@ async def extract_knowledge_graph(
     closed (502) instead of returning 200 with an empty graph, which a client cannot
     tell apart from a genuine "no entities" answer.
     """
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'knowledge_graph')
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
     kg_mod = _knowledge_graph_llm_module()

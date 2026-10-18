@@ -31,6 +31,53 @@ as failed reconciliation. Successful siblings finalize independently. Flagged
 oversized GPU empty-result retries become held work without a failure attempt;
 the unflagged retry follows main's behavior.
 
+## Ladder budget refresh and execution admission (default off)
+
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, funded ladder/Free live sessions
+install the shared provider admission state even when legacy dispatch remains off.
+It carries remaining units and debits accepted PCM at the pinned provider speech
+rate. A packet exceeding the estimate is suppressed while capture continues.
+There is no per-audio-chunk I/O. Full scans run at session start, every 900 seconds,
+and on subscription invalidation. At >=90% used or below two minutes at the maximum
+managed speech rate, the 60-second flush refreshes only the current hour, today's
+gateway day and today's API day, combining them with the session's closed-bucket
+sum. Rollover closes the old buckets once; backdated writes reconcile at 900 seconds.
+The existing flush subscription is reused. Unavailable snapshots retry after
+60 / 120 / 240 / 480 / 900 seconds, capped at 900; successful reads reset backoff.
+Custom STT without a funded socket keeps the 900-second cache.
+
+Near-cap external usage is detected within a 60-second flush plus persistence
+latency. Far from cap, concurrent external spending can remain unseen for 900
+seconds. This is not a distributed reservation; accepted provider queues and
+already-admitted batch work may drain. Sync execution and each GPU ASR microbatch
+reauthorize with the current ladder allowance. Exhausted uploads use durable
+holds instead of a ladder 402 or locked transcript; explicit backlog choice or a
+fitting upgrade intent recovers them and checks the current allowance again.
+Reset does not process backlog. All conversation sources preserve capped transcripts
+with `processing_deferred=true`; first-open cannot consume that backlog. See
+[funded halt and choice](ladder-v1-cutover.md#funded-halt-and-user-chosen-backlog-david-2026-10-18). Ladder-only activation bypasses legacy monthly seconds.
+
+The month reader batches only elapsed day refs, never future days. A normal near-cap
+minute costs three ledger reads plus the existing subscription read. The required
+900-second full scans still add periodic spikes: at H=408 hourly documents / D=17
+elapsed days, ordinary / amortized reads per minute are 1 / 30.47 at 0% and 50%,
+and 4 / 33.27 at 95%, versus the prior 30.53 / 30.53 / 444 averages. Rollover adds
+one closing-hour read and, at midnight, two closing-day reads. See the complete
+[failure/read-cost model](stt-cap-dispatch.md#ladder-v1-admission-in-21488).
+
+Unprojected seconds receive the pinned provisional speech rate without a silence
+ratio; unpriced gateway attempts receive the standard-chat estimate. Atomic
+unpriced-quantity counters keep priced seconds/events out of residuals. Newly
+attributed quantities and units remain separate from history. For each ambiguous
+historical leaf, charge `max(historical priced units, unknown-provider proxy)`
+once, plus separately attributed new units. Ambiguity never raises a 503 or denies
+a paying account until reset. Residual and historical ambiguity histograms
+(`omi_ladder_unprojected_*`, `omi_ladder_ambiguous_priced_*`) and the shared degraded
+fallback metric expose uncertainty without user labels or historical writes.
+Repeated evaluations are observations, not unique usage.
+With ladder flags off, shadow totals and #21866 dispatch behavior remain unchanged.
+No switch or deployment binding is activated.
+
 ## Windowed live transcription deadlines
 
 Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`
@@ -4770,6 +4817,32 @@ Rollback: disable authoritative/sync flags first, set mode to `legacy`, then res
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
 
+### Flagged ladder usage admission
+
+`LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` (default OFF) lets the shared allowance
+resolver use the monthly blended ledger for Free and ladder-price subscribers.
+At 100% it selects the on-device allowance, never a captured-content lock. Raw
+sync admission returns the structured at-cap choice before consuming device
+WALs. `LADDER_V1_LANE_METERING_ENABLED` (default OFF) attributes hourly shadow
+writes to live, batch, on-device or unknown lanes without double-charging the
+feature total. See [ladder cutover](ladder-v1-cutover.md) for ramp prerequisites,
+partial-coverage limits, the choice API and rollback.
+### Flagged mobile on-device overflow
+
+`mobile-on-device-overflow` is default off. Mobile phone-only WAL records
+exclude audio from automatic and manual cloud drains; native batch files use
+`omibatchoverflow` in the existing recordings directory. The runner decodes
+bounded 30-second windows without diarization and submits transcript text to
+`POST /v1/conversations/from-segments` with a stable `client_session_id`.
+`stt_provider=on_device:<engine>` survives the canonical ingest seam. Identity
+remains one unnamed voice; the engine token is provenance, not a speaker claim.
+Optional Foundation Models summaries use the existing hash-bound
+`client_processing` display projection (`runtime=local`). Unsupported devices
+submit text for ordinary cloud processing; this path does not send audio to live
+STT or charge live transcription hours. Phone-only mode submits nothing and
+keeps transcript-only conversations in the account-owned local WAL index.
+`/reprocess` processes the existing transcript and does not re-transcribe audio;
+mobile therefore hides the cloud re-transcription action for these recordings.
 ### Mobile Standard batch admission (default off)
 
 New Flutter clients reuse `client_state` visibility and add

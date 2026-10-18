@@ -57,6 +57,7 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
+from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
 from utils.other.list_budget import ListReadBudget
 from database.memory_vector_repair_outbox_worker import VectorRepairOutboxWorkerTickConfig
@@ -2554,6 +2555,13 @@ _add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
 _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(USAGE_UNITS_DRIVER)
+_add(
+    CoveredByEntry(
+        'database.usage_units.read_usage_month',
+        covered_by=('database.usage_units.get_usage_units',),
+        reason='shared month builder called by the public reader and cold/900-second session refresh; current-bucket refresh uses document get_all only',
+    )
+)
 _add(DriverEntry('database.user_usage.get_usage_by_plan', base={'uid': UID}, domains={'now': [None, T0]}))
 _add(DriverEntry('database.user_usage.get_yearly_history', base={'uid': UID}))
 _add(DriverEntry('database.user_usage.get_yearly_usage_stats', base={'uid': UID, 'date': T0}))
@@ -3041,6 +3049,50 @@ _add(
         neutrals={'limit': (10, 'bounded recovery page; does not affect filters')},
     )
 )
+_add(
+    DriverEntry(
+        'utils.sync.held_audio_summary._load_rows',
+        base={'uid': UID},
+    )
+)
+
+
+def _summary_migration_pages(client, combo, trial):
+    client.queue_results(
+        [
+            client.snapshot(
+                f'users/{UID}/stt_cap_holds/held-{i:04d}', {'state': 'held', 'seconds': 1, 'listed_at': i + 1}
+            )
+            for i in range(400)
+        ]
+    )
+    client.queue_results([])
+
+
+def _summary_migration_writes(client):
+    # This driver resumes from transaction-written summary markers. The shape
+    # recorder normally discards writes; persist only this driver's set markers.
+    from tests.support.firestore_shape_recorder import RecordingTransaction
+
+    original = RecordingTransaction._commit
+
+    def commit(tx, *args, **kwargs):
+        for operation, reference, data in tx._write_ops:
+            if operation == 'set':
+                client.documents[reference.path] = dict(data)
+        return original(tx, *args, **kwargs)
+
+    return unittest.mock.patch.object(RecordingTransaction, '_commit', commit)
+
+
+_add(
+    DriverEntry(
+        'utils.sync.cap_hold._ensure_held_audio_summary',
+        base={'uid': UID},
+        setup=_summary_migration_pages,
+        patchers=(_summary_migration_writes,),
+    )
+)
 _add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(
@@ -3113,6 +3165,26 @@ _add(
     )
 )
 
+_add(
+    DriverEntry(
+        'utils.processing_backlog_worker._page',
+        base={'uid': UID},
+        domains={'kind': ['audio', 'text'], 'cursor': [None, {'at': 1, 'id': 'cursor'}]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.funded_usage_session.LegacyUsageSession.read',
+        base={'self': LegacyUsageSession(), 'uid': UID, 'launch': T0},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.funded_usage_session.read_month',
+        covered_by=('database.funded_usage_session.LegacyUsageSession.read',),
+        reason='Cold session executes this monthly builder; warm checks read explicit hour documents.',
+    )
+)
 # Background-only discovery. Each boolean field has its own automatic single-field
 # index; point reads of all memberships on serving requests need no query index.
 _add(

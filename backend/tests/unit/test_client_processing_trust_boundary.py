@@ -221,6 +221,11 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('utils/conversations/process_conversation.py', '_store_projected_conversation'),
         ('utils/conversations/process_conversation.py', '_store_deterministic_minimum'),
         ('utils/conversations/process_conversation.py', '_store_deferred_conversation'),
+        # Model-free backlog persistence: display projection never enters canonical structure.
+        ('utils/conversations/process_conversation.py', '_store_budget_waiting'),
+        # Storage-only budget-denial wrapper forwards validated display projection
+        # to _store_budget_waiting; no model or intelligence reads it.
+        ('utils/conversations/process_conversation.py', 'preserve_capture'),
         # Flag-off eager deny: threads the display projection into the same
         # persist helpers; has_projection is the existing S6 plan input, not
         # an intelligence read of projection contents.
@@ -304,6 +309,8 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('utils/conversations/process_conversation.py', '_store_deterministic_minimum', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'ClientProcessing'),
         Reference('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', '_store_budget_waiting', 'client_projection'),
+        Reference('utils/conversations/process_conversation.py', 'preserve_capture', 'client_projection'),
         Reference('utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'ClientProcessing'),
         Reference(
             'utils/conversations/process_conversation.py', '_flag_off_identified_basic_deny', 'client_processing'
@@ -522,6 +529,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
+        # Storage payload strips the projection before the initial-create-only mutation.
+        DumpSite('utils/conversations/process_conversation.py', '_store_budget_waiting', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
@@ -624,6 +633,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
         'processing_state',
+        # Server-authored funding/queue state, not client display text or projection-family.
+        'processing_deferred',
         # Server-authored dead-letter retry marker, written only by the
         # finalization dead-letter transaction and cleared by processing
         # persists. A bool, no client text: NOT projection-family.

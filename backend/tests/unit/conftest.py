@@ -259,7 +259,20 @@ def _reset_live_stt_fleet_health():
         # starts with closed family circuits, including account quarantine.
         from utils.stt import streaming
 
-        with streaming._family_circuits_lock:
+        # Import-isolation stubs register a bare streaming module. They have no
+        # family circuits to reset, and touching the missing lock fails the next file.
+        lock = getattr(streaming, '_family_circuits_lock', None)
+        circuits = (
+            getattr(streaming, '_parakeet_circuit', None),
+            getattr(streaming, '_deepgram_circuit', None),
+            getattr(streaming, '_modulate_circuit', None),
+            getattr(streaming, '_soniox_circuit', None),
+        )
+        identity = getattr(streaming, '_family_circuits_identity', None)
+        if lock is None or identity is None or any(circuit is None for circuit in circuits):
+            yield
+            return
+        with lock:
             for circuit in (
                 streaming._parakeet_circuit,
                 streaming._deepgram_circuit,

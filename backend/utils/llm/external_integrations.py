@@ -1,3 +1,4 @@
+from utils.generated_compute import require_generated_compute
 import json
 import re
 import uuid
@@ -277,6 +278,7 @@ def summarize_experience_text(
 
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
+    require_generated_compute(uid, 'daily_summary_simple')
     user_name, memories_str = get_prompt_memories(uid)
     user_language = users_db.get_user_language_preference(uid)
 
@@ -345,6 +347,7 @@ def generate_comprehensive_daily_summary(
 
     Returns a dictionary matching the DailySummary model structure.
     """
+    require_generated_compute(uid, 'daily_summary')
     learned_refs: List[Dict[str, Any]] = list(memories_learned or [])
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)

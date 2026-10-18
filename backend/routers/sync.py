@@ -65,7 +65,7 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
-from config.stt_cap_dispatch import enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.analytics import record_sync_v1_usage as record_usage
@@ -609,14 +609,18 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
-    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock.
+    # Legacy exhaustion retains the installed-client path below.
+
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
     has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
     should_lock = False
     if not has_credits:
         allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+        should_lock = (
+            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+            and allowance.reason != 'usage_budget_exhausted'
+        )
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -686,7 +690,8 @@ async def sync_local_files(
                 content={
                     'new_memories': [],
                     'updated_memories': [],
-                    'credits_exhausted': cap_admission.get('reason') == 'plan_allowance_exhausted',
+                    'credits_exhausted': cap_admission.get('reason')
+                    in {'plan_allowance_exhausted', 'usage_budget_exhausted'},
                     'held_audio': True,
                     'held_files': len(wav_paths),
                 },
@@ -1117,7 +1122,10 @@ async def sync_local_files_v2(
     should_lock = False
     if not has_credits:
         allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+        should_lock = (
+            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+            and allowance.reason != 'usage_budget_exhausted'
+        )
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])

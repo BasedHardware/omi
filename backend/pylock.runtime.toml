@@ -118,6 +118,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/e7/45/282a04df72c17cc6c
 wheels = [{ url = "https://files.pythonhosted.org/packages/51/95/d43a02410e4e1cb6397a675facf5a65285d670697c0762a0e29c0c3615b4/av-12.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-21T11:15:50Z, size = 34691295, hashes = { sha256 = "7a6d4f1e261df48932128e6495772faa4cc23f5dd1512eec73daab82ad9f3240" } }]
 
 [[packages]]
+name = "babel"
+version = "2.18.0"
+sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", upload-time = 2026-02-01T12:30:56Z, size = 9959554, hashes = { sha256 = "b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", upload-time = 2026-02-01T12:30:53Z, size = 10196845, hashes = { sha256 = "e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35" } }]
+
+[[packages]]
 name = "backoff"
 version = "2.2.1"
 sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", upload-time = 2022-10-05T19:19:32Z, size = 17001, hashes = { sha256 = "03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba" } }
@@ -1065,8 +1071,6 @@ version = "0.2.3"
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", upload-time = 2024-07-21T12:58:21Z, size = 19752, hashes = { sha256 = "5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", upload-time = 2024-07-21T12:58:20Z, size = 11842, hashes = { sha256 = "1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0" } }]
 
-# TODO(#12758): pyarrow pinned at 19.0.1 for GCP buildpack/rmgpgab manylinux2014
-# (23.x is manylinux_2_28-only → sdist fail). Drop when trigger uses Dockerfile/uv.
 [[packages]]
 name = "pyarrow"
 version = "19.0.1"

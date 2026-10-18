@@ -56,6 +56,10 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
+from utils.sync.held_audio_summary import attach_subscription_held_audio
+from config.stt_cap_dispatch import execution_admission_enabled as funded_processing_enabled
+from utils.generated_compute import require_generated_compute, generated_compute_enabled
+from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -1227,7 +1231,20 @@ def get_user_subscription_endpoint(
         response = _user_subscription_response(
             uid, x_app_platform, x_app_version, already_read, request.headers.get('X-Omi-Plan-Identity')
         )
-    allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+    if funded_processing_enabled():
+        from utils import funded_processing
+
+        funded = funded_processing.allowance(
+            uid, **{key: value for key, value in already_read.items() if key in {'subscription', 'usage'}}
+        )
+        allowance = (
+            resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+            if already_read.get('byok_active')
+            else funded
+        )
+    else:
+        allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+        funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
     # A closed result with no resolved total is not an unlimited allowance.
     # Keep the already-built finite snapshot instead of emitting the wire's
@@ -1235,7 +1252,40 @@ def get_user_subscription_endpoint(
     if allowance.remaining_seconds is None or (allowance.limit_seconds is not None and allowance.limit_seconds > 0):
         response.transcription_seconds_limit = allowance.limit_seconds or 0
         response.subscription.limits.transcription_seconds = allowance.limit_seconds
+    # Dispatch off: leave held_audio unset so the response omits the field.
+    # On: reuse this allowance, kick recovery without waiting, and read the
+    # running summary (plus a short newest-first page when the count is positive).
+    attach_subscription_held_audio(response, uid, funded, already_read.get('subscription'))
+    if funded_processing_enabled():
+        from utils import processing_backlog
+
+        held = response.held_audio
+        audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
+        response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
+        if response.processing_backlog and response.processing_backlog.state == 'processing':
+            from utils.processing_backlog_worker import kick as kick_processing_backlog
+
+            kick_processing_backlog(uid)
     return response
+
+
+@router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])
+def process_waiting_recordings(
+    uid: str = Depends(auth.get_current_user_uid),
+    idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
+):
+    if not funded_processing_enabled():
+        raise HTTPException(status_code=404, detail='Not found')
+    from utils import processing_backlog
+    from utils.processing_backlog_worker import kick as kick_processing_backlog
+
+    result = processing_backlog.choose(uid, request_key=idempotency_key)
+    snapshot = processing_backlog.snapshot(uid)
+    if snapshot is not None and snapshot.state == 'capped':
+        raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'})
+    if result is not None:
+        kick_processing_backlog(uid)
+    return snapshot
 
 
 def _user_subscription_response(
@@ -1269,7 +1319,12 @@ def _user_subscription_response(
                 show_subscription_ui=False,
                 phone_call_quota=unlimited_phone_quota,
             )
-        usage = get_monthly_usage_for_subscription(uid)
+        if funded_processing_enabled():
+            from utils.funded_processing import monthly_usage
+
+            usage = monthly_usage(uid)
+        else:
+            usage = get_monthly_usage_for_subscription(uid)
         already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
         basic_limits = get_basic_plan_limits()
         return UserSubscriptionResponse(
@@ -1349,7 +1404,12 @@ def _user_subscription_response(
         subscription.plan = PlanType.unlimited
 
     # Get current usage
-    usage = get_monthly_usage_for_subscription(uid)
+    if funded_processing_enabled():
+        from utils.funded_processing import monthly_usage
+
+        usage = monthly_usage(uid)
+    else:
+        usage = get_monthly_usage_for_subscription(uid)
     already_read['usage'] = dict(usage) if isinstance(usage, dict) else usage
 
     # Calculate usage metrics
@@ -1502,8 +1562,13 @@ def get_user_chat_usage_quota(
     # Match enforce_desktop_chat_quota: only the provider actually used by
     # desktop chat can exempt it. Other enrolled keys still use managed chat.
     customer_client = get_customer_firestore_client()
-    if users_db.is_byok_active(uid, firestore_client=customer_client) and request_has_byok_provider(
-        DESKTOP_CHAT_BYOK_PROVIDER
+    from utils import ladder_v1
+
+    shared_budget = ladder_v1.budget_snapshot(uid, firestore_client=customer_client)
+    if (
+        shared_budget is None
+        and users_db.is_byok_active(uid, firestore_client=customer_client)
+        and request_has_byok_provider(DESKTOP_CHAT_BYOK_PROVIDER)
     ):
         return ChatUsageQuota(
             plan='Free (BYOK)',
@@ -1545,7 +1610,9 @@ def get_user_chat_usage_quota(
         percent=percent,
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
-        is_overage_plan=plan_uses_overage(plan),
+        is_overage_plan=snapshot.get('is_overage_plan', plan_uses_overage(plan)),
+        chat_at_cap=snapshot.get('chat_at_cap'),
+        uses_shared_budget=snapshot.get('uses_shared_budget', False),
     )
 
 
@@ -1697,6 +1764,7 @@ def test_daily_summary(
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
+    require_generated_compute(uid, 'daily_summary')
     enforce_chat_quota(uid, platform=x_app_platform)
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
@@ -1965,6 +2033,7 @@ def create_user_daily_summary(
     if existing:
         return existing
 
+    require_generated_compute(uid, 'daily_summary')
     cooldown_key = f'daily_summary_create:{uid}:{date_str}'
     if get_generic_cache(cooldown_key):
         raise HTTPException(
@@ -2080,6 +2149,7 @@ def regenerate_daily_summary(
     except ValueError:
         raise HTTPException(status_code=400, detail='Daily summary has an invalid date')
 
+    require_generated_compute(uid, 'daily_summary')
     cooldown_key = f'daily_summary_regen:{uid}:{summary_id}'
     if get_generic_cache(cooldown_key):
         raise HTTPException(
@@ -2512,6 +2582,8 @@ async def synthesize_ai_profile(
     """
     from utils.llm import ai_user_profile as ai_user_profile_llm
 
+    if generated_compute_enabled():
+        await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
     synthesis = await run_blocking(

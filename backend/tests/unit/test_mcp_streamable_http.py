@@ -811,6 +811,44 @@ class TestUnknownsAndScope:
         }
 
 
+class TestDailyCapAdmission:
+    def test_redis_outage_is_http_503_with_retry_after(self, client, authed):
+        outage = HTTPException(status_code=503, detail="usage_unavailable", headers={"Retry-After": "30"})
+        with (
+            patch.object(mcp_transport, "enforce_daily_cap", side_effect=outage),
+            patch.object(mcp_transport, "execute_tool") as execute,
+        ):
+            response = _post(client, "/v1/mcp", _tool_call("get_memories"))
+        assert response.status_code == 503
+        assert response.headers["Retry-After"] == "30"
+        assert response.json()["detail"] == "usage_unavailable"
+        execute.assert_not_called()
+
+    def test_reached_daily_cap_stays_a_tool_result(self, client, authed):
+        detail = {
+            "error": "mcp_daily_cap",
+            "trigger": "mcp_daily_cap",
+            "allowed": False,
+            "used": 5,
+            "limit": 5,
+            "reset_at": 4102444800,
+            "state": "cap",
+            "upgrade_plan": "plus",
+        }
+        capped = HTTPException(status_code=429, detail=detail, headers={"Retry-After": "60"})
+        with (
+            patch.object(mcp_transport, "enforce_daily_cap", side_effect=capped),
+            patch.object(mcp_transport, "execute_tool") as execute,
+        ):
+            response = _post(client, "/v1/mcp", _tool_call("get_memories"))
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["isError"] is True
+        assert result["structuredContent"]["error"]["code"] == "mcp_daily_cap"
+        assert result["_meta"]["omi_usage"] == detail
+        execute.assert_not_called()
+
+
 class TestToolResultContract:
     def _call(self, name, **context_kwargs):
         auth = _full_auth()
