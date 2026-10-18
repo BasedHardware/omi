@@ -33,6 +33,8 @@ import logging
 import time
 from typing import Any, Dict, Optional, cast
 
+from google.api_core.exceptions import GoogleAPICallError
+
 from config.plan_catalog import (
     CATALOG_REVISION,
     CATALOG_SHA256,
@@ -83,7 +85,7 @@ def _fetch_config(firestore_client: Optional[Any] = None) -> Dict[str, Any]:
             return {}
         raw: object = doc.to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    except Exception:
+    except (GoogleAPICallError, OSError, TimeoutError):
         # A transient Firestore failure must not crash policy resolution —
         # callers fall back to catalog defaults for the cache lifetime.
         _LOGGER.warning('phone_call_config fetch failed; using catalog defaults', exc_info=True)
