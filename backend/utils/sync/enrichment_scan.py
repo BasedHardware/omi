@@ -1,12 +1,13 @@
 """CAS keyset checkpoint for bounded enrichment watchdog passes."""
 
 import math
+from typing import Any
 
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
 from google.cloud import firestore
 
 
-def begin(client, collection):
+def begin(client: Any, collection: str) -> tuple[Any, dict[str, Any] | None]:
     snapshot = client.collection('sync_reprocess_scan').document('cursor').get()
     value = snapshot.to_dict() or {}
     due, document_id = value.get('due_at'), value.get('document_id')
@@ -23,7 +24,7 @@ def begin(client, collection):
     return snapshot, cursor
 
 
-def finish(previous, last, exhausted):
+def finish(previous: Any, last: Any, exhausted: bool) -> None:
     if last is None and not exhausted:
         return
     value = (
