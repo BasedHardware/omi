@@ -28,6 +28,7 @@ from utils.conversations import summary_delivery
 from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
+    enabled as summary_enabled,
     first_summary_pending,
     preserves_admitted,
 )
@@ -362,6 +363,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return status
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
+    summary_policy = summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
     summary_seen = False
     superseded = False
     retry_revision = None
@@ -378,7 +380,11 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 'backfill' if (row.get('dispatch') or {}).get('queue') == 'sync-backfill' else summary_delivery.lane({})
             )
         )
-        process_context = {'owner': owner, 'lease_until': row['lease_until']} if first_summary_pending(row) else None
+        process_context = (
+            {'owner': owner, 'lease_until': row['lease_until']}
+            if summary_policy and not row.get('summary_seen')
+            else None
+        )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
         context_token = summary_delivery.REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
@@ -386,7 +392,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         try:
             with _heartbeat(document_id, task_token, owner, process_context) if process_context else nullcontext():
                 output = process(row['uid'], row['conversation_id'], row['language'])
-                if first_summary_pending(row):
+                if summary_policy:
                     summary_seen = output is not None and summary_delivery.present(
                         summary_delivery.field(output, 'structured')
                     )
@@ -437,7 +443,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return pending, pending
 
         if old['version'] == row['version']:
-            if first_summary_pending(row) and summary_seen:
+            if summary_policy and summary_seen:
                 # Retain only scheduling metadata as the first-summary receipt.
                 # Future revisions keep their trailing-edge coalescing policy.
                 settled = dict(old)
@@ -456,7 +462,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 return settled, None
             return None, None
         pending = dict(old)
-        if summary_seen and first_summary_pending(row):
+        if summary_seen and summary_policy:
             pending['summary_seen'] = True
             pending['first_pending_at'] = current
             pending['summary_repair'] = False

@@ -1035,3 +1035,28 @@ def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monke
     finally:
         pipeline.PROCESS_CONTEXT.reset(token)
     assert context.get('discarded', False) == persisted
+
+
+@pytest.mark.parametrize('preserve', [False, True])
+@pytest.mark.parametrize('has_output', [False, True])
+def test_later_summary_keeps_legacy_callback_validation_and_completion(state, monkeypatch, preserve, has_output):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    rows[key]['summary_seen'] = True
+
+    def callback(*_):
+        assert reprocess.summary_delivery.PROCESS_CONTEXT.get() is None
+        return SimpleNamespace(discarded=False, structured={'overview': 'Synthetic output'} if has_output else {})
+
+    if has_output:
+        assert reprocess.run(key, token, callback, now=120) == 'processed'
+        assert rows[key]['dormant'] and rows[key]['summary_seen']
+    else:
+        with pytest.raises(reprocess.summary_delivery.SummaryOutputUnavailable):
+            reprocess.run(key, token, callback, now=120)
+        assert not rows[key].get('dormant')
+        assert rows[key]['lease_until'] == 1920
