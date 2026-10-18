@@ -100,7 +100,12 @@ def test_prod_shadow_scope_rejects_value_drift(
 ) -> None:
     values = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
     flag = f'TRANSCRIPTION_SHADOW_{name}'
-    replace_once(values, f'  - name: {flag}\n    value: "{expected}"\n', f'  - name: {flag}\n    value: "{changed}"\n')
+    if name == 'UID_ALLOWLIST':
+        replace_once(values, f'key: {flag}\n', f'key: {changed}\n')
+    else:
+        replace_once(
+            values, f'  - name: {flag}\n    value: "{expected}"\n', f'  - name: {flag}\n    value: "{changed}"\n'
+        )
     assert any(f'[prod] shadow scope {flag}' in error for error in gate.validate_preflight(chart_fixture))
 
 
@@ -277,7 +282,10 @@ def test_batch_cohort_rejects_scope_or_route_drift(gate, chart_fixture, name, va
     path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
     stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
     expected = stages['A'][name]
-    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+    if name.endswith('UID_ALLOWLIST'):
+        replace_once(path, f'key: {name}\n', f'key: {value}\n')
+    else:
+        replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
 
 
@@ -313,17 +321,18 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
                 path, f'  - name: {key}\n    value: "{previous}"\n', f'  - name: {key}\n    value: "{expected}"\n'
             )
     expected = stages[stage][name]
-    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+    if name.endswith('UID_ALLOWLIST'):
+        replace_once(path, f'key: {name}\n', f'key: {value}\n')
+    else:
+        replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert gate.validate_preflight(chart_fixture)
 
 
 @pytest.mark.parametrize('env', ('dev', 'prod'))
 def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
     batch_listen_only = gate._BATCH_PIPELINE_LISTEN_ONLY
-    if env == 'prod':
-        batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
     assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
-    assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
@@ -340,3 +349,24 @@ def test_copying_batch_admission_to_pusher_is_not_silently_allowed(gate: SimpleN
     assert any(
         'BATCH_PIPELINE_ENABLED is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture)
     )
+
+
+@pytest.mark.parametrize('name', ['TRANSCRIPTION_SHADOW_UID_ALLOWLIST', 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'])
+@pytest.mark.parametrize('defect', ['missing', 'literal', 'wrong_secret', 'wrong_key'])
+def test_prod_shadow_requires_exact_private_binding(gate, chart_fixture, name, defect):
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    before = (
+        f'  - name: {name}\n'
+        '    valueFrom:\n'
+        '      secretKeyRef:\n'
+        '        name: prod-omi-backend-secrets\n'
+        f'        key: {name}\n'
+    )
+    after = {
+        'missing': '',
+        'literal': f'  - name: {name}\n    value: "synthetic-owner"\n',
+        'wrong_secret': before.replace('prod-omi-backend-secrets', 'other-secret'),
+        'wrong_key': before.replace(f'key: {name}', 'key: OTHER_KEY'),
+    }[defect]
+    replace_once(path, before, after)
+    assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))

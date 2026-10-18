@@ -327,7 +327,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
-    | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
+    | _BATCH_PIPELINE_LISTEN_ONLY,
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -421,6 +421,7 @@ class EnvEntry:
     value: str | None
     secret_key: str | None
     config_map_key: str | None
+    secret_name: str | None = None
 
 
 def _values_path(root: Path, service: str, env: str) -> Path:
@@ -474,6 +475,7 @@ def parse_env_entries(text: str) -> dict[str, EnvEntry]:
             name=current,
             value=value,
             secret_key=secret_match.group(2) if secret_match else None,
+            secret_name=secret_match.group(1) if secret_match else None,
             config_map_key=config_match.group(2) if config_match else None,
         )
         current = None
@@ -505,6 +507,15 @@ def _read_values(root: Path, service: str, env: str) -> tuple[dict[str, EnvEntry
     except OSError as exc:
         raise DiffError(f"could not read {path}: {exc}") from exc
     return parse_env_entries(text), parse_envfrom_configmaps(text)
+
+
+def _prod_scope_matches(name: str, entry: EnvEntry | None, expected: str) -> bool:
+    if entry is None:
+        return False
+    if name in {'TRANSCRIPTION_SHADOW_UID_ALLOWLIST', 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'}:
+        # Membership is private. Verify its exact source; the lead verifies payload equality.
+        return entry.value is None and entry.secret_name == 'prod-omi-backend-secrets' and entry.secret_key == name
+    return entry.value == expected
 
 
 def validate_preflight(root: Path = ROOT) -> list[str]:
@@ -586,7 +597,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 (
                     values
                     for values in stages.values()
-                    if all(name in pusher_env and pusher_env[name].value == value for name, value in values.items())
+                    if all(_prod_scope_matches(name, pusher_env.get(name), value) for name, value in values.items())
                 ),
                 None,
             )
@@ -595,6 +606,12 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
             else:
                 prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
         for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
+            if env == 'prod' and name.endswith('UID_ALLOWLIST'):
+                if not _prod_scope_matches(name, pusher_env.get(name), expected_pusher) or name in listen_env:
+                    errors.append(
+                        f'[{env}] shadow scope {name} requires its private pusher secret and no listen binding'
+                    )
+                continue
             actual_pusher = pusher_env[name].value if name in pusher_env else None
             actual_listen = listen_env[name].value if name in listen_env else None
             if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):
