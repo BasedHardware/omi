@@ -19,22 +19,24 @@ import numpy as np
 import pytest
 import requests
 
-from utils.stt import vad
-from utils.stt.vad import (
-    VADAudioDecodeError,
-    VADProcessingError,
-    VADEmptyError,
-    vad_is_empty,
-    _run_file_vad,
+from utils.stt import vad, local_vad
+from utils.stt.local_vad import (
     _get_ort_session,
     make_fresh_state,
     run_vad_window,
     VAD_SAMPLE_RATE,
     VAD_WINDOW_SAMPLES,
     VAD_CONTEXT_SAMPLES,
+    _STATE_SHAPE,
+)
+from utils.stt.vad import (
+    VADAudioDecodeError,
+    VADProcessingError,
+    VADEmptyError,
+    vad_is_empty,
+    _run_file_vad,
     vad_is_empty_strict,
     linear16_pcm_is_silent,
-    _STATE_SHAPE,
 )
 
 
@@ -135,10 +137,10 @@ def _mock_make_fresh_state():
 @pytest.fixture(autouse=True)
 def _reset_singleton():
     """Reset the module-level ORT singleton between tests."""
-    original = vad._ort_session
-    vad._ort_session = None
+    original = local_vad._ort_session
+    local_vad._ort_session = None
     yield
-    vad._ort_session = original
+    local_vad._ort_session = original
 
 
 @pytest.fixture
@@ -453,8 +455,8 @@ class TestVadIsEmptyCache:
 class TestRunFileVad:
     """_run_file_vad() processes audio files through ONNX Silero VAD."""
 
-    @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_silence)
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.run_vad_window', side_effect=_mock_run_vad_window_silence)
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_silence_returns_empty(self, mock_state, mock_vad, tmp_wav_dir):
         """Silent audio produces no segments."""
         wav_path = str(tmp_wav_dir / 'silence.wav')
@@ -463,8 +465,8 @@ class TestRunFileVad:
         segments = _run_file_vad(wav_path)
         assert segments == []
 
-    @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_all_speech_single_segment(self, mock_state, mock_vad, tmp_wav_dir):
         """Audio with all-speech produces one segment spanning the whole file."""
         wav_path = str(tmp_wav_dir / 'speech.wav')
@@ -476,7 +478,7 @@ class TestRunFileVad:
         assert segments[0]['end'] > 0
         assert segments[0]['duration'] > 0
 
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_speech_silence_speech_produces_two_segments(self, mock_state, tmp_wav_dir):
         """Speech-silence-speech pattern produces two segments."""
         wav_path = str(tmp_wav_dir / 'pattern.wav')
@@ -487,7 +489,7 @@ class TestRunFileVad:
         pattern = [True, True, False, False, True, True]
         mock_fn = _mock_run_vad_window_pattern(pattern)
 
-        with patch('utils.stt.vad.run_vad_window', side_effect=mock_fn):
+        with patch('utils.stt.local_vad.run_vad_window', side_effect=mock_fn):
             segments = _run_file_vad(wav_path)
 
         assert len(segments) == 2
@@ -519,8 +521,8 @@ class TestRunFileVad:
         with pytest.raises(VADAudioDecodeError):
             vad_is_empty_strict(bad_path)
 
-    @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_silence)
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.run_vad_window', side_effect=_mock_run_vad_window_silence)
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_strict_valid_silence_returns_true(self, mock_state, mock_vad, tmp_wav_dir):
         """A successfully decoded, VAD-negative file remains expected silence."""
         wav_path = str(tmp_wav_dir / 'strict-silence.wav')
@@ -528,8 +530,8 @@ class TestRunFileVad:
 
         assert vad_is_empty_strict(wav_path) is True
 
-    @patch('utils.stt.vad.run_vad_window', side_effect=RuntimeError('VAD inference failed'))
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.run_vad_window', side_effect=RuntimeError('VAD inference failed'))
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_strict_inference_failure_propagates(self, mock_state, mock_vad, tmp_wav_dir):
         """Strict eligibility never converts an inference failure into silence."""
         wav_path = str(tmp_wav_dir / 'strict-inference.wav')
@@ -538,8 +540,8 @@ class TestRunFileVad:
         with pytest.raises(VADProcessingError, match='local VAD could not evaluate audio'):
             vad_is_empty_strict(wav_path)
 
-    @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_short_file_fewer_than_one_window(self, mock_state, mock_vad, tmp_wav_dir):
         """File shorter than one 512-sample window produces no segments."""
         wav_path = str(tmp_wav_dir / 'tiny.wav')
@@ -552,7 +554,7 @@ class TestRunFileVad:
         assert segments == []
         mock_vad.assert_not_called()
 
-    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    @patch('utils.stt.local_vad.make_fresh_state', side_effect=_mock_make_fresh_state)
     def test_open_segment_closed_at_end(self, mock_state, tmp_wav_dir):
         """Speech at end of file is properly closed."""
         wav_path = str(tmp_wav_dir / 'trail.wav')
@@ -562,7 +564,7 @@ class TestRunFileVad:
         pattern = [False, True, True]
         mock_fn = _mock_run_vad_window_pattern(pattern)
 
-        with patch('utils.stt.vad.run_vad_window', side_effect=mock_fn):
+        with patch('utils.stt.local_vad.run_vad_window', side_effect=mock_fn):
             segments = _run_file_vad(wav_path)
 
         assert len(segments) == 1
@@ -598,7 +600,7 @@ class TestOnnxSessionWiring:
         assert s2[0, 0, 0] == 0.0
         assert c2[0, 0] == 0.0
 
-    @patch('utils.stt.vad.ort')
+    @patch('utils.stt.local_vad.ort')
     def test_singleton_reuses_session(self, mock_ort_module):
         """_get_ort_session() returns the same object on repeated calls."""
         mock_session = MagicMock()
@@ -606,14 +608,14 @@ class TestOnnxSessionWiring:
         mock_ort_module.SessionOptions.return_value = MagicMock()
         mock_ort_module.ExecutionMode.ORT_SEQUENTIAL = 0
 
-        vad._ort_session = None
+        local_vad._ort_session = None
         s1 = _get_ort_session()
         s2 = _get_ort_session()
         assert s1 is s2
         # Only one InferenceSession created
         mock_ort_module.InferenceSession.assert_called_once()
 
-    @patch('utils.stt.vad.ort')
+    @patch('utils.stt.local_vad.ort')
     def test_session_options_configured(self, mock_ort_module):
         """Session options set single-threaded sequential mode."""
         mock_opts = MagicMock()
@@ -621,7 +623,7 @@ class TestOnnxSessionWiring:
         mock_ort_module.ExecutionMode.ORT_SEQUENTIAL = 0
         mock_ort_module.InferenceSession.return_value = MagicMock()
 
-        vad._ort_session = None
+        local_vad._ort_session = None
         _get_ort_session()
 
         assert mock_opts.intra_op_num_threads == 1
@@ -637,7 +639,7 @@ class TestOnnxSessionWiring:
 class TestRunVadWindow:
     """Verify run_vad_window() input shaping and output extraction."""
 
-    @patch('utils.stt.vad._get_ort_session')
+    @patch('utils.stt.local_vad._get_ort_session')
     def test_input_shapes_and_output(self, mock_get_sess):
         """run_vad_window passes correctly shaped inputs to ORT."""
         mock_sess = MagicMock()
@@ -668,6 +670,6 @@ class TestRunVadWindow:
 
 @pytest.mark.parametrize('probability', [float('nan'), float('inf'), -0.1, 1.1])
 def test_strict_pcm_vad_invalid_probability_is_failure_not_silence(monkeypatch, probability):
-    monkeypatch.setattr(vad, 'run_vad_window', lambda audio, state, context: (probability, state, context))
+    monkeypatch.setattr(local_vad, 'run_vad_window', lambda audio, state, context: (probability, state, context))
     with pytest.raises(VADProcessingError):
-        vad.offline_pcm_speech_segments(b'\0' * 1024)
+        local_vad.offline_pcm_speech_segments(b'\0' * 1024)

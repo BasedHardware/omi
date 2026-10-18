@@ -34,6 +34,25 @@ MockClient _answering(Map<String, Object?> body, {int status = 200}) => MockClie
     });
 
 void main() {
+  test('boolean kill switches accept true only, never variants or missing flags', () async {
+    final adapter = _adapter(_answering({
+      'featureFlags': {
+        'kill': true,
+        'off': false,
+        'variant': 'enabled',
+        'string_true': 'true',
+      }
+    }));
+    expect(await adapter.reloadFeatureFlags(), isTrue);
+    expect(await adapter.isBooleanFeatureEnabled('kill'), isTrue);
+    expect(adapter.isBooleanFeatureEnabledCached('kill'), isTrue);
+    expect(adapter.isBooleanFeatureEnabledCached('variant'), isFalse);
+    expect(adapter.isBooleanFeatureEnabledCached('missing'), isFalse);
+    for (final key in ['off', 'variant', 'string_true', 'missing']) {
+      expect(await adapter.isBooleanFeatureEnabled(key), isFalse);
+    }
+  });
+
   test('person properties ride along with the fetch; blank ones are dropped', () async {
     Object? sent;
     final client = MockClient((request) async {

@@ -1168,7 +1168,7 @@ overlay:
             value: 'sync-backfill'
             category: reliability
           SYNC_BACKFILL_UID_SEQUENCER:
-            value: 'off'
+            value: 'on'
             category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
@@ -1486,7 +1486,7 @@ overlay:
             value: 'sync-backfill'
             category: reliability
           SYNC_BACKFILL_UID_SEQUENCER:
-            value: 'off'
+            value: 'on'
             category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'

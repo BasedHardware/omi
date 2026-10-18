@@ -222,3 +222,11 @@ work; it never reports successful silence. Successful siblings retain their
 assignment receipts, while later uploads may advance. Legacy recovery is held,
 not dispatched: see [terminal quarantine and the visible gap](../docs/batch-pipeline-worker.md#terminal-quarantine-and-the-visible-gap)
 for client status, retained audio/usage obligations and the fenced recovery design.
+
+Worker strict-silence disposition is separately dark behind
+`BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED=false`, rendered from Helm
+`worker.workerSilenceDispositionEnabled: false`. It reuses integration's local
+Silero inspection after empty ASR, before quarantine; ONNX and the VAD asset
+are packaged in this image. Enable only with an approved worker image rollout
+and worker flag change; setting it back to false restores empty-ASR quarantine.
+See `docs/listen_pusher_pipeline.mdx` for payload and recovery semantics.
