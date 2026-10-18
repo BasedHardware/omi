@@ -72,6 +72,9 @@ dev = [
     "mypy>=1.8,<2.0",
     "build>=1.0,<2.0",
     "twine>=5.0,<7.0",
+    # parquet recipe tests exercise the real artifact — without pyarrow in
+    # the dev extra, CI skips the whole file and "passing" is vacuous.
+    "pyarrow>=14.0,<25.0",
 ]
 
 [tool.setuptools.dynamic]
