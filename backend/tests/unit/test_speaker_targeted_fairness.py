@@ -278,15 +278,26 @@ async def test_failed_queries_still_spend_and_never_exceed_voice_socket_or_task_
         raise RuntimeError('injected failure')
 
     monkeypatch.setattr(matcher, '_extract_query', fail)
+    # A failed query consumes the audio it attempted, so the ceiling is
+    # pressured with distinct windows inside the fixture's (0, 60) buffer —
+    # 16 x 3s gives every distinct voice its own window, and the single voice
+    # exactly its 12-attempt program before the repeats go stale.
     for index in range(32):
-        matcher.queue.put_nowait(work(index if distinct else 2, seconds=30, segment=f'failure-{index}'))
+        start = (index % 16) * 3
+        matcher.queue.put_nowait(work(index if distinct else 2, start=start, seconds=3, segment=f'failure-{index}'))
     await serve(matcher, host, monkeypatch, 32)
     assert state.calls == (16 if distinct else 12)
-    assert state.peak <= 16 and state.largest == 10
+    assert state.peak <= 16 and state.largest == 3
     assert sum(matcher._embedding_attempts.values()) == state.calls
     assert max(matcher._embedding_attempts.values()) <= 12
     assert matcher._socket_embedding_tokens == 16 - state.calls
-    assert not matcher._rejectors.comparisons and not matcher._covered_audio.get(2)
+    if distinct:
+        # Voice 2 is one of sixteen distinct voices: its single window was
+        # consumed by its one doomed attempt.
+        assert matcher._covered_audio.get(2) == [(6, 9)]
+    else:
+        # Every attempt consumed exactly the window it sent: no clip re-sent.
+        assert matcher._covered_audio.get(2) == [((index % 16) * 3, (index % 16) * 3 + 3) for index in range(12)]
 
 
 def test_targeted_metric_labels_have_closed_cardinality():

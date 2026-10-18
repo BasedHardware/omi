@@ -87,9 +87,9 @@ async def test_twelve_near_owner_attempts_then_new_clean_owner_speech_recovers(m
 async def test_gapped_new_phrases_win_recovery_over_long_failed_pending_audio(monkeypatch):
     matcher, host, clock, calls, _ = _setup(monkeypatch, failed=True)
     ring = host.state.audio_ring_buffer
-    ring.write_positioned(_pcm(60, 1), 0)
-    for _ in range(12):
-        await matcher.match(1, _segment('old-failed', 0, 60))
+    # A failed query consumes the audio it attempted, so the allowance is
+    # exhausted by twelve distinct 2s windows, not by replaying one clip.
+    await _exhaust(matcher, host, clock)
     recovery = matcher._voice_recovery[1]
     clock.now = recovery.next_grant_at
     observed = []
@@ -101,7 +101,7 @@ async def test_gapped_new_phrases_win_recovery_over_long_failed_pending_audio(mo
     monkeypatch.setattr(matcher, '_extract_query', extract)
     # Accrue proof across updates, preserving gaps and the selection checkpoint.
     for i in range(5):
-        start = 70 + i * 3
+        start = 30 + i * 3
         ring.write_positioned(_pcm(2, 20 + i), start)
         await matcher.match(1, _segment(f'phrase-{i}', start, 2))
     assert matcher._embedding_attempts[1] == 13
@@ -110,15 +110,29 @@ async def test_gapped_new_phrases_win_recovery_over_long_failed_pending_audio(mo
     assert len(observed[0]) == 10 * 16000
     assert set(observed[0]) == {20, 21, 22, 23, 24}
     assert all(np.count_nonzero(observed[0] == value) == 2 * 16000 for value in range(20, 25))
-    assert recovery.checkpoint_audio_watermark == 84
-    assert recovery.query_audio_watermark == 60
+    assert recovery.checkpoint_audio_watermark == 44
+    assert recovery.query_audio_watermark == 24
     assert 1 not in matcher._pending_audio  # main clears metadata after success; no self-requeue
-    clock.now += 30
-    await matcher.match(1, _segment('old-fallback', 0, 60))
-    await matcher.match(1, _segment('old-fallback', 0, 60))
-    await matcher.match(1, _segment('cannot-recredit-phrases', 70, 14))
-    assert matcher._embedding_attempts[1] == 15
+    # The consumed windows cannot re-dial: replaying them is a silent no-op,
+    # and only genuinely new audio re-arms (and bounds) recovery.
+    for start in (0, 30):
+        await matcher.match(1, _segment('consumed-replay', start, 20))
+    assert matcher._embedding_attempts[1] == 13
     assert recovery.tranches == 1
+    ring.write_positioned(_pcm(11, 30), 44)
+    await matcher.match(1, _segment('fresh-again', 44, 11))
+    assert matcher._embedding_attempts[1] == 14
+    # Inside the first tranche's allowance: no grant spent yet.
+    assert recovery.tranches == 1
+    ring.write_positioned(_pcm(12, 31), 55)
+    clock.now += RECOVERY_COOLDOWN_SECONDS
+    await matcher.match(1, _segment('fresh-again-2', 55, 12))
+    assert matcher._embedding_attempts[1] == 15
+    ring.write_positioned(_pcm(12, 32), 67)
+    await matcher.match(1, _segment('fresh-again-3', 67, 12))
+    # Blocked at the first tranche's limit, re-granted on fresh seconds.
+    assert matcher._embedding_attempts[1] == 16
+    assert recovery.tranches == 2
     assert recovery.fresh_bytes == 0
     assert len(calls) == 12
 
@@ -184,11 +198,14 @@ async def test_failures_spend_both_tranches_and_never_exceed_eighteen(monkeypatc
     await _exhaust(matcher, host, clock)
     for tranche in range(2):
         clock.now += RECOVERY_COOLDOWN_SECONDS
-        start = 24 + tranche * 10
-        host.state.audio_ring_buffer.write_positioned(_pcm(10), start)
-        for _ in range(5):
-            await matcher.match(1, _segment('failed-replay', start, 10))
-        assert matcher._embedding_attempts[1] == 15 + tranche * 3
+        # A failed query consumes the audio it attempted, so each tranche's
+        # three attempts arrive on three distinct fresh windows that together
+        # provide the 10 fresh seconds a tranche grant requires.
+        for attempt in range(3):
+            start = 24 + tranche * 10 + attempt * 4
+            host.state.audio_ring_buffer.write_positioned(_pcm(4), start)
+            await matcher.match(1, _segment(f'failed-{tranche}-{attempt}', start, 4))
+        assert matcher._embedding_attempts[1] == 13 + tranche * 3
     clock.now += 300
     host.state.audio_ring_buffer.write_positioned(_pcm(20), 44)
     for _ in range(10):
@@ -196,7 +213,6 @@ async def test_failures_spend_both_tranches_and_never_exceed_eighteen(monkeypatc
     assert len(calls) == 18
     assert matcher._embedding_attempts[1] == 18
     assert matcher._voice_recovery[1].tranches == 2
-    assert not matcher._covered_audio[1]
     assert {x: _metric(RECOVERY_GRANTS, tranche=x) for x in before} == {x: v + 1 for x, v in before.items()}
 
 
@@ -505,25 +521,45 @@ async def test_real_runner_denies_fresh_tranches_to_decided_non_near_voices(monk
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', extract)
     await _exhaust(matcher, host, clock)
     assert matcher._rejectors.proven(1) is (reason == 'proven_rejector')
+    expected_attempts = 12
     if reason == 'clearly_far':
+        # The frozen test clock keeps every failure inside the socket-wide
+        # outage window, so the completed comparison runs as the circuit's
+        # half-open recovery probe: it closes the outage and clears the
+        # 5xx history without granting a tranche.
+        assert matcher._outage_probe_voice is None
+        assert matcher._outage_open_until == 0.0
+        assert not matcher._outage_failures
+        # A failed query consumes the audio it attempted, so the eleven
+        # exhausted failures burned their clips; the completed far comparison
+        # arrives on fresh audio through the first recovery tranche grant.
+        clock.now += RECOVERY_COOLDOWN_SECONDS
+        host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+        await matcher.match(1, _segment('completed-far', 24, 10))
+        expected_attempts = 13
         assert matcher._rejectors.comparisons[1] == 1
+        assert matcher._voice_recovery[1].tranches == 1
     recovery = matcher._voice_recovery[1]
     clock.now = recovery.next_grant_at
-    host.state.audio_ring_buffer.write_positioned(_pcm(10), 24)
+    # Unconsumed audio: the clearly_far path already consumed (24, 34] with
+    # its completed comparison, so every reason credits its fresh bytes here.
+    host.state.audio_ring_buffer.write_positioned(_pcm(10), 34)
     checkpoint = (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at)
     grants = _metric(RECOVERY_GRANTS, tranche='first')
     denied = _metric(RECOVERY_DENIALS, reason=reason)
     tokens = matcher._socket_embedding_tokens
-    matcher.queue.put_nowait(dict(_segment('fresh-but-ineligible', 24, 10), speaker_id=1))
+    matcher.queue.put_nowait(dict(_segment('fresh-but-ineligible', 34, 10), speaker_id=1))
     assert await serve(matcher, host, monkeypatch, 1) == [(1, 'fresh-but-ineligible')]
-    assert len(calls) == matcher._embedding_attempts[1] == 12
-    assert recovery.tranches == 0
+    assert len(calls) == matcher._embedding_attempts[1] == expected_attempts
+    assert recovery.tranches == (1 if reason == 'clearly_far' else 0)
     assert recovery.fresh_bytes == 10 * host.state.audio_ring_buffer.bytes_per_second
     assert checkpoint == (recovery.checkpoint_audio_watermark, recovery.query_audio_watermark, recovery.next_grant_at)
+    # The completed-far match above already spent the first-tranche grant; the
+    # denied fresh request is refused before any grant logic can run again.
     assert _metric(RECOVERY_GRANTS, tranche='first') == grants
     assert _metric(RECOVERY_DENIALS, reason=reason) == denied + 1
     summary = snapshot(matcher)
-    assert summary['attempted'] == 12 and summary['owner_comparisons'] > 0
+    assert summary['attempted'] == expected_attempts and summary['owner_comparisons'] > 0
     assert summary['budget_voice'] == summary['reasons']['embedding_budget'] == 1
     matcher.diagnostics.stop('drain', matcher.queue, matcher.tasks)
     frozen = snapshot(matcher)

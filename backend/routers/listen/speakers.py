@@ -84,6 +84,20 @@ MAX_OWNER_AUDIO_REPAIRS = 3
 # clock only — wall-clock jumps must not extend or shorten a silence window.
 EMBEDDING_STATUS_BACKOFF_SECONDS = 30.0
 EMBEDDING_BACKOFF_CEILING_SECONDS = 300.0
+# Socket-wide outage circuit for the embedding API. When several DISTINCT
+# voices receive 5xx within EMBEDDING_OUTAGE_WINDOW_SECONDS, the provider is
+# failing for the whole socket, not for one voice: a per-voice ladder alone
+# still lets every active voice climb it independently, each burning real GPU
+# round trips and an ERROR log line per expiry (the residual
+# "Speaker ID match failed type=HTTPStatusError" storm during a diarizer/gateway
+# outage). The open circuit sheds every voice with the bounded
+# ``embedding_outage`` exit and no request at all, then admits exactly one
+# half-open recovery probe; success closes the circuit, failure re-opens it
+# with a doubled window up to the cap. Monotonic clock only.
+EMBEDDING_OUTAGE_WINDOW_SECONDS = 30.0
+EMBEDDING_OUTAGE_VOICE_THRESHOLD = 2
+EMBEDDING_OUTAGE_OPEN_SECONDS = 20.0
+EMBEDDING_OUTAGE_MAX_OPEN_SECONDS = 300.0
 
 # The enumerated early-exit reasons for live speaker-ID matching. Every return
 # before a match decision bumps exactly one of these (Prometheus counter label
@@ -121,6 +135,10 @@ SPEAKER_ID_EXIT_REASONS = frozenset(
         # The voice is inside its post-failure silence window (deterministic
         # HTTP rejections and 5xx/transport faults use distinct ladders).
         'embedding_backoff',
+        # The socket-wide embedding outage circuit is open (the per-voice
+        # ladder's complement: a provider outage fails for every voice, so the
+        # circuit sheds all of them without a request).
+        'embedding_outage',
     }
 )
 
@@ -193,6 +211,14 @@ class SpeakerMatcher:
         self._embedding_retry_after: Dict[int, float] = {}
         self._embedding_last_status_5xx = False
         self._embedding_degradation_warned = False
+        # Socket-wide embedding outage circuit: recent per-voice 5xx times
+        # (distinct voices inside the window), the open-until deadline, the
+        # current open window (doubled per failed recovery probe), all reset
+        # by clear() with the rest of the generation inventory.
+        self._outage_failures: Dict[int, float] = {}
+        self._outage_open_until = 0.0
+        self._outage_open_seconds = EMBEDDING_OUTAGE_OPEN_SECONDS
+        self._outage_probe_voice: Optional[int] = None
         self._budget_socket_blocked = False
         self._generation = 0
         self.collapse_monitor = LiveSpeakerCollapseMonitor()
@@ -744,6 +770,59 @@ class SpeakerMatcher:
             EMBEDDING_STATUS_BACKOFF_SECONDS * 2 ** self._embedding_failures.get(speaker_id, 0),
         )
 
+    # The per-voice ladder bounds how often ONE voice re-sends a doomed
+    # request; it cannot see that a 5xx is failing for EVERY voice. When
+    # several distinct voices are 5xxing inside one window the provider is
+    # down for this socket: the circuit opens, shedding every voice's next
+    # reservation with the bounded ``embedding_outage`` exit — no request,
+    # no GPU call, no ERROR line. At the deadline exactly one half-open
+    # recovery probe is admitted; success closes the circuit, a failed probe
+    # re-opens it with a doubled window (capped). Monotonic clock only.
+    def _on_embedding_5xx(self, speaker_id: int, now: float) -> None:
+        window_start = now - EMBEDDING_OUTAGE_WINDOW_SECONDS
+        self._outage_failures = {voice: ts for voice, ts in self._outage_failures.items() if ts >= window_start}
+        self._outage_failures[speaker_id] = now
+        if self._outage_probe_voice == speaker_id:
+            # The half-open probe failed: re-open with a doubled window; the
+            # next reservation past the new deadline is the next probe.
+            self._outage_open_seconds = min(EMBEDDING_OUTAGE_MAX_OPEN_SECONDS, self._outage_open_seconds * 2)
+            self._outage_open_until = now + self._outage_open_seconds
+            self._outage_probe_voice = None
+            return
+        if self._outage_probe_voice is not None:
+            # A probe is in flight and owns recovery: a straggler 5xx from
+            # another voice changes nothing until it resolves.
+            return
+        if self._outage_open_until:
+            # Fully open: a fresh distinct-voice pair re-arms the window so a
+            # long outage is not probed on the original short schedule.
+            if len(self._outage_failures) >= EMBEDDING_OUTAGE_VOICE_THRESHOLD:
+                self._outage_open_until = max(self._outage_open_until, now + self._outage_open_seconds)
+            return
+        if len(self._outage_failures) >= EMBEDDING_OUTAGE_VOICE_THRESHOLD:
+            self._outage_open_until = now + self._outage_open_seconds
+
+    def _embedding_outage_sheds(self, speaker_id: int, now: float) -> bool:
+        """True while the open circuit sheds this voice; False admits a probe."""
+        if self._outage_probe_voice is not None:
+            # Half-open with a probe in flight: the probe voice dials, every
+            # other voice stays shed until the probe resolves.
+            return speaker_id != self._outage_probe_voice
+        if not self._outage_open_until:
+            return False
+        if now < self._outage_open_until:
+            return True
+        # Deadline reached: this caller becomes the single recovery probe.
+        # Success (or any non-5xx outcome) leaves the circuit closed; a
+        # failed probe re-opens doubled in _on_embedding_5xx. The probe
+        # voice's per-voice silence window predates the circuit and was sized
+        # by the outage itself; the probe is the bounded retest, so its stale
+        # deadline is dropped with admission.
+        self._outage_open_until = 0.0
+        self._outage_probe_voice = speaker_id
+        self._embedding_retry_after.pop(speaker_id, None)
+        return False
+
     # The one bounded degradation signal per voice backoff window: the
     # pipeline degrades from live speaker identification to unlabeled, and
     # every previously silent clip emission carries that warning once.
@@ -851,6 +930,12 @@ class SpeakerMatcher:
     ) -> bool:
         """Reserve synchronously before any await; failed requests spend tokens too."""
         now = time.monotonic()
+        if self._embedding_outage_sheds(speaker_id, now):
+            # The socket-wide outage circuit is open and this voice has its
+            # own in-flight 5xx: shed without a request, a token, or advancing
+            # the voice's ladder — the outage is not the voice's fault.
+            self._record_exit('embedding_outage', speaker_id)
+            return False
         if now < self._embedding_retry_after.get(speaker_id, 0.0):
             # Silence the voice until its retry deadline. Counting the attempt
             # keeps the existing voice-capacity ladder intact while blocked
@@ -1091,6 +1176,8 @@ class SpeakerMatcher:
     ) -> None:
         short_reconnect = False
         reconnect_recorded = False
+        covered: list = []
+        attempted_ranges: list = []
         try:
             ring_buffer: Optional[AudioRingBuffer] = self.host.state.audio_ring_buffer
             if ring_buffer is None:
@@ -1159,6 +1246,7 @@ class SpeakerMatcher:
             if clip_seconds < needed:
                 self._record_exit('window_shorter_than_minimum', speaker_id)
                 return
+            attempted_ranges = selected
             if not self._reserve_embedding(
                 speaker_id,
                 segment=segment,
@@ -1166,6 +1254,11 @@ class SpeakerMatcher:
             ):
                 return
             query = await self._extract_query(pcm)
+            if self._outage_probe_voice == speaker_id:
+                # The half-open recovery probe succeeded: the outage is over,
+                # and the next outage opens from the base window again.
+                self._outage_probe_voice = None
+                self._outage_open_seconds = EMBEDDING_OUTAGE_OPEN_SECONDS
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
@@ -1378,9 +1471,30 @@ class SpeakerMatcher:
             # Decisions made from still-valid earlier evidence stand.
             if isinstance(error, HTTPStatusError):
                 status = getattr(error.response, 'status_code', None)
-                self._embedding_last_status_5xx = (
-                    isinstance(status, int) and not isinstance(status, bool) and status >= 500
-                )
+                is_5xx = isinstance(status, int) and not isinstance(status, bool) and status >= 500
+                self._embedding_last_status_5xx = is_5xx
+                if is_5xx:
+                    # A 5xx is the provider failing, not the voice: feed the
+                    # socket-wide circuit. Distinct-voice 5xx pairs inside the
+                    # window open it; its probe schedule then owns re-dials.
+                    self._on_embedding_5xx(speaker_id, time.monotonic())
+                elif self._outage_probe_voice == speaker_id:
+                    # The probe got an answer that is not outage-shaped (a
+                    # deterministic 4xx): the provider is serving again.
+                    self._outage_probe_voice = None
+                    self._outage_open_seconds = EMBEDDING_OUTAGE_OPEN_SECONDS
+            elif self._outage_probe_voice == speaker_id:
+                # Transport-level faults are not outage evidence: a probe that
+                # fails on transport releases the half-open slot (the next
+                # distinct-voice 5xx pair re-opens the circuit).
+                self._outage_probe_voice = None
+                self._outage_open_seconds = EMBEDDING_OUTAGE_OPEN_SECONDS
+            if attempted_ranges:
+                # A failed request has none of the request's evidence: it must
+                # not keep it. Consume the attempted audio so the next provider
+                # update — not a re-send of this same clip — drives the next
+                # attempt (the storm's "identical doomed request" half).
+                self._covered_audio[speaker_id] = covered + attempted_ranges
             self._log_embedding_failure(speaker_id, error)
             retry_delay = self._embedding_failure_backoff(speaker_id, error)
             self._embedding_failures[speaker_id] = self._embedding_failures.get(speaker_id, 0) + 1
@@ -1411,6 +1525,11 @@ class SpeakerMatcher:
                     self._session_log_id(),
                 )
         finally:
+            if self._outage_probe_voice == speaker_id:
+                # The match ended without an embedding outcome (cancelled
+                # mid-request, dropped post-reservation): release the
+                # half-open probe slot so a later reservation can probe again.
+                self._outage_probe_voice = None
             if short_reconnect and not reconnect_recorded:
                 record_owner_reconnect('rejected', 'arbitration')
 
@@ -1583,6 +1702,10 @@ class SpeakerMatcher:
         self._embedding_retry_after.clear()
         self._embedding_last_status_5xx = False
         self._embedding_degradation_warned = False
+        self._outage_failures.clear()
+        self._outage_open_until = 0.0
+        self._outage_open_seconds = EMBEDDING_OUTAGE_OPEN_SECONDS
+        self._outage_probe_voice = None
         self._voice_recovery.clear()
         self._rejectors.clear()
         self._budget_blocked_voices.clear()

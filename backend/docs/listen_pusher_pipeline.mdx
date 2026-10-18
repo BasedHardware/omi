@@ -3500,8 +3500,31 @@ window the voice skips GPU reservation entirely and every blocked segment
 records `embedding_backoff` in the bounded exit/diagnostic vocabulary; the
 socket token and voice attempt are not spent. A published decision on the same
 voice ends its streak (the next genuine failure starts a fresh ladder), and
-`clear()` resets all four pieces of backoff state with the generation
+`clear()` resets the backoff and outage-circuit state with the generation
 inventory. Exit metrics gain exactly one closed reason label (`embedding_backoff`).
+
+Failure-Class: FC-deterministic-provider-rejection-burns-connect-retries —
+sibling instance in `backend/routers/listen/speakers.py` (prod backend-listen
+2026-10, `Speaker ID match failed type=HTTPStatusError` x863/30m after the
+per-voice ladder): the per-voice ladder bounds how often one voice re-sends a
+doomed request, but during a diarizer/embedding-API 5xx outage every active
+voice still climbs its own ladder independently, each burning a real GPU round
+trip and an ERROR line per window expiry.
+
+The socket-wide outage circuit closes that gap. Two distinct voices receiving
+a 5xx within 30s opens it: every voice's next reservation is shed with the
+bounded `embedding_outage` exit — no request, no token, no ERROR line — for
+an initial 20s window (monotonic clock). At the deadline exactly one half-open
+recovery probe is admitted (its stale per-voice silence window is dropped with
+admission; other voices stay shed while the probe is in flight). A successful
+probe — or any non-5xx outcome — closes the circuit; a failed probe re-opens
+it with a doubled window capped at 300s, and a probe lost to cancellation
+releases the half-open slot. While fully open, a fresh distinct-voice 5xx pair
+re-arms the window so a long outage is not probed on the original short
+schedule. Separately, a failed request now consumes the audio it attempted, so
+the next attempt is driven by new provider audio instead of re-sending the
+identical doomed clip. Exit metrics gain exactly one closed reason label
+(`embedding_outage`).
 Backoff windows deliberately do not set `_pending_rollover_carry`: a voice
 silenced at a rollover boundary is not retained as if its last segment succeeded.
 

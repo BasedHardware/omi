@@ -72,6 +72,8 @@ def test_atomic_global_and_user_caps(monkeypatch):
 
 def test_fail_closed_error_and_timeout(monkeypatch):
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    # The experiment's hard UTC stop has passed; these contracts pin the gate open.
+    monkeypatch.setattr(shadow, 'capture_jev_shadow_enabled', lambda *args, **kwargs: (True, 'enabled'))
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'david')
     monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
     monkeypatch.setattr(
@@ -107,6 +109,8 @@ def test_fail_closed_error_and_timeout(monkeypatch):
 
 def test_success_telemetry_and_identifier_only_record(monkeypatch):
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    # The experiment's hard UTC stop has passed; these contracts pin the gate open.
+    monkeypatch.setattr(shadow, 'capture_jev_shadow_enabled', lambda *args, **kwargs: (True, 'enabled'))
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'david')
     monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
     rows = {
@@ -150,6 +154,8 @@ def test_success_telemetry_and_identifier_only_record(monkeypatch):
 
 def test_resummary_uses_pinned_threshold_and_never_revises(monkeypatch):
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    # The experiment's hard UTC stop has passed; these contracts pin the gate open.
+    monkeypatch.setattr(shadow, 'capture_jev_shadow_enabled', lambda *args, **kwargs: (True, 'enabled'))
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', 'david')
     monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
     rows = {

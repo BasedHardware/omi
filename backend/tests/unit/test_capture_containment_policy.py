@@ -339,6 +339,8 @@ def test_detector_fault_never_leaks_or_inhibits(seam, monkeypatch, caplog):
 def test_jev_success_logs_content_free_companion(seam, monkeypatch, caplog):
     monkeypatch.setenv(containment_module.MODE_ENV, 'shadow')
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    # The experiment's hard UTC stop has passed; these contracts pin the gate open.
+    monkeypatch.setattr(shadow, 'capture_jev_shadow_enabled', lambda *args, **kwargs: (True, 'enabled'))
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
     monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
     pendant, laptop = complementary_rows()
@@ -603,6 +605,8 @@ def test_shadow_sampled_budget_abstention_logs_sampled_basis(seam, monkeypatch, 
 def test_jev_companion_reports_detector_basis(seam, monkeypatch, caplog, mode):
     monkeypatch.setenv(containment_module.MODE_ENV, mode)
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    # The experiment's hard UTC stop has passed; these contracts pin the gate open.
+    monkeypatch.setattr(shadow, 'capture_jev_shadow_enabled', lambda *args, **kwargs: (True, 'enabled'))
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
     monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
     pendant, desktop = _favorable_rows()
@@ -675,6 +679,8 @@ def test_registry_and_classification_declare_the_mode():
 def test_jev_companion_fault_preserves_legacy_record_and_skips(seam, monkeypatch, caplog):
     monkeypatch.setenv(containment_module.MODE_ENV, 'shadow')
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    # The experiment's hard UTC stop has passed; these contracts pin the gate open.
+    monkeypatch.setattr(shadow, 'capture_jev_shadow_enabled', lambda *args, **kwargs: (True, 'enabled'))
     monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
     monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
     pendant, laptop = complementary_rows()

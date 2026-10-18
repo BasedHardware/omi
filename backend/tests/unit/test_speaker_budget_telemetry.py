@@ -184,7 +184,12 @@ async def test_reservations_settle_extraction_only_without_refunds(monkeypatch, 
     assert not matcher.speaker_to_person
     if outcome != 'stale':
         assert matcher._embedding_attempts[1] == 1
-    if not success:
+    if outcome in ('failed', 'encoding_failed'):
+        # A failed request consumes the audio it attempted: the identical clip
+        # is never re-sent (new provider audio drives any further attempt).
+        assert matcher._covered_audio[1] == [(0.0, 5.0)]
+    elif outcome == 'cancelled':
+        # Cancellation propagates before the failure handler: nothing consumed.
         assert not matcher._covered_audio[1]
 
 

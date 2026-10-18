@@ -24,7 +24,11 @@ Guards proven below:
   classified reason (``provider_5xx`` vs ``http_error``), and reservation
   tokens are metered per outcome;
 - the generic ``Speaker ID match failed`` line is preserved, alongside the new
-  classified ``Speaker ID embedding failed`` line with the numeric status.
+  classified ``Speaker ID embedding failed`` line with the numeric status;
+- a failed request consumes the audio it attempted: the identical doomed clip
+  is never re-sent (new provider audio drives any further attempt), pending
+  metadata is retained for recovery, and a degraded probe path through the
+  (later) socket-wide outage circuit leaves the per-voice program untouched.
 """
 
 import logging
@@ -216,8 +220,17 @@ async def test_status_ladder_doubles_and_respects_the_clock(monkeypatch, fake_cl
     _install_failure(monkeypatch, _http_status_error(status))
     matcher = _matcher(_host(_ring()))
     ladder = []
-    for _ in range(4):
-        await matcher.match(0, _queued())
+    for step in range(4):
+        # A failed query consumes its clip, so every ladder step after the
+        # first is driven by fresh provider audio, not a re-send of the same
+        # doomed request.
+        if step:
+            ring_end = 110.0 + step * 10.0
+            matcher.host.state.audio_ring_buffer.write(b'\x01\x00' * int(10.0 * RATE), ring_end)
+            segment = _queued(ring_end - 10.0, ring_end)
+        else:
+            segment = _queued()
+        await matcher.match(0, segment)
         ladder.append(matcher._embedding_retry_after[0] - fake_clock.now)
         fake_clock.advance(matcher._embedding_retry_after[0] - fake_clock.now + 0.5)
     assert ladder[0] == pytest.approx(expected)
@@ -244,9 +257,16 @@ async def test_status_ladder_caps_at_ceiling(monkeypatch, fake_clock):
     _install_failure(monkeypatch, _http_status_error(404))
     matcher = _matcher(_host(_ring()))
     # 30, 60, 120, 240, then the 5th failure would double to 480, so its
-    # window is clamped to the 300s ceiling.
-    for _ in range(5):
-        await matcher.match(0, _queued())
+    # window is clamped to the 300s ceiling. Each step presents fresh audio:
+    # the failed query consumed its clip.
+    for step in range(5):
+        if step:
+            ring_end = 110.0 + step * 10.0
+            matcher.host.state.audio_ring_buffer.write(b'\x01\x00' * int(10.0 * RATE), ring_end)
+            segment = _queued(ring_end - 10.0, ring_end)
+        else:
+            segment = _queued()
+        await matcher.match(0, segment)
         window = matcher._embedding_retry_after[0] - fake_clock.now
         fake_clock.advance(window + 0.5)
     assert matcher._embedding_failures[0] == 5
@@ -275,8 +295,10 @@ async def test_streak_survives_window_expiry_until_a_decision_publishes(monkeypa
     matcher = _matcher(_host(_ring()))
     await matcher.match(0, _queued())  # failure 1 -> 30s window
     fake_clock.advance(60.0)  # expiry is not a reset
-    # Same segment: the failed query never marked its ranges covered.
-    await matcher.match(0, _queued())  # failure 2 -> 60s window, not a fresh 30s
+    # Failure 2 arrives on fresh provider audio (the failed query consumed its
+    # clip), not a re-send of the same doomed request.
+    matcher.host.state.audio_ring_buffer.write(b'\x01\x00' * int(10.0 * RATE), 120.0)
+    await matcher.match(0, _queued(110.0, 120.0))  # failure 2 -> 60s window, not a fresh 30s
     assert matcher._embedding_failures[0] == 2
     assert matcher._embedding_retry_after[0] - fake_clock.now == pytest.approx(EMBEDDING_STATUS_BACKOFF_SECONDS * 2)
 
@@ -298,7 +320,12 @@ async def test_match_during_window_makes_no_extraction_call(monkeypatch, fake_cl
     exits_before = _counter('embedding_backoff')
     row_before = dict(matcher.diagnostics.current.data)
     fake_clock.advance(1.0)
-    await matcher.match(0, _queued())  # the storm's per-segment re-send
+    # A queued detection from a NEW provider update (the consume-on-failure
+    # change means the failed clip itself can no longer re-enter; the original
+    # program silenced exactly this in-window attempt).
+    ring_end = 120.0
+    matcher.host.state.audio_ring_buffer.write(b'\x01\x00' * int(10.0 * RATE), ring_end)
+    await matcher.match(0, _queued(110.0, ring_end))  # the storm's per-segment re-send
     assert not calls  # the doomed request was never re-sent
     assert _counter('embedding_backoff') == exits_before + 1.0
     assert _attempts('reserved') == reserved_before
@@ -416,9 +443,11 @@ async def test_degradation_signal_fires_once_per_generation(monkeypatch, fake_cl
     _install_failure(monkeypatch, _http_status_error(500))
     matcher = _matcher(_host(_ring()))
     await matcher.match(0, _queued())
-    for _ in range(3):
+    for step in range(1, 4):
         fake_clock.advance(matcher._embedding_retry_after[0] - fake_clock.now + 0.5)
-        await matcher.match(0, _queued())
+        ring_end = 110.0 + step * 10.0
+        matcher.host.state.audio_ring_buffer.write(b'\x01\x00' * int(10.0 * RATE), ring_end)
+        await matcher.match(0, _queued(ring_end - 10.0, ring_end))
     assert matcher._embedding_failures[0] == 4
     assert len(fallback_capture) == 1
     assert fallback_capture[0]['component'] == 'other'
@@ -488,7 +517,7 @@ async def test_transport_failure_logs_sanitized_type(monkeypatch, fake_clock, ca
 @pytest.mark.anyio
 async def test_exit_vocabulary_gains_exactly_one_closed_reason():
     assert 'embedding_backoff' in SPEAKER_ID_EXIT_REASONS
-    assert len(SPEAKER_ID_EXIT_REASONS) == 14
+    assert len(SPEAKER_ID_EXIT_REASONS) == 15
 
 
 @pytest.mark.anyio
