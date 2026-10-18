@@ -47,7 +47,11 @@ mobile batch renewal and live-demand handovers await it before
 making rollout decisions. Warm awaits return immediately without a read; cold
 and expired async decisions wait for the bounded read instead of silently
 choosing the legacy path. No Firestore I/O runs on the event loop.
-Expired grants are never served while refreshing. Saturation and read errors
+Expired grants are never served while refreshing. Live audio archive phase
+admission is snapshotted at first use after listen warmup and remains stable
+for that admitted connection; cohort changes affect it on reconnect. This
+avoids packet gaps during a cache refresh. Other cohort checks retain the
+60-second cache contract. Saturation and read errors
 deny membership; neither an SDK error nor the UID/document path is logged.
 
 A warm check costs **0 document reads per request**, regardless of flag count.

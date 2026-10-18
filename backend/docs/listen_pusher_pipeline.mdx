@@ -5605,7 +5605,9 @@ OIDC sync tasks and delayed inline sync work await the first/expired cohort read
 before selecting lineage routing. Dream pass and model-turn admission, pusher
 shadow finalization, mobile batch renewals and
 live-demand handovers also warm membership before deciding; warm checks make
-zero reads. Membership changes do not require a Helm env override. Seed the intended members
+zero reads. Live audio archive snapshots each phase decision for an admitted connection
+to avoid packet gaps at cache expiry; cohort changes apply to that archive
+connection on reconnect. Membership changes do not require a Helm env override. Seed the intended members
 in their original environment before deploying the cohort-aware image and its
 matching manifest/chart together. Preserve dev absent-lineage allow-all and
 the live iMessage policy. Cutover order is seed, verify, switch reads, then
