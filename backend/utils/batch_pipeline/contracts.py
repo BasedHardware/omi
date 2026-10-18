@@ -117,10 +117,21 @@ class HeldWork:
 
 @dataclass(frozen=True)
 class RecoveryWork:
-    """Non-success handoff after speech VAD and an exhausted padded ASR retry."""
+    """Non-success handoff after speech VAD and an exhausted or skipped padded ASR retry."""
 
     segment_id: str
     padded_retry_empty: bool = False
+    padded_retry: str | None = None
+
+    def __post_init__(self):
+        if self.padded_retry is None and self.padded_retry_empty:
+            object.__setattr__(self, 'padded_retry', 'empty')
+        elif self.padded_retry == 'empty' and not self.padded_retry_empty:
+            object.__setattr__(self, 'padded_retry_empty', True)
+        if self.padded_retry not in {None, 'empty', 'skipped_oversize'}:
+            raise ValueError('unsupported padded retry evidence')
+        if self.padded_retry_empty and self.padded_retry != 'empty':
+            raise ValueError('conflicting padded retry evidence')
 
 
 class BatchWorker(Protocol):

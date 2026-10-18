@@ -5452,9 +5452,14 @@ volume before any future enablement. There is no new client polling loop.
 
 The default-off `BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED` permits a
 `no_recoverable_speech` result only after positive strict VAD, a GPU padded retry
-that returned empty, and an empty independent multilingual recovery. The worker
-persists padded-empty evidence under its lease; CPU recovery pins the paid
-provider before dispatch. This terminal empty span is distinct from silence,
+that actually ran and returned empty, and an empty independent multilingual
+recovery. The worker persists `worker_empty_evidence.padded_retry=empty` under
+its lease only when the padded retry ran; units exceeding `min(120,
+max_padded_seconds)` (>116s) skip the GPU padded retry and persist
+`padded_retry=skipped_oversize` (`padded_retry_empty=False`), so CPU recovery
+still attempts strict VAD / multilingual STT on them without terminal-completing
+an empty multilingual response. CPU recovery pins the paid provider before
+dispatch. This terminal empty span is distinct from silence,
 adds no transcript words and no transcription usage, and releases successful
 siblings through normal projection/client completion. The encrypted artifact
 retains VAD and closed exhaustion evidence; correctness metrics count its captured

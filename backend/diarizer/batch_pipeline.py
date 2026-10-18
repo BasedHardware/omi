@@ -132,6 +132,16 @@ def validate_words(words, duration):
     return result
 
 
+def padded_retry_seconds(samples) -> float:
+    left = 2 * SAMPLE_RATE
+    right = max(2 * SAMPLE_RATE, 8 * SAMPLE_RATE - len(samples) - left)
+    return (len(samples) + left + right) / SAMPLE_RATE
+
+
+def padded_retry_fits(samples, max_padded_seconds: float) -> bool:
+    return padded_retry_seconds(samples) <= min(120, max_padded_seconds)
+
+
 def crop_model_vad_spans(spans, duration):
     """Intersect frame-centered model intervals with the real captured buffer.
 
@@ -308,7 +318,14 @@ class PipelineWorker:
                     and stage == 'assemble_words'
                     and self.recover_words is not None
                 ):
-                    results.append(RecoveryWork(item.segment_id, padded_retry_empty=True))
+                    state = states.get(item.segment_id, {})
+                    results.append(
+                        RecoveryWork(
+                            item.segment_id,
+                            padded_retry_empty=bool(state.get('padded_retry_empty')),
+                            padded_retry=state.get('padded_retry'),
+                        )
+                    )
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(
@@ -431,6 +448,7 @@ class PipelineWorker:
                     # with a second hypothesis or publish a fabricated silence.
                     reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
                     stage = 'asr_recovery'
+                    fits_retry = padded_retry_fits(state['samples'], self.config.max_padded_seconds)
                     if cap_dispatch_enabled():
                         recovered = self.recover_words(
                             state['samples'],
@@ -438,15 +456,30 @@ class PipelineWorker:
                             before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
                             after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
                         )
-                        if recovered is None:
+                        if recovered is None and (
+                            fits_retry
+                            or not (
+                                reason == 'empty_asr'
+                                and empty_asr_recovery_enabled()
+                                or reason in {'empty_asr', 'no_owned_words'}
+                                and empty_asr_disposition_enabled()
+                            )
+                        ):
                             held.add(item.segment_id)
                             results.append(HeldWork(item.segment_id))
                             continue
-                        words = validate_words(recovered, duration)
                     else:
-                        words = validate_words(
-                            self.recover_words(state['samples'], self.config.max_padded_seconds), duration
-                        )
+                        recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                    if recovered is None or not fits_retry:
+                        words = []
+                        state['padded_retry'] = 'skipped_oversize'
+                        state['padded_retry_empty'] = False
+                        recovery_outcome = 'skipped_oversize'
+                    else:
+                        words = validate_words(recovered, duration)
+                        state['padded_retry'] = 'recovered' if words else 'empty'
+                        state['padded_retry_empty'] = not words
+                        recovery_outcome = 'recovered' if words else 'empty'
                     recovery_records.append(
                         (
                             item.segment_id,
@@ -458,6 +491,7 @@ class PipelineWorker:
                             state['window_min_samples'],
                             state['window_max_samples'],
                             round(state['speech_seconds'] * SAMPLE_RATE),
+                            recovery_outcome,
                         )
                     )
                     stage = 'assemble_words'
@@ -528,14 +562,29 @@ class PipelineWorker:
                 fail(item, exc, stage)
         # Emit only strings/integers after every item exception handler has exited.
         # Handler error printers must not inherit the private worker exception.
-        for segment_id, reason, samples, owned, asr_words, clips, shortest, longest, speech in recovery_records:
+        for (
+            segment_id,
+            reason,
+            samples,
+            owned,
+            asr_words,
+            clips,
+            shortest,
+            longest,
+            speech,
+            recovery_outcome,
+        ) in recovery_records:
             try:
                 record_fallback(
                     component='stt_selection',
                     from_mode='batch',
                     to_mode='batch',
                     reason='other',
-                    outcome='recovered' if owned else 'exhausted',
+                    outcome=(
+                        'recovered'
+                        if owned
+                        else ('degraded' if recovery_outcome == 'skipped_oversize' else 'exhausted')
+                    ),
                 )
                 logger.info(
                     'event=batch_asr_recovery segment_id=%s reason=%s samples=%d owned_words=%d outcome=%s '
@@ -544,7 +593,7 @@ class PipelineWorker:
                     reason,
                     samples,
                     owned,
-                    'recovered' if owned else 'empty',
+                    recovery_outcome,
                     asr_words,
                     clips,
                     shortest,
