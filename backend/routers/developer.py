@@ -1563,6 +1563,7 @@ def get_conversations(
         cached = external_lists.cached_external_list(request, response, auth, locals())
         if cached is not None:
             status = 200
+            returned_count = len(json.loads(bytes(cached.body)))
             return cached
         budget = external_lists.developer_conversation_offset_budget(request, response, offset)
         budget_kwargs = {'budget': budget} if budget is not None else {}

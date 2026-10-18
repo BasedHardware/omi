@@ -16,7 +16,7 @@ from utils.mcp_server.cursors import encode_cursor
 from utils.mcp_server.handlers import memories as memory_handlers
 from utils.observability.external_lists import ExternalListMetricsMiddleware
 from utils.other.list_budget import ListReadBudget
-from tests.unit.test_external_list_cache import FakeRedis
+from tests.unit.test_external_list_cache import FakeRedis, immediate_population
 
 PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/action-items', '/v1/mcp/memories']
 
@@ -24,6 +24,7 @@ PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/ac
 @pytest.fixture
 def routes(monkeypatch):
     storage = FakeRedis()
+    monkeypatch.setattr(cache, 'submit_with_context', immediate_population)
     monkeypatch.setattr(cache, '_client', storage)
     app = FastAPI()
     app.include_router(developer.router)
@@ -267,3 +268,28 @@ def test_mcp_signed_continuations_bypass_cache_authority_reuse(routes):
         assert client.get(PATHS[3], params={'sort': 'updated_desc', 'cursor': cursor}).status_code == 200
     assert calls.mcp_memories.call_count == 2
     assert not storage.entries
+
+
+@pytest.mark.parametrize('populated', [False, True])
+def test_conversation_cache_hit_retains_successful_audit_count(routes, monkeypatch, populated):
+    client, state, calls, _ = routes
+    if populated:
+        state.rows = [
+            {
+                'id': 'synthetic',
+                'started_at': None,
+                'finished_at': None,
+                'created_at': datetime(2026, 10, 18, tzinfo=timezone.utc),
+                'structured': {'title': 'Offline', 'overview': 'Synthetic', 'category': 'work'},
+            }
+        ]
+    audit = Mock()
+    monkeypatch.setattr(developer, '_audit_developer_read', audit)
+    first = client.get(PATHS[0])
+    hit = client.get(PATHS[0])
+    assert first.status_code == hit.status_code == 200
+    assert first.content == hit.content and first.headers == hit.headers
+    assert calls.cards.call_count == 1
+    assert audit.call_count == 2
+    assert [call.kwargs['returned_count'] for call in audit.call_args_list] == [int(populated)] * 2
+    assert all(call.kwargs['status'] == 200 for call in audit.call_args_list)

@@ -386,8 +386,8 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
-app.add_middleware(DesktopProxyDeadlineMiddleware)
 app.add_middleware(ExternalListMetricsMiddleware)
+app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
 def _run_fsr_loop(loop_name, callback, interval_seconds):

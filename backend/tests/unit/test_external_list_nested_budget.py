@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from database import mcp_conversation_pages, conversations
-from models.memories import MemoryDB
 from models.product_memory import MemoryItem
 from utils.memory.memory_service import MemoryService
 from utils.memory import read_resilience
@@ -291,24 +290,31 @@ def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatc
 
 
 @pytest.mark.parametrize('use_cursor', [False, True])
-def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_cursor):
+@pytest.mark.parametrize('activity_count', [0, 4, 100])
+def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_cursor, activity_count):
     now = datetime(2026, 10, 18, tzinfo=timezone.utc)
-    rows = [
-        MemoryDB(
-            id=f'm-{i}',
-            uid='owner',
-            content='Focused on email' if i < 100 else f'Durable fact {i}',
-            category='work',
-            created_at=now - timedelta(seconds=i),
-            updated_at=now - timedelta(seconds=i),
-        )
+    rows = {
+        f'users/owner/memories/m-{i}': {
+            'id': f'm-{i}',
+            'content': 'Focused on email' if i < activity_count else f'Durable fact {i}',
+            'category': 'work',
+            'created_at': now - timedelta(seconds=i),
+            'updated_at': now - timedelta(seconds=i),
+            'data_protection_level': 'standard',
+            'reviewed': False,
+        }
         for i in range(140)
-    ]
+    }
+    store = Store(rows)
+    service = MemoryService(db_client=store)
+    monkeypatch.setattr(service._canonical, 'read', lambda *a, **k: [])
+    ticks = iter(range(1000))
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance(clock=lambda: next(ticks)))
     calls = []
 
     def read(uid, *, limit, offset, budget=None):
         calls.append((limit, offset, budget))
-        return rows[offset : offset + limit]
+        return service.read(uid, limit=limit, offset=offset, budget=budget)
 
     monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
     position = {'offset': 1}
@@ -326,20 +332,26 @@ def test_scoring_compatibility_activity_prefix_preserves_page(monkeypatch, use_c
         if use_cursor
         else {'offset': 1}
     )
-    kwargs = dict(limit=25, sort='scoring_desc', max_scan=200, cursor_kind='test', **pagination)
+    kwargs = dict(limit=25, sort='scoring_desc', max_scan=5000, cursor_kind='test', **pagination)
     old = handlers.memories_page_core('owner', **kwargs)
-    assert len(calls) == 2
+    prior_calls, prior_reads = list(calls), store.physical
+    assert prior_reads == (1100 if activity_count == 100 else 500)
     calls.clear()
+    store.physical = 0
     allowance = budget(1000)
     new = handlers.memories_page_core('owner', budget=allowance, **kwargs)
     assert (
         [row['id'] for row in new['memories']]
         == [row['id'] for row in old['memories']]
-        == [f'm-{i}' for i in range(101, 126)]
+        == [f'm-{i}' for i in range(activity_count + 1, activity_count + 26)]
     )
     assert new['has_more'] == old['has_more'] is True
     assert not new['scan_truncated'] and not old['scan_truncated']
-    assert calls == [(200, 0, allowance)]
+    assert calls == prior_calls
+    assert all(call[2] is None for call in calls)
+    assert store.physical == prior_reads
+    assert allowance.docs_scanned == 0 and not allowance.truncated
+    print(f'scoring activity={activity_count} cursor={use_cursor} prior/on physical reads={prior_reads}')
 
 
 def test_card_offsets_stop_before_rpc_and_small_pages_charge_skips():

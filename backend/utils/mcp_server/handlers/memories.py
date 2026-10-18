@@ -227,6 +227,11 @@ def memories_page_core(
     tool uses the smaller MCP cap. Callers must authorize the read grant
     first — this function performs no product authorization.
     """
+    # The optimization targets global-sort scans. Scoring compatibility pages
+    # retain the released incremental collector and its resilience boundary;
+    # even a directly supplied budget must not force a shallow page to 5000.
+    if sort not in {'created_desc', 'updated_desc', 'manual_first'}:
+        budget = None
     valid_categories = list(categories or [])
     filters = {
         "categories": sorted(valid_categories),
@@ -268,19 +273,9 @@ def memories_page_core(
         # operation and slice the materialized window locally.
         window = None
         if budget is not None:
-            needs_full_scan = (
-                sort in {'created_desc', 'updated_desc', 'manual_first'}
-                or reviewed is not None
-                or manually_added is not None
-                or updated_after is not None
-                or not include_sensitive
-                or not include_activity
-                or bool(valid_categories)
-            )
-            read_limit = max_scan if needs_full_scan else min(max_scan, offset + limit + 1)
             window = [
                 memory.model_dump(mode='json')
-                for memory in MemoryService(db_client=db).read(uid, limit=read_limit, offset=0, budget=budget)
+                for memory in MemoryService(db_client=db).read(uid, limit=max_scan, offset=0, budget=budget)
             ]
         result = collect_filtered_memories(
             lambda batch_offset, batch_limit: (

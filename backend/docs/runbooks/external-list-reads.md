@@ -40,7 +40,12 @@ opaque cache key is authenticated as associated data. Neither identity nor query
 Redis key names or metric labels. Entries have at most 256 KiB of body and 8 KiB of envelope allowance;
 larger responses are served normally. Entries expire after 10 seconds; there is no process-local payload
 cache. Global memory/eviction remains owned by Redis. Concurrent misses can duplicate origin work;
-there is no lock or single-flight guarantee.
+there is no lock or single-flight guarantee. Successful eligible responses submit short cache
+populations with context to the existing db pool without awaiting them. A nonblocking 32-slot
+process-local bound covers queued/running populations (at most 8 MiB of eligible bodies). Saturation
+or submission failure skips population; errors, truncation, oversized or expired bodies never queue.
+Future completion, failure or cancellation releases the slot. Workers recheck the query-start expiry
+after queue delay; queueing never extends freshness or delays the completed origin response.
 
 **Up to 10 seconds of stale list data after any user write is accepted**, including deletes, edits,
 locked-state changes and writes from other clients. There is no write invalidation. The expiry is fixed
@@ -56,12 +61,16 @@ through the shared fallback telemetry without logging payloads or exceptions.
 
 ## Read bounds and client compatibility
 
-For MCP's non-keyset compatibility path (including default `created_desc`), the enabled lever reads
-one mixed canonical/historical window instead of repeatedly rereading prefixes of 100 through 5000.
+For MCP's global-sort compatibility paths (`created_desc`, `manual_first`, non-keyset `updated_desc`),
+the enabled lever reads one mixed canonical/historical window instead of repeatedly rereading prefixes
+of 100 through 5000.
 The same `ListReadBudget` reaches canonical scans, dual historical index windows, status batches, and
 hydration. The existing 5000 outer window, filtering, ordering, legacy rows, array shape and cursor
 fingerprints remain. Local slicing/filtering issues no further source reads. One operation also avoids
 exhausting the memory resilience whole-operation retry allowance across successful batches.
+Non-global `scoring_desc` compatibility pages (offsets or old offset cursors) keep the released
+incremental collector with no new shared budget, including when the core receives a budget directly.
+This avoids reading 5000 raw rows for shallow pages and continues past activity-only batches.
 The existing scoring/updated keyset branch retains its own bounded paging and retry behavior.
 
 Budget exhaustion sets both the existing `X-Scan-Truncated: true` and shared

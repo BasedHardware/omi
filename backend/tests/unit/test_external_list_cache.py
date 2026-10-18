@@ -1,5 +1,7 @@
 """Hermetic cache boundaries: encrypted bytes, isolation, age, outages, middleware."""
 
+from concurrent.futures import Future
+from threading import BoundedSemaphore
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,6 +11,7 @@ from fastapi.testclient import TestClient
 from routers import metrics
 from utils import external_list_reads as cache
 from utils.metrics import metrics_response
+from utils.other.timeout import TimeoutMiddleware
 from utils.observability.external_lists import EXTERNAL_LIST_HTTP_TOTAL, ExternalListMetricsMiddleware, ROUTES
 
 
@@ -31,6 +34,45 @@ class FakeRedis:
             raise ConnectionError('offline')
         self.entries[key] = value
         self.expiries[key] = int(cache.time.time() * 1000) + px
+
+
+class PendingPopulations:
+    """Explicit executor admission/completion control; no worker or sleeps."""
+
+    def __init__(self):
+        self.jobs = []
+
+    def __call__(self, executor, fn, *args):
+        assert executor is cache.db_executor
+        future = Future()
+        self.jobs.append((future, fn, args))
+        return future
+
+    def drain(self):
+        for future, fn, args in self.jobs:
+            if future.done():
+                continue
+            try:
+                future.set_result(fn(*args))
+            except Exception as exc:
+                future.set_exception(exc)
+
+
+def immediate_population(executor, fn, *args):
+    queue = PendingPopulations()
+    future = queue(executor, fn, *args)
+    queue.drain()
+    return future
+
+
+@pytest.fixture
+def populations(monkeypatch):
+    queue = PendingPopulations()
+    monkeypatch.setattr(cache, 'submit_with_context', queue)
+    monkeypatch.setattr(cache, '_population_slots', BoundedSemaphore(cache.MAX_CACHE_POPULATIONS))
+    yield queue
+    for future, _, _ in queue.jobs:
+        future.cancel()
 
 
 @pytest.fixture
@@ -210,3 +252,128 @@ def test_real_metrics_endpoint_and_cloud_run_export_filter(monkeypatch):
     assert EXTERNAL_LIST_HTTP_TOTAL._labelnames == ('route', 'outcome')
     config = (Path(__file__).resolve().parents[2] / 'deploy/cloud_run_gmp_sidecar.yaml').read_text()
     assert 'port: 9090' in config and 'path: /metrics' in config and 'regex: omi_.*' in config
+
+
+def test_http_metrics_observe_timeout_response_outside_timeout_middleware(monkeypatch):
+    monkeypatch.delenv('OMI_EXTERNAL_LIST_METRICS_ENABLED', raising=False)
+    path = '/v1/mcp/memories'
+    app = FastAPI()
+    app.add_middleware(TimeoutMiddleware, methods_timeout={'GET': 0})
+    app.add_middleware(ExternalListMetricsMiddleware)
+
+    @app.get(path)
+    async def expired_list():
+        raise AssertionError('The expired middleware deadline must answer before dispatch')
+
+    metric = EXTERNAL_LIST_HTTP_TOTAL.labels(route=path, outcome='server_error')
+    before = metric._value.get()
+    assert TestClient(app).get(path).status_code == 504
+    assert metric._value.get() == before + 1
+
+
+@pytest.mark.parametrize(
+    'offset,limit,expected', [(-10, -5, (0, 1)), (-1, 0, (0, 1)), (5, 99999, (5, 200)), (7, 25, (7, 25))]
+)
+def test_sensitive_read_page_clamp(offset, limit, expected):
+    assert cache.clamp_list_page(offset, limit, 200) == expected
+
+
+def test_completed_response_does_not_wait_for_cache_population(storage, populations):
+    app = FastAPI()
+    app.router.route_class = cache.ExternalListCacheRoute
+    path = '/v1/dev/user/memories'
+
+    @app.get(path)
+    def route(request: Request):
+        hit = cache.cached_list_response(request, Response(), uid='owner', context=SimpleNamespace(), query={})
+        return hit if hit is not None else [{'content': 'private fact'}]
+
+    client = TestClient(app)
+    response = client.get(path)
+    assert response.status_code == 200 and response.json() == [{'content': 'private fact'}]
+    assert len(populations.jobs) == 1 and not populations.jobs[0][0].done()
+    assert not storage.entries  # Executor admission has not started the writer.
+    populations.drain()
+    assert client.get(path).content == response.content
+    assert len(populations.jobs) == 1
+    assert storage.entries
+
+
+@pytest.mark.parametrize('completion', ['success', 'failure', 'cancel'])
+def test_population_saturation_and_all_terminal_states_release_slots(storage, populations, completion):
+    request, _ = lookup()
+    entry = request.state.external_list_cache_entry
+    response = Response(b'x' * cache.MAX_BODY_BYTES)
+    for _ in range(cache.MAX_CACHE_POPULATIONS + 1):
+        cache._queue_population(entry, response)
+    assert len(populations.jobs) == 32  # Hard bound: at most 8 MiB of eligible bodies.
+    first = populations.jobs[0][0]
+    if completion == 'success':
+        first.set_result(None)
+    elif completion == 'failure':
+        first.set_exception(RuntimeError('offline synthetic writer error'))
+    else:
+        assert first.cancel()
+    cache._queue_population(entry, response)
+    assert len(populations.jobs) == 33  # Exactly one terminal job freed one slot.
+    cache._queue_population(entry, response)
+    assert len(populations.jobs) == 33
+
+
+def test_submission_failure_is_open_and_releases_slot(storage, populations, monkeypatch):
+    request, _ = lookup()
+    entry = request.state.external_list_cache_entry
+    monkeypatch.setattr(cache, '_population_slots', BoundedSemaphore(1))
+
+    def reject(*args):
+        raise RuntimeError('offline executor admission failure')
+
+    monkeypatch.setattr(cache, 'submit_with_context', reject)
+    cache._queue_population(entry, Response(b'[]'))
+    monkeypatch.setattr(cache, 'submit_with_context', populations)
+    cache._queue_population(entry, Response(b'[]'))
+    assert len(populations.jobs) == 1
+    populations.drain()
+    assert lookup()[1].body == b'[]'
+
+
+@pytest.mark.parametrize(
+    'ineligible', ['error', 'shared_truncated', 'scan_truncated', 'oversized', 'wall_expired', 'age_expired']
+)
+def test_ineligible_population_skips_executor_admission(storage, populations, ineligible):
+    request, _ = lookup()
+    entry = request.state.external_list_cache_entry
+    response = Response(b'[]')
+    if ineligible == 'error':
+        response.status_code = 500
+    elif ineligible == 'shared_truncated':
+        response.headers['X-Omi-List-Truncated'] = 'true'
+    elif ineligible == 'scan_truncated':
+        response.headers['X-Scan-Truncated'] = 'true'
+    elif ineligible == 'oversized':
+        response = Response(b'x' * (cache.MAX_BODY_BYTES + 1))
+    elif ineligible == 'wall_expired':
+        entry.expires_at = cache.time.time() - 1
+    else:
+        entry.started = cache.time.monotonic() - cache.TTL_SECONDS
+    cache._queue_population(entry, response)
+    assert not populations.jobs and not storage.entries
+
+
+def test_queued_population_preserves_expiry_and_drops_expired_work(storage, populations, monkeypatch):
+    now = [1000.0]
+    mono = [20.0]
+    monkeypatch.setattr(cache.time, 'time', lambda: now[0])
+    monkeypatch.setattr(cache.time, 'monotonic', lambda: mono[0])
+    request, _ = lookup()
+    cache._queue_population(request.state.external_list_cache_entry, Response(b'[]'))
+    now[0] += 7
+    mono[0] += 7
+    populations.drain()
+    assert list(storage.expiries.values()) == [1010000]
+    request, _ = lookup(query={'limit': 26})
+    cache._queue_population(request.state.external_list_cache_entry, Response(b'[]'))
+    now[0] += 11
+    mono[0] += 11
+    populations.drain()
+    assert len(storage.entries) == 1  # The expired queued writer added nothing.

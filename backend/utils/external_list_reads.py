@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import time
+from concurrent.futures import Future
 from dataclasses import dataclass
+from threading import BoundedSemaphore
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -15,7 +17,7 @@ from pydantic import ValidationError
 
 from database import redis_db
 from utils.encryption import derive_key
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, submit_with_context
 from utils.mcp_server.cursors import decode_cursor
 from utils.mcp_server.errors import ToolExecutionError
 from utils.observability.external_lists import EXTERNAL_LIST_CACHE_TOTAL
@@ -26,6 +28,8 @@ logger = logging.getLogger(__name__)
 TTL_SECONDS = 10
 MAX_BODY_BYTES = 256 * 1024
 MAX_ENTRY_BYTES = MAX_BODY_BYTES + 8192
+MAX_CACHE_POPULATIONS = 32
+_population_slots = BoundedSemaphore(MAX_CACHE_POPULATIONS)
 _client: Any = None
 _HEADERS = frozenset(
     {
@@ -66,15 +70,24 @@ class _Entry:
     expires_at: float
     started: float
 
+    def eligible(self, response: Response) -> bool:
+        return (
+            response.status_code == 200
+            and not any(
+                response.headers.get(header, '').lower() == 'true'
+                for header in ('x-omi-list-truncated', 'x-scan-truncated')
+            )
+            and len(response.body) <= MAX_BODY_BYTES
+            and time.monotonic() - self.started < TTL_SECONDS
+            and time.time() < self.expires_at
+            and lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED')
+        )
+
     def store(self, response: Response) -> None:
-        if response.status_code != 200 or any(
-            response.headers.get(header, '').lower() == 'true'
-            for header in ('x-omi-list-truncated', 'x-scan-truncated')
-        ):
+        # Recheck after queue delay; the deadline still belongs to query start.
+        if not self.eligible(response):
             return
         body = bytes(response.body)
-        if len(body) > MAX_BODY_BYTES or time.monotonic() - self.started >= TTL_SECONDS:
-            return
         try:
             envelope = json.dumps(
                 {
@@ -152,6 +165,30 @@ def cached_list_response(
     return None
 
 
+def _queue_population(entry: _Entry, response: Response) -> None:
+    # Never let optional population queue unbounded response bodies on the
+    # shared db pool: 32 running/queued bodies retain at most 8 MiB per process.
+    if not entry.eligible(response):
+        return
+    slots = _population_slots
+    if not slots.acquire(blocking=False):
+        _fail_open('cache_write_saturated')
+        return
+    try:
+        future = submit_with_context(db_executor, entry.store, response)
+    except Exception:
+        slots.release()
+        _fail_open('cache_write_submit')
+        return
+
+    def completed(done: Future) -> None:
+        slots.release()
+        if not done.cancelled() and done.exception() is not None:
+            _fail_open('cache_write')
+
+    future.add_done_callback(completed)
+
+
 class ExternalListCacheRoute(APIRoute):
     """Capture bytes only after FastAPI has applied response-model validation."""
 
@@ -162,7 +199,7 @@ class ExternalListCacheRoute(APIRoute):
             response = await original(request)
             entry = getattr(request.state, 'external_list_cache_entry', None)
             if entry is not None:
-                await run_blocking(db_executor, entry.store, response)
+                _queue_population(entry, response)
             return response
 
         return handler
