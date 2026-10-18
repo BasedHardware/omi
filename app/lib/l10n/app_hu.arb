@@ -3588,6 +3588,8 @@
     "phoneRecordingBlockedByPendantBatch": "Állítsa le a Transcribe Later módot a medálján, mielőtt telefonnal rögzítene.",
     "captureNotTranscribing": "Nincs átírás",
     "captureAudioSavedTranscribesLater": "Hang mentve, később lesz átírva",
+    "captureBannerTryReconnect": "Próbálja újra a csatlakozást",
+    "captureBannerRetrySync": "Szinkronizálás újrapróbálása",
     "captureBannerWhatsWrong": "Mi történik?",
     "captureBannerDismiss": "Elrejtés",
     "captureWedgeBleExplanation": "Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.",

@@ -11077,6 +11077,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'صدا ذخیره شد، بعداً رونویسی می‌شود';
 
   @override
+  String get captureBannerTryReconnect => 'تلاش برای اتصال مجدد';
+
+  @override
+  String get captureBannerRetrySync => 'تلاش برای همگام‌سازی مجدد';
+
+  @override
   String get captureBannerWhatsWrong => 'چه اتفاقی افتاده است؟';
 
   @override

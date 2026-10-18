@@ -11119,6 +11119,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ನಂತರ ಪ್ರತಿಲೇಖನ';
 
   @override
+  String get captureBannerTryReconnect => 'ಮರುಸಂಪರ್ಕಿಸಲು ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get captureBannerRetrySync => 'ಸಿಂಕ್ ಅನ್ನು ಮರುಪ್ರಯತ್ನಿಸಿ';
+
+  @override
   String get captureBannerWhatsWrong => 'ಏನಾಗುತ್ತಿದೆ?';
 
   @override

@@ -11136,6 +11136,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio salvat, transcris mai târziu';
 
   @override
+  String get captureBannerTryReconnect => 'Încearcă reconectarea';
+
+  @override
+  String get captureBannerRetrySync => 'Reîncearcă sincronizarea';
+
+  @override
   String get captureBannerWhatsWrong => 'Ce se întâmplă?';
 
   @override

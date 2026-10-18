@@ -10915,6 +10915,8 @@
     "phoneRecordingBlockedByPendantBatch": "Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.",
     "captureNotTranscribing": "Hindi nagta-transcribe",
     "captureAudioSavedTranscribesLater": "Na-save ang audio, ita-transcribe mamaya",
+    "captureBannerTryReconnect": "Subukang ikonekta muli",
+    "captureBannerRetrySync": "Subukang i-sync muli",
     "captureBannerWhatsWrong": "Anong nangyayari?",
     "captureBannerDismiss": "Isara",
     "captureWedgeBleExplanation": "Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.",

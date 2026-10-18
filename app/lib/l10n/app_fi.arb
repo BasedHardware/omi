@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella.",
     "captureNotTranscribing": "Ei litterointia",
     "captureAudioSavedTranscribesLater": "Ääni tallennettu, litteroidaan myöhemmin",
+    "captureBannerTryReconnect": "Yritä yhdistää uudelleen",
+    "captureBannerRetrySync": "Yritä synkronointia uudelleen",
     "captureBannerWhatsWrong": "Mitä on meneillään?",
     "captureBannerDismiss": "Hylkää",
     "captureWedgeBleExplanation": "Omi-laitteeseen muodostettu Bluetooth-yhteys on pysähtynyt, joten ääni ei päädy sovellukseen. Omi jatkaa tallentamista laitteella ja synkronoi, kun yhteys palaa. Uudelleenyrittäminen yhdistää linkin uudelleen; jos se epäonnistuu jatkuvasti, tarkista laittesi kohdasta Asetukset > Laite.",

@@ -11113,6 +11113,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аўдыя захавана, транскрыпцыя пазней';
 
   @override
+  String get captureBannerTryReconnect => 'Спробаваць падключыць зноў';
+
+  @override
+  String get captureBannerRetrySync => 'Паўтарыць сінхранізацыю';
+
+  @override
   String get captureBannerWhatsWrong => 'Што адбываецца?';
 
   @override

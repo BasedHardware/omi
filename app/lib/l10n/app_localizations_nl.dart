@@ -11113,6 +11113,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio opgeslagen, later getranscribeerd';
 
   @override
+  String get captureBannerTryReconnect => 'Opnieuw proberen te verbinden';
+
+  @override
+  String get captureBannerRetrySync => 'Synchronisatie opnieuw proberen';
+
+  @override
   String get captureBannerWhatsWrong => 'Wat is er aan de hand?';
 
   @override

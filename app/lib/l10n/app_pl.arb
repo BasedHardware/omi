@@ -3527,6 +3527,8 @@
     "phoneRecordingBlockedByPendantBatch": "Zatrzymaj Transcribe Later na wisiorku, zanim zaczniesz nagrywać telefonem.",
     "captureNotTranscribing": "Brak transkrypcji",
     "captureAudioSavedTranscribesLater": "Dźwięk zapisany, transkrypcja później",
+    "captureBannerTryReconnect": "Spróbuj ponownie połączyć",
+    "captureBannerRetrySync": "Ponów synchronizację",
     "captureBannerWhatsWrong": "Co się dzieje?",
     "captureBannerDismiss": "Ukryj",
     "captureWedgeBleExplanation": "Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.",

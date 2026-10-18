@@ -11164,6 +11164,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ஆடியோ சேமிக்கப்பட்டது, பின்னர் எழுத்தாக்கம்';
 
   @override
+  String get captureBannerTryReconnect => 'மீண்டும் இணைக்க முயற்சிக்கவும்';
+
+  @override
+  String get captureBannerRetrySync => 'ஒத்திசைவை மீண்டும் முயற்சிக்கவும்';
+
+  @override
   String get captureBannerWhatsWrong => 'என்ன நடக்கிறது?';
 
   @override

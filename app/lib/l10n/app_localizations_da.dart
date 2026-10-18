@@ -11071,6 +11071,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Lyd gemt, transskriberes senere';
 
   @override
+  String get captureBannerTryReconnect => 'Prøv at forbinde igen';
+
+  @override
+  String get captureBannerRetrySync => 'Prøv synkronisering igen';
+
+  @override
   String get captureBannerWhatsWrong => 'Hvad foregår der?';
 
   @override

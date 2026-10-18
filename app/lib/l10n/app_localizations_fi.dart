@@ -11086,6 +11086,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
 
   @override
+  String get captureBannerTryReconnect => 'Yritä yhdistää uudelleen';
+
+  @override
+  String get captureBannerRetrySync => 'Yritä synkronointia uudelleen';
+
+  @override
   String get captureBannerWhatsWrong => 'Mitä on meneillään?';
 
   @override

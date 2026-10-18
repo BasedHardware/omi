@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "在用手机录音之前，请先停止吊坠上的“稍后转录”。",
     "captureNotTranscribing": "未在转录",
     "captureAudioSavedTranscribesLater": "音频已保存，稍后转录",
+    "captureBannerTryReconnect": "尝试重新连接",
+    "captureBannerRetrySync": "重试同步",
     "captureBannerWhatsWrong": "怎么了？",
     "captureBannerDismiss": "忽略",
     "captureWedgeBleExplanation": "与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。",

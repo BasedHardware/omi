@@ -11107,6 +11107,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аудіо збережено, транскрипція пізніше';
 
   @override
+  String get captureBannerTryReconnect => 'Спробувати підключити знову';
+
+  @override
+  String get captureBannerRetrySync => 'Повторити синхронізацію';
+
+  @override
   String get captureBannerWhatsWrong => 'Що відбувається?';
 
   @override

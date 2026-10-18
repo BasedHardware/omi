@@ -10900,6 +10900,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
 
   @override
+  String get captureBannerTryReconnect => '尝试重新连接';
+
+  @override
+  String get captureBannerRetrySync => '重试同步';
+
+  @override
   String get captureBannerWhatsWrong => '怎么了？';
 
   @override

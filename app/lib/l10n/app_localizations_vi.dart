@@ -11084,6 +11084,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Đã lưu âm thanh, phiên âm sau';
 
   @override
+  String get captureBannerTryReconnect => 'Thử kết nối lại';
+
+  @override
+  String get captureBannerRetrySync => 'Thử đồng bộ lại';
+
+  @override
   String get captureBannerWhatsWrong => 'Chuyện gì đang xảy ra?';
 
   @override

@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Hentikan Transcribe Later pada loket anda sebelum merakam dengan telefon.",
     "captureNotTranscribing": "Tiada transkripsi",
     "captureAudioSavedTranscribesLater": "Audio disimpan, ditranskripsi kemudian",
+    "captureBannerTryReconnect": "Cuba sambung semula",
+    "captureBannerRetrySync": "Cuba segerak semula",
     "captureBannerWhatsWrong": "Apa yang berlaku?",
     "captureBannerDismiss": "Tutup",
     "captureWedgeBleExplanation": "Pautan Bluetooth ke Omi anda tersekat, jadi audio tidak sampai ke aplikasi. Omi terus merakam pada peranti dan akan disegerakkan apabila pautan pulih. Mencuba semula menyambung semula pautan; jika ia terus gagal, semak peranti anda di Tetapan > Peranti.",

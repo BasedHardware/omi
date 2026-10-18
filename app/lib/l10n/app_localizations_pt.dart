@@ -11100,6 +11100,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Áudio salvo, transcrição depois';
 
   @override
+  String get captureBannerTryReconnect => 'Tentar reconectar';
+
+  @override
+  String get captureBannerRetrySync => 'Repetir sincronização';
+
+  @override
   String get captureBannerWhatsWrong => 'O que está acontecendo?';
 
   @override

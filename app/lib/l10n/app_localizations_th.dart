@@ -11022,6 +11022,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'บันทึกเสียงแล้ว จะถอดความภายหลัง';
 
   @override
+  String get captureBannerTryReconnect => 'ลองเชื่อมต่อใหม่';
+
+  @override
+  String get captureBannerRetrySync => 'ลองซิงค์อีกครั้ง';
+
+  @override
   String get captureBannerWhatsWrong => 'เกิดอะไรขึ้น';
 
   @override

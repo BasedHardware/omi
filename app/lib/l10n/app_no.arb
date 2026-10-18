@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Stopp Transcribe Later på anhenget ditt før du tar opp med telefonen.",
     "captureNotTranscribing": "Transkriberer ikke",
     "captureAudioSavedTranscribesLater": "Lyd lagret, transkriberes senere",
+    "captureBannerTryReconnect": "Prøv å koble til på nytt",
+    "captureBannerRetrySync": "Prøv synkronisering igjen",
     "captureBannerWhatsWrong": "Hva skjer?",
     "captureBannerDismiss": "Avvis",
     "captureWedgeBleExplanation": "Bluetooth-koblingen til Omi-en din har stanset, så lyden når ikke fram til appen. Omi fortsetter å ta opp på enheten og synkroniseres når koblingen er tilbake. Prøv igjen kobler til igjen; hvis det fortsetter å feile, sjekk enheten din under Innstillinger > Enhet.",

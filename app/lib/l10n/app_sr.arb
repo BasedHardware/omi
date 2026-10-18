@@ -10915,6 +10915,8 @@
     "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privesku pre snimanja telefonom.",
     "captureNotTranscribing": "Нема транскрипције",
     "captureAudioSavedTranscribesLater": "Звук је сачуван, транскрипција касније",
+    "captureBannerTryReconnect": "Покушај поново да повежеш",
+    "captureBannerRetrySync": "Понови синхронизацију",
     "captureBannerWhatsWrong": "Шта се дешава?",
     "captureBannerDismiss": "Сакриј",
     "captureWedgeBleExplanation": "Bluetooth веза са вашим Omi је стала, па звук не стиже до апликације. Omi наставља да снима на уређају и синхронизоваће се када се веза опорави. Поновни покушај поново успоставља везу; ако и даље не успева, проверите уређај у Подешавања > Уређај.",

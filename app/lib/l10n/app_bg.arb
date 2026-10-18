@@ -3492,6 +3492,8 @@
     "phoneRecordingBlockedByPendantBatch": "Спрете Transcribe Later на висулката си, преди да записвате с телефона.",
     "captureNotTranscribing": "Без транскрипция",
     "captureAudioSavedTranscribesLater": "Аудиото е запазено, транскрипция по-късно",
+    "captureBannerTryReconnect": "Опитайте отново връзката",
+    "captureBannerRetrySync": "Повтори синхронизацията",
     "captureBannerWhatsWrong": "Какво става?",
     "captureBannerDismiss": "Скрий",
     "captureWedgeBleExplanation": "Връзката по Bluetooth с вашия Omi прекъсна, така че звукът не стига до приложението. Omi продължава да записва на устройството и ще се синхронизира, щом връзката се възстанови. Повторният опит възстановява връзката; ако продължава да се проваля, проверете устройството си в Настройки > Устройство.",

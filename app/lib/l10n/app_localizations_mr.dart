@@ -11093,6 +11093,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ऑडिओ जतन केला, नंतर लिप्यंतरण होईल';
 
   @override
+  String get captureBannerTryReconnect => 'पुन्हा कनेक्ट करण्याचा प्रयत्न करा';
+
+  @override
+  String get captureBannerRetrySync => 'सिंक पुन्हा प्रयत्न करा';
+
+  @override
   String get captureBannerWhatsWrong => 'काय चालू आहे?';
 
   @override

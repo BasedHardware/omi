@@ -11088,6 +11088,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
 
   @override
+  String get captureBannerTryReconnect => 'Coba sambungkan kembali';
+
+  @override
+  String get captureBannerRetrySync => 'Coba sinkronkan lagi';
+
+  @override
   String get captureBannerWhatsWrong => 'Ada apa?';
 
   @override

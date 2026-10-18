@@ -11104,6 +11104,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Garsas išsaugotas, bus perrašytas vėliau';
 
   @override
+  String get captureBannerTryReconnect => 'Pabandyti prisijungti iš naujo';
+
+  @override
+  String get captureBannerRetrySync => 'Pakartoti sinchronizavimą';
+
+  @override
   String get captureBannerWhatsWrong => 'Kas vyksta?';
 
   @override

@@ -11084,6 +11084,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Zvuk uložen, přepíše se později';
 
   @override
+  String get captureBannerTryReconnect => 'Zkusit znovu připojit';
+
+  @override
+  String get captureBannerRetrySync => 'Zopakovat synchronizaci';
+
+  @override
   String get captureBannerWhatsWrong => 'Co se děje?';
 
   @override

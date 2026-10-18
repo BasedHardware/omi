@@ -11085,6 +11085,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Lyd lagret, transkriberes senere';
 
   @override
+  String get captureBannerTryReconnect => 'Prøv å koble til på nytt';
+
+  @override
+  String get captureBannerRetrySync => 'Prøv synkronisering igjen';
+
+  @override
   String get captureBannerWhatsWrong => 'Hva skjer?';
 
   @override

@@ -10916,6 +10916,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
 
   @override
+  String get captureBannerTryReconnect => '再接続を試す';
+
+  @override
+  String get captureBannerRetrySync => '同期を再試行';
+
+  @override
   String get captureBannerWhatsWrong => '何が起きていますか？';
 
   @override

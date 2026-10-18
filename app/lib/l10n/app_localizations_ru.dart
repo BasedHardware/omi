@@ -11124,6 +11124,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'Аудио сохранено, расшифруется позже';
 
   @override
+  String get captureBannerTryReconnect => 'Попробовать подключить снова';
+
+  @override
+  String get captureBannerRetrySync => 'Повторить синхронизацию';
+
+  @override
   String get captureBannerWhatsWrong => 'Что происходит?';
 
   @override

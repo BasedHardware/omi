@@ -11133,6 +11133,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => 'ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది';
 
   @override
+  String get captureBannerTryReconnect => 'మళ్లీ కనెక్ట్ చేయడానికి ప్రయత్నించండి';
+
+  @override
+  String get captureBannerRetrySync => 'సమకాలీకరణను మళ్లీ ప్రయత్నించండి';
+
+  @override
   String get captureBannerWhatsWrong => 'ఏమి జరుగుతోంది?';
 
   @override

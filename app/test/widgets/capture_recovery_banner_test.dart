@@ -81,6 +81,8 @@ void main() {
       final context = tester.element(find.byType(CaptureRecoveryBanner));
       expect(find.text(AppLocalizations.of(context).captureRecoveryBanner), findsOneWidget);
       expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+      expect(find.byKey(const Key('capture_recovery_banner_retry')), findsOneWidget);
+      expect(find.text(AppLocalizations.of(context).captureBannerTryReconnect), findsOneWidget);
       expect(forEvent('Capture Recovery Prompt Shown'), hasLength(1));
     });
 
@@ -123,13 +125,31 @@ void main() {
       final retriesBeforeTap = bleRetries;
       expect(retriesBeforeTap, 1, reason: 'declaration already attempted one automatic retry');
 
-      await tester.tap(find.byKey(const Key('capture_recovery_banner')));
+      // Tap the card body (the title area), not a control inside it.
+      final card = find.byKey(const Key('capture_recovery_banner'));
+      await tester.tapAt(tester.getTopLeft(card) + const Offset(60, 10));
       await tester.pump();
 
       expect(bleRetries, retriesBeforeTap + 1, reason: 'the banner tap retries the same episode in place');
       expect(opened, isEmpty, reason: 'a stalled BLE link is fixed where the reader stands, not in settings');
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
       expect(find.byIcon(Icons.chevron_right), findsNothing);
+    });
+
+    testWidgets('the Try reconnect button retries once, without the card gesture double-firing', (tester) async {
+      var bleRetries = 0;
+      final monitor = makeMonitor(bleRetry: (_) async => bleRetries++);
+      wedge(monitor);
+
+      await pumpBanner(tester, monitor);
+      final retriesBeforeTap = bleRetries;
+
+      await tester.tap(find.byKey(const Key('capture_recovery_banner_retry')));
+      await tester.pump();
+
+      expect(bleRetries, retriesBeforeTap + 1,
+          reason: 'the button runs the same recovery as the card tap, and only once');
+      expect(forEvent('Capture Recovery Actioned'), hasLength(1));
     });
 
     testWidgets('What\'s going on? opens the details sheet with the BLE explanation', (tester) async {
@@ -175,12 +195,16 @@ void main() {
 
       await pumpBanner(tester, monitor);
       final retriesBeforeTap = retries;
+      final context = tester.element(find.byType(CaptureRecoveryBanner));
+      final l10n = AppLocalizations.of(context);
+      expect(find.text(l10n.captureBannerRetrySync), findsOneWidget,
+          reason: 'the storage primary action names what its retry does');
+      expect(find.text(l10n.captureBannerTryReconnect), findsNothing);
 
-      await tester.tap(find.byKey(const Key('capture_recovery_banner')));
+      await tester.tap(find.byKey(const Key('capture_recovery_banner_retry')));
       await tester.pump();
 
       expect(retries, retriesBeforeTap + 1, reason: 'storage keeps its transfer-recovery tap');
-      final context = tester.element(find.byType(CaptureRecoveryBanner));
       expect(find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater), findsNothing,
           reason: 'the storage title already says what is unsynced');
     });
