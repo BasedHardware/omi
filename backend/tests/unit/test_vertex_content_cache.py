@@ -224,6 +224,7 @@ async def test_expired_handle_recreated_once_then_uncached():
             model='gemini-3.8-flash',
             headers={},
             receipt=receipt,
+            allow_recreate=True,
         ) == {'synthetic': True}
         assert len(creates) == 2 and len(sent) == 3
         assert sent[-1] == payload
