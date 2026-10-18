@@ -18,7 +18,7 @@
     {
       "file": "003-mobile-ios-trial-paywall-plans.png",
       "platform": "mobile-ios",
-      "description": "Scrolled to the bottom: full timeline, feature list, Monthly $29.99 and Yearly $269.91 (save $89.97) from the live catalog",
+      "description": "Scrolled to the bottom: timeline (Today / +7 days free / In 7 days charged unless cancelled, no reminder row), feature list, Monthly $29.99 and Yearly $269.91 (save $89.97) from the live catalog",
       "captured_by": "agent",
       "source": "visual-audit"
     },
