@@ -13,7 +13,7 @@ import hashlib
 import logging
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 import re
 import threading
 import time

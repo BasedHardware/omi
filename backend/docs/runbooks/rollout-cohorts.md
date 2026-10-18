@@ -34,12 +34,15 @@ members by an indexed boolean field; those background scans cache results for
 across flags. Positive, missing-document, negative, malformed-document and error
 results have a 60-second TTL. Concurrent misses for one UID share one read.
 Firestore reads have a one-second RPC timeout and SDK retries disabled. The
-serving executor injects the background submitter into the cache; the database
-module never imports serving utilities. Async misses enqueue a bounded, isolated
+serving composition roots (`main.py` and `pusher/main.py`) inject the cached
+resolver into the pure `config.rollout_cohorts` boundary. Configuration imports
+no database or serving utilities. `database.rollout_cohorts` owns only lazy
+Firestore transport; `utils.rollout_cohorts` owns caching and the bounded executor. Async misses enqueue a bounded, isolated
 read and deny until it completes; listen and pusher await their initial read for
 up to 1.25 seconds before admission. The HTTP auth
 worker preloads the same cache. OIDC sync tasks, the shared sync coordinator,
-Dream admission, mobile batch renewal and live-demand handovers await it before
+Dream pass admission and every model turn, pusher finalization shadow admission,
+mobile batch renewal and live-demand handovers await it before
 making rollout decisions. Warm awaits return immediately without a read; cold
 and expired async decisions wait for the bounded read instead of silently
 choosing the legacy path. No Firestore I/O runs on the event loop.

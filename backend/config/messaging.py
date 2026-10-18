@@ -3,7 +3,7 @@
 import json
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 from urllib.parse import quote
 
 

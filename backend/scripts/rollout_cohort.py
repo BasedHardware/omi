@@ -8,8 +8,10 @@ import os
 from pathlib import Path
 import sys
 
+from google.cloud import firestore
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from database.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
+from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
 
 
 def main(argv=None, *, client_factory=None) -> int:
@@ -45,8 +47,6 @@ def main(argv=None, *, client_factory=None) -> int:
         return 2
     try:
         if client_factory is None:
-            from google.cloud import firestore
-
             client_factory = firestore.Client
         client = client_factory(project=args.project)
         # Explicit false is a tombstone: removing a member also revokes legacy-env fallback.

@@ -16,7 +16,7 @@ from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
 from utils.other import storage
 from routers.listen import runtime as runtime_module
 from routers.listen.runtime import ListenSessionRuntime
-from database import rollout_cohorts
+from utils import rollout_cohorts
 
 
 @pytest.mark.parametrize(
@@ -309,6 +309,7 @@ async def test_mobile_renewal_awaits_expired_membership_and_warm_packets_cost_ze
         assert release.wait(1)
         return {'prod': {'mobile-standard-batch': member[0]}}
 
+    rollout_cohorts.configure_rollout_runtime()
     cache = rollout_cohorts._TTLReads(read)
     monkeypatch.setattr(rollout_cohorts, '_cache', cache)
     with ThreadPoolExecutor(max_workers=1) as pool:

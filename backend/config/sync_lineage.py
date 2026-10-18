@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 
 SYNC_LINEAGE_RESOLVE_ENV = 'SYNC_LINEAGE_RESOLVE_ENABLED'
 SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV = 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST'

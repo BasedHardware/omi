@@ -23,7 +23,7 @@ import yaml
 
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
-from database import rollout_cohorts
+from utils import rollout_cohorts
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_recording_lineage import (  # noqa: F401 - fixtures
@@ -582,6 +582,7 @@ async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting
             raise RuntimeError('synthetic unavailable store')
         return {'prod': {'sync-lineage-resolve': membership}}
 
+    rollout_cohorts.configure_rollout_runtime()
     cache = rollout_cohorts._TTLReads(read)
     monkeypatch.setattr(rollout_cohorts, '_cache', cache)
     with ThreadPoolExecutor(max_workers=1) as pool:

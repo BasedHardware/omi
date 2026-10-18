@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 from dataclasses import dataclass
 
 from config.jev_decisions import percentage, uid_bucket

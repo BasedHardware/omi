@@ -137,7 +137,7 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from config.capture_evidence import capture_evidence_dark_write_enabled
-from database.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,

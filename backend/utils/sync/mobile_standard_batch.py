@@ -3,7 +3,7 @@
 import hashlib
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 
 
 def mobile_standard_batch_rollout_enabled() -> bool:

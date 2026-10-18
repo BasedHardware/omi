@@ -4,7 +4,7 @@ import hashlib
 import math
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 from dataclasses import dataclass
 from typing import TypedDict
 

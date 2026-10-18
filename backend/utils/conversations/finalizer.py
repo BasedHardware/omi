@@ -13,6 +13,7 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
@@ -230,6 +231,7 @@ async def finalize_persisted_conversation(
         # STT or metric persistence and cannot alter this processing input.
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
+            await warm_rollout_cohorts(uid)
             _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []

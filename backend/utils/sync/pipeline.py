@@ -87,7 +87,7 @@ from database.sync_ledger import (
     release_sync_content_claim,
 )
 from config.capture_evidence import capture_evidence_dark_write_enabled
-from database.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource

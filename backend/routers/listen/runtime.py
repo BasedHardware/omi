@@ -16,7 +16,7 @@ from starlette.websockets import WebSocketState
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
-from database.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,

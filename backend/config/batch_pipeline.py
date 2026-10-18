@@ -5,7 +5,7 @@ import hashlib
 import math
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
 from typing import Callable, TypeVar
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
@@ -108,8 +108,6 @@ def recovery_owners() -> tuple[str, ...]:
     """Recovery is independent of admission; empty allowlist always denies."""
     if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
         return ()
-    from database.rollout_cohorts import rollout_cohort_members
-
     return rollout_cohort_members('batch-pipeline-recovery')
 
 

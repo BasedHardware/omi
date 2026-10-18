@@ -14,7 +14,7 @@ import logging
 import math
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 from typing import Any, Iterable
 
 from database.redis_db import create_bounded_redis_client

@@ -25,9 +25,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Capture this stdlib-only module before legacy suites replace the database package.
-# The fixture must not import through those synthetic package objects.
-import database.rollout_cohorts as _rollout_cohorts
+# Capture the pure resolver boundary before legacy suites replace package objects.
+import config.rollout_cohorts as _rollout_cohorts
 
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
@@ -284,19 +283,21 @@ def isolated_dream_dynamic_control(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def empty_rollout_cohorts(monkeypatch):
-    """Unit fixtures have no cohort documents unless the test supplies a store/cache."""
-    from concurrent.futures import Future
-
+    """Inject an empty store without importing SDKs or scheduling real reads."""
     cohorts = _rollout_cohorts
 
-    class EmptyCache:
-        def get(self, _key):
-            return {}
+    def membership(uid, name, *, legacy_members=None, legacy_all=False):
+        return cohorts.legacy_membership(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
 
-        def request(self, _key, **_kwargs):
-            future = Future()
-            future.set_result({})
-            return future
+    def members(name):
+        return tuple(
+            sorted({item.strip() for item in cohorts.COHORT_ENVS[name]().split(',') if cohorts.valid_uid(item.strip())})
+        )
 
-    monkeypatch.setattr(cohorts, '_cache', EmptyCache())
-    monkeypatch.setattr(cohorts, '_member_cache', type('EmptyMembers', (), {'get': lambda self, key: ()})())
+    async def warm(_uid):
+        return None
+
+    monkeypatch.setattr(cohorts, '_membership_resolver', membership)
+    monkeypatch.setattr(cohorts, '_members_resolver', members)
+    monkeypatch.setattr(cohorts, '_load_resolver', lambda _uid: None)
+    monkeypatch.setattr(cohorts, '_warm_resolver', warm)

@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Callable, Mapping
 
 from config.live_demand import language_qualified, resolve_live_demand
-from database.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
 from utils.observability.demand_cohort import DemandTelemetry, attach_demand_telemetry, host_telemetry, telemetry_call
 from config.live_stt_recovery import session_recovery_enabled

@@ -3,7 +3,7 @@
 import math
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
 from dataclasses import dataclass
 from datetime import timedelta
 from config.plan_catalog import PAID_PLAN_IDS
@@ -45,8 +45,6 @@ def _allowlisted(uid):
 
 def allowlist_uids():
     """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
-    from database.rollout_cohorts import rollout_cohort_members
-
     return list(rollout_cohort_members('dream-agent'))
 
 

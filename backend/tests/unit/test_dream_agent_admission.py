@@ -11,10 +11,10 @@ import pytest
 
 from config.vertex_reservations import State
 from database import dream_scheduler, dream_store
-from database import rollout_cohorts
+from utils import rollout_cohorts
 from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from tests.unit.test_dream_harness_runtime import runtime, store, scripted, UID
-from utils import dream_agent, dream_capacity, dream_seed
+from utils import dream_agent, dream_capacity, dream_seed, dream_harness_transport
 from utils.dream_capacity import claim as claim_capacity, release as release_capacity
 from utils.llm.vertex_reservation_state import ReservationState
 
@@ -127,6 +127,7 @@ async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission
             raise RuntimeError('synthetic unavailable store')
         return {'prod': {'dream-agent': membership}}
 
+    rollout_cohorts.configure_rollout_runtime()
     cache = rollout_cohorts._TTLReads(read)
     monkeypatch.setattr(rollout_cohorts, '_cache', cache)
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -153,3 +154,32 @@ async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission
             assert reads == [UID] * (attempt + 1)
             cache.entries[UID].expires = 0
     assert dream_capacity.claim.await_count == (2 if membership is True else 0)
+
+
+@pytest.mark.asyncio
+async def test_each_model_turn_refreshes_membership_before_capacity_selection(admission, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    # Stop before the gateway: the assertion concerns the real turn's routing boundary.
+    monkeypatch.setattr(dream_harness_transport, 'attempt_room', lambda *args, **kwargs: (10, 128))
+    capacity = AsyncMock(return_value=None)
+    monkeypatch.setattr(dream_capacity, 'available_model', capacity)
+    membership = [True]
+    reads = []
+
+    def read(uid):
+        reads.append(uid)
+        return {'prod': {'dream-agent': membership[0]}}
+
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for value, expected in [(True, 'on_demand'), (True, 'on_demand'), (False, 'reserved')]:
+            membership[0] = value
+            if UID in cache.entries:
+                cache.entries[UID].expires = 0
+            with pytest.raises(dream_harness_transport.CapacityWait):
+                await dream_harness_transport.model_turn(UID, dream_harness_transport.MAIN_LANE, None, [])
+            assert capacity.await_args.kwargs == {'mode': expected, 'owner_allowlisted': value}
+    assert reads == [UID] * 3

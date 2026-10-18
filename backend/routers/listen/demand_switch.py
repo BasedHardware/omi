@@ -8,7 +8,7 @@ Policy handovers do not consume transport-failure episode allowances.
 import asyncio
 
 from config.live_demand import resolve_live_demand
-from database.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
 from utils.stt.live_failure import PendingLiveFailover, live_stt_socket_is_dead, live_stt_terminal_reason
 from utils.stt.recovery_state import LiveRecoveryController, RecoveryState, current_recovery

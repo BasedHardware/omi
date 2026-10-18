@@ -53,7 +53,7 @@ def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime(m
     # Cloud Run merge may retain a legacy literal; runtime supports it only for
     # an absent Firestore field. Helm replaces the env list; absent keys deny.
     from config.batch_pipeline import enabled_for
-    from database import rollout_cohorts
+    from config import rollout_cohorts
 
     assert callable(enabled_for) and callable(rollout_cohorts.in_rollout_cohort)
     from config import summary_guarantee

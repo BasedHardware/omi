@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from database import rollout_cohorts as cohorts
+from utils import rollout_cohorts as cohorts
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -20,6 +20,7 @@ def loaded_adapters():
 
 
 def cache(monkeypatch, reader, capacity=4096):
+    cohorts.configure_rollout_runtime()
     value = cohorts._TTLReads(lambda uid: {cohorts.rollout_environment(): reader(uid)}, capacity)
     monkeypatch.setattr(cohorts, '_cache', value)
     return value
@@ -311,6 +312,7 @@ async def test_cache_and_executor_saturation_deny_without_unbounded_work(monkeyp
 
 
 def test_shared_customer_project_never_unions_dev_and_prod_members(monkeypatch):
+    cohorts.configure_rollout_runtime()
     reads = []
     value = cohorts._TTLReads(
         lambda uid: reads.append(uid)
@@ -333,6 +335,7 @@ def test_shared_customer_project_never_unions_dev_and_prod_members(monkeypatch):
 
 
 def test_background_discovery_is_environment_scoped(monkeypatch):
+    cohorts.configure_rollout_runtime()
     keys = []
     monkeypatch.setattr(cohorts, '_member_cache', cohorts._TTLReads(lambda key: keys.append(key) or ('owner',)))
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
@@ -350,7 +353,22 @@ async def test_unconfigured_scheduler_denies_without_database_importing_utils(mo
     assert not cohorts.in_rollout_cohort('owner', 'batch-pipeline')
     import ast
 
-    tree = ast.parse(Path(cohorts.__file__).read_text())
+    tree = ast.parse((Path(__file__).parents[2] / 'database/rollout_cohorts.py').read_text())
     assert not any(
         isinstance(node, ast.ImportFrom) and (node.module or '').startswith('utils') for node in ast.walk(tree)
     )
+
+
+def test_config_cohorts_has_only_standard_library_dependencies():
+    import ast
+
+    tree = ast.parse((Path(__file__).parents[2] / 'config/rollout_cohorts.py').read_text())
+    assert {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)} <= {'__future__', 'typing'}
+    assert {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} == {'os'}
+
+
+def test_serving_composition_roots_bind_private_cohort_runtime():
+    for relative in ('main.py', 'pusher/main.py', 'scripts/dream-agent.py', 'scripts/dream-replay.py'):
+        text = (Path(__file__).parents[2] / relative).read_text()
+        assert 'from utils.rollout_cohorts import configure_rollout_runtime' in text
+        assert 'configure_rollout_runtime()' in text

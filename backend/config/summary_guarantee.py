@@ -5,7 +5,7 @@ from collections.abc import Mapping
 import math
 import os
 
-from database.rollout_cohorts import in_rollout_cohort
+from config.rollout_cohorts import in_rollout_cohort
 from typing import Any
 
 from config.batch_pipeline import in_percent_cohort
