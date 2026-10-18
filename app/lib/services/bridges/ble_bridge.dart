@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/devices/saved_pendant_reconnect.dart';
 import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/services/devices/models.dart';
 
@@ -28,6 +29,11 @@ class BleBridge implements BleFlutterApi {
   static final BleBridge instance = BleBridge._();
 
   BleBridge._();
+
+  @override
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs) {
+    recordSavedReconnect('native_retry', attempt, result, disconnectedMs);
+  }
 
   final Map<String, CharacteristicValueCallback> _characteristicCallbacks = {};
   final Map<String, ConnectionStateCallback> _disconnectCallbacks = {};
@@ -212,8 +218,10 @@ class BleBridge implements BleFlutterApi {
       if (_connectionRevisions[key] != revision) return;
       final start = (jsonDecode(raw) as Map)['audio_outage_started_at'] as num?;
       if (start != null && start > 0) {
-        await DeviceHealthTelemetry.recordOutage(peripheralUuid,
-            at: DateTime.fromMillisecondsSinceEpoch(start.toInt()));
+        await DeviceHealthTelemetry.recordOutage(
+          peripheralUuid,
+          at: DateTime.fromMillisecondsSinceEpoch(start.toInt()),
+        );
       }
     } catch (_) {
       // Native has already durably recorded the start; import it on emission.

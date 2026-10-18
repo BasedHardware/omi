@@ -3,6 +3,7 @@ from contextlib import nullcontext
 import io
 import logging
 import sys
+import time
 import wave
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -10,6 +11,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
+from config.batch_pipeline import worker_silence_disposition_enabled
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer import batch_pipeline, batch_pipeline_models
 from diarizer.batch_pipeline import (
@@ -23,6 +25,12 @@ from diarizer.batch_pipeline import (
 )
 from diarizer.batch_pipeline_models import ParakeetWords, PyannoteVAD, decode_pcm16_wav
 from utils.batch_pipeline.contracts import WorkItem, Priority
+from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.pump import Pump
+from utils.batch_pipeline.recovery_disposition import result_outcome
+from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from utils.stt import local_vad as vad
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 
 class Samples:
@@ -868,3 +876,107 @@ def test_empty_vad_is_the_only_silence_even_with_recovery_enabled(monkeypatch):
     assert worker.process_batch([item()])[0].outcome == 'silence'
     retry.assert_not_called()
     assert saved['a']['speech_spans'] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled,speech', [(True, False), (True, True), (False, False), (False, True)])
+async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch, enabled, speech):
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', str(enabled))
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    strict = Mock(return_value=[{'start': 0.25, 'end': 0.5}] if speech else [])
+    monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    provider = Mock()
+    provider.transcribe_batch.side_effect = lambda samples: [[] for _ in samples]
+    retry = Mock(return_value=[])
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.zeros(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=retry,
+    )
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    pump = Pump(queue, worker)
+    # Drive the real worker -> scheduler -> ordered-merge path, without a GPU
+    # or provider. No RecoveryWork may be emitted for confirmed local silence.
+    await pump.run_once()
+    provider.transcribe_batch.assert_called_once()
+    retry.assert_called_once()
+    assert strict.call_count == int(enabled)
+    if enabled and not speech:
+        assert store.rows['jobs', 'a']['state'] == 'committed'
+        assert store.rows['results', 'a']['result']['outcome'] == 'silence'
+        assert result_outcome(saved['a']) == 'silence'
+        assert saved['a']['speech_seconds'] == 0 and saved['a']['speech_spans'] == []
+        assert saved['a']['words_provider'] == 'strict_local_vad'
+        assert not failures and worker.counts['failed'] == 0
+        assert worker.counts['silence'] == 1
+    else:
+        assert store.rows['jobs', 'a']['state'] == 'quarantined'
+        assert ('results', 'a') not in store.rows and not saved
+        assert failures == [('a', 'BatchValidationError')]
+        assert worker.counts['silence'] == 0
+    assert not diarized
+
+
+@pytest.mark.parametrize('raw', [None, [{'start': 0, 'end': 99}], RuntimeError('unavailable')])
+def test_worker_strict_vad_failure_retains_empty_asr(monkeypatch, raw):
+
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'true')
+    strict = Mock(**({'side_effect': raw} if isinstance(raw, Exception) else {'return_value': raw}))
+    monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    provider = Mock(transcribe_batch=lambda samples: [[] for _ in samples])
+    worker, _, saved, _, diarized, failures = setup_worker(
+        decode=lambda work: np.zeros(int(work.duration_seconds * 16000), dtype=np.float32),
+        words_providers={'parakeet': provider},
+        recover_words=lambda *_: [],
+    )
+    assert worker.process_batch([item()]) == []
+    assert failures == [('a', 'BatchValidationError')] and not saved and not diarized
+
+
+def test_worker_silence_adapter_preserves_exact_pcm_and_shared_evidence(monkeypatch):
+
+    pcm = np.resize(np.array([-32768, -1, 0, 1, 32767], dtype='<i2'), 32000)
+    strict = Mock(return_value=[])
+    monkeypatch.setattr(vad, 'offline_pcm_speech_segments', strict)
+    assert inspect_worker_silence(item(), pcm.astype(np.float32) / 32768)['outcome'] == 'silence'
+    assert strict.call_args.args[0] == pcm.tobytes()
+    for invalid in [np.full(32000, np.nan), np.full(32000, 1.0), np.full(32000, 0.000001)]:
+        with pytest.raises(ValueError, match='canonical PCM16'):
+            inspect_worker_silence(item(), invalid)
+    assert strict.call_count == 1
+
+
+def test_worker_silence_uses_real_local_silero():
+
+    payload = inspect_worker_silence(item(), np.zeros(32000, dtype=np.float32))
+    assert payload['outcome'] == 'silence' and payload['speech_spans'] == []
+
+
+@pytest.mark.parametrize('recovered', [False, True])
+def test_worker_disposition_does_not_replace_positive_asr(monkeypatch, recovered):
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'true')
+    strict = Mock(side_effect=AssertionError('positive ASR must not be disposed'))
+    monkeypatch.setattr(batch_pipeline, 'inspect_worker_silence', strict)
+    provider = Mock()
+    # Midpoint is outside core ownership, but initial ASR WAS positive.
+    provider.transcribe_batch.return_value = [[{'word': 'heard', 'timestamp': [4.5, 4.8]}]]
+    worker, _, saved, _, _, _ = setup_worker(
+        decode=lambda _: np.zeros(160320, dtype=np.float32),
+        vad=lambda _: [(1, 2)],
+        words_providers={'parakeet': provider},
+        recover_words=lambda *_: [{'word': 'heard', 'timestamp': [1, 1.1]}] if recovered else [],
+    )
+    results = worker.process_batch([item(duration=10.02)])
+    assert bool(results) is recovered
+    assert bool(saved) is recovered
+    strict.assert_not_called()
+
+
+def test_worker_silence_flag_defaults_off(monkeypatch):
+
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', raising=False)
+    assert not worker_silence_disposition_enabled()

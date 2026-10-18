@@ -302,7 +302,7 @@ def legacy_dependencies():
         'utils.sync.intake_completion',
     ):
         importlib.import_module(module)
-    from utils.stt import pre_recorded, vad
+    from utils.stt import pre_recorded, local_vad as vad
     from utils.batch_pipeline.projection_parts import split_result
     from utils.batch_pipeline.projection import build_incoming
     from utils import fair_use

@@ -22,6 +22,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   /// silent GATT link is distinct from a socket that sent nothing.
   static void Function(String deviceId, int byteCount)? ingressByteObserver;
 
+  bool savedReconnectEnabled = false;
+  bool hasRetryableConnectFailure = false;
+  Future<void>? _connectInFlight;
+
   final String _peripheralUuid;
   final bool requiresBond;
   final BleHostApi _hostApi;
@@ -56,14 +60,14 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   final _audioSubscriptionErrors = StreamController<Object>.broadcast();
   @override
   Stream<Object> get audioSubscriptionErrors => Stream.multi((consumer) {
-        final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);
-        // Some adapters subscribe during connection setup, before capture binds.
-        // Replay only failures belonging to the current connection generation.
-        for (final entry in subscriptionFailures.entries) {
-          if (isBleAudioCharacteristicUuid(entry.key.split(':').last)) consumer.add(entry.value);
-        }
-        consumer.onCancel = subscription.cancel;
-      }, isBroadcast: true);
+    final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);
+    // Some adapters subscribe during connection setup, before capture binds.
+    // Replay only failures belonging to the current connection generation.
+    for (final entry in subscriptionFailures.entries) {
+      if (isBleAudioCharacteristicUuid(entry.key.split(':').last)) consumer.add(entry.value);
+    }
+    consumer.onCancel = subscription.cancel;
+  }, isBroadcast: true);
   final Map<String, int> _pendingSubscriptions = {};
 
   bool _nativeOwnsAudioHealth(String characteristicUuid) =>
@@ -72,7 +76,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       characteristicUuid.toLowerCase() == '19b10001-e8f2-537e-4f6c-d104768a1214';
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
-      : _hostApi = hostApi ?? BleHostApi() {
+    : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.addIngressListener(_ingressOwnershipChanged);
     _releaseBridge = BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
@@ -91,7 +95,10 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   // MARK: - Connection
 
   @override
-  Future<void> connect() async {
+  Future<void> connect() => _connectInFlight ??= _connect().whenComplete(() => _connectInFlight = null);
+
+  Future<void> _connect() async {
+    hasRetryableConnectFailure = true;
     if (_state == DeviceTransportState.connected && await isConnected()) return;
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.connection)) {
@@ -133,6 +140,9 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
 
   @override
   Future<void> disconnect() async {
+    if (_deviceReadyCompleter case final completer? when !completer.isCompleted) {
+      completer.completeError('unmanaged');
+    }
     _subscriptionGeneration++;
     if (_nativeReleased && _state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
@@ -243,13 +253,16 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
         if (gate != null) await gate(characteristicUuid);
         if (generation != _subscriptionGeneration) return;
       }
-      await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid).then((_) {
-        if (generation == _subscriptionGeneration &&
-            failure is TimeoutException &&
-            identical(subscriptionFailures[key], failure)) {
-          subscriptionFailures.remove(key);
-        }
-      }).timeout(subscriptionTimeout);
+      await _hostApi
+          .subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid)
+          .then((_) {
+            if (generation == _subscriptionGeneration &&
+                failure is TimeoutException &&
+                identical(subscriptionFailures[key], failure)) {
+              subscriptionFailures.remove(key);
+            }
+          })
+          .timeout(subscriptionTimeout);
       if (generation != _subscriptionGeneration) return;
       _subscribedSubscriptionKeys.add(key);
       subscriptionFailures.remove(key);
@@ -355,6 +368,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
 
   void _handleConnectionState(bool connected, String? error) {
     if (!connected) {
+      hasRetryableConnectFailure = error != 'pairing_lost' && error != 'unmanaged';
       _subscriptionGeneration++;
       // Guard against double-fire (didDisconnect + didFailToConnect both invoke this).
       // On the 2nd call _streamControllers is already empty; overwriting _activeSubscriptionKeys
@@ -388,6 +402,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       if (_readyWhileReleasing == null && _releasePending) _readyWhileReleasing = services;
       return;
     }
+    hasRetryableConnectFailure = false;
     _subscriptionGeneration++;
     _subscribedSubscriptionKeys.clear();
     subscriptionFailures.clear();

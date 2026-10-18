@@ -100,7 +100,7 @@ mixin _GroupRows<T extends StatefulWidget> on State<T> {
 // -----------------------------------------------------------------------------------------------
 // Device
 
-/// Device: the connected device's settings (only while connected), Offline Sync and Phone Calls.
+/// Device: the device's settings, Offline Sync and Phone Calls.
 class DeviceGroupPage extends StatefulWidget {
   const DeviceGroupPage({super.key});
 
@@ -113,13 +113,18 @@ class _DeviceGroupPageState extends State<DeviceGroupPage> with _GroupRows {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final deviceConnected = context.select<DeviceProvider, bool>((p) => p.isConnected);
+    // The Device Settings page also serves remembered-but-disconnected devices (its Diagnostics
+    // row reads per-device native history that survives a drop, and the persisted pairing exists
+    // before the provider hydrates it on the connect path), so keep the destination while the
+    // app remembers any device instead of only while the link is up.
+    final rememberedDevice = context.select<DeviceProvider, bool>((p) => p.hasRememberedDevice);
     return _GroupPage(
       pageKey: 'settings_page_device',
       title: l10n.device,
       children: [
         OmiSettingsGroup(
           children: [
-            if (deviceConnected)
+            if (deviceConnected || rememberedDevice)
               row(SettingsDestination.device, icon: FontAwesomeIcons.bluetooth, title: l10n.deviceSettings),
             row(SettingsDestination.offlineSync, icon: FontAwesomeIcons.solidCloud, title: l10n.offlineSync),
             if (PhoneCallsFeature.visible)
@@ -270,10 +275,10 @@ class NotificationsDisplayGroupPage extends StatefulWidget {
 
 class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGroupPage> with _GroupRows {
   String _appearanceLabel(ThemeMode mode) => switch (mode) {
-        ThemeMode.system => context.l10n.appearanceSystem,
-        ThemeMode.light => context.l10n.appearanceLight,
-        ThemeMode.dark => context.l10n.appearanceDark,
-      };
+    ThemeMode.system => context.l10n.appearanceSystem,
+    ThemeMode.light => context.l10n.appearanceLight,
+    ThemeMode.dark => context.l10n.appearanceDark,
+  };
 
   Future<void> _showAppearancePicker() async {
     final provider = context.read<AppearanceProvider>();

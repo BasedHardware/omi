@@ -6,6 +6,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -69,24 +70,32 @@ class LimitlessDeviceConnection extends DeviceConnection {
     super.transport, {
     Duration streamHealthWindow = _defaultStreamHealthWindow,
     Duration storageStatusTimeout = _defaultStorageStatusTimeout,
-  })  : _streamHealthWindow = streamHealthWindow,
-        _storageStatusTimeout = storageStatusTimeout;
+  }) : _streamHealthWindow = streamHealthWindow,
+       _storageStatusTimeout = storageStatusTimeout;
 
   /// Injected in main.dart; true while Transcribe Later keeps the pendant recording to flash.
   static bool Function()? realtimeSuppressionPolicy;
   bool _realtimeSuppressed = false;
 
+  Future<void>? _activeConnect;
+
   @override
-  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) =>
+      _activeConnect ??= _connect(onConnectionStateChanged).whenComplete(() => _activeConnect = null);
+
+  Future<void> _connect(Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
     _resetClockDriftCapture();
     try {
       await super.connect(onConnectionStateChanged: onConnectionStateChanged);
-    } on DeviceConnectionTimeoutException {
-      // DeviceService preserves the native transport after a launch timeout.
-      // Keep the device-specific setup alive too, including its first RX subscription.
-      _listenForTransportReconnects();
-      if (status == DeviceConnectionState.connected) unawaited(_handleTransportReconnected());
+    } on DeviceConnectionException catch (error) {
+      final native = transport;
+      if (error.isTimeout ||
+          (native is NativeBleTransport && native.savedReconnectEnabled && native.hasRetryableConnectFailure)) {
+        // Keep first-ready setup alive whenever DeviceService retains this owner.
+        _listenForTransportReconnects();
+        if (status == DeviceConnectionState.connected) unawaited(_handleTransportReconnected());
+      }
       rethrow;
     }
 
@@ -104,7 +113,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (_closed) return;
     _transportReconnectSubscription ??= transport.connectionStateStream
         .where((s) => s == DeviceTransportState.connected)
-        .listen((_) => unawaited(_handleTransportReconnected()));
+        .listen((_) {
+          // A pending Dart connect owns this ready and runs first setup itself.
+          if (_activeConnect == null) unawaited(_handleTransportReconnected());
+        });
   }
 
   Future<void> _completeInitialSetup(int epoch) async {
@@ -143,8 +155,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
-    _rxSubscription =
-        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
+    _rxSubscription = transport
+        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
+        .listen(_handleNotification);
   }
 
   Future<void> _handleTransportReconnected() async {
@@ -325,7 +338,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
         while (appliedSuppression != _realtimeSuppressed) {
           appliedSuppression = _realtimeSuppressed;
           await transport.writeCharacteristic(
-              limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream(enable: !appliedSuppression));
+            limitlessServiceUuid,
+            limitlessTxCharUuid,
+            _encodeEnableDataStream(enable: !appliedSuppression),
+          );
           if (!_isCurrentSession(epoch)) return;
         }
       }
@@ -679,8 +695,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
           } else {
             // Audio page that yielded zero frames — genuine parse failure
             final firstBytesLen = flashPageData.length < 64 ? flashPageData.length : 64;
-            final firstBytes =
-                flashPageData.sublist(0, firstBytesLen).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+            final firstBytes = flashPageData
+                .sublist(0, firstBytesLen)
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(' ');
             DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
               'index': index,
               'session': session,
@@ -1282,10 +1300,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, statusCmd);
 
       // Wait for response with timeout
-      final result = await statusCompleter.future.timeout(
-        _storageStatusTimeout,
-        onTimeout: () => _storageState,
-      );
+      final result = await statusCompleter.future.timeout(_storageStatusTimeout, onTimeout: () => _storageState);
 
       if (identical(_storageStateCompleter, statusCompleter)) _storageStateCompleter = null;
       final status = result ?? _storageState;
@@ -2098,8 +2113,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -2113,8 +2127,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;

@@ -14,3 +14,6 @@ python-dotenv==1.1.1
 
 # Decode generation-pinned retained Opus captures; native libopus comes from ffmpeg.
 opuslib==3.0.1
+
+# Shared strict-local silence disposition (utils.stt.local_vad); no hosted calls.
+onnxruntime==1.19.0
