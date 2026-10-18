@@ -23,6 +23,8 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.rollout_cohorts import configure_rollout_runtime
+
 OPERATION = 'strict-vad-held-disposition-v1'
 
 
@@ -182,6 +184,7 @@ def main():
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
     require(len(secret) >= 32 and bool(bucket), 'secure_runtime_material_required')
     os.environ['OMI_ENV_STAGE'] = args.stage
+    configure_rollout_runtime()
     from google.cloud import firestore, storage
     from google.cloud.firestore_v1.base_query import FieldFilter
     from database.batch_pipeline_store import FirestoreStore

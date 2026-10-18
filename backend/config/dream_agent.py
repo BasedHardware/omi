@@ -2,6 +2,8 @@
 
 import math
 import os
+
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
 from dataclasses import dataclass
 from datetime import timedelta
 from config.plan_catalog import PAID_PLAN_IDS
@@ -34,7 +36,7 @@ def eligibility():
 
 
 def allowlisted(uid):
-    return uid in {item.strip() for item in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if item.strip()}
+    return in_rollout_cohort(uid, 'dream-agent')
 
 
 def _allowlisted(uid):
@@ -43,7 +45,7 @@ def _allowlisted(uid):
 
 def allowlist_uids():
     """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
-    return sorted({item.strip() for item in os.getenv('DREAM_AGENT_UID_ALLOWLIST', '').split(',') if item.strip()})
+    return list(rollout_cohort_members('dream-agent'))
 
 
 def hunt_interval(size_bucket):
