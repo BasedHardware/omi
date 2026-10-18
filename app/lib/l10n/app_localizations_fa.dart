@@ -11093,6 +11093,16 @@ class AppLocalizationsFa extends AppLocalizations {
       'اتصال بلوتوث با Omi شما قطع شده است، بنابراین صدا به برنامه نمی‌رسد. Omi همچنان روی دستگاه ضبط می‌کند و پس از بازگشت اتصال همگام‌سازی می‌شود. تلاش دوباره اتصال را دوباره برقرار می‌کند؛ اگر همچنان ناموفق بود، دستگاه خود را در تنظیمات > دستگاه بررسی کنید.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'اتصال صدا قطع شده است — پس از بازیابی، گفتار به متن تبدیل می‌شود';
+
+  @override
+  String get captureIngressNeedsReconnect => 'صدا به برنامه نمی‌رسد — Omi را دوباره وصل کنید';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'برنامه دیگر نمی‌تواند صدا را از دستگاه Omi دریافت کند و نتوانست اتصال را به‌طور خودکار بازیابی کند. دستگاه را قطع و دوباره وصل کنید — از تنظیمات دستگاه یا با خاموش و روشن کردن آن. صدای ذخیره‌شده روی دستگاه بعداً همگام‌سازی می‌شود.';
+
+  @override
   String get captureStillRecording => 'ضبط ادامه دارد';
 
   @override

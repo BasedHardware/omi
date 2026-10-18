@@ -11129,6 +11129,16 @@ class AppLocalizationsBe extends AppLocalizations {
       'Спынілася Bluetooth-злучэнне з вашым Omi, таму гук не трапляе ў праграму. Omi працягвае запіс на прыладзе і сінхранізуецца, калі злучэнне адновіцца. Паўтор спрабыў зноў падлучыць злучэнне; калі гэта працягвае не працаваць, праверце прыладу ў Налады > Прылада.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'Сувязь аўдыё перарвалася — транскрыпцыя з\'явіцца пасля аднаўлення';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Аўдыё не даходзіць да праграмы — перападлучыце Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Праграма больш не прымае аўдыё з прылады Omi і не змагла аднавіць сувязь аўтаматычна. Адлучыце і зноў падлучыце прыладу — у наладах прылады або выключыўшы і ўключыўшы яе. Аўдыё, якое захавана на прыладзе, сінхранізуецца пазней.';
+
+  @override
   String get captureStillRecording => 'Запіс працягваецца';
 
   @override

@@ -229,7 +229,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       }
     }
     if (health?.actionable == true) {
-      if (state.episode?.trigger != triggerIngressRecoveryFailed) {
+      final dismissedGeneration = state.dismissedIngressGeneration;
+      final sameIncident = dismissedGeneration != null && health!.generation == dismissedGeneration;
+      if (!sameIncident && state.episode?.trigger != triggerIngressRecoveryFailed) {
         state.episode = CaptureWedgeEpisode(
           deviceId: deviceId,
           source: 'omi',
@@ -237,9 +239,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
           declaredAt: _now(),
         )..retryAttempted = true;
       }
-      state.episode!.promptVisible = true;
-    } else if (state.episode?.trigger == triggerIngressRecoveryFailed) {
-      state.episode = null;
+      if (!sameIncident) state.episode?.promptVisible = true;
+    } else {
+      if (state.episode?.trigger == triggerIngressRecoveryFailed) state.episode = null;
+      // Health left actionRequired (or the owner went away): the incident is
+      // over, so a later actionable snapshot of a *new* incident may alert.
+      state.dismissedIngressGeneration = null;
     }
     // A new, valid native ingress lease proves recovery independently of STT.
     // Replaying the same cached lease must not resolve a later BLE episode.
@@ -611,6 +616,29 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Dismisses only the episode the reader dismissed — the visible prompt. A
+  /// telemetry-only episode for the same device (an upload-silence observation,
+  /// say) is a separate recovery operation: erasing it would silently cancel
+  /// its eventual resolved event and let later observations redeclare it as a
+  /// new incident. [dismissDeviceEpisode] remains the full reset for an
+  /// intentional disconnect.
+  void dismissVisibleEpisode(String deviceId) {
+    final state = _devices[deviceId];
+    if (state == null || state.episode == null) return;
+    state.rapidDropEnds.clear();
+    final episode = state.episode!;
+    if (episode.trigger == triggerIngressRecoveryFailed) {
+      // The native side republishes the same actionable snapshot every few
+      // seconds, and observeIngressHealth would recreate a nulled episode on
+      // the next tick — resurrecting a dismissed banner. Remember the
+      // dismissed incident (its connection generation) until health actually
+      // changes; a new generation or a healthy/quiet snapshot re-allows it.
+      state.dismissedIngressGeneration = state.lastIngressHealth?.generation;
+    }
+    state.episode = null;
+    notifyListeners();
+  }
+
   void reset() {
     _devices.clear();
     _ingressEvents.clear();
@@ -854,6 +882,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 
 class _DeviceWedgeState {
   CaptureIngressHealth? lastIngressHealth;
+  String? dismissedIngressGeneration;
   final List<DateTime> zeroByteSessionEnds = [];
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];

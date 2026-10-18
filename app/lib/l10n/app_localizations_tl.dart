@@ -11194,6 +11194,17 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nag-stall ang Bluetooth link sa iyong Omi, kaya hindi umaabot sa app ang audio. Patuloy na nagre-record ang Omi sa device at mag-si-sync kapag nakabawi ang link. Ang pag-subok muli ay muling nagkokonekta ng link; kung patuloy itong nabibigo, tingnan ang iyong device sa Mga Setting > Device.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Nahinto ang audio link — magpapatuloy ang transcript kapag nakabawi na';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Hindi naabot ng audio ang app — i-reconnect ang iyong Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Hindi na makuha ng app ang audio mula sa Omi device at hindi nito mabawi ang koneksyon nang awtomatiko. I-disconnect at i-reconnect ang device — mula sa mga setting ng device, o sa pagpatay at pagbukas nito. Ang audio na naka-save sa device ay magsi-sync sa ibang pagkakataon.';
+
+  @override
   String get captureStillRecording => 'Nagre-record pa rin';
 
   @override

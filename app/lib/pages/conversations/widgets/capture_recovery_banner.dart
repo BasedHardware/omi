@@ -11,7 +11,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// Tapping the card retries the episode in place (the same recovery the monitor runs on its
 /// own) — it never navigates away, because no settings page can fix a stalled BLE link from
 /// where the reader stands. "Try reconnect" runs that same retry; "What's going on?" opens the
-/// details sheet; ✕ hides the episode until a newly declared trigger alerts again.
+/// details sheet; ✕ hides the episode until a newly declared trigger alerts again. An
+/// `ingress_recovery_failed` episode is the exception: the app itself owns that recovery and a
+/// Dart-side retry would no-op, so the card informs and explains instead of offering a retry.
 class CaptureRecoveryBanner extends StatelessWidget {
   const CaptureRecoveryBanner({super.key, this.monitor});
 
@@ -31,21 +33,27 @@ class CaptureRecoveryBanner extends StatelessWidget {
         final episode = wedge.visiblePrompt;
         if (episode == null) return const SizedBox.shrink();
         final isTransferRecovery = episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk;
+        // Native ingress recovery is exhausted; the app keeps retrying on its own and a
+        // Dart-side retry would no-op (retryVisibleEpisode returns for this trigger).
+        final isIngressFailure = episode.trigger == CaptureWedgeMonitor.triggerIngressRecoveryFailed;
         if (TickerMode.valuesOf(context).enabled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) wedge.markPromptShown();
           });
         }
         final l10n = context.l10n;
-        final title =
-            isTransferRecovery ? '${l10n.phoneStorage}: ${l10n.recordingsNotSynced}' : l10n.captureRecoveryBanner;
+        final title = isTransferRecovery
+            ? '${l10n.phoneStorage}: ${l10n.recordingsNotSynced}'
+            : isIngressFailure
+                ? l10n.captureIngressNeedsReconnect
+                : l10n.captureRecoveryBanner;
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Semantics(
-            button: true,
+            button: !isIngressFailure,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => _retry(wedge),
+              onTap: isIngressFailure ? null : () => _retry(wedge),
               child: Container(
                 key: const Key('capture_recovery_banner'),
                 padding: const EdgeInsets.all(12),
@@ -76,13 +84,13 @@ class CaptureRecoveryBanner extends StatelessWidget {
                         ),
                       ],
                     ),
-                    // The audio-safe reassurance the capturing page must keep: a stalled
-                    // link risks the transcript, never the recording. The storage episode
-                    // already says what is unsynced, so it needs no second line.
-                    if (!isTransferRecovery) ...[
+                    // The second line may only promise what the trigger proves: a storage
+                    // episode already says what is unsynced, and an ingress failure proves
+                    // ingress, not durability (INV-CAP-1) — neither gets an audio-saved claim.
+                    if (!isTransferRecovery && !isIngressFailure) ...[
                       const SizedBox(height: 4),
                       Text(
-                        l10n.captureAudioSavedTranscribesLater,
+                        l10n.captureLinkStalledTranscribesLater,
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                       ),
                     ],
@@ -94,18 +102,21 @@ class CaptureRecoveryBanner extends StatelessWidget {
                       runSpacing: 8,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        OmiButton(
-                          key: const Key('capture_recovery_banner_retry'),
-                          label: isTransferRecovery ? l10n.captureBannerRetrySync : l10n.captureBannerTryReconnect,
-                          onPressed: () => _retry(wedge),
-                          size: OmiButtonSize.compact,
-                          // Amber has no on-warning token; near-black clears 8:1 on both
-                          // palettes' amber, white does not in light mode.
-                          colors: OmiButtonColors(
-                            background: OmiColors.warning,
-                            foreground: Colors.black87,
+                        // No retry action for an exhausted native ingress recovery: the
+                        // app-owned recovery is already running and a Dart retry no-ops.
+                        if (!isIngressFailure)
+                          OmiButton(
+                            key: const Key('capture_recovery_banner_retry'),
+                            label: isTransferRecovery ? l10n.captureBannerRetrySync : l10n.captureBannerTryReconnect,
+                            onPressed: () => _retry(wedge),
+                            size: OmiButtonSize.compact,
+                            // Amber has no on-warning token; near-black clears 8:1 on both
+                            // palettes' amber, white does not in light mode.
+                            colors: OmiButtonColors(
+                              background: OmiColors.warning,
+                              foreground: Colors.black87,
+                            ),
                           ),
-                        ),
                         OmiButton(
                           key: const Key('capture_recovery_banner_info'),
                           label: l10n.captureBannerWhatsWrong,
@@ -115,8 +126,11 @@ class CaptureRecoveryBanner extends StatelessWidget {
                             LiveCaptureCard.showDetails(
                               context,
                               title: title,
-                              explanation:
-                                  isTransferRecovery ? l10n.recordingsNotSynced : l10n.captureWedgeBleExplanation,
+                              explanation: isTransferRecovery
+                                  ? l10n.recordingsNotSynced
+                                  : isIngressFailure
+                                      ? l10n.captureIngressNeedsReconnectExplanation
+                                      : l10n.captureWedgeBleExplanation,
                             );
                           },
                           size: OmiButtonSize.compact,
@@ -126,17 +140,20 @@ class CaptureRecoveryBanner extends StatelessWidget {
                             foreground: OmiColors.textSecondary,
                           ),
                         ),
-                        IconButton(
-                          key: const Key('capture_recovery_banner_dismiss'),
-                          tooltip: l10n.captureBannerDismiss,
-                          onPressed: () => wedge.dismissDeviceEpisode(episode.deviceId),
-                          icon: const Icon(Icons.close),
-                          iconSize: 16,
-                          color: OmiColors.textTertiary,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                          visualDensity: VisualDensity.compact,
-                          splashRadius: 18,
+                        SizedBox(
+                          height: 44,
+                          child: IconButton(
+                            key: const Key('capture_recovery_banner_dismiss'),
+                            tooltip: l10n.captureBannerDismiss,
+                            onPressed: () => wedge.dismissVisibleEpisode(episode.deviceId),
+                            icon: const Icon(Icons.close),
+                            iconSize: 16,
+                            color: OmiColors.textTertiary,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                            visualDensity: VisualDensity.compact,
+                            splashRadius: 18,
+                          ),
                         ),
                       ],
                     ),

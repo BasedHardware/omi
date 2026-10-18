@@ -11120,6 +11120,16 @@ class AppLocalizationsLt extends AppLocalizations {
       'Bluetooth ryšys su jūsų Omi nutrūko, todėl garsas nepasieka programos. Omi toliau įrašinėja įrenginyje ir sinchronizuos, kai ryšys atsistatys. Bandymas iš naujo vėl užmezga ryšį; jei tai ir toliau nepavyksta, patikrinkite įrenginį skiltyje Nustatymai > Įrenginys.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'Garso ryšys nutrūko — transkripcija bus tęsiama jį atstačius';
+
+  @override
+  String get captureIngressNeedsReconnect => 'Garsas nepasiekia programos — iš naujo prijunkite Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'Programa nebegauna gauti garso iš Omi įrenginio ir nepavyko automatiškai atkurti ryšio. Atjunkite ir vėl prijunkite įrenginį — įrenginio nustatymuose arba jį išjungdami ir vėl įjungdami. Įrenginyje išsaugotas garsas bus sinchronizuotas vėliau.';
+
+  @override
   String get captureStillRecording => 'Įrašymas tęsiamas';
 
   @override

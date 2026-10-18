@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 
 void main() {
@@ -187,6 +188,49 @@ void main() {
       expect(monitor.dismissedDeviceIds, ['dev-a']);
     });
 
+    testWidgets('an exhausted native ingress recovery informs, never offers a dead-end retry', (tester) async {
+      final monitor = makeMonitor(bleRetry: (_) async {});
+      monitor.observeIngressHealth(
+        'dev-a',
+        const CaptureIngressHealth(
+          phase: 'actionRequired',
+          generation: 'g1',
+          reason: 'subscription_timeout',
+          validUntilMs: 0,
+          subscriptionConfirmed: false,
+          unverifiedSinceMs: 60000,
+        ),
+      );
+      await pumpBanner(tester, monitor);
+
+      final context = tester.element(find.byType(CaptureRecoveryBanner));
+      final l10n = AppLocalizations.of(context);
+      expect(find.text(l10n.captureIngressNeedsReconnect), findsOneWidget,
+          reason: 'the title names the required manual action, not a wait or a retry');
+      expect(find.text(l10n.captureRecoveryBanner), findsNothing,
+          reason: '"tap to reconnect" would promise an action this trigger cannot perform');
+      expect(find.text(l10n.captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'an ingress failure proves ingress, not durability (INV-CAP-1)');
+      expect(find.byKey(const Key('capture_recovery_banner_retry')), findsNothing,
+          reason: 'no retry affordance when the Dart-side retry would no-op');
+    });
+
+    testWidgets('every banner action keeps a 44-point target', (tester) async {
+      final monitor = makeMonitor();
+      wedge(monitor);
+
+      await pumpBanner(tester, monitor);
+
+      for (final key in const [
+        Key('capture_recovery_banner_retry'),
+        Key('capture_recovery_banner_info'),
+        Key('capture_recovery_banner_dismiss'),
+      ]) {
+        final size = tester.getSize(find.byKey(key));
+        expect(size.height, greaterThanOrEqualTo(44), reason: 'UX contract: 44pt minimum tap target');
+      }
+    });
+
     testWidgets('the storage episode taps through to a transfer retry, with no audio-safe detail line', (tester) async {
       var retries = 0;
       final monitor = makeMonitor(transferRetry: () async => retries++);
@@ -206,6 +250,8 @@ void main() {
 
       expect(retries, retriesBeforeTap + 1, reason: 'storage keeps its transfer-recovery tap');
       expect(find.text(AppLocalizations.of(context).captureAudioSavedTranscribesLater), findsNothing,
+          reason: 'the storage title already says what is unsynced');
+      expect(find.text(AppLocalizations.of(context).captureLinkStalledTranscribesLater), findsNothing,
           reason: 'the storage title already says what is unsynced');
     });
 
@@ -314,8 +360,8 @@ class _DismissRecordingMonitor extends CaptureWedgeMonitor {
   final List<String> dismissedDeviceIds = [];
 
   @override
-  void dismissDeviceEpisode(String deviceId) {
+  void dismissVisibleEpisode(String deviceId) {
     dismissedDeviceIds.add(deviceId);
-    super.dismissDeviceEpisode(deviceId);
+    super.dismissVisibleEpisode(deviceId);
   }
 }
