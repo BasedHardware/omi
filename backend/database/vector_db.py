@@ -13,7 +13,13 @@ from pinecone import Pinecone
 
 from database import projection_repair
 from database._client import data_plane_db as default_db_client
-from database.legal_holds import external_write_fence
+from database.legal_holds import (
+    DestructiveOperationInProgress,
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+    destructive_operation_gate,
+    external_write_fence,
+)
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_canonical_memory_vector_delete_filter,
@@ -652,10 +658,15 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
         )
     if not clauses:
         return 0
-    index.delete(
-        filter={'$and': [{'uid': {'$eq': uid}}, {'$or': clauses}]},
-        namespace=MEMORIES_NAMESPACE,
-    )
+    try:
+        with destructive_operation_gate(uid, kind='stale_vector_index_cleanup'):
+            index.delete(
+                filter={'$and': [{'uid': {'$eq': uid}}, {'$or': clauses}]},
+                namespace=MEMORIES_NAMESPACE,
+            )
+    except (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress):
+        logger.warning('canonical memory vector delete by ids skipped; destructive authority did not permit it')
+        return 0
     logger.info('delete_canonical_memory_vectors_by_ids count=%d', len(clauses))
     return len(clauses)
 

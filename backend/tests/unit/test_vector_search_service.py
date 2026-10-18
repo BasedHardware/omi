@@ -964,10 +964,6 @@ def test_hydration_default_deleter_uses_canonical_metadata_identity(monkeypatch)
         return len(observed)
 
     monkeypatch.setattr(
-        'utils.memory.vector_search_service.destructive_operation_gate',
-        lambda uid, **kwargs: _AllowGate(),
-    )
-    monkeypatch.setattr(
         'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
         fake_canonical_delete,
     )
@@ -1007,6 +1003,7 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
             calls.append({'ids': ids, 'filter': filter, 'namespace': namespace})
 
     monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _AllowGate())
     from database.vector_db import delete_canonical_memory_vectors_by_ids
 
     deleted = delete_canonical_memory_vectors_by_ids(
@@ -1051,14 +1048,15 @@ def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
     missing = _memory_item('missing', tier=MemoryTier.long_term, now=now)
     deleted = []
 
+    class _Index:
+        def delete(self, **kwargs):
+            deleted.append(kwargs)
+
     def blocked(uid, **kwargs):
         raise LegalHoldActive('held')
 
-    monkeypatch.setattr('utils.memory.vector_search_service.destructive_operation_gate', blocked)
-    monkeypatch.setattr(
-        'utils.memory.vector_search_service.delete_canonical_memory_vectors_by_ids',
-        lambda uid, observed: deleted.append((uid, list(observed))) or len(observed),
-    )
+    monkeypatch.setattr('database.vector_db.index', _Index())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', blocked)
 
     response = fetch_default_vector_memory_search(
         uid='u1',
