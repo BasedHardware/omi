@@ -29,6 +29,27 @@
       "why": "pre-existing; unreviewed; LIVE RISK: inline fallback (BYOK, dispatch disabled, enqueue failure) runs the full sync pipeline (STT + conversation writes) after the 202; a revision replacement kills it and recovery depends on lease expiry/retry claim"
     },
     {
+      "path": "services/users/account_deletion.py",
+      "function": "enqueue_deletion_wipe",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "dev/test-only inline dispatch (assert_inline_account_deletion_permitted); prod uses the durable Cloud Tasks enqueue"
+    },
+    {
+      "path": "services/users/account_deletion.py",
+      "function": "run_deletion_wipe_with_lease",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "lease-renewal heartbeat; awaited via shielded worker inside the same request (see finally: stop.set())"
+    },
+    {
+      "path": "services/users/account_deletion.py",
+      "function": "run_deletion_wipe_with_lease.run",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "lease-renewal heartbeat for the awaited wipe worker; stopped in finally"
+    },
+    {
       "path": "utils/batch_pipeline/projection_followup.py",
       "function": "ProjectionFollowups.launch",
       "kind": "start_background_task",
@@ -48,6 +69,13 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/jev_shadow.py",
+      "function": "_submit",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "best-effort shadow-inference submit; slot released via done callback, result intentionally unobserved"
     },
     {
       "path": "utils/conversations/lifecycle.py",
@@ -71,6 +99,20 @@
       "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor"
     },
     {
+      "path": "utils/conversations/process_conversation.py",
+      "function": "trigger_conversation_apps",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/jit_rollout.py",
+      "function": "PostHogJITFlagProvider.__call__",
+      "kind": "asyncio.create_task",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
       "path": "utils/jit_rollout.py",
       "function": "PostHogJITFlagProvider.__call__.forget",
       "kind": "loop.create_task",
@@ -85,6 +127,13 @@
       "why": "reviewed safe: process-lifetime daemon event loop for feature-flag lookups; no durable effect"
     },
     {
+      "path": "utils/llm/byok_errors.py",
+      "function": "handle_llm_error_async",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "best-effort BYOK error telemetry"
+    },
+    {
       "path": "utils/observability/sync_phases.py",
       "function": "_BackgroundFlush.__init__",
       "kind": "threading.Thread",
@@ -96,6 +145,13 @@
       "function": "DeferredDeleter.schedule",
       "kind": "threading.Thread",
       "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/other/storage.py",
+      "function": "download_audio_chunks_and_merge._submit_job",
+      "kind": "executor.submit",
+      "count": 2,
       "why": "pre-existing; unreviewed"
     },
     {
@@ -118,6 +174,20 @@
       "kind": "start_background_task",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/retrieval/rag.py",
+      "function": "retrieve_memories_for_topics",
+      "kind": "executor.submit",
+      "count": 2,
+      "why": "parallel fan-out whose futures are gathered by the caller"
+    },
+    {
+      "path": "utils/retrieval/rag.py",
+      "function": "retrieve_rag_conversation_context",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "single bounded prefetch submit; result consumed downstream"
     },
     {
       "path": "utils/speaker_learning_jobs.py",
@@ -195,6 +265,13 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "reviewed safe: best-effort playback cache warming"
+    },
+    {
+      "path": "utils/sync/playback.py",
+      "function": "_run_parallel_precache",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
     },
     {
       "path": "utils/sync/playback.py",

@@ -10,29 +10,38 @@ owned by such work died mid-flight during a rollout (fixed by #22149, which
 moved it into the awaited ``/v2/batch-pipeline/recover-quarantine`` handler).
 
 Scope (exact): every module under ``backend/`` reachable through first-party
-``utils.*`` / ``routers.*`` top-level imports (``import x`` and
-``from x import y`` with level 0, transitively, ``database.*`` excluded) from
-the router modules that own the Cloud Tasks / sync handlers:
+``utils.*`` / ``routers.*`` / ``services.*`` top-level imports (``import x``
+and ``from x import y`` with level 0, transitively, ``database.*`` excluded)
+from the router modules that own the Cloud Tasks / sync handlers:
 
 - ``routers/sync.py`` (``/v2/sync-local-files``, ``/v2/sync-jobs/run``,
   ``/v2/audio-merge-jobs/run``)
 - ``routers/batch_pipeline.py`` (``/v2/batch-pipeline/*`` incl. recover-quarantine)
-- ``routers/users.py`` (``/v1/users/account-deletion-wipes/run``)
+- ``routers/users.py`` (``/v1/users/account-deletion-wipes/run``; the wipe
+  itself is delegated to ``services/users/account_deletion.py``)
 - ``routers/conversation_finalization.py`` (``/v1/conversation-finalization-jobs/run``)
 
 plus every module in ``utils/batch_pipeline/`` and ``utils/sync/`` whether or
 not it is currently imported. Function-local imports are not followed.
 
+The scope is shared with CI path selection (``tests/support/
+background_task_ratchet_scope.py``): changing any module under a scanned
+top-level directory selects this ratchet, and a test below asserts the walk's
+closure never escapes those directories.
+
 Inventoried call kinds and when a call counts as un-awaited:
 
 - always: ``start_background_task(``, ``BackgroundTasks.add_task(`` (any
   ``.add_task(``), ``threading.Thread(``
-- when the returned handle is not consumed in the enclosing function:
+- when the returned handle is not *consumed* in the enclosing function:
   ``asyncio.create_task(`` / ``create_task(``, ``asyncio.ensure_future(``,
   ``<loop>.create_task(`` (receiver named ``*loop`` or ``get_*loop()``),
-  ``submit_with_context(``, ``<executor>.submit(``. "Not consumed" means the
-  result is discarded (expression statement or lambda body), stored on an
-  attribute/subscript, or bound to a local name that is never read again.
+  ``submit_with_context(``, ``<executor>.submit(``. "Consumed" means the
+  completion is actually observed: the handle is awaited (incl. inside
+  ``asyncio.gather/wait/wait_for/as_completed/shield``), ``.result()`` is
+  called on it, or it is returned to the caller. Merely reading the name --
+  attaching a done callback, checking ``.done()``, logging it -- does not
+  count: the work still outlives the request and dies at SIGKILL.
 
 Each site is keyed by (backend-relative path, enclosing def/class qualname,
 call kind) with a ``count`` -- never line numbers, so unrelated edits do not
@@ -56,62 +65,23 @@ from pathlib import Path
 
 import pytest
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-BASELINE_PATH = BACKEND_DIR / 'tests' / 'unit' / 'fixtures' / 'background_task_baseline.json'
-ROOT_MODULES = (
-    'routers/sync.py',
-    'routers/batch_pipeline.py',
-    'routers/users.py',
-    'routers/conversation_finalization.py',
+if __package__ in (None, ''):  # ``python tests/unit/test_background_task_ratchet.py --write``
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tests.support.background_task_ratchet_scope import (  # noqa: E402
+    BACKEND_DIR,
+    ROOT_MODULES,
+    ratchet_selection_prefixes,
+    scoped_modules,
 )
-WHOLE_PACKAGES = ('utils/batch_pipeline', 'utils/sync')
-FOLLOWED_PREFIXES = ('utils.', 'routers.')
+
+BASELINE_PATH = BACKEND_DIR / 'tests' / 'unit' / 'fixtures' / 'background_task_baseline.json'
 UNREVIEWED = 'pre-existing; unreviewed'
 
 ALWAYS_FLAGGED = {'start_background_task', 'BackgroundTasks.add_task', 'threading.Thread'}
 
-
-def _module_path(name: str) -> Path | None:
-    relative = name.replace('.', '/')
-    for candidate in (BACKEND_DIR / f'{relative}.py', BACKEND_DIR / relative / '__init__.py'):
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def _imported_names(node: ast.AST) -> set[str]:
-    """Import-time imports: everything outside function bodies (incl. guarded/try blocks)."""
-    names: set[str] = set()
-    for child in ast.iter_child_nodes(node):
-        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            continue
-        if isinstance(child, ast.Import):
-            names.update(alias.name for alias in child.names)
-        elif isinstance(child, ast.ImportFrom) and child.module and child.level == 0:
-            names.add(child.module)
-            names.update(f'{child.module}.{alias.name}' for alias in child.names)
-        else:
-            names.update(_imported_names(child))
-    return names
-
-
-def scoped_modules() -> list[Path]:
-    seen: set[Path] = set()
-    stack = [BACKEND_DIR / root for root in ROOT_MODULES]
-    for package in WHOLE_PACKAGES:
-        stack.extend(sorted((BACKEND_DIR / package).glob('*.py')))
-    while stack:
-        path = stack.pop()
-        if path in seen:
-            continue
-        seen.add(path)
-        for name in _imported_names(ast.parse(path.read_text(encoding='utf-8'))):
-            if not name.startswith(FOLLOWED_PREFIXES):
-                continue
-            target = _module_path(name)
-            if target is not None and target not in seen:
-                stack.append(target)
-    return sorted(seen)
+# Calls that observe completion of the handles passed to them as arguments.
+_COMPLETION_HELPERS = {'gather', 'wait', 'wait_for', 'as_completed', 'shield'}
 
 
 def _is_loop_receiver(node: ast.expr) -> bool:
@@ -163,6 +133,15 @@ class _SiteVisitor(ast.NodeVisitor):
         self.parents: dict[ast.AST, ast.AST] = {}
         self.sites: Counter[tuple[str, str]] = Counter()
 
+    def visit(self, node: ast.AST) -> None:
+        # Consumption checks look at *later* statements (e.g. the `await renew`
+        # in a finally block), so the parent map must cover the whole tree
+        # before any Call is classified -- generic_visit only fills it lazily.
+        for descendant in ast.walk(node):
+            for child in ast.iter_child_nodes(descendant):
+                self.parents[child] = descendant
+        super().visit(node)
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.scope.append(node.name)
         self.generic_visit(node)
@@ -179,8 +158,7 @@ class _SiteVisitor(ast.NodeVisitor):
     visit_AsyncFunctionDef = _visit_function
 
     def generic_visit(self, node: ast.AST) -> None:
-        for child in ast.iter_child_nodes(node):
-            self.parents[child] = node
+        # parents is pre-populated for the whole tree in visit(); nothing to do here.
         super().generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -189,23 +167,98 @@ class _SiteVisitor(ast.NodeVisitor):
             self.sites[('.'.join(self.scope) or '<module>', kind)] += 1
         self.generic_visit(node)
 
+    def _completion_helper(self, node: ast.AST) -> bool:
+        """``asyncio.gather/wait/wait_for/as_completed/shield`` (or a same-named import)."""
+        if not isinstance(node, ast.Call):
+            return False
+        func = node.func
+        if isinstance(func, ast.Attribute):
+            return func.attr in _COMPLETION_HELPERS
+        return isinstance(func, ast.Name) and func.id in _COMPLETION_HELPERS
+
+    def _reaches_completion_helper(self, node: ast.AST) -> bool:
+        for _ in range(3):  # name -> Starred/List/... -> helper call
+            parent = self.parents.get(node)
+            if parent is None:
+                return False
+            if self._completion_helper(parent):
+                return True
+            node = parent
+        return False
+
+    def _name_consumed(self, name: str) -> bool:
+        """Whether ``name``'s completion is observed in the enclosing function.
+
+        Awaits, ``.result()`` calls, ``return name`` (ownership moves to the
+        caller), appearance inside a completion helper's arguments, and
+        collection into a local container that is itself consumed count.
+        Receiver-only reads — ``name.add_done_callback(...)``, ``name.done()``,
+        ``name.cancel()``, logging the handle — do not: the work still
+        outlives the request.
+        """
+        body = self.functions[-1] if self.functions else None
+        if body is None:
+            return False
+        for use in ast.walk(body):
+            if not (isinstance(use, ast.Name) and use.id == name and isinstance(use.ctx, ast.Load)):
+                continue
+            parent = self.parents.get(use)
+            if isinstance(parent, (ast.Await, ast.Return)):
+                return True
+            if isinstance(parent, ast.Attribute):
+                # ``x.result()`` observes completion; ``x.done()`` / ``x.add_done_callback(...)`` do not.
+                if parent.attr == 'result' and isinstance(self.parents.get(parent), ast.Call):
+                    return True
+                continue  # Receiver-only read: x.done() / x.add_done_callback(...) / x.cancel().
+            if isinstance(parent, ast.Call):
+                if self._completion_helper(parent):
+                    return True
+                func = parent.func
+                if (
+                    isinstance(func, ast.Attribute)
+                    and func.attr in {'append', 'add', 'insert'}
+                    and isinstance(func.value, ast.Name)
+                ):
+                    if self._name_consumed(func.value.id):
+                        return True  # Collected into a container that is awaited later.
+                continue
+            if self._reaches_completion_helper(use):
+                return True  # e.g. gather(*tasks) / wait([task, other])
+        return False
+
     def _handle_consumed(self, call: ast.Call) -> bool:
         parent = self.parents.get(call)
         if isinstance(parent, (ast.Expr, ast.Lambda)):
+            return False
+        if isinstance(parent, (ast.Await, ast.Return, ast.Yield, ast.YieldFrom)):
+            return True  # Completion observed here, or ownership moves to the caller.
+        if isinstance(parent, ast.Attribute):
+            # ``create_task(...).result()`` observes completion; ``.done()`` / ``.add_done_callback(...)`` do not.
+            return parent.attr == 'result'
+        if isinstance(parent, ast.Call):
+            if self._completion_helper(parent):
+                return True  # e.g. ``await asyncio.gather(asyncio.create_task(...))``.
+            func = parent.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr in {'append', 'add', 'insert'}
+                and isinstance(func.value, ast.Name)
+            ):
+                return self._name_consumed(func.value.id)  # Collected into a local container.
+            return False  # Passed to an arbitrary callable: consumption is not observable here.
+        if isinstance(parent, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            owner = self.parents.get(parent)
+            if isinstance(owner, (ast.Assign, ast.AnnAssign)):
+                targets = owner.targets if isinstance(owner, ast.Assign) else [owner.target]
+                if len(targets) == 1 and isinstance(targets[0], ast.Name):
+                    return self._name_consumed(targets[0].id)
             return False
         if isinstance(parent, (ast.Assign, ast.AnnAssign)):
             targets = parent.targets if isinstance(parent, ast.Assign) else [parent.target]
             if len(targets) != 1 or not isinstance(targets[0], ast.Name):
                 return False  # Stored on an object/collection: the handle outlives this call.
-            name = targets[0].id
-            body = self.functions[-1] if self.functions else None
-            if body is None:
-                return False
-            return any(
-                isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load)
-                for node in ast.walk(body)
-            )
-        return True  # Awaited, returned, passed on, or collected into a larger expression.
+            return self._name_consumed(targets[0].id)
+        return False  # Truthiness test, comparison, arithmetic, ...: no completion observed.
 
 
 def scan() -> dict[tuple[str, str, str], int]:
@@ -240,6 +293,18 @@ def test_scope_includes_handler_routers_and_owned_packages(scanned):
     assert 'utils/batch_pipeline/quarantine_recovery.py' in modules
     assert 'utils/sync/pipeline.py' in modules
     assert 'utils/executors.py' in modules
+    # routers/users.py delegates the wipe handler to services.users.account_deletion.
+    assert 'services/users/account_deletion.py' in modules
+
+
+def test_scope_never_escapes_the_ci_selection_prefixes(scanned):
+    """The AST walk (scanner scope) must stay inside the cheap prefix superset
+    the CI selector uses (see tests/support/background_task_ratchet_scope.py);
+    otherwise a changed scanned module would stop selecting this ratchet."""
+    prefixes = ratchet_selection_prefixes()
+    for path in scanned[0]:
+        relative = path.relative_to(BACKEND_DIR).as_posix()
+        assert relative.startswith(prefixes), relative
 
 
 def test_background_task_sites_match_baseline(scanned):
@@ -292,13 +357,25 @@ async def handler(executor, loop, background_tasks):
     threading.Thread(target=fn).start()
     client.create_task(parent='p', task={})
     await asyncio.gather(asyncio.create_task(work()))
+    tracked = asyncio.create_task(work(), name='tracked')
+    tracked.add_done_callback(lambda task: None)
+    watched = asyncio.ensure_future(work())
+    if watched.done():
+        return
+    logged = executor.submit(fn)
+    logger.info('submitted %s', logged)
+    collected = executor.submit(fn)
+    tasks.append(collected)
+    await asyncio.gather(*tasks)
+    waited = submit_with_context(executor, fn)
+    await asyncio.wait_for(waited, timeout=1)
 '''
     visitor = _SiteVisitor()
     visitor.visit(ast.parse(source))
     assert dict(visitor.sites) == {
-        ('handler', 'asyncio.create_task'): 1,
-        ('handler', 'asyncio.ensure_future'): 1,
-        ('handler', 'executor.submit'): 2,
+        ('handler', 'asyncio.create_task'): 2,
+        ('handler', 'asyncio.ensure_future'): 2,
+        ('handler', 'executor.submit'): 3,
         ('handler', 'loop.create_task'): 1,
         ('handler', 'start_background_task'): 1,
         ('handler', 'BackgroundTasks.add_task'): 1,

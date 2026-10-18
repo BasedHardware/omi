@@ -133,6 +133,28 @@ async def test_fastapi_background_tasks_run_after_the_response_and_are_lost():
     assert report.one('POST /background-tasks').outcome == COMPLETED
 
 
+async def test_quick_background_task_is_still_recorded_as_post_response():
+    """A BackgroundTasks callback that finishes between the response and
+    ``replace_revision()`` must not vanish from the report (review finding:
+    recording only at replacement time is timing-dependent)."""
+    app = FastAPI()
+
+    @app.post('/quick-background-tasks')
+    async def quick_background_tasks(tasks: BackgroundTasks) -> dict:
+        tasks.add_task(asyncio.sleep, 0.01)
+        return {'status': 'accepted'}
+
+    async with RevisionDrainHarness(app) as harness:
+        unit = harness.request('POST', '/quick-background-tasks')
+        assert (await harness.response(unit)).json() == {'status': 'accepted'}
+        await asyncio.sleep(0.05)  # The callback completes long before revision replacement.
+        report = await harness.replace_revision(grace_seconds=0.05)
+
+    post = report.one('post-response POST /quick-background-tasks')
+    assert (post.kind, post.scope, post.outcome) == (POST_RESPONSE, FIRE_AND_FORGET, COMPLETED)
+    assert post in report.survived_by_luck
+
+
 def _paid_stt(harness_ref: list, entered: threading.Event, release: threading.Event):
     def paid_call(*args, **kwargs):
         entered.set()

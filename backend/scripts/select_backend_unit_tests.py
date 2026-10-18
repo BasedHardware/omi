@@ -19,6 +19,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
+from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -145,6 +146,21 @@ FIRESTORE_INDEX_GUARD_TESTS = (
 FIRESTORE_INDEX_GUARD_SUPPORT_PREFIX = 'backend/tests/support/firestore_'
 FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
     {'firestore.indexes.json', 'backend/database/firestore_index_registry.py'}
+)
+
+# Background-task ratchet: un-awaited background work on the Cloud Tasks
+# handler request paths must survive revision draining (#22198). The scanned
+# module set is owned by the ratchet itself
+# (tests/support/background_task_ratchet_scope.py); selection uses that
+# module's cheap prefix superset over the same scope constants, so a change
+# to any module the scanner can reach — including transitive closure members
+# like utils/stt/soniox_runway.py or services/users/account_deletion.py —
+# always runs the ratchet, and a new un-awaited site cannot slip past
+# changed-file CI and only fail a later --all run. The ratchet's own test
+# asserts the walk never escapes the selection prefixes.
+BACKGROUND_TASK_RATCHET_TESTS = (
+    'tests/unit/test_background_task_ratchet.py',
+    'tests/unit/test_revision_drain_harness.py',
 )
 
 # Shared with the canonical release manifest's named trigger. Do not copy the
@@ -393,14 +409,10 @@ AREA_TESTS = (
     ),
     (
         # Cloud Tasks handler request paths: background work there must survive revision draining.
+        # Superseded by the shared ratchet-scope guard in tests_for_changed_paths
+        # (tests/support/background_task_ratchet_scope.py), which selects the
+        # ratchet for *every* module the scanner walks, not just these seeds.
         (
-            'backend/routers/sync.py',
-            'backend/routers/batch_pipeline.py',
-            'backend/routers/users.py',
-            'backend/routers/conversation_finalization.py',
-            'backend/utils/sync/',
-            'backend/utils/batch_pipeline/',
-            'backend/utils/conversations/',
             'backend/tests/unit/fixtures/revision_drain.py',
             'backend/tests/unit/fixtures/background_task_baseline.json',
         ),
@@ -536,6 +548,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
     selected: set[str] = set()
     if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
+    if any(is_background_task_ratchet_path(path) for path in changed_paths):
+        selected.update(test for test in BACKGROUND_TASK_RATCHET_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 

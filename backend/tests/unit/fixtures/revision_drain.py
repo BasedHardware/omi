@@ -90,6 +90,7 @@ class WorkUnit:
     children: list['WorkUnit'] = field(default_factory=list)
     response_done: asyncio.Event | None = None
     is_origin: bool = False
+    post_response_recorded: bool = False
 
     @property
     def name(self) -> str:
@@ -251,6 +252,18 @@ class RevisionDrainHarness:
             for child in unit.children:
                 if child.scope is None:
                     child.scope = REQUEST_SCOPED if child.handle.done() else FIRE_AND_FORGET
+        if (
+            outcome == COMPLETED
+            and unit.handle is not None
+            and not unit.handle.done()
+            and not unit.post_response_recorded
+        ):
+            # The final body chunk was sent while the ASGI call is still running
+            # (FastAPI BackgroundTasks): record the post-response work now, not
+            # at replacement time -- it may complete or raise first, and a
+            # later `handle.done()` check would miss it entirely.
+            unit.post_response_recorded = True
+            self._record(POST_RESPONSE, f'post-response {unit.label}', unit.handle, unit)
         assert unit.response_done is not None
         unit.response_done.set()
 
@@ -377,8 +390,11 @@ class RevisionDrainHarness:
             if unit.outcome is None:
                 unit.handle.cancel()  # Exceeded the request timeout; Cloud Run kills it.
                 self._close_request(unit, KILLED)
-            elif not unit.handle.done():
+            elif not unit.post_response_recorded and not unit.handle.done():
                 # Response sent, ASGI call still running (FastAPI BackgroundTasks): outside the request.
+                # Usually already recorded eagerly at final-chunk time (see _close_request); this is
+                # the belt-and-suspenders path for requests completed while we were draining others.
+                unit.post_response_recorded = True
                 self._record(POST_RESPONSE, f'post-response {unit.label}', unit.handle, unit)
 
         if on_sigterm is not None:
