@@ -46,6 +46,42 @@ def test_transcript_schedule_without_a_loop_records_bounded_drop_reason(monkeypa
     assert _value(FLEET_HEALTH_WRITE_DROPPED, **dropped_labels) == before_dropped + 1
 
 
+def test_raising_write_counters_do_not_break_record_or_schedule(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+
+    def raise_counter_error(**_labels):
+        raise RuntimeError('synthetic metrics failure')
+
+    monkeypatch.setattr(FLEET_HEALTH_WRITE_ATTEMPTED, 'labels', raise_counter_error)
+    monkeypatch.setattr(FLEET_HEALTH_WRITE_DROPPED, 'labels', raise_counter_error)
+    monkeypatch.setattr(FLEET_HEALTH_WRITE_WRITTEN, 'labels', raise_counter_error)
+    health = FleetHealth(clock=lambda: 1000.0)
+
+    # Without a running loop record() takes the ordinary bounded drop path.
+    health.record('soniox', 'en', 'text')
+
+
+@pytest.mark.asyncio
+async def test_raising_attempt_counter_does_not_block_background_schedule(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+
+    def raise_counter_error(**_labels):
+        raise RuntimeError('synthetic metrics failure')
+
+    monkeypatch.setattr(FLEET_HEALTH_WRITE_ATTEMPTED, 'labels', raise_counter_error)
+    health = FleetHealth(clock=lambda: 1000.0)
+    tasks = _capture_background_tasks(monkeypatch)
+    completed = []
+
+    async def pending_write():
+        completed.append(True)
+
+    health.schedule(pending_write(), write_path='transcript_result', kind='result')
+    await asyncio.gather(*tasks)
+
+    assert completed == [True]
+
+
 @pytest.mark.asyncio
 async def test_transcript_written_counter_increments_only_after_pipeline_commit(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
@@ -86,6 +122,50 @@ async def test_transcript_written_counter_increments_only_after_pipeline_commit(
 
     assert _value(FLEET_HEALTH_WRITE_ATTEMPTED, **labels) == attempted_before + 1
     assert _value(FLEET_HEALTH_WRITE_WRITTEN, **labels) == written_before + 1
+
+
+@pytest.mark.asyncio
+async def test_transcript_post_commit_cleanup_error_stays_written_only(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    labels = {'write_path': 'transcript_result', 'kind': 'result'}
+    written_before = _value(FLEET_HEALTH_WRITE_WRITTEN, **labels)
+    dropped_labels = {**labels, 'reason': 'redis_error'}
+    dropped_before = _value(FLEET_HEALTH_WRITE_DROPPED, **dropped_labels)
+
+    class Pipeline:
+        def incr(self, _key):
+            return self
+
+        def expire(self, _key, _seconds):
+            return self
+
+        async def execute(self):
+            return [1, 1]
+
+    class Redis:
+        async def mget(self, _keys):
+            return ['selection:999', None]
+
+        def pipeline(self, *, transaction):
+            assert transaction is False
+            return Pipeline()
+
+        async def eval(self, *_args):
+            raise ConnectionError('synthetic post-commit cleanup failure')
+
+    health = FleetHealth(clock=lambda: 1000.0, redis_client=Redis())
+    monkeypatch.setattr(health, '_check_identity', lambda: 'stable')
+    monkeypatch.setattr(health, '_score_keys', lambda *_args: ('text-score', 'no-text-score'))
+
+    async def bounded(operation):
+        return await operation
+
+    monkeypatch.setattr(health, '_bounded', bounded)
+    await health._write_result('soniox', 'en', 'text', expected_identity='stable')
+
+    assert _value(FLEET_HEALTH_WRITE_WRITTEN, **labels) == written_before + 1
+    assert _value(FLEET_HEALTH_WRITE_DROPPED, **dropped_labels) == dropped_before
+    assert health._redis_retry_at == 0.0
 
 
 @pytest.mark.asyncio

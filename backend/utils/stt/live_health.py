@@ -20,10 +20,10 @@ from config import live_stt_state
 from utils.executors import start_background_task
 from utils.stt.live_cost_health import CostHealthMixin
 from utils.stt.live_metrics import (
-    FLEET_HEALTH_WRITE_ATTEMPTED,
-    FLEET_HEALTH_WRITE_DROPPED,
-    FLEET_HEALTH_WRITE_WRITTEN,
     LEG_TRANSCRIPT_OUTCOME,
+    record_fleet_health_write_attempted,
+    record_fleet_health_write_dropped,
+    record_fleet_health_write_written,
 )
 
 logger = logging.getLogger(__name__)
@@ -326,15 +326,11 @@ class FleetHealth(CostHealthMixin):
         expected_identity: str | None = None,
     ) -> None:
         if self._clock() < self._redis_retry_at:
-            FLEET_HEALTH_WRITE_DROPPED.labels(
-                write_path='transcript_result', kind='result', reason='redis_backoff'
-            ).inc()
+            record_fleet_health_write_dropped(write_path='transcript_result', kind='result', reason='redis_backoff')
             return
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
-            FLEET_HEALTH_WRITE_DROPPED.labels(
-                write_path='transcript_result', kind='result', reason='identity_changed'
-            ).inc()
+            record_fleet_health_write_dropped(write_path='transcript_result', kind='result', reason='identity_changed')
             return
         scope = scoped_identity(provider, endpoint)
         bucket = int(self._clock() // SCORE_BUCKET_SECONDS)
@@ -347,14 +343,14 @@ class FleetHealth(CostHealthMixin):
                 live_stt_state.fleet_probe_key(provider, account=True),
             ),
         )
+        expired: list[tuple[str, str, str]] = []
         try:
-            expired: list[tuple[str, str, str]] = []
             if outcome == 'text':
                 values = await self._bounded(self._redis().mget([state_key for state_key, _ in states]))
                 if self._check_identity() != identity:
-                    FLEET_HEALTH_WRITE_DROPPED.labels(
+                    record_fleet_health_write_dropped(
                         write_path='transcript_result', kind='result', reason='identity_changed'
-                    ).inc()
+                    )
                     return
                 if not isinstance(values, list) or len(values) != len(states):
                     raise ValueError('invalid fleet health read')
@@ -369,31 +365,41 @@ class FleetHealth(CostHealthMixin):
             pipe.incr(key)
             pipe.expire(key, SCORE_BUCKET_SECONDS * (SCORE_BUCKETS + 1))
             await self._bounded(pipe.execute())
-            FLEET_HEALTH_WRITE_WRITTEN.labels(write_path='transcript_result', kind='result').inc()
+        except Exception:
+            try:
+                if self._check_identity() == identity:
+                    self._redis_retry_at = self._clock() + 10.0
+            except Exception:
+                logger.debug('Unable to verify identity after STT fleet health Redis failure', exc_info=True)
+            record_fleet_health_write_dropped(write_path='transcript_result', kind='result', reason='redis_error')
+            logger.debug('STT fleet health write fell back to local state', exc_info=True)
+            return
+
+        # The score write has committed. Later identity checks, cleanup, or telemetry
+        # failures cannot turn this acknowledged write into a Redis error/drop.
+        record_fleet_health_write_written(write_path='transcript_result', kind='result')
+        try:
             if self._check_identity() != identity:
-                FLEET_HEALTH_WRITE_DROPPED.labels(
+                record_fleet_health_write_dropped(
                     write_path='transcript_result', kind='result', reason='identity_changed_after_commit'
-                ).inc()
+                )
                 return
             for state_key, probe_key, clear_bench in expired:
                 await self._bounded(self._redis().eval(BENCH_CLEANUP, 2, state_key, probe_key, clear_bench))
                 if self._check_identity() != identity:
-                    FLEET_HEALTH_WRITE_DROPPED.labels(
+                    record_fleet_health_write_dropped(
                         write_path='transcript_result', kind='result', reason='identity_changed_after_commit'
-                    ).inc()
+                    )
                     return
         except Exception:
-            if self._check_identity() == identity:
-                self._redis_retry_at = self._clock() + 10.0
-            FLEET_HEALTH_WRITE_DROPPED.labels(write_path='transcript_result', kind='result', reason='redis_error').inc()
-            logger.debug('STT fleet health write fell back to local state', exc_info=True)
+            logger.debug('STT fleet health post-commit bench cleanup failed', exc_info=True)
 
     def schedule(self, coroutine: Any, *, write_path: str, kind: str) -> None:
         """Best-effort result write; account/selection benches use the retry map."""
         if mode() == 'off':
             coroutine.close()
             return
-        FLEET_HEALTH_WRITE_ATTEMPTED.labels(write_path=write_path, kind=kind).inc()
+        record_fleet_health_write_attempted(write_path=write_path, kind=kind)
         try:
             loop = asyncio.get_running_loop()
             self._loop = loop
@@ -403,12 +409,12 @@ class FleetHealth(CostHealthMixin):
             loop = self._loop
             if loop is None or loop.is_closed():
                 coroutine.close()
-                FLEET_HEALTH_WRITE_DROPPED.labels(write_path=write_path, kind=kind, reason='loop_unavailable').inc()
+                record_fleet_health_write_dropped(write_path=write_path, kind=kind, reason='loop_unavailable')
                 return
         with self._lock:
             if self._writes_in_flight['result'] >= WRITE_IN_FLIGHT_LIMITS['result']:
                 coroutine.close()
-                FLEET_HEALTH_WRITE_DROPPED.labels(write_path=write_path, kind=kind, reason='in_flight_limit').inc()
+                record_fleet_health_write_dropped(write_path=write_path, kind=kind, reason='in_flight_limit')
                 return
             self._writes_in_flight['result'] += 1
 
@@ -422,9 +428,7 @@ class FleetHealth(CostHealthMixin):
             except RuntimeError:
                 coroutine.close()
                 release()
-                FLEET_HEALTH_WRITE_DROPPED.labels(
-                    write_path=write_path, kind=kind, reason='background_schedule_error'
-                ).inc()
+                record_fleet_health_write_dropped(write_path=write_path, kind=kind, reason='background_schedule_error')
             else:
                 task.add_done_callback(lambda _task: release())
 
@@ -436,9 +440,9 @@ class FleetHealth(CostHealthMixin):
             except RuntimeError:
                 coroutine.close()
                 release()
-                FLEET_HEALTH_WRITE_DROPPED.labels(
+                record_fleet_health_write_dropped(
                     write_path=write_path, kind=kind, reason='cross_thread_schedule_error'
-                ).inc()
+                )
 
     def quarantine(self, provider: str, kind: str, seconds: float, *, endpoint: str | None = None) -> None:
         # Account quarantine is a mode-independent hard exclusion: a quota/auth

@@ -1,8 +1,10 @@
 """Bounded live-chain and windowed TDT metrics, collected by the listen scrape."""
 
-from prometheus_client import Counter, Gauge, Histogram
-from typing import NamedTuple
+import logging
 import threading
+from typing import Any, NamedTuple
+
+from prometheus_client import Counter, Gauge, Histogram
 
 from config.live_stt_recovery import recovery_enabled
 from utils.observability.demand_cohort import DEMAND_COHORTS, initialize_metric
@@ -186,6 +188,50 @@ FLEET_HEALTH_WRITE_WRITTEN = Counter(
     'Fleet-health writes acknowledged by Redis by bounded path and kind',
     ['write_path', 'kind'],
 )
+
+_logger = logging.getLogger(__name__)
+
+
+def safe_counter_increment(counter: Any, *, metric_name: str, **labels: str) -> None:
+    """Record best-effort telemetry without allowing instrumentation to affect serving."""
+    try:
+        counter.labels(**labels).inc()
+    except Exception:
+        try:
+            _logger.debug('Unable to increment metric %s', metric_name, exc_info=True)
+        except Exception:
+            # A logging handler failure must not turn a metrics failure into a request failure.
+            pass
+
+
+def record_fleet_health_write_attempted(*, write_path: str, kind: str) -> None:
+    safe_counter_increment(
+        FLEET_HEALTH_WRITE_ATTEMPTED,
+        metric_name='omi_stt_fleet_health_write_attempted_total',
+        write_path=write_path,
+        kind=kind,
+    )
+
+
+def record_fleet_health_write_written(*, write_path: str, kind: str) -> None:
+    safe_counter_increment(
+        FLEET_HEALTH_WRITE_WRITTEN,
+        metric_name='omi_stt_fleet_health_write_written_total',
+        write_path=write_path,
+        kind=kind,
+    )
+
+
+def record_fleet_health_write_dropped(*, write_path: str, kind: str, reason: str) -> None:
+    safe_counter_increment(
+        FLEET_HEALTH_WRITE_DROPPED,
+        metric_name='omi_stt_fleet_health_write_dropped_total',
+        write_path=write_path,
+        kind=kind,
+        reason=reason,
+    )
+
+
 ROUTING_DECISION_LATENCY = Histogram(
     'omi_stt_routing_decision_seconds',
     'Time spent choosing the eligible live STT order without network operations',
