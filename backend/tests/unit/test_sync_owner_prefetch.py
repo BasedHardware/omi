@@ -113,7 +113,7 @@ def test_speculation_never_becomes_authority(preparation, monkeypatch, fault):
         download.assert_not_called()
 
 
-@pytest.mark.parametrize('state', ['unchanged', 'replaced', 'deleted', 'disabled', 'derived'])
+@pytest.mark.parametrize('state', ['unchanged', 'replaced', 'deleted', 'disabled', 'derived', 'encoded'])
 def test_download_validates_generation_lifecycle_bucket_priority_and_switch(preparation, monkeypatch, tmp_path, state):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'derived' if state == 'derived' else '')
@@ -121,6 +121,7 @@ def test_download_validates_generation_lifecycle_bucket_priority_and_switch(prep
     client = MagicMock()
     blob = client.bucket.return_value.blob.return_value
     blob.generation = 2 if state == 'replaced' else 1
+    blob.content_encoding = 'gzip' if state == 'encoded' else None
     monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
     path = 'syncing/a/next/audio'
     token = preparation.acquire('a')
@@ -145,7 +146,7 @@ def test_prefetch_download_is_generation_fenced_and_size_bounded(monkeypatch):
     monkeypatch.setattr(storage, 'syncing_local_bucket', 'staged')
     client = MagicMock()
     blob = client.bucket.return_value.blob.return_value
-    blob.size, blob.generation = 10, 42
+    blob.size, blob.generation = 5, 42
     blob.content_encoding = None
     blob.download_as_bytes.return_value = b'bytes'
     monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
@@ -156,3 +157,7 @@ def test_prefetch_download_is_generation_fenced_and_size_bounded(monkeypatch):
     blob.size = MAX_FILE_BYTES + 1
     assert storage.prefetch_syncing_temporal_file('path') is None
     assert blob.download_as_bytes.call_count == 1
+    blob.size = 6
+    assert storage.prefetch_syncing_temporal_file('path') is None  # Truncated range cannot become authoritative bytes.
+    blob.size, blob.content_encoding = 5, 'gzip'
+    assert storage.prefetch_syncing_temporal_file('path') is None

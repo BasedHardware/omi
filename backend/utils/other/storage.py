@@ -632,7 +632,7 @@ def download_syncing_temporal_file(file_path: str) -> bool:
                 # Lifecycle deletion, replacement, or a higher-priority derived
                 # object must win over cached bytes. Never resurrect expired audio.
                 blob.reload()
-                if int(blob.generation) == prepared.generation:
+                if int(blob.generation) == prepared.generation and not blob.content_encoding:
                     with open(file_path, 'wb') as output:
                         output.write(prepared.data)
                     logger.info('event=sync_owner_prefetch outcome=hit')
@@ -656,7 +656,7 @@ def prefetch_syncing_temporal_file(file_path: str) -> StagedBytes | None:
             data = blob.download_as_bytes(
                 start=0, end=MAX_FILE_BYTES, if_generation_match=generation, timeout=(1, 3), retry=None
             )
-            if len(data) <= MAX_FILE_BYTES:
+            if len(data) == blob.size:
                 return StagedBytes(data, name, generation)
             return None
         except BlobNotFound:

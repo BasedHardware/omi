@@ -43,7 +43,9 @@ def warm_owner(uid: str, job_id: str, epoch: int) -> None:
                 files += 1
                 value = prefetch_syncing_temporal_file(path)
                 if value is not None:
-                    cached += int(staged_prefetch.put(uid, token, path, value))
+                    if not staged_prefetch.put(uid, token, path, value):
+                        return
+                    cached += 1
     except Exception as error:
         # Speculation cannot fail accepted work; the ordinary download is still
         # the authoritative path, with its original retry/error behavior.
