@@ -65,6 +65,9 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
         return None
     from database import processing_backlog as store
 
+    # Pin the grant's month before reads: rollover between validation and the
+    # write must expire this grant, never stamp old intent with a new budget.
+    period = funded_processing.period_id()
     allowance = funded_processing.allowance(uid)
     result = snapshot(uid, allowance=allowance)
     if result is None:
@@ -81,13 +84,13 @@ def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: An
         except (TypeError, ValueError, OverflowError, OSError):
             pass
     begin = result.state not in {'none', 'capped'} and (
-        not automatic or intent_period == funded_processing.period_id() and not result.exceeds_remaining
+        not automatic or intent_period == period and not result.exceeds_remaining
     )
     if not begin and not automatic:
         return None
     chosen = store.start(
         uid,
-        period=funded_processing.period_id(),
+        period=period,
         remaining=result.remaining_units,
         cutoff=time.time(),
         request_key=request_key,

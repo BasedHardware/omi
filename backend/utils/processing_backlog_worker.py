@@ -128,6 +128,8 @@ async def run(uid: str, *, continuation: bool = False):
         # A reserved application attempt keeps its identity over crashes and
         # cooldowns. Never debit the user's chosen estimate twice.
         if reserved:
+            if job['period'] != funded_processing.period_id():
+                return
             if not await _process(uid, reserved):
                 return
             if not await save({'reserved': {}}):

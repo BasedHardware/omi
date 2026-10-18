@@ -442,3 +442,47 @@ def test_later_dispatch_denial_keeps_capture_instead_of_ingress_cleanup(monkeypa
         assert result.processing_deferred
         create.assert_called_once()
     persist.assert_not_called()
+
+
+def test_rollover_during_choice_never_stamps_old_intent_with_new_month(monkeypatch):
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    month = Mock(side_effect=['2026-01', '2026-02'])
+    monkeypatch.setattr(funded, 'period_id', month)
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
+    monkeypatch.setattr(
+        backlog,
+        'snapshot',
+        lambda *a, **k: ProcessingBacklog(
+            state='waiting_choice', remaining_units=130, estimated_units=10, exceeds_remaining=False
+        ),
+    )
+    start = Mock(return_value={'period': '2026-01'})
+    monkeypatch.setattr(worker.store, 'start', start)
+    result = backlog.choose(
+        'synthetic',
+        request_key='rollover-upgrade',
+        automatic=True,
+        intent_at=datetime(2026, 1, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp(),
+    )
+    assert result['period'] == '2026-01'
+    assert start.call_args.kwargs['period'] == '2026-01'
+    month.assert_called_once()
+
+
+async def test_reserved_attempt_does_not_dispatch_if_month_rolls_during_claim(monkeypatch):
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'period_id', Mock(side_effect=['2026-01', '2026-01', '2026-02']))
+    monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
+    monkeypatch.setattr(
+        worker.store,
+        'read',
+        lambda uid: {'state': 'processing', 'period': '2026-01', 'token': 'old', 'reserved': {'id': 'reserved'}},
+    )
+    monkeypatch.setattr(worker.store, 'claim', lambda *args: 'lease')
+    monkeypatch.setattr(worker.store, 'checkpoint', lambda *args: True)
+    from unittest.mock import AsyncMock
+
+    process = AsyncMock(side_effect=AssertionError('old month dispatched'))
+    monkeypatch.setattr(worker, '_process', process)
+    await worker.run('synthetic')
+    process.assert_not_called()
