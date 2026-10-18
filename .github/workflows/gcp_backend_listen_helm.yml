@@ -80,8 +80,8 @@ on:
         default: ''
         type: string
 
-# This chart path mutates backend-listen and shared backend-secrets, which are
-# also applied by the full backend deploy for the same environment.
+# This path mutates backend-listen, the production NEG coverage exporter, and
+# shared backend-secrets, which are also applied by the full backend deploy.
 concurrency:
   group: deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}
   cancel-in-progress: false
@@ -346,6 +346,16 @@ jobs:
             ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"} \
             --dry-run
 
+      - name: NEG coverage exporter Helm dry run
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && env.BACKEND_LISTEN_SOURCE_SHA != '' }}
+        run: |
+          set -euo pipefail
+          helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
+            ./backend/charts/monitoring/neg-coverage-exporter \
+            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
+            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
+            --dry-run
+
       # The ExternalSecret resource (which tells external-secrets which GCP
       # Secret Manager keys to sync into the K8s `*-omi-backend-secrets`
       # secret) lives in this chart. Without re-applying it, a new chart key
@@ -380,6 +390,16 @@ jobs:
             --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}
 
+      - name: Upgrade NEG coverage exporter Helm chart
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && env.BACKEND_LISTEN_SOURCE_SHA != '' }}
+        run: |
+          set -euo pipefail
+          helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
+            ./backend/charts/monitoring/neg-coverage-exporter \
+            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
+            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
+            --atomic --wait --timeout 5m
+
       - name: Roll back backend-listen Helm release
         if: ${{ github.event.inputs.mode == 'rollback' }}
         env:
@@ -402,6 +422,23 @@ jobs:
           echo "Image after rollback: $AFTER"
           helm -n "$NS" history "$RELEASE" --max 10
 
+      - name: Roll back or remove NEG coverage exporter Helm release
+        if: ${{ github.event.inputs.mode == 'rollback' && github.event.inputs.environment == 'prod' }}
+        run: |
+          set -euo pipefail
+          RELEASE=prod-omi-neg-coverage-exporter
+          NS=prod-omi-monitoring
+          if helm -n "$NS" status "$RELEASE" >/dev/null 2>&1; then
+            REVISION_COUNT="$(helm -n "$NS" history "$RELEASE" --output json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+            if (( REVISION_COUNT > 1 )); then
+              helm -n "$NS" rollback "$RELEASE" --wait --timeout 5m
+            else
+              helm -n "$NS" uninstall "$RELEASE" --wait --timeout 5m
+            fi
+          else
+            echo "No NEG coverage exporter Helm release to roll back."
+          fi
+
       - name: Verify rollout
         run: |
           # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
@@ -411,6 +448,11 @@ jobs:
             exit 1
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+
+      - name: Verify NEG coverage exporter rollout
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && env.BACKEND_LISTEN_SOURCE_SHA != '' }}
+        run: |
+          kubectl -n prod-omi-monitoring rollout status deploy/neg-coverage-exporter --timeout=300s
 
       - name: Show pod status
         if: always()
