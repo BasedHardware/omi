@@ -626,3 +626,22 @@ def test_strict_vad_log_survives_failed_recovery_without_content(pipeline, monke
     assert len(events) == 1
     assert f'outcome={outcome} lane=fresh provider=parakeet segment_ref=synthetic-sealed-segment' in events[0]
     assert 'private-owner' not in events[0] and 'private-path' not in events[0]
+
+
+@pytest.mark.parametrize(
+    'error', [ValueError('internal refresh'), TypeError('internal type'), RuntimeError('transient')]
+)
+def test_finalize_internal_failure_is_retryable_and_has_no_provider_label(pipeline, monkeypatch, tmp_path, error):
+    module, store = pipeline
+    path = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=3000).export(path, format='wav')
+    monkeypatch.setattr(module, 'finish_sync_segment', MagicMock(side_effect=error))
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert module.process_segment(str(path), 'u', response, threading.Lock(), errors, deferred_outcome=outcome) is False
+    assert conversations(store)
+    assert errors == ['sync_finalize_failed']
+    assert outcome['outcome'].value == 'upstream_error'
+    assert outcome['retryable'] is True
+    assert outcome['provider'] == 'unknown' and outcome['model'] == 'unknown'
+    assert outcome['phase'] == 'finalize' and not outcome.get('provider_invalid_input')

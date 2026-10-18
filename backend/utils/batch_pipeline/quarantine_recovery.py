@@ -1,6 +1,9 @@
 """Default-off, at-most-once legacy STT dispatch with durable result reconciliation."""
 
 from dataclasses import fields
+import hashlib
+import os
+from urllib.parse import urlsplit
 import io
 import logging
 import time
@@ -12,6 +15,7 @@ from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
     recovery_owners,
+    recovery_tasks_enabled,
     recovery_enabled_for,
     recover_all_admitted,
     empty_asr_disposition_enabled,
@@ -32,6 +36,9 @@ from utils.batch_pipeline.recovery_disposition import (
     padded_empty,
     terminal_empty_payload,
 )
+
+from utils.cloud_tasks import enqueue_named_task
+from utils.sync.stage import current_stage
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +264,66 @@ class QuarantineRecovery:
         except ProjectionBlocked:
             return 'held'
 
+    def dispatch(self, segment_id, owner_id):
+        try:
+            return self._dispatch(segment_id, owner_id)
+        except BatchPrivacyBlocked:
+            cancel_fenced_recovery(self.store, segment_id)
+            return 'cancelled'
+        except ProjectionBlocked:
+            return 'held'
+        except Exception as error:
+            # A lost create-task acknowledgement can race delivery. Both paths
+            # adopt the SAME intent; only RecoveryStore.start may spend it.
+            logger.warning(
+                'event=batch_quarantine_recovery action=dispatch outcome=inline exception_type=%s',
+                type(error).__name__,
+            )
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='cloud_tasks',
+                to_mode='inline',
+                reason='enqueue_failed',
+                outcome='degraded',
+            )
+            return self.recover(segment_id, owner_id)
+
+    def _dispatch(self, segment_id, owner_id):
+        if not recovery_enabled_for(owner_id):
+            return 'disabled'
+        # prepare() is the existing durable privacy/ownership fence. Enqueue
+        # acknowledgement loss never spends the intent. The HTTP handler or
+        # inline fallback must win prepared -> running before a provider call.
+        job = self.protocol.prepare(segment_id, owner_id, self.clock())
+        if job is None:
+            return 'held'
+        if job['recovery_state'] == 'running':
+            return self.recover(segment_id, owner_id)  # Artifact reconciliation only.
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
+        target = urlsplit(audience)
+        if (
+            target.scheme != 'https'
+            or not target.netloc
+            or target.path not in ('', '/')
+            or target.query
+            or target.fragment
+        ):
+            raise ValueError('recovery task requires the serving origin audience')
+        token = job['recovery']['token']
+        # Repair an exhausted/missing wake without ever resetting its paid
+        # intent. Parallel deliveries remain fenced by RecoveryStore.start.
+        wake = int(self.clock() // 120)
+        task_id = f'bpr-{current_stage()}-{hashlib.sha256(segment_id.encode()).hexdigest()}-{token}-{wake}'
+        enqueue_named_task(
+            os.getenv('SYNC_TASKS_QUEUE', ''),
+            audience.rstrip('/') + '/v2/batch-pipeline/recover-quarantine',
+            task_id,
+            {'stage': current_stage(), 'segment_id': segment_id},
+            audience=audience,
+            invoker_sa=os.getenv('SYNC_TASKS_INVOKER_SA', '').strip(),
+        )
+        return 'queued'
+
     def sweep(self):
         counts = {}
         all_admitted = recover_all_admitted()
@@ -274,14 +341,18 @@ class QuarantineRecovery:
                 if all_admitted:
                     self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
                 try:
-                    outcome = self.recover(segment_id, owner_id)
-                except Exception:
+                    outcome = (self.dispatch if recovery_tasks_enabled() else self.recover)(segment_id, owner_id)
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
                     outcome = 'held'
                 counts[outcome] = counts.get(outcome, 0) + 1
                 try:
                     logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
                 except Exception:
                     pass
-                if outcome in {'recovered', 'failed_held', 'result_held', 'cancelled'}:
+                if outcome in {'queued', 'recovered', 'failed_held', 'result_held', 'cancelled'}:
                     break  # One provider dispatch per queried cohort per sweep; continue at this cursor next tick.
         return counts

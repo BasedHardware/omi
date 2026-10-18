@@ -39,7 +39,12 @@ SUMMARY_PIPELINE_SCOPES = (
 
 @functools.cache
 def _composed() -> dict:
-    return yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    # CSafeLoader (same safe schema, ~1/7 the CPU) keeps the first caller's
+    # call-phase parse of this ~4.8k-line manifest inside the fast-unit budget.
+    return yaml.load(
+        (BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
 
 
 def _env_maps(environment: dict) -> dict[str, dict]:

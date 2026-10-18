@@ -151,6 +151,9 @@ environment_shared:
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
           value: 'true'
           category: ops_kill
+        SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+          value: 'true'
+          category: ops_kill
         SYNC_ASSIGNMENT_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
@@ -808,7 +811,7 @@ environment_shared:
           source: environment
         REDIS_DB_HOST:
           source: environment
-        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
+        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {source: literal, value: 'false'}
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
@@ -1126,6 +1129,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -1581,6 +1587,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -1992,6 +2001,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
@@ -2211,6 +2223,8 @@ environment_shared:
             category: rollout
         provisional: true
       backend-integration:
+        flags:
+          --timeout: 3600s
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -2386,6 +2400,9 @@ environment_shared:
           DESKTOP_PENDANT_CALL_LINK_PERCENT:
             value: '100'
             category: rollout
+          SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+            value: 'true'
+            category: ops_kill
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout

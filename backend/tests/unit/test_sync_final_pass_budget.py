@@ -106,6 +106,9 @@ def test_stalled_redis_socket_returns_legacy_and_releases_slot(monkeypatch):
                 accepted.set()
                 release.wait(3)
 
+    # This test hosts its own fake Redis peer and must exercise the real
+    # socket I/O against it, so opt out of the unit-session Redis block.
+    monkeypatch.setenv('OMI_HERMETIC_ALLOW_FAKE_REDIS', '1')
     monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
     monkeypatch.setenv('REDIS_DB_PORT', str(port))
     monkeypatch.delenv('REDIS_DB_PASSWORD', raising=False)

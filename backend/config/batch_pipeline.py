@@ -178,6 +178,11 @@ def worker_silence_disposition_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
 
 
+def worker_validation_disposition_enabled() -> bool:
+    """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
+    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+
+
 def head_priority_enabled() -> bool:
     """Prefer a queued capture-order head without changing lease/merge authority."""
     return os.getenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false').strip().lower() == 'true'
@@ -186,3 +191,8 @@ def head_priority_enabled() -> bool:
 def async_projection_enabled() -> bool:
     """Persist in order, then drain durable follow-ups outside the owner claim."""
     return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def recovery_tasks_enabled() -> bool:
+    """Ship-on request-backed paid recovery; false restores inline sweeping."""
+    return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'

@@ -1496,6 +1496,16 @@ def test_listen_gate_is_the_conditional_source_sha_gate():
     workflow = (repo / '.github/workflows' / name).read_text(encoding='utf-8')
     assert policy.workflow_gate_violations(workflow, name=name, dockerfiles=dockerfiles) == []
 
+    # A separate exporter deployment job may inherit protection from the
+    # listen rollout only through a required successful dependency.
+    without_exporter_dependency = workflow.replace('    needs: helm-upgrade\n', '    needs: []\n', 1)
+    assert any(
+        'listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate' in violation
+        for violation in policy.workflow_gate_violations(
+            without_exporter_dependency, name=name, dockerfiles=dockerfiles
+        )
+    )
+
     gate_block = re.search(r'      - name: Verify serving Firestore indexes\n(?:        .*\n)+', workflow).group(0)
     removed = workflow.replace(gate_block, '')
     assert policy.workflow_gate_violations(removed, name=name, dockerfiles=dockerfiles)
@@ -1827,19 +1837,22 @@ def _stub_bin(tmp_path: Path) -> Path:
 def _run_step(run: str, env: dict[str, str], substitutions: dict[str, str], tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     env_file = tmp_path / 'github.env'
+    output_file = tmp_path / 'github.output'
     env_file.touch()
+    output_file.touch()
     proc = subprocess.run(
         ['bash', '-c', _render_run(run, substitutions)],
-        env={**os.environ, **env, 'GITHUB_ENV': str(env_file)},
+        env={**os.environ, **env, 'GITHUB_ENV': str(env_file), 'GITHUB_OUTPUT': str(output_file)},
         capture_output=True,
         text=True,
     )
     outputs = {}
-    if env_file.exists():
-        for line in env_file.read_text(encoding='utf-8').splitlines():
-            if '=' in line:
-                key, value = line.split('=', 1)
-                outputs[key] = value
+    for output_path in (env_file, output_file):
+        if output_path.exists():
+            for line in output_path.read_text(encoding='utf-8').splitlines():
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    outputs[key] = value
     return proc, outputs
 
 
@@ -1902,6 +1915,7 @@ def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert outputs['BACKEND_LISTEN_IMAGE_TAG'] == 'ddddddd'
     assert outputs['BACKEND_LISTEN_SOURCE_SHA'] == 'd' * 40
+    assert outputs['neg_coverage_exporter_image_tag'] == 'ddddddd'
 
     case = tmp_path / 'missing-tag'
     env = base_env | _listen_env(case, {'abc1234': 'c' * 40}, image='') | {'REQUESTED_TAG': ''}

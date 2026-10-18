@@ -207,7 +207,7 @@ from utils.sync.intake_completion import (
 )
 from utils.sync.lanes import SyncLane
 from utils.sync.telemetry import bounded_correlation_ref as _bounded_correlation_ref
-from utils.sync.telemetry import bounded_exception_class
+from utils.sync.telemetry import bounded_exception_class, finalize_exception_site
 from utils.sync.telemetry import bounded_exception_type as _bounded_exception_type
 from utils.sync.telemetry import bounded_sync_lane as _bounded_sync_lane
 from utils.sync.telemetry import bounded_sync_language as _bounded_retry_language
@@ -1779,14 +1779,21 @@ def process_segment(
                 _bounded_correlation_ref(job_id),
                 _bounded_correlation_ref(attempt_ref),
             )
+        if phase == 'finalize':
+            logger.error(
+                'event=sync_finalize_exception exception_type=%s site=%s firestore_error=%s',
+                _bounded_exception_type(e),
+                finalize_exception_site(e),
+                _firestore_error_class(e),
+            )
         fingerprint = _persistence_failure_fingerprint(e, phase)
-        if phase == 'persistence':
+        if phase in ('persistence', 'finalize'):
             failure = TranscriptionFailure(
                 TranscriptionOutcome.UPSTREAM_ERROR,
                 provider=None,
                 retryable=fingerprint is None,
             )
-            failure.error_code = 'sync_persistence_failed'
+            failure.error_code = 'sync_finalize_failed' if phase == 'finalize' else 'sync_persistence_failed'
             model = 'unknown'
         else:
             failure = failure_from_exception(e, provider=provider)
@@ -3257,8 +3264,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             failure_phase, failure_class, failure_subtype = (
                 first_segment_failure[0] if first_segment_failure else ('none', 'none', 'none')
             )
-            job_provider = 'unknown' if failure_phase == 'persistence' else sync_provider
-            job_model = 'unknown' if failure_phase == 'persistence' else sync_model
+            job_provider = 'unknown' if failure_phase in ('persistence', 'finalize') else sync_provider
+            job_model = 'unknown' if failure_phase in ('persistence', 'finalize') else sync_model
             final_result = {
                 'new_memories': result['new_memories'],
                 'updated_memories': result['updated_memories'],

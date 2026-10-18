@@ -113,6 +113,13 @@ class ActionItemsProvider extends ChangeNotifier {
   // delete may still be in flight. Guarded against re-insertion by fetch/load.
   final Set<String> _pendingDeletionIds = {};
 
+  // An omitted row does not acknowledge an outstanding delete. A later complete
+  // read may retire suppression only after all older projection reads settle.
+  // See docs/task-list-reconciliation.md for the shared deletion lifecycle.
+  final Map<String, int> _deletionAcknowledgedAtRead = {};
+  int _listReadOrdinal = 0;
+  final Set<int> _activeListReads = {};
+
   // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
   // from every list, not yet deleted on the server.
   final Map<String, ({ActionItemWithMetadata item, int index, int homeIndex})> _stagedDeletes = {};
@@ -270,6 +277,8 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<void> _fetchHomeTodayTasks({required DateTime now}) async {
     final generation = _sessionGeneration;
+    final readOrdinal = ++_listReadOrdinal;
+    _activeListReads.add(readOrdinal);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
@@ -289,6 +298,8 @@ class ActionItemsProvider extends ChangeNotifier {
       }
     } catch (e) {
       Logger.debug('Error fetching home today tasks: $e');
+    } finally {
+      _activeListReads.remove(readOrdinal);
     }
     notifyListeners();
   }
@@ -371,6 +382,12 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     final generation = _sessionGeneration;
+    final readOrdinal = ++_listReadOrdinal;
+    _activeListReads.add(readOrdinal);
+    final query = (includeCompleted: _includeCompleted, startDate: _startDate, endDate: _endDate);
+    bool ownsQuery() =>
+        generation == _sessionGeneration &&
+        query == (includeCompleted: _includeCompleted, startDate: _startDate, endDate: _endDate);
     var decodedPageIsComplete = true;
     var loaded = false;
     if (showShimmer) {
@@ -383,24 +400,30 @@ class ActionItemsProvider extends ChangeNotifier {
       final response = await _fetchActionItemsPage(
         limit: 100,
         offset: 0,
-        completed: _includeCompleted ? null : false,
-        startDate: _startDate,
-        endDate: _endDate,
+        completed: query.includeCompleted ? null : false,
+        startDate: query.startDate,
+        endDate: query.endDate,
         onTyped: (result) {
+          if (!ownsQuery()) return;
           _projectTypedList(result);
           if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
             decodedPageIsComplete = rejectedRows == 0 && !truncated;
           }
         },
       );
-      if (response != null && generation == _sessionGeneration) {
+      if (response != null && ownsQuery()) {
         _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
-        await _applyFetchedActionItems(response, decodedPageIsComplete: decodedPageIsComplete);
+        await _applyFetchedActionItems(
+          response,
+          decodedPageIsComplete: decodedPageIsComplete,
+          readOrdinal: readOrdinal,
+        );
         loaded = true;
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
     } finally {
+      _activeListReads.remove(readOrdinal);
       if (showShimmer) {
         setLoading(false);
       } else {
@@ -424,7 +447,11 @@ class ActionItemsProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _applyFetchedActionItems(ActionItemsResponse response, {required bool decodedPageIsComplete}) async {
+  Future<void> _applyFetchedActionItems(
+    ActionItemsResponse response, {
+    required bool decodedPageIsComplete,
+    required int readOrdinal,
+  }) async {
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -435,17 +462,24 @@ class ActionItemsProvider extends ChangeNotifier {
     _actionItems = _pendingDeletionIds.isEmpty
         ? List.of(response.actionItems)
         : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
-    // Lazily retire tombstones once the server confirms the item is gone:
-    // any ID still tracked as pending-deletion that did not appear in the
-    // fresh server response can be cleared, because subsequent refreshes
-    // will no longer see it.
+    // Only a read started after acknowledgement can confirm absence. Keep the
+    // tombstone while older Tasks, pagination or Home reads could still apply.
     if (_pendingDeletionIds.isNotEmpty &&
         !response.hasMore &&
         !hasActiveFilter &&
         _includeCompleted &&
         decodedPageIsComplete &&
-        !response.truncated) {
-      _pendingDeletionIds.removeWhere((id) => !_stagedDeletes.containsKey(id) && !serverIds.contains(id));
+        !response.truncated &&
+        !_activeListReads.any((ordinal) => ordinal < readOrdinal)) {
+      _pendingDeletionIds.removeWhere((id) {
+        final acknowledgedAt = _deletionAcknowledgedAtRead[id];
+        if (_stagedDeletes.containsKey(id) ||
+            acknowledgedAt == null ||
+            readOrdinal <= acknowledgedAt ||
+            serverIds.contains(id)) return false;
+        _deletionAcknowledgedAtRead.remove(id);
+        return true;
+      });
     }
     _hasMore = response.hasMore;
     // A rejected wire row or a staged delete is still present on the server.
@@ -464,6 +498,8 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> loadMoreActionItems() async {
     if (_isFetching || !_hasMore) return;
     final generation = _sessionGeneration;
+    final readOrdinal = ++_listReadOrdinal;
+    _activeListReads.add(readOrdinal);
 
     setFetching(true);
 
@@ -506,6 +542,7 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
     } finally {
+      _activeListReads.remove(readOrdinal);
       setFetching(false);
     }
 
@@ -760,6 +797,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
       } else {
+        _deletionAcknowledgedAtRead[item.id] = _listReadOrdinal;
         SiriIntegration.current.queueDelete('task', item.id);
       }
       // On success, the tombstone is intentionally retained: a refresh that
@@ -831,6 +869,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
     } else {
+      _deletionAcknowledgedAtRead[id] = _listReadOrdinal;
       SiriIntegration.current.queueDelete('task', id);
     }
     return success;
@@ -1163,6 +1202,9 @@ class ActionItemsProvider extends ChangeNotifier {
     _homeTodayLoad = null;
     _selectedItems = {};
     _stagedDeletes.clear();
+    _pendingDeletionIds.clear();
+    _deletionAcknowledgedAtRead.clear();
+    _activeListReads.clear();
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();
     notifyListeners();
@@ -1199,7 +1241,12 @@ class ActionItemsProvider extends ChangeNotifier {
       _deleteAppleReminderIfLinked(item);
     }
 
-    final deleted = await _bulkDeleteActionItemsRequest(ids);
+    List<String>? deleted;
+    try {
+      deleted = await _bulkDeleteActionItemsRequest(ids);
+    } catch (e) {
+      Logger.debug('Error bulk deleting action items: $e');
+    }
     if (generation != _sessionGeneration) return false;
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
@@ -1209,8 +1256,7 @@ class ActionItemsProvider extends ChangeNotifier {
       // Re-insert rows at their original positions, oldest index first.
       final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
-        final idx = entry.key.clamp(0, _actionItems.length);
-        _actionItems.insert(idx, entry.value);
+        _restoreDeletedItem(entry.value, entry.key);
       }
       _isSelectionMode = wasInSelection;
       _selectedItems = ids.toSet();
@@ -1223,6 +1269,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
     final deletedIDs = deleted.toSet();
     for (final id in deletedIDs) {
+      _deletionAcknowledgedAtRead[id] = _listReadOrdinal;
       SiriIntegration.current.queueDelete('task', id);
     }
     if (deletedIDs.length != ids.length) {
@@ -1230,7 +1277,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final entries = snapshot.entries.where((entry) => !deletedIDs.contains(entry.value.id)).toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
-        _actionItems.insert(entry.key.clamp(0, _actionItems.length), entry.value);
+        _restoreDeletedItem(entry.value, entry.key);
       }
       notifyListeners();
     }

@@ -36,6 +36,7 @@ worker:
   emptyAsrDispositionEnabled: false
   headPriorityEnabled: false
   workerSilenceDispositionEnabled: false
+  workerValidationDispositionEnabled: true
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
