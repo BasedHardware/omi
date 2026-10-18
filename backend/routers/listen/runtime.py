@@ -16,6 +16,7 @@ from starlette.websockets import WebSocketState
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
+from config.rollout_cohorts import warm_rollout_cohorts
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -27,7 +28,7 @@ from database.redis_db import user_webhook_status_db
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
-from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
+from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -926,6 +927,8 @@ class ListenSessionRuntime:
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
+        if mobile_standard_batch_rollout_enabled():
+            await warm_rollout_cohorts(self.request.uid)
         # Conservatively retain live delivery for ANY enabled integration. This
         # covers transcript consumers as well as audio consumers, and fails
         # closed if their inventory cannot be read. Re-evaluate on reconnect.

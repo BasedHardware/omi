@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from config.dream_agent import admission_for
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils import dream_capacity
 from utils.dream_cost import (
     charge_attempts,
@@ -224,6 +225,7 @@ async def model_turn(
         completion_limit=completion_limit,
     )
     ceiling = _estimate + completion
+    await warm_rollout_cohorts(uid)
     mode, allowlisted = admission_for(uid)
     model = await dream_capacity.available_model(mode=mode, owner_allowlisted=allowlisted)
     if model is None:

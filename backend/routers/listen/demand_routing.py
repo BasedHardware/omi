@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Callable, Mapping
 
 from config.live_demand import language_qualified, resolve_live_demand
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
 from utils.observability.demand_cohort import DemandTelemetry, attach_demand_telemetry, host_telemetry, telemetry_call
 from config.live_stt_recovery import session_recovery_enabled
@@ -135,6 +136,7 @@ class LiveDemandRouting:
         except Exception:
             self._consumer_unavailable()
         self.consumer_checked = time.monotonic()
+        await warm_rollout_cohorts(self.receiver.host.request.uid)
         return (
             self.policy.decide(
                 enabled=resolve_live_demand().admits(self.receiver.host.request.uid),
@@ -172,6 +174,7 @@ class LiveDemandRouting:
                 if self._served_window and current == 'vendor':
                     self.policy.fallback = True
                 self._served_window = current == 'parakeet'
+                await warm_rollout_cohorts(host.request.uid)
                 desired = self.policy.decide(
                     enabled=resolve_live_demand().admits(host.request.uid), visible=visible, consumer=self.consumer
                 )

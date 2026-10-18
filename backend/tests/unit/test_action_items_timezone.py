@@ -48,8 +48,18 @@ def _stub_module(name):
 
 
 def _stub_package(name):
-    mod = _stub_module(name)
+    original = _stub_module(name)
+    # Collection may begin with a real package already imported by conftest.
+    # A shallow sys.modules snapshot cannot restore an in-place __path__ edit.
+    mod = types.ModuleType(name)
+    mod.__dict__.update(original.__dict__)
     mod.__path__ = []
+    sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 

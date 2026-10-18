@@ -14,6 +14,7 @@ from fastapi import HTTPException
 import pytest
 
 from database import conversation_tombstones as tombstones
+from database import user_data_deletion
 from google.api_core.exceptions import AlreadyExists
 from testing.import_isolation import stub_modules, AutoMockModule
 
@@ -179,8 +180,11 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
     assert tombstones.is_deleted('u', 'c')
 
 
-def test_account_wipe_enumerates_tombstones_even_without_root(store):
+def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch):
     tombstones.record_deletion('u', 'c')
+    data_plane = Store()
+    data_plane.rows['rollout_cohorts/u'] = {'cohorts': {'dev': {'batch-pipeline': True}}}
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: data_plane)
 
     def purge(ref, **kwargs):
         for path in list(store.rows):
@@ -197,6 +201,7 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store):
         },
     )
     wipe('u')
+    assert data_plane.rows == {}
     assert store.rows == {}
     assert not tombstones.is_deleted('u', 'c')
 

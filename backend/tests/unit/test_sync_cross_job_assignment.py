@@ -502,7 +502,8 @@ def _smart_merge_pair(store):
     store.rows[('users', 'u', 'conversations', 'n')] = donor
 
 
-def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     from tests.unit.test_sync_lineage_dedupe_replay import prove
@@ -518,7 +519,8 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
 
 
-def test_repeated_late_repair_to_revisioned_smart_survivor_appends():
+def test_repeated_late_repair_to_revisioned_smart_survivor_appends(monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
     store = StrictFirestore()
     _smart_merge_pair(store)
     store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1

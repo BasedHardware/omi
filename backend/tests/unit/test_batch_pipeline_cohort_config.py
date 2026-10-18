@@ -101,36 +101,24 @@ def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, mon
         assert not summary_guarantee.enabled('any-user')
 
 
-def test_quarantine_recovery_is_david_only_on_prod_integration(
+def test_quarantine_recovery_uses_private_membership_only_on_prod_integration(
     manifest,
     recovery_base_hosts,
     listen_chart_envs,
-    monkeypatch,
 ):
     for stage, config in manifest.items():
         for name, env in hosts(config).items():
-            recovery_mode = env['BATCH_PIPELINE_RECOVERY_MODE']
-            recovery_allowlist = env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST']
-            assert recovery_mode['category'] == 'rollout'
-            assert recovery_allowlist['category'] == 'rollout'
-
-            if stage == 'prod' and name == 'backend-integration':
-                assert recovery_mode['value'] == 'on'
-                assert recovery_allowlist['value'] == UID
-                expected = (UID,)
+            if name == 'backend-listen':
+                assert env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST']['value'] == ''
             else:
-                assert recovery_mode['value'] == 'off'
-                assert recovery_allowlist['value'] == ''
-                expected = ()
-
-            monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', recovery_mode['value'])
-            monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', recovery_allowlist['value'])
-            assert recovery_owners() == expected
-
-    for host in recovery_base_hosts.values():
-        assert host['env']['BATCH_PIPELINE_RECOVERY_MODE'] == {'value': 'off', 'category': 'rollout'}
-        assert host['env']['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == {'value': '', 'category': 'rollout'}
-
+                assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in env
+            expected = 'on' if stage == 'prod' and name == 'backend-integration' else 'off'
+            assert env['BATCH_PIPELINE_RECOVERY_MODE']['value'] == expected
+    for name, host in recovery_base_hosts.items():
+        if name == 'backend-listen':
+            assert host['env']['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST']['value'] == ''
+        else:
+            assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' not in host['env']
     for chart_env in listen_chart_envs:
         assert chart_env['BATCH_PIPELINE_RECOVERY_MODE'] == 'off'
         assert chart_env['BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST'] == ''

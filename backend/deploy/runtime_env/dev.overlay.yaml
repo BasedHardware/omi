@@ -338,8 +338,6 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
@@ -348,8 +346,6 @@ overlay:
             value: syncing-local-development
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING:
@@ -370,8 +366,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
@@ -414,8 +408,6 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: ''
           BATCH_PIPELINE_WORKER_AUDIENCE:
@@ -426,8 +418,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING:
@@ -449,8 +439,6 @@ overlay:
             value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            value: ''
           SYNC_LEGACY_FRESH_PERCENT:
             value: '0'
           SYNC_LEGACY_FRESH_HOURLY_TOKENS:
@@ -464,8 +452,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:
@@ -473,9 +459,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: ''
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '0'
@@ -518,16 +501,12 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING:
@@ -551,8 +530,6 @@ overlay:
             value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            value: ''
           SYNC_LEGACY_FRESH_PERCENT:
             value: '0'
           SYNC_LEGACY_FRESH_HOURLY_TOKENS:
@@ -564,8 +541,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:
@@ -604,8 +579,6 @@ overlay:
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
             category: service_auth
-          BATCH_PIPELINE_UID_ALLOWLIST:
-            value: ''
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
           BATCH_PIPELINE_API_URL:
@@ -614,8 +587,6 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING:
@@ -632,8 +603,6 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           GOOGLE_CLOUD_PROJECT:

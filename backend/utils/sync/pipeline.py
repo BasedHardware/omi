@@ -87,6 +87,7 @@ from database.sync_ledger import (
     release_sync_content_claim,
 )
 from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
@@ -2284,6 +2285,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    # OIDC tasks and delayed inline work do not share an HTTP auth cache warmup.
+    # Await fresh membership before choosing an irreversible whole-batch path.
+    await warm_rollout_cohorts(uid)
     if stt_cap_dispatch_enabled():
         # A hold is pending processing, not a locked transcript partition.
         should_lock = False

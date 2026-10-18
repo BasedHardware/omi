@@ -188,6 +188,17 @@ jobs:
               echo "Pass image_tag=<short-sha> to set one explicitly." >&2
               exit 1
             fi
+            # The chart values no longer set the legacy UID allowlist env keys, so a
+            # chart-only rollout must never land on an image that predates the
+            # Firestore cohort resolver: that runtime reads the absent key as an
+            # empty allowlist and admits every user. Require the running image's
+            # commit to contain the cohort policy module.
+            RUNNING_COMMIT="$(git rev-parse "${RUNNING_TAG}^{commit}" 2>/dev/null || true)"
+            if [[ -z "$RUNNING_COMMIT" ]] || ! git cat-file -e "${RUNNING_COMMIT}:backend/config/rollout_cohorts.py" 2>/dev/null; then
+              echo "ERROR: chart-only upgrade would apply cohort-removal values onto ${RUNNING_TAG}, which does not resolve to a cohort-aware commit in this repository." >&2
+              echo "Deploy with image_tag=<short-sha containing the Firestore cohort resolver> first; the chart-only lane can then keep that image." >&2
+              exit 1
+            fi
             echo "Keeping the running image tag: $RUNNING_TAG"
             echo "BACKEND_LISTEN_IMAGE_TAG=$RUNNING_TAG" >> "$GITHUB_ENV"
             exit 0

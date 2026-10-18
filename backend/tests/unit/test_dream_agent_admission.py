@@ -1,6 +1,9 @@
 """Eligibility gates real pass/drain admission before reserved-capacity waits."""
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+import threading
 from unittest.mock import AsyncMock, Mock
 
 import fakeredis.aioredis
@@ -8,9 +11,10 @@ import pytest
 
 from config.vertex_reservations import State
 from database import dream_scheduler, dream_store
+from utils import rollout_cohorts
 from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from tests.unit.test_dream_harness_runtime import runtime, store, scripted, UID
-from utils import dream_agent, dream_capacity, dream_seed
+from utils import dream_agent, dream_capacity, dream_seed, dream_harness_transport
 from utils.dream_capacity import claim as claim_capacity, release as release_capacity
 from utils.llm.vertex_reservation_state import ReservationState
 
@@ -106,3 +110,76 @@ async def test_authoritative_store_still_rejects_deleted_allowlisted_owner(admis
     dream_capacity.claim.assert_awaited_once()
     dream_capacity.release.assert_awaited_once()
     model.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('membership', [True, False, 'error'])
+async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission, monkeypatch, membership):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(dream_capacity, 'claim', AsyncMock(return_value=None))
+    release = threading.Event()
+    reads = []
+
+    def read(uid):
+        reads.append(uid)
+        assert release.wait(1)
+        if membership == 'error':
+            raise RuntimeError('synthetic unavailable store')
+        return {'prod': {'dream-agent': membership}}
+
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for attempt in range(2):
+            release.clear()
+
+            async def unblock():
+                await asyncio.sleep(0)
+                release.set()
+
+            pulse = asyncio.create_task(unblock())
+            try:
+                report = await dream_agent.run_pass(UID)
+            finally:
+                release.set()
+                await pulse
+            expected = (
+                {'status': 'waiting', 'reason': 'reserved_capacity'}
+                if membership is True
+                else {'status': 'not_admitted', 'reason': 'ineligible'}
+            )
+            assert report == expected
+            assert reads == [UID] * (attempt + 1)
+            cache.entries[UID].expires = 0
+    assert dream_capacity.claim.await_count == (2 if membership is True else 0)
+
+
+@pytest.mark.asyncio
+async def test_each_model_turn_refreshes_membership_before_capacity_selection(admission, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    # Stop before the gateway: the assertion concerns the real turn's routing boundary.
+    monkeypatch.setattr(dream_harness_transport, 'attempt_room', lambda *args, **kwargs: (10, 128))
+    capacity = AsyncMock(return_value=None)
+    monkeypatch.setattr(dream_capacity, 'available_model', capacity)
+    membership = [True]
+    reads = []
+
+    def read(uid):
+        reads.append(uid)
+        return {'prod': {'dream-agent': membership[0]}}
+
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for value, expected in [(True, 'on_demand'), (True, 'on_demand'), (False, 'reserved')]:
+            membership[0] = value
+            if UID in cache.entries:
+                cache.entries[UID].expires = 0
+            with pytest.raises(dream_harness_transport.CapacityWait):
+                await dream_harness_transport.model_turn(UID, dream_harness_transport.MAIN_LANE, None, [])
+            assert capacity.await_args.kwargs == {'mode': expected, 'owner_allowlisted': value}
+    assert reads == [UID] * 3

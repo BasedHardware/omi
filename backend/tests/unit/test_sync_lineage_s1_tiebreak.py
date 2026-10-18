@@ -42,7 +42,7 @@ OFFSETS = [i * SPF for i in range(11)]
 @pytest.fixture(autouse=True)
 def default_flag(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
 
 def committed_env(first, last, *, wall_first, spf=SPF, root=ROOT, epoch=EPOCH, rate=RATE):

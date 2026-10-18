@@ -487,8 +487,6 @@ overlay:
             value: syncing-local
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING:
@@ -514,9 +512,6 @@ overlay:
           TRANSCRIPTION_FINAL_PASS_BACKEND:
             value: pyannote
             category: rollout
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT:
             value: '5'
             category: rollout
@@ -532,9 +527,6 @@ overlay:
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
             category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
             category: rollout
@@ -549,12 +541,6 @@ overlay:
             category: rollout
           OMI_MESSAGING_CHANNELS:
             value: 'on'
-            category: rollout
-          OMI_MESSAGING_CHANNELS_UIDS:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
-          OMI_MESSAGING_CHANNEL_POLICY:
-            value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["vi7SA9ckQCe4ccobWNxlbdcNdC23"],"seat_cap":"off"}}'
             category: rollout
           OMI_TELEGRAM_STREAMING:
             value: none
@@ -580,8 +566,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           DREAM_AGENT_PASSES_PER_DAY:
             value: '6'
             category: rollout
@@ -608,9 +592,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -697,9 +678,6 @@ overlay:
             value: '100'
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
-            category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
@@ -819,8 +797,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING:
@@ -845,8 +821,6 @@ overlay:
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           SYNC_LEGACY_FRESH_PERCENT:
             value: '100'
             category: rollout
@@ -869,9 +843,6 @@ overlay:
           TRANSCRIPTION_FINAL_PASS_BACKEND:
             value: pyannote
             category: rollout
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT:
             value: '5'
             category: rollout
@@ -886,9 +857,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -908,8 +876,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
@@ -939,9 +905,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -1009,9 +972,6 @@ overlay:
             value: '100'
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
-            category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
@@ -1182,8 +1142,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING:
@@ -1210,8 +1168,6 @@ overlay:
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           SYNC_LEGACY_FRESH_PERCENT:
             value: '100'
             category: rollout
@@ -1232,9 +1188,6 @@ overlay:
           TRANSCRIPTION_FINAL_PASS_BACKEND:
             value: pyannote
             category: rollout
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT:
             value: '5'
             category: rollout
@@ -1249,9 +1202,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -1271,8 +1221,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1281,9 +1229,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -1344,9 +1289,6 @@ overlay:
             category: ops_kill
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
-            category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
@@ -1529,8 +1471,6 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
-          AUDIO_ARCHIVE_UID_ALLOWLIST:
-            value: ''
           LIVE_SPEAKER_SPAN_RESOLUTION:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING:
@@ -1549,8 +1489,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1559,9 +1497,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -1606,14 +1541,9 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'on'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'true'
             category: rollout
