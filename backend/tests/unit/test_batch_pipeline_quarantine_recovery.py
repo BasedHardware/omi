@@ -618,14 +618,16 @@ def test_dispatch_keeps_privacy_cancellation_before_enqueue(setup, monkeypatch, 
     client, _, binding, artifacts, stt, recovery = setup
     recovery.protocol.prepare('bad', binding.owner_id, 100)
     if blocked == 'account':
-        client.rows[('users', binding.owner_id)]['deleted'] = True
+        client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
     elif blocked == 'source':
-        row(client)['privacy_generation'] = 1
+        row(client)['conversation_id'] = 'deleted-source'
+        client.rows[('users', binding.owner_id, 'deleted_conversations', 'deleted-source')] = {'deleted': True}
     else:
         client.rows[('users', binding.owner_id)]['data_protection_level'] = 'e2ee'
     enqueue = Mock()
     monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
-    assert recovery.dispatch('bad', binding.owner_id) in {'cancelled', 'held'}
+    assert recovery.dispatch('bad', binding.owner_id) == 'cancelled'
+    assert row(client)['recovery_state'] == 'cancelled'
     enqueue.assert_not_called()
     stt.assert_not_called()
     artifacts.fetch_audio.assert_not_called()
