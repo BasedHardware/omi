@@ -51,13 +51,13 @@ The public port 8080 `/metrics` route stays fail-closed with bearer authenticati
 
 The application therefore starts a second Prometheus HTTP listener bound specifically to `127.0.0.1:9090` when `PROMETHEUS_SIDECAR_PORT=9090`. Cloud Run containers in one instance share a network namespace, so the collector can reach it. Cloud Run ingress cannot. This avoids weakening the public route or trusting proxy-derived client IPs.
 
-`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest and the numeric Secret Manager config version by revision, uses 1 vCPU and 512 MiB by default, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
+`backend/deploy/cloud_run_gmp_sidecar.yaml` keeps only `omi_.*`, includes only the service metadata label (the per-instance label is mandatory), and sets scrape limits. The deploy helper pins the collector image by digest, uses 1 vCPU and 512 MiB by default, preserves existing containers and ingress settings, refuses a service whose traffic follows `latestRevision`, and creates the final sidecar revision at zero traffic. Candidate acceptance still happens before any traffic shift.
 
 ## Sync fleet cost profile
 
 Only `backend-sync`, `backend-sync-backfill`, and `backend-integration` use
-`backend/deploy/cloud_run_gmp_sync.yaml` and a separate numeric version of the existing
-`cloud-run-gmp-config` secret. Their collectors use **0.08 vCPU / 128Mi**,
+`backend/deploy/cloud_run_gmp_sync.yaml` as revision-local, non-secret collector
+configuration. Their collectors use **0.08 vCPU / 128Mi**,
 scrape every **60s**, and keep the existing sync exporter families plus direct
 sentinel consumers: `omi_batch_pipeline_*`, `omi_accept_to_summary_seconds*`,
 `omi_summary_terminal_total`, `omi_summary_debt_*`, and
@@ -80,21 +80,28 @@ and `cpu-throttling=false`. 0.1 and 0.25 vCPU also passed; 64Mi was rejected
 (minimum 128Mi). The exported service was identical before/after validation.
 This is control-plane validation, not runtime scrape/load acceptance.
 
-The backend-stack action prepares the broad backend and filtered sync versions
-before any revision or binding mutation. The existing secret must already exist;
-this deploy path never creates secrets or changes IAM. The prod CI identity's
-existing `roles/secretmanager.admin` binding on `cloud-run-gmp-config` permits
-version additions; it does not permit creating a sibling secret at project scope
-(the #22089 deployment failure). Runtime accounts already read this secret.
-Missing-secret or denied-add errors stop preparation before deployment.
+The backend-stack action validates both configs locally and checks the required
+application secrets before any revision, binding, or traffic mutation. A missing
+required secret stops the action; it is never auto-created. This catches the
+late-discovered prerequisite class behind the #22089 failure without new IAM.
 
-Each preparation uses the exact numeric resource returned by `versions add`.
-Backend receives its broad version; all three sync services share their filtered
-version. Attachments do not resolve `latest`, update hash labels, or write another
-version. Other callers of the helper also return their own AddSecretVersion result,
-so concurrent backend/desktop/sync writers cannot substitute each other's config.
-Existing serving revisions retain their numeric versions. Two new config versions
-are prepared per backend-stack deployment; no version is destroyed by this flow.
+Backend and all three sync collectors use `--config-env`: the helper puts the
+literal RunMonitoring YAML in `OMI_GMP_RUN_MONITORING_CONFIG` on the collector only.
+The digest-pinned image includes `/bin/sh` and `/run-gmp-entrypoint`. Its entrypoint
+reads `/etc/rungmp/config.yaml`, not an OTel `--config=env:...` argument. A shell
+wrapper writes the quoted env value to that instance-local file with `printf`,
+then `exec`s the unchanged entrypoint. There is no `eval`, shared config object,
+Secret Manager write, new image, or IAM requirement. The inherited config-secret
+volume and its unused annotations are removed from the new candidate only.
+Other application secret bindings and old serving revisions remain unchanged.
+
+Concurrent deployments cannot overwrite one another's configuration because the
+YAML belongs to each immutable Cloud Run revision. The backend keeps its broad
+30s config; sync receives the filtered 60s config. Desktop and job callers retain
+the existing-secret path: the helper requires that secret to exist and pins the
+numeric resource returned by `versions add`, never a shared label or `latest`
+lookup. They do not create secrets either. No collector config is sensitive;
+future migrations should use the revision-local path rather than add secrets.
 
 Instance billing (`cpu-throttling=false`) and application resources are unchanged.
 Smaller total CPU changes the autoscaling utilization denominator; actual instance
@@ -103,12 +110,11 @@ collector readiness, memory/OOM/restarts and fresh retained metric samples under
 load, including sentinel histograms and summary-debt timestamps. A 60s interval
 adds up to 30s steady scrape delay; startup/shutdown scrapes still apply.
 
-Rollback: restore the prior traffic-selected revisions (which pin their numeric
-config versions), then restore the prior resource/scrape profile before the next deployment. That restores
-1 vCPU / 512Mi and the shared broad 30s config while keeping exact-version preparation.
-Do not restore the legacy hash-label/latest helper: filtered versions now share this
-secret, so an older helper can select a different config through `latest`. Do not modify shared secret versions
-or CPU billing as a rollback shortcut.
+Rollback: restore the prior traffic-selected revisions, which retain their
+original config and allocation. For the next deployment, restore the sync
+1 vCPU / 512Mi allocation and broad 30s config while retaining `--config-env`.
+Do not mutate or delete historical secret versions or change CPU billing as a
+rollback shortcut.
 
 ## Options considered
 

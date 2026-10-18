@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -79,7 +81,94 @@ def test_config_uses_existing_secret_when_secrets_create_is_denied(monkeypatch, 
         with pytest.raises(RuntimeError, match='required existing GMP config secret'):
             module.ensure_config_secret(project='example', secret='cloud-run-gmp-config', config_path=config)
         assert len(calls) == 1
-    assert not any(c[1:3] == ['secrets', 'create'] for c in calls)
+    assert not any(call[1:3] == ['secrets', 'create'] for call in calls)
+
+
+@pytest.mark.parametrize('config_name', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_env_config_is_revision_local_and_removes_only_unused_collector_secrets(config_name):
+    module = _load_module()
+    config = module.read_run_monitoring_config(SCRIPT.parents[1] / 'deploy' / config_name)
+    service = _service()
+    secret_annotation = 'run.googleapis.com/secrets'
+    references = 'cloud-run-gmp-config:projects/123/secrets/cloud-run-gmp-config,existing:projects/123/secrets/existing'
+    service['metadata']['annotations'] = {secret_annotation: references}
+    service['spec']['template']['metadata']['annotations'][secret_annotation] = references
+    service['spec']['template']['spec']['volumes'].append(
+        {'name': module.CONFIG_VOLUME_NAME, 'secret': {'secretName': 'cloud-run-gmp-config'}}
+    )
+    patched = module.patch_service(
+        service,
+        project_number='123',
+        base_revision='base',
+        latest_created_revision='base',
+        final_revision='final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='',
+        config_content=config,
+    )
+    template = patched['spec']['template']
+    collector = template['spec']['containers'][-1]
+    assert collector['command'] == ['/bin/sh', '-c']
+    assert collector['args'] == [module.CONFIG_ENV_COMMAND]
+    assert collector['env'] == [{'name': module.CONFIG_ENV_NAME, 'value': config}]
+    assert 'volumeMounts' not in collector
+    assert template['spec']['volumes'] == [{'name': 'existing', 'secret': {'secretName': 'existing'}}]
+    for metadata in (patched['metadata'], template['metadata']):
+        assert metadata['annotations'][secret_annotation] == 'existing:projects/123/secrets/existing'
+    assert module.CONFIG_VOLUME_NAME in references
+    assert len(service['spec']['template']['spec']['volumes']) == 2
+
+
+def test_env_config_wrapper_preserves_literal_bytes_and_executes_entrypoint(tmp_path):
+    module = _load_module()
+    config = 'kind: RunMonitoring\nvalue: "$(touch injected) ${NOT_EXPANDED} \\ %s"\n'
+    directory = tmp_path / 'rungmp'
+    entrypoint = tmp_path / 'entrypoint'
+    receipt = tmp_path / 'entrypoint-receipt'
+    entrypoint.write_text('#!/bin/sh\nprintf ready > "$RECEIPT"\n')
+    entrypoint.chmod(0o755)
+    command = module.CONFIG_ENV_COMMAND.replace('/etc/rungmp', str(directory)).replace(
+        '/run-gmp-entrypoint', str(entrypoint)
+    )
+    result = subprocess.run(
+        ['/bin/sh', '-c', command],
+        cwd=tmp_path,
+        env={**os.environ, module.CONFIG_ENV_NAME: config, 'RECEIPT': str(receipt)},
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (directory / 'config.yaml').read_text() == config
+    assert receipt.read_text() == 'ready'
+    assert not (tmp_path / 'injected').exists()
+
+
+def test_env_config_wrapper_does_not_start_on_missing_config(tmp_path):
+    module = _load_module()
+    command = module.CONFIG_ENV_COMMAND.replace('/etc/rungmp', str(tmp_path))
+    result = subprocess.run(
+        ['/bin/sh', '-c', command],
+        env={key: value for key, value in os.environ.items() if key != module.CONFIG_ENV_NAME},
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+    assert 'RunMonitoring config missing' in result.stderr
+
+
+@pytest.mark.parametrize(
+    'content', ['kind: Wrong\n', '[]', 'x' * 32769], ids=['wrong-kind', 'wrong-shape', 'too-large']
+)
+def test_env_config_validation_fails_before_cloud_calls(monkeypatch, tmp_path, content):
+    module = _load_module()
+    config = tmp_path / 'config.yaml'
+    config.write_text(content)
+    monkeypatch.setattr(module, '_run', lambda *args, **kwargs: pytest.fail('unexpected cloud call'))
+    with pytest.raises(ValueError):
+        module.attach_sidecar(SimpleNamespace(config=config, config_env=True))
 
 
 def test_config_versions_pin_own_add_response_despite_concurrent_writer(monkeypatch, tmp_path):

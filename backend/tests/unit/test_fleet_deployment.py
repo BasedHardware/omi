@@ -93,11 +93,12 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
     for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert name in script
     assert '--config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"' in script
-    assert '--config-secret=cloud-run-gmp-config' in script
-    assert '--config-secret-version="${{ steps.prepare-sync-gmp-config.outputs.version }}"' in script
+    assert '--config-env' in script
+    assert '--config-secret' not in script
     backend_attach = next(step for step in steps if step.get('id') == 'attach-backend-gmp-sidecar')
     assert 'cloud_run_gmp_sidecar.yaml' in backend_attach['run']
-    assert '--config-secret-version="${{ steps.prepare-backend-gmp-config.outputs.version }}"' in backend_attach['run']
+    assert '--config-env' in backend_attach['run']
+    assert '--config-secret' not in backend_attach['run']
     assert 'cloud-run-gmp-sync-config' not in backend_attach['run']
     assert '--expected-env-state=' in script
     assert '--base-revision="$service-${{ steps.image-tag.outputs.revision_suffix }}-base"' in script
@@ -157,11 +158,15 @@ def test_upload_metrics_include_byok_admission_rejection(monkeypatch):
     assert [child._value.get() for child in children] == [value + 1 for value in before]
 
 
-@pytest.mark.parametrize('failure', ['missing', 'version-add', None])
+@pytest.mark.parametrize('failure', ['missing', None])
 def test_gmp_preflight_precedes_revision_mutations_without_secret_create(contracts, tmp_path, failure):
     steps = contracts['action']['runs']['steps']
-    prepare = [step for step in steps if step.get('id') in ('prepare-backend-gmp-config', 'prepare-sync-gmp-config')]
-    assert len(prepare) == 2
+    prepare = [
+        step
+        for step in steps
+        if step.get('id') in ('preflight-required-secrets', 'prepare-backend-gmp-config', 'prepare-sync-gmp-config')
+    ]
+    assert len(prepare) == 3
     mutations = [
         i
         for i, step in enumerate(steps)
@@ -171,6 +176,7 @@ def test_gmp_preflight_precedes_revision_mutations_without_secret_create(contrac
             'Migrate legacy public Cloud Run bindings',
             'Deploy sync-backfill worker',
             'Probe LLM gateway from the Cloud Run VPC before promotion',
+            'Preflight Cloud Run deploy',
         )
     ]
     assert mutations
@@ -190,17 +196,21 @@ if args[:2] == ['secrets', 'create']:
 if args[:2] == ['secrets', 'describe']:
     if failure == 'missing':
         sys.exit('NOT_FOUND')
-    print('projects/1/secrets/cloud-run-gmp-config')
+    print('projects/1/secrets/runtime-secret')
 elif args[:3] == ['secrets', 'versions', 'add']:
-    if failure == 'version-add':
-        sys.exit('secretmanager.versions.add denied')
-    number = '8' if any('cloud_run_gmp_sync.yaml' in a for a in args) else '7'
-    print('projects/1/secrets/cloud-run-gmp-config/versions/' + number)
+    sys.exit('secretmanager.versions.add denied')
+elif args[:3] == ['secrets', 'versions', 'list']:
+    print('1')
+elif args[:3] == ['secrets', 'versions', 'describe']:
+    print('ENABLED')
 elif args[:3] != ['run', 'services', 'replace']:
     sys.exit('unexpected command')
 ''')
     fake.chmod(0o755)
-    scripts = [step['run'].replace('${{ inputs.project_id }}', 'test-project') for step in prepare]
+    scripts = [
+        step['run'].replace('${{ inputs.project_id }}', 'based-hardware').replace('${{ inputs.runtime_env }}', 'prod')
+        for step in prepare
+    ]
     # Execute the checked-in preflight scripts before a representative mutation.
     # set -e must stop the shell before it when any preflight command fails.
     result = subprocess.run(
@@ -210,6 +220,7 @@ elif args[:3] != ['run', 'services', 'replace']:
             'PATH': f'{bindir}:{Path(sys.executable).parent}:' + os.environ['PATH'],
             'DEPLOY_CONTROL_SCRIPTS': str(ROOT / 'backend/scripts'),
             'GITHUB_OUTPUT': str(output),
+            'GITHUB_WORKSPACE': str(ROOT),
             'GMP_TEST_CALLS': str(log),
             'GMP_TEST_FAILURE': failure or '',
         },
@@ -219,16 +230,14 @@ elif args[:3] != ['run', 'services', 'replace']:
     )
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert not any(call[:2] == ['secrets', 'create'] for call in calls)
+    assert not any(call[:3] == ['secrets', 'versions', 'add'] for call in calls)
+    assert not any('cloud-run-gmp-config' in argument for call in calls for argument in call)
     mutations = [call for call in calls if call[:3] == ['run', 'services', 'replace']]
     if failure:
         assert result.returncode != 0
         assert not mutations
-        assert (
-            'required existing GMP config secret' in result.stderr
-            if failure == 'missing'
-            else 'versions.add denied' in result.stderr
-        )
+        assert 'not found' in result.stderr
     else:
         assert result.returncode == 0, result.stderr
         assert mutations
-        assert output.read_text().splitlines() == ['version=7', 'version=8']
+        assert output.read_text() == ''
