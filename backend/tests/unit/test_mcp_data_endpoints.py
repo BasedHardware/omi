@@ -218,7 +218,7 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid(monkeyp
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
     if budget_enabled and sort != 'scoring_desc':
-        make_budget.assert_called_once_with(None, route='mcp-memories')
+        make_budget.assert_called_once_with(None, route='mcp-memories', owner_uid='auth-user', context=auth_context)
         memory_service.read.assert_called_once_with('auth-user', limit=5000, offset=0, budget=shared_budget)
     else:
         make_budget.assert_not_called()

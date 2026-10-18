@@ -2,11 +2,12 @@
 
 The three Developer API GET lists (`/v1/dev/user/conversations`, `/v1/dev/user/memories`,
 `/v1/dev/user/action-items`) and REST `GET /v1/mcp/memories` share a short response cache
-and HTTP outcome measurement. Hosted MCP JSON-RPC tools are outside this cache and rollout.
+and HTTP outcome measurement. The staged-task promote POST uses the same HTTP counter and its
+own physical-empty probe. Hosted MCP JSON-RPC tools are outside this cache and rollout.
 
 ## Behavior and rollback
 
-All four independent env levers default **on**. Only a case-insensitive, whitespace-trimmed
+All five independent env levers default **on**. Only a case-insensitive, whitespace-trimmed
 `false` disables a lever; unset, `0`, and other values leave it on.
 
 | Lever | Disable with `false` |
@@ -15,8 +16,9 @@ All four independent env levers default **on**. Only a case-insensitive, whitesp
 | `OMI_EXTERNAL_LIST_CACHE_ENABLED` | Bypass all response cache reads/writes; run the original handlers. |
 | `OMI_MCP_MEMORY_LIST_BUDGET_ENABLED` | Restore the prior growing-prefix MCP compatibility scan with no shared budget. |
 | `OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED` | Restore unbudgeted Developer conversation offsets and omit new guidance/truncation headers. |
+| `OMI_STAGED_TASK_PROMOTE_EMPTY_PROBE_ENABLED` | Restore control + full projection for every staged promote poll. |
 
-Full behavior rollback sets all four to `false`. No deployment/env values are changed by this PR.
+Full behavior rollback sets all five to `false`. No deployment/env values are changed by this PR.
 Cache keys include budget lever states, so switching either budget off cannot replay its headers/results.
 No data migration, extra Firestore write, index, rate-limit, boost, or daily ladder change is required.
 The existing memory keyset paths and the existing Developer memory/action-item budgets stay in place.
@@ -29,7 +31,9 @@ A hit cannot bypass these gates; permission revocations are rechecked on each re
 list/content reads, not every auth/grant read. Existing dependency auth caches retain their own semantics.
 The key hashes owner UID, persisted app/key context, a digest of the presented credential (including
 legacy keys), route and normalized parsed effective query. Defaults and clamped pagination normalize;
-all accepted filters, cursor, and page positions participate. Category multiplicity is retained to match
+all accepted filters, cursor, and page positions participate. Effective document allowances also
+participate: resolving a different per-request limit cannot reuse a page cached under another limit.
+The owner/context-aware resolver runs after auth and validation, before cache lookup. Category multiplicity is retained to match
 the existing cursor filter fingerprint. Signed MCP `uml` continuation requests bypass response caching
 so the original reader rechecks their independent expiry/snapshot authority on every call. Ignored query parameters retain existing
 acceptance and get a fresh ignored-parameter header on hits.
@@ -95,12 +99,54 @@ overshoot by up to one current bounded RPC window, which can contain 7000 histor
 billing ceiling.
 Auth/grants, fixed policy reads, and auxiliary render reads are outside this list-document allowance.
 
+## One injectable API document-limit resolver
+
+`utils.other.list_budget.resolve_list_read_max_documents(owner_uid=..., context=...)` is the single
+factory seam for the document allowance. Developer memories/action-items, budgeted conversation
+card/transcript/folder/starred offsets, and MCP global-sort compatibility lists pass their authenticated
+owner and authorization context through `list_read_budget_for_request`. No client-supplied UID or
+read-limit header is trusted. Cache keys include the resulting allowance; limits are resolved even
+on a warm cache hit. Budget kill switches still select the original paths, and scoring/keyset
+boundaries above stay in place.
+
+The resolver currently performs no entitlement read: a positive `OMI_LIST_READ_MAX_DOCUMENTS`
+keeps its existing override, otherwise the fallback is 25,000. The existing 24-second default,
+`OMI_LIST_READ_BUDGET_SECONDS`, GET-timeout headroom, middleware start stamp, and explicit internal
+factory overrides keep their semantics. A future plan `api_max_reads_per_request` source belongs in
+this one resolver (David ruling 2026-10-18), rather than individual routes. This adds neither a ladder,
+daily count admission nor a plan change. Exhaustion stays a truncated 200 with the existing
+continuation rules, never a new 4xx.
+
+## Empty staged-task promote polls
+
+Old desktop clients may poll `POST /v1/staged-tasks/promote` every 60 seconds. With
+`OMI_STAGED_TASK_PROMOTE_EMPTY_PROBE_ENABLED` on, two unfiltered `limit(1).select([])` queries check
+`users/{uid}/staged_tasks` and `users/{uid}/candidates` before the control-fence read. Only physical
+emptiness of **both** stores proves the released response can be returned early:
+`{"promoted":false,"reason":"No staged tasks available","promoted_task":null}`.
+
+No field predicate or field order excludes legacy rows. Any row is inconclusive, including completed,
+hidden, malformed or other-generation rows: the unchanged control/eligibility/merge projection decides
+what can be promoted. Candidate precedence and suppression of historical duplicates are unchanged.
+A probe failure uses the original reader and shared fallback telemetry. There is no negative cache,
+writer invalidation, new write, migration or index; the registered query driver proves both unfiltered
+collection shapes use built-in indexes. Nonempty polls pay one or two extra bounded probes.
+
+The counted offline fixture models a physically empty poll as two empty queries (zero returned rows,
+two minimum billed reads), versus the prior control read plus two empty collection queries (three
+minimum billed reads). This is a one-read reduction per eligible poll, not a zero-read result. The
+~40M reads/day supplied snapshot alone does not reveal eligible request counts. If all of those reads
+were this three-read empty path, the ceiling would model ~13.3M fewer reads/day; terminal/nonempty
+stores and the added probes reduce or can negate that saving. Measure the eligible mix and actual
+origin reads/request after an authorized deploy; no deployed saving is claimed.
+
 ## Measurement and export
 
 `omi_external_list_http_requests_total{route,outcome}` is emitted by pure ASGI middleware outside the
-GET timeout middleware. `route` is one of the four exact normalized paths; `outcome` is one of
+GET timeout middleware. It also counts the exact staged promote POST; `route` is one of these five normalized paths; `outcome` is one of
 `success`, `truncated`, `auth_error`, `validation_error`, `rate_limited`, `server_error`, `other`.
-It includes dependency 401/403/429, query 400/413/422 and timeout/server failures. GET only; raw query
+It includes dependency 401/403/429, query 400/413/422 and timeout/server failures. Four GET lists plus
+the staged promote POST only; raw query
 strings, UID, keys and apps are never labels. `omi_external_list_cache_total{route,outcome}` counts
 `hit`, `miss`, `stored`; disabled, truncated and oversized writes are not `stored`.
 
@@ -127,7 +173,8 @@ sum by (route, outcome) (increase(omi_external_list_cache_total[1h]))
 
 Use `omi_firestore_billed_reads_by_origin_total` with existing `origin` labels
 `http:/v1/dev/user/conversations`, `http:/v1/dev/user/memories`,
-`http:/v1/dev/user/action-items`, `http:/v1/mcp/memories` (sum collection/kind dimensions).
+`http:/v1/dev/user/action-items`, `http:/v1/mcp/memories`, and the separate
+`http:/v1/staged-tasks/promote` (sum collection/kind dimensions).
 Divide each service+origin read delta by the corresponding service+route HTTP counter delta, and
 also report successful/truncated request denominators separately from auth/429 rejects. Do not add
 caller totals to origin totals or mix hosted tool traffic with REST. Trace sampling/scaling and

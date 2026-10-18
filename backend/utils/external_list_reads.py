@@ -122,6 +122,7 @@ def cached_list_response(
     uid: str,
     context: Any,
     query: dict[str, Any],
+    max_documents: int | None = None,
 ) -> Response | None:
     """Call AFTER all auth/grant/rate/validation gates, with parsed effective query.
 
@@ -139,6 +140,7 @@ def cached_list_response(
         'credential': hashlib.sha256(request.headers.get('authorization', '').encode()).hexdigest(),
         'route': route,
         'query': query,
+        'max_documents': max_documents,
         'mcp_budget': lever_enabled('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED'),
         'conversation_budget': lever_enabled('OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED'),
     }
@@ -271,15 +273,25 @@ def cached_external_list(
             # Signed inner cursors have expiry/snapshot authority checked by
             # read_page. Never reuse a response past those independent gates.
             return None
-    return cached_list_response(request, response, uid=context.uid, context=context, query=query)
+    budget = parameters.get('budget')
+    return cached_list_response(
+        request,
+        response,
+        uid=context.uid,
+        context=context,
+        query=query,
+        max_documents=budget.max_documents if budget is not None else None,
+    )
 
 
 def developer_conversation_offset_budget(
-    request: Request | None, response: Response | None, offset: int
+    request: Request | None, response: Response | None, offset: int, context: Any = None
 ) -> ListReadBudget | None:
     if offset <= 0 or not lever_enabled('OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED'):
         return None
-    budget = list_read_budget_for_request(request, route='developer-conversations')
+    budget = list_read_budget_for_request(
+        request, route='developer-conversations', owner_uid=getattr(context, 'uid', None), context=context
+    )
     if response is not None:
         response.headers['X-Pagination-Guidance'] = (
             'Prefer cursor with offset=0, include_transcript=false and no folder/starred filter; '

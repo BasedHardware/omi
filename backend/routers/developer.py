@@ -377,7 +377,6 @@ def get_memories(
             logger.error(f"Invalid category in developer memories: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-    budget = list_read_budget_for_request(request, route='developer-memories')
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -397,6 +396,7 @@ def get_memories(
     allowed = {category.value for category in category_list} if category_list else None
     if offset + limit > 5000:
         raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
+    budget = list_read_budget_for_request(request, route='developer-memories', owner_uid=uid, context=auth_context)
     cached = external_lists.cached_external_list(request, response, auth_context, locals())
     if cached is not None:
         return cached
@@ -842,10 +842,10 @@ def get_action_items(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
+    budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
     cached = external_lists.cached_external_list(request, response, auth, locals())
     if cached is not None:
         return cached
-    budget = list_read_budget_for_request(request, route='developer-action-items')
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -1560,12 +1560,12 @@ def get_conversations(
             logger.error(f"Invalid category in developer conversations: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
+        budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
         cached = external_lists.cached_external_list(request, response, auth, locals())
         if cached is not None:
             status = 200
             returned_count = len(json.loads(bytes(cached.body)))
             return cached
-        budget = external_lists.developer_conversation_offset_budget(request, response, offset)
         budget_kwargs = {'budget': budget} if budget is not None else {}
 
         next_cursor = None

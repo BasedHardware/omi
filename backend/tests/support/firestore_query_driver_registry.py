@@ -2039,6 +2039,13 @@ _add(
     )
 )
 _add(DriverEntry('database.staged_tasks.clear_staged_tasks', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.staged_tasks.staged_task_stores_physically_empty',
+        base={'uid': UID},
+        profiles=(CallerProfile('staged-promote-physical-empty', {}),),
+    )
+)
 _add(DriverEntry('database.staged_tasks.create_staged_task', base={'uid': UID, 'description': 'shape-task'}))
 _add(DriverEntry('database.staged_tasks.get_active_staged_tasks_for_compatibility', base={'uid': UID}))
 _add(DriverEntry('database.staged_tasks.get_all_staged_tasks_for_migration', base={'uid': UID}))

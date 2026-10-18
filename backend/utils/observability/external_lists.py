@@ -1,4 +1,4 @@
-"""Count all four list routes, including dependency/validation rejections."""
+"""Count four list GETs and staged promote POSTs, including dependency/validation rejections."""
 
 import os
 from typing import Any
@@ -7,7 +7,7 @@ from prometheus_client import Counter
 
 EXTERNAL_LIST_HTTP_TOTAL = Counter(
     'omi_external_list_http_requests_total',
-    'External list GETs including auth, rate-limit and validation failures',
+    'External list GETs and staged promote POSTs including auth, rate-limit and validation failures',
     ['route', 'outcome'],
 )
 EXTERNAL_LIST_CACHE_TOTAL = Counter(
@@ -17,6 +17,8 @@ EXTERNAL_LIST_CACHE_TOTAL = Counter(
 ROUTES = frozenset(
     {'/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/action-items', '/v1/mcp/memories'}
 )
+
+STAGED_PROMOTE_ROUTE = '/v1/staged-tasks/promote'
 
 
 def _outcome(status: int, truncated: bool) -> str:
@@ -40,8 +42,10 @@ class ExternalListMetricsMiddleware:
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if (
             scope['type'] != 'http'
-            or scope.get('method') != 'GET'
-            or scope.get('path') not in ROUTES
+            or not (
+                (scope.get('method') == 'GET' and scope.get('path') in ROUTES)
+                or (scope.get('method') == 'POST' and scope.get('path') == STAGED_PROMOTE_ROUTE)
+            )
             or os.getenv('OMI_EXTERNAL_LIST_METRICS_ENABLED', '').strip().lower() == 'false'
         ):
             await self.app(scope, receive, send)

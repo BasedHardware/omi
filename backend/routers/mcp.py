@@ -452,15 +452,15 @@ def get_memories(
             detail=app_key_grant.observability,
         )
 
-    cached = cached_external_list(request, response, auth_context, locals())
-    if cached is not None:
-        return cached
     budget = (
-        list_read_budget_for_request(request, route='mcp-memories')
+        list_read_budget_for_request(request, route='mcp-memories', owner_uid=uid, context=auth_context)
         if sort in {'created_desc', 'updated_desc', 'manual_first'}
         and lever_enabled('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED')
         else None
     )
+    cached = cached_external_list(request, response, auth_context, locals())
+    if cached is not None:
+        return cached
     try:
         result = mcp_memory_handlers.memories_page_core(
             uid,

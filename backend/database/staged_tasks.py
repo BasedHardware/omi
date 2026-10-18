@@ -33,6 +33,20 @@ def _user_col(uid: str, collection: str):
     return db.collection('users').document(uid).collection(collection)
 
 
+def staged_task_stores_physically_empty(uid: str, *, firestore_client=None) -> bool:
+    """Prove both stores empty without excluding any legacy or terminal row.
+
+    A nonempty store is inconclusive: only the existing generation/eligibility
+    projection may decide whether it contains a promotable staged task.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user = client.collection('users').document(uid)
+    for collection in ('staged_tasks', 'candidates'):
+        if list(user.collection(collection).limit(1).select([]).stream()):
+            return False
+    return True
+
+
 def _commit_batch(batch, count):
     """Commit batch if count reaches BATCH_LIMIT; return fresh batch and 0."""
     if count >= BATCH_LIMIT:

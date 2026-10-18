@@ -9,6 +9,7 @@ decision succeeds.
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from typing import List
 
@@ -29,6 +30,7 @@ from models.staged_task import (
     StagedTask,
     StagedTaskListResponse,
 )
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.staged_migration import proposal_from_legacy_staged
@@ -44,6 +46,23 @@ def _control(uid: str):
     """Read the account-generation fence; workflow mode is no longer entitlement."""
 
     return task_control_db.get_task_workflow_control(uid)
+
+
+def _empty_promote_probe(uid: str) -> bool:
+    if os.getenv('OMI_STAGED_TASK_PROMOTE_EMPTY_PROBE_ENABLED', '').strip().lower() == 'false':
+        return False
+    try:
+        return staged_tasks_db.staged_task_stores_physically_empty(uid)
+    except Exception:
+        # A failed optional probe cannot replace a successful original reader.
+        record_fallback(
+            component='firestore_read',
+            from_mode='empty_probe',
+            to_mode='full_projection',
+            reason='unavailable',
+            outcome='recovered',
+        )
+        return False
 
 
 def _candidate_as_staged(candidate: CandidateRecord) -> dict:
@@ -432,6 +451,8 @@ def batch_update_staged_scores(
 
 @router.post('/v1/staged-tasks/promote', tags=['staged-tasks'], response_model=PromoteStagedTaskResponse)
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
+    if _empty_promote_probe(uid):
+        return {'promoted': False, 'reason': 'No staged tasks available', 'promoted_task': None}
     control = _control(uid)
     items = _merged_staged_projection(uid, account_generation=control.account_generation)
     if not items:

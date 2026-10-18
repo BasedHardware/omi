@@ -15,6 +15,7 @@ from utils import external_list_reads as cache
 from utils.mcp_server.cursors import encode_cursor
 from utils.mcp_server.handlers import memories as memory_handlers
 from utils.observability.external_lists import ExternalListMetricsMiddleware
+from utils.other import list_budget as budgets
 from utils.other.list_budget import ListReadBudget
 from tests.unit.test_external_list_cache import FakeRedis, immediate_population
 
@@ -293,3 +294,71 @@ def test_conversation_cache_hit_retains_successful_audit_count(routes, monkeypat
     assert audit.call_count == 2
     assert [call.kwargs['returned_count'] for call in audit.call_args_list] == [int(populated)] * 2
     assert all(call.kwargs['status'] == 200 for call in audit.call_args_list)
+
+
+@pytest.mark.parametrize(
+    'path,origin',
+    [
+        (PATHS[0] + '?offset=1', 'cards'),
+        (PATHS[0] + '?offset=1&include_transcript=true', 'legacy'),
+        (PATHS[0] + '?offset=1&folder_id=folder', 'legacy'),
+        (PATHS[0] + '?offset=1&starred=true', 'legacy'),
+        (PATHS[1], 'memories'),
+        (PATHS[2], 'actions'),
+        (PATHS[3], 'mcp_memories'),
+    ],
+)
+def test_real_routes_resolve_owner_budget_and_keep_truncated_200(routes, monkeypatch, path, origin):
+    client, state, calls, _ = routes
+    seen = []
+
+    def resolve(*, owner_uid=None, context=None):
+        seen.append((owner_uid, context))
+        return 7
+
+    monkeypatch.setattr(budgets, 'resolve_list_read_max_documents', resolve)
+    state.truncated = True
+    response = client.get(path, headers={'X-Read-Budget': '100000000'})
+    assert response.status_code == 200 and response.content == b'[]'
+    assert response.headers['X-Omi-List-Truncated'] == 'true'
+    assert len(seen) == 1
+    owner, context = seen[0]
+    assert owner == context.uid == state.uid
+    assert context.app_id == state.app_id and context.key_id == state.key_id
+    assert getattr(calls, origin).call_args.kwargs['budget'].max_documents == 7
+
+
+@pytest.mark.parametrize(
+    'path,origin',
+    [
+        (PATHS[0] + '?offset=1', 'cards'),
+        (PATHS[1], 'memories'),
+        (PATHS[2], 'actions'),
+        (PATHS[3], 'mcp_memories'),
+    ],
+)
+def test_real_route_cache_separates_effective_read_limits_and_owner(routes, monkeypatch, path, origin):
+    client, state, calls, storage = routes
+    allowance = [100]
+    seen = []
+
+    def resolve(*, owner_uid=None, context=None):
+        seen.append((owner_uid, context.uid))
+        return allowance[0]
+
+    monkeypatch.setattr(budgets, 'resolve_list_read_max_documents', resolve)
+    first = client.get(path)
+    assert client.get(path).content == first.content
+    assert getattr(calls, origin).call_count == 1
+    allowance[0] = 2
+    assert client.get(path).content == first.content
+    assert getattr(calls, origin).call_count == 2
+    assert getattr(calls, origin).call_args.kwargs['budget'].max_documents == 2
+    allowance[0] = 100
+    assert client.get(path).content == first.content
+    assert getattr(calls, origin).call_count == 2
+    state.uid = 'other-owner'
+    assert client.get(path).content == first.content
+    assert getattr(calls, origin).call_count == 3
+    assert seen == [('owner', 'owner')] * 4 + [('other-owner', 'other-owner')]
+    assert len(storage.entries) == 3
