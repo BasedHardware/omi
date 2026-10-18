@@ -402,9 +402,12 @@ complementary approximately 5% of managed accounts use static selection. Keep
 There is no provider, endpoint, GPU-pool, or admission-limit change. Custom STT,
 BYOK, and multi-channel sessions remain outside the managed cohort.
 
-Pin one immutable image across both arms. Establish a router-on baseline on
-that image before changing allocation; a source rollback or a deployment
-workflow's overall completion time is not a flag-only serving boundary. Verify
+Ship the instrumented binary with `STT_ROUTING_MODE=on` and
+`STT_ROUTING_ON_PERCENT=100` first. Let that image serve on/100 for at least
+**60 minutes** before the separate stage-1 allocation change. Pin `image_tag`
+to that same immutable instrumented image for stage 1 and both arms. A source
+rollback or a deployment workflow's overall completion time is not a flag-only
+serving boundary. Verify
 image convergence, Ready pods, public NEG exposure in every serving zone and
 complete scrapes. Hold for an unobserved Ready pod or missing telemetry.
 
