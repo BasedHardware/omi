@@ -22,9 +22,9 @@ from google.cloud.firestore_v1.bulk_batch import BulkWriteBatch
 from google.cloud.firestore_v1.document import DocumentReference
 from google.cloud.firestore_v1.async_document import AsyncDocumentReference
 
-from database import redis_db
+from database.redis_connection import create_bounded_redis_client
 from utils.executors import db_executor, run_blocking
-from utils.observability.fallback import record_fallback
+from database.fsr_cache_telemetry import record_fallback
 
 logger = logging.getLogger(__name__)
 VERSION_TTL = 7 * 86400
@@ -58,7 +58,7 @@ end
 
 @functools.lru_cache(maxsize=1)
 def _redis() -> Any:
-    return redis_db.create_bounded_redis_client(0.1)
+    return create_bounded_redis_client(0.1)
 
 
 def _key(uid: str) -> str:

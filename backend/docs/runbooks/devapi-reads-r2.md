@@ -33,7 +33,10 @@ transforms use WriteBatch; direct document delete is separately wrapped because
 it calls Commit without WriteBatch. Sync/async transaction commit, sync/async
 WriteBatch, and BulkWriteBatch (BulkWriter) are covered. Each batch fences every
 affected owner, including mixed-owner batches. Other collections add no Redis IO.
-No Firestore query or extra Firestore write is added to mutations.
+No Firestore query or extra Firestore write is added to mutations. The small
+`database.redis_connection` module shares connection settings without importing
+product database helpers at SDK bootstrap. The slim batch-worker lock adds the
+same pinned Redis client so SDK fence installation has its dependency there too.
 
 Serving writer audit (direct and dynamic collection references):
 
