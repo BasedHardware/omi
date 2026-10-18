@@ -1384,6 +1384,7 @@ def _s1_spies(pipeline, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('lineage_switch', ['on', 'off'])
 @pytest.mark.parametrize(
     'claims',
     [
@@ -1407,7 +1408,9 @@ def _s1_spies(pipeline, monkeypatch):
         'nonmapping-list',
     ],
 )
-async def test_s1_required_keeps_pre_lineage_binding_without_claims(coordinator, monkeypatch, tmp_path, claims):
+async def test_s1_required_keeps_pre_lineage_binding_without_claims(
+    coordinator, monkeypatch, tmp_path, claims, lineage_switch
+):
     """Default-on S1 gate: an admitted upload without a complete validated claim
     set keeps the pre-lineage whole-batch resolver and never reaches the
     per-segment planner — the identical route the lineage kill switch takes."""
@@ -1415,6 +1418,7 @@ async def test_s1_required_keeps_pre_lineage_binding_without_claims(coordinator,
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
     monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', lineage_switch)
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
     spies = _s1_spies(pipeline, monkeypatch)
     await _run_batch(module, stubs, tmp_path, claims=claims)
@@ -1424,18 +1428,7 @@ async def test_s1_required_keeps_pre_lineage_binding_without_claims(coordinator,
     assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
     assert len(state.processed) == 1
     assert state.outcomes[-1].value == 'success'
-    gated = (
-        list(state.vad_seen),
-        list(state.processed),
-        [outcome.value for outcome in state.outcomes],
-    )
-    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'off')
-    await _run_batch(module, stubs, tmp_path, claims=None)
-    assert spies.plan_calls == []
-    assert spies.resolver_calls == [_WHOLE_BATCH_ARGS] * 2
-    assert state.vad_seen == gated[0] * 2
-    assert state.processed == gated[1] * 2
-    assert [outcome.value for outcome in state.outcomes] == gated[2] * 2
+    assert [outcome.value for outcome in state.outcomes] == ['success']
 
 
 @pytest.mark.asyncio
