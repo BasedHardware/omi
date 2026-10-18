@@ -13,4 +13,4 @@ def test_production_producers_and_workers_share_the_first_summary_deadline():
         env = hosts[name]['env']
         assert env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'] == 'true', name
         assert env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'] == '100', name
-    assert hosts['backend-sync']['env']['SUMMARY_DEBT_REPAIR_ENABLED']['value'] == 'true'
+    assert hosts['backend-sync']['env']['SUMMARY_DEBT_REPAIR_ENABLED']['value'] == 'false'

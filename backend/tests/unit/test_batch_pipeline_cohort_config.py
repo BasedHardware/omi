@@ -47,9 +47,10 @@ def hosts(config):
 
 def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
-        for env in hosts(config).values():
+        for name, env in hosts(config).items():
             assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
-            assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            expected_percent = '100' if stage == 'prod' and name in SERVICES else '0'
+            assert env['BATCH_PIPELINE_PERCENT']['value'] == expected_percent
             if stage == 'prod':
                 assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
                 assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
