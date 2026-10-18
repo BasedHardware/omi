@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import importlib
 import unittest.mock
+
+from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -2871,7 +2873,18 @@ _add(
         patchers=(_messaging_cleanup, _messaging_decryption),
     )
 )
-_add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
+_add(
+    DriverEntry(
+        'database.channel_visibility.visible_sessions',
+        base={'uid': UID},
+        patchers=(
+            _messaging_visibility,
+            # Drivers run outside serving bootstrap/function fixtures. Model a
+            # successful empty cohort document with the explicit synthetic env fallback.
+            lambda client: unittest.mock.patch('config.rollout_cohorts._membership_resolver', legacy_membership),
+        ),
+    )
+)
 
 _add(
     DriverEntry(

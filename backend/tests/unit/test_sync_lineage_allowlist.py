@@ -567,8 +567,9 @@ def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('membership', [True, False, 'error'])
+@pytest.mark.parametrize('expired', [False, True])
 async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting_lineage(
-    coordinator, monkeypatch, membership
+    coordinator, monkeypatch, membership, expired
 ):
     module, stubs = coordinator
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
@@ -587,22 +588,23 @@ async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting
     monkeypatch.setattr(rollout_cohorts, '_cache', cache)
     with ThreadPoolExecutor(max_workers=1) as pool:
         monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
-        for attempt in range(2):
-            # The read can only finish after the coordinator yields to warmup.
-            release.clear()
-
-            async def unblock():
-                await asyncio.sleep(0)
-                release.set()
-
-            pulse = asyncio.create_task(unblock())
-            try:
-                targets, _ = await _coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
-            finally:
-                release.set()
-                await pulse
-            expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if membership is True else [None] * 4
-            assert targets == expected
-            assert reads == ['uid'] * (attempt + 1)
-            # An expired instance must make the same decision as a cold one.
+        if expired:
+            release.set()
+            await rollout_cohorts.warm_rollout_cohorts('uid')
             cache.entries['uid'].expires = 0
+        # The read can only finish after the coordinator yields to warmup.
+        release.clear()
+
+        async def unblock():
+            await asyncio.sleep(0)
+            release.set()
+
+        pulse = asyncio.create_task(unblock())
+        try:
+            targets, _ = await _coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
+        finally:
+            release.set()
+            await pulse
+        expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if membership is True else [None] * 4
+        assert targets == expected
+        assert reads == ['uid'] * (2 if expired else 1)

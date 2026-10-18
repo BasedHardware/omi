@@ -1383,6 +1383,19 @@ def _s1_spies(pipeline, monkeypatch):
     return SimpleNamespace(resolver_calls=resolver_calls, plan_calls=plan_calls)
 
 
+@pytest.fixture
+def s1_routing(coordinator, monkeypatch, tmp_path, lineage_switch):
+    # WAV construction and fake dependency wiring are setup, not coordinator CPU.
+    module, stubs = coordinator
+    pipeline = stubs['pipeline']
+    _coverage_env(monkeypatch)
+    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', lineage_switch)
+    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
+    spies = _s1_spies(pipeline, monkeypatch)
+    return module, stubs, state, spies
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('lineage_switch', ['on', 'off'])
 @pytest.mark.parametrize(
@@ -1408,19 +1421,11 @@ def _s1_spies(pipeline, monkeypatch):
         'nonmapping-list',
     ],
 )
-async def test_s1_required_keeps_pre_lineage_binding_without_claims(
-    coordinator, monkeypatch, tmp_path, claims, lineage_switch
-):
+async def test_s1_required_keeps_pre_lineage_binding_without_claims(s1_routing, tmp_path, claims, lineage_switch):
     """Default-on S1 gate: an admitted upload without a complete validated claim
     set keeps the pre-lineage whole-batch resolver and never reaches the
     per-segment planner — the identical route the lineage kill switch takes."""
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', lineage_switch)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
-    spies = _s1_spies(pipeline, monkeypatch)
+    module, stubs, state, spies = s1_routing
     await _run_batch(module, stubs, tmp_path, claims=claims)
     assert spies.plan_calls == []
     assert spies.resolver_calls == [_WHOLE_BATCH_ARGS]
