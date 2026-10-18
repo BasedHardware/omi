@@ -71,7 +71,7 @@ from typing import Any, Callable
 from prometheus_client import Counter
 
 from database.firestore_tier_context import current_tier
-from database.firestore_read_origin import current_read_origin
+from database.firestore_read_origin import current_read_origin, trace_request_reads
 
 logger = logging.getLogger(__name__)
 
@@ -565,6 +565,7 @@ def _record(
         kind = 'not_found' if outcome == 'miss' else 'lookup'
     if caller is None:
         caller = 'unattributed'
+    trace_request_reads(amount)
     tier = current_tier()
     origin = current_read_origin()
     if _LEDGER_ENABLED:

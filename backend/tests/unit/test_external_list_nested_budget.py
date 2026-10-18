@@ -128,7 +128,7 @@ class Query:
                 reverse=direction == 'DESCENDING',
             )
         if self.after:
-            boundary = self.after['__name__'].path
+            boundary = self.after['__name__'].path if isinstance(self.after, dict) else self.after.reference.path
             index = next(i for i, row in enumerate(rows) if row[0] == boundary)
             rows = rows[index + 1 :]
         selected = rows[self.skip : self.skip + self.n]
@@ -205,15 +205,15 @@ def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkey
     assert same['memories'] == unbounded['memories']
     assert [row['id'] for row in same['memories']] == ['canonical', *[f'h-{i}' for i in range(12, 24)]]
     assert not same['scan_truncated'] and not same['has_more'] and not clean.truncated
-    assert clean_reads == clean.docs_scanned == 124
+    assert clean_reads == clean.docs_scanned == 84
     assert len(calls) == 1
     assert store.batch_gets > 0
     historical = [window for window in store.windows if window[0].endswith('/memories')]
     assert {window[1][0][0] for window in historical} == {'updated_at', 'created_at'}
-    assert any(window[2] > 20 for window in historical)  # Hidden rows expanded the RPC window.
+    assert len(historical) > 2  # Hidden rows grow via suffix RPCs, not a prefix reread.
     # updated_at excludes h-12; created_at supplies it. Neither index invents a field.
-    assert any(window[1][0][0] == 'updated_at' and window[3] == 23 for window in historical)
-    assert any(window[1][0][0] == 'created_at' and window[3] == 24 for window in historical)
+    assert sum(window[3] for window in historical if window[1][0][0] == 'updated_at') == 23
+    assert sum(window[3] for window in historical if window[1][0][0] == 'created_at') == 24
     bounded = budget(25)
     truncated, bounded_reads = run(bounded)
     assert bounded.truncated and truncated['scan_truncated'] and truncated['has_more']

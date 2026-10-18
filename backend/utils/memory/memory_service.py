@@ -2644,6 +2644,63 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
         authoritative: bool = False,
+        category_filter: Optional[Set[str]] = None,
+    ) -> List[MemoryDB]:
+        kwargs: Dict[str, Any] = dict(
+            device_scope_request=device_scope_request,
+            include_pending_processing=include_pending_processing,
+            include_archive=include_archive,
+            now=now,
+            budget=budget,
+            view=view,
+            as_of=as_of,
+            authoritative=authoritative,
+        )
+        if category_filter is None:
+            return self._read_compatibility_window(uid, limit=limit, offset=offset, **kwargs)
+        # One admitted operation owns the sparse category scan. Individual
+        # windows retain the SAME RPC/document budget and provider evidence;
+        # they do not spend a new whole-operation retry ticket for each chunk.
+        target = max(0, offset) + max(1, limit)
+        if target > HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW:
+            raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
+        matched: List[MemoryDB] = []
+        scanned = 0
+        size = min(500, max(25, target))
+        exhausted = False
+        try:
+            while scanned < 5000 and len(matched) < target:
+                take = min(size, 5000 - scanned)
+                if budget is not None:
+                    budget.check()
+                batch = self._read_compatibility_window(uid, limit=take, offset=scanned, **kwargs)
+                scanned += len(batch)
+                matched.extend(row for row in batch if row.category.value in category_filter)
+                if len(batch) < take:
+                    exhausted = True
+                    break
+                size = min(500, size * 2)
+        except ListReadBudgetExhausted as exc:
+            if budget is not None:
+                budget.mark_exhausted(exc.reason)
+        if not exhausted and len(matched) < target and budget is not None and not budget.truncated:
+            budget.mark_exhausted('documents')
+        return matched[max(0, offset) : target]
+
+    def _read_compatibility_window(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
+        include_pending_processing: bool = False,
+        include_archive: bool = False,
+        now: Optional[datetime] = None,
+        budget: Optional[ListReadBudget] = None,
+        view: str = 'released',
+        as_of: Optional[datetime] = None,
+        authoritative: bool = False,
     ) -> List[MemoryDB]:
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))

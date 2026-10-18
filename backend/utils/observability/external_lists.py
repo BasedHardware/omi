@@ -3,7 +3,9 @@
 import os
 from typing import Any
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
+
+from database.firestore_read_origin import RequestReadTrace, bind_request_read_trace, reset_request_read_trace
 
 EXTERNAL_LIST_HTTP_TOTAL = Counter(
     'omi_external_list_http_requests_total',
@@ -12,6 +14,13 @@ EXTERNAL_LIST_HTTP_TOTAL = Counter(
 )
 EXTERNAL_LIST_CACHE_TOTAL = Counter(
     'omi_external_list_cache_total', 'External list response cache activity', ['route', 'outcome']
+)
+
+EXTERNAL_LIST_READS = Histogram(
+    'omi_external_list_firestore_reads_per_request',
+    'SDK billed-equivalent Firestore reads per external list/promote request, including auth and empty query floors',
+    ['route'],
+    buckets=(0, 1, 5, 10, 25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 25000),
 )
 
 ROUTES = frozenset(
@@ -52,6 +61,18 @@ class ExternalListMetricsMiddleware:
             return
         status = 500
         truncated = False
+        trace = RequestReadTrace()
+        token = bind_request_read_trace(trace)
+        observed = False
+
+        def finish_trace() -> None:
+            nonlocal observed
+            if not observed:
+                with trace.lock:
+                    trace.closed = True
+                    reads = trace.reads
+                observed = True
+                EXTERNAL_LIST_READS.labels(route=scope['path']).observe(reads)
 
         async def observe_send(message: Any) -> None:
             nonlocal status, truncated
@@ -61,9 +82,13 @@ class ExternalListMetricsMiddleware:
                     k.lower() in (b'x-omi-list-truncated', b'x-scan-truncated') and v.lower() == b'true'
                     for k, v in message.get('headers', [])
                 )
+            if message['type'] == 'http.response.body' and not message.get('more_body', False):
+                finish_trace()
             await send(message)
 
         try:
             await self.app(scope, receive, observe_send)
         finally:
+            finish_trace()
+            reset_request_read_trace(token)
             EXTERNAL_LIST_HTTP_TOTAL.labels(route=scope['path'], outcome=_outcome(status, truncated)).inc()
