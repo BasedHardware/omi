@@ -6,6 +6,7 @@ import os
 import wave
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, Callable
 
 from pydub import AudioSegment
 
@@ -18,7 +19,9 @@ def enabled() -> bool:
     return os.getenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'false').lower() == 'true'
 
 
-def recover(path, *, transcribe, authorize):
+def recover(
+    path: str | Path, *, transcribe: Callable[..., Any], authorize: Callable[[], None]
+) -> tuple[list[dict], str, float, list[dict]]:
     """Only validated zero-span VAD authorizes silence; all uncertainty fails closed.
 
     The input is the existing local segment. Canonicalize supported legacy PCM

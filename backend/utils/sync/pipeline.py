@@ -1254,6 +1254,63 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
+def _recover_empty_segment(
+    path: str, uid: str, provider: str, lane: str, job_id: str | None, attempt_ref: str | None
+) -> tuple[list[TranscriptSegment], str] | None:
+    def authorize_recovery():
+        if provider != 'parakeet':
+            # Positive VAD after multilingual double-empty is unresolved;
+            # buying the same call again is not independent recovery.
+            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+        if stt_cap_dispatch_enabled() and not sync_allowed(uid):
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
+
+    def multilingual_once(audio, **kwargs):
+        try:
+            return dispatch_empty_recovery_once(
+                uid,
+                compute_sync_segment_id(uid, path),
+                lambda: modulate_prerecorded_from_bytes(audio, **kwargs),
+            )
+        except Exception as error:
+            raise failure_from_exception(error, provider='modulate') from None
+
+    words, recovered_language, duration, spans = empty_recovery.recover(
+        path, transcribe=multilingual_once, authorize=authorize_recovery
+    )
+    logger.info(
+        'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '
+        'vad_spans=%d speech_seconds=%.3f job_ref=%s attempt_ref=%s',
+        'speech' if spans else 'silence',
+        _bounded_sync_lane(lane),
+        duration,
+        len(spans),
+        sum(span['end'] - span['start'] for span in spans),
+        _bounded_correlation_ref(job_id),
+        _bounded_correlation_ref(attempt_ref),
+    )
+    if not spans:
+        return None
+    if stt_cap_dispatch_enabled():
+        allowance = funded_allowance(uid)
+        record_cap_audio('sync', 'accepted', 'modulate', duration, allowance.reason == 'plan_allowance_exhausted')
+    transcript_segments = postprocess_words(words, 0)
+    if not transcript_segments:
+        raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate')
+    if sync_safety_wal_enabled():
+        for segment in transcript_segments:
+            segment.stt_provider = 'velma-2'
+    record_fallback(
+        component='sync_dispatch',
+        from_mode=provider,
+        to_mode='modulate',
+        reason='empty_result',
+        outcome='recovered',
+        log=logger,
+    )
+    return transcript_segments, recovered_language
+
+
 def process_segment(
     path: str,
     uid: str,
@@ -1441,62 +1498,12 @@ def process_segment(
             if empty_retried:
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
                 if empty_recovery.enabled():
-                    empty_provider = provider
-
-                    def authorize_recovery():
-                        nonlocal provider, model
-                        if empty_provider != 'parakeet':
-                            # A multilingual recognizer already returned empty twice.
-                            # Positive VAD remains unresolved; don't buy the same call again.
-                            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=empty_provider)
-                        if stt_cap_dispatch_enabled() and not sync_allowed(uid):
-                            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
-                        provider, model = 'modulate', 'velma-2'
-
-                    def multilingual_once(audio, **kwargs):
-                        return dispatch_empty_recovery_once(
-                            uid,
-                            compute_sync_segment_id(uid, path),
-                            lambda: modulate_prerecorded_from_bytes(audio, **kwargs),
-                        )
-
                     phase = 'provider_call'
-                    words, recovered_language, duration, spans = empty_recovery.recover(
-                        path, transcribe=multilingual_once, authorize=authorize_recovery
-                    )
-                    logger.info(
-                        'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '
-                        'vad_spans=%d speech_seconds=%.3f job_ref=%s attempt_ref=%s',
-                        'speech' if spans else 'silence',
-                        _bounded_sync_lane(sync_lane),
-                        duration,
-                        len(spans),
-                        sum(span['end'] - span['start'] for span in spans),
-                        _bounded_correlation_ref(job_id),
-                        _bounded_correlation_ref(attempt_ref),
-                    )
-                    if spans:
-                        if stt_cap_dispatch_enabled():
-                            allowance = funded_allowance(uid)
-                            record_cap_audio(
-                                'sync', 'accepted', provider, duration, allowance.reason == 'plan_allowance_exhausted'
-                            )
-                        phase = 'parse'
-                        transcript_segments = postprocess_words(words, 0)
-                        if not transcript_segments:
-                            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+                    recovered = _recover_empty_segment(path, uid, provider, sync_lane, job_id, attempt_ref)
+                    if recovered is not None:
+                        transcript_segments, recovered_language = recovered
+                        provider, model = 'modulate', 'velma-2'
                         language = user_language if (single_language_mode and user_language) else recovered_language
-                        if sync_safety_wal_enabled():
-                            for segment in transcript_segments:
-                                segment.stt_provider = model
-                        record_fallback(
-                            component='sync_dispatch',
-                            from_mode=empty_provider,
-                            to_mode='modulate',
-                            reason='empty_asr',
-                            outcome='recovered',
-                            log=logger,
-                        )
                         recovered_via_retry = True
                         break
                 _record_empty_segment_as_silence(
