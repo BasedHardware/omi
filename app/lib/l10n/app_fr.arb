@@ -4371,5 +4371,6 @@
     "processingAction": "Traiter les enregistrements en attente",
     "processingProgress": "Traitement de vos enregistrements en attente…",
     "processingDeferred": "En attente de traitement",
-    "processingCount": "{count, plural, =1{1 conversation en attente} other{{count} conversations en attente}}"
+    "processingCount": "{count, plural, =1{1 conversation en attente} other{{count} conversations en attente}}",
+    "playbackPartialAudioSaved": "{saved} sur {total} d'audio enregistré"
 }

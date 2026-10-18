@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 from dataclasses import asdict
+import json
+import logging
 import threading
 from unittest.mock import Mock
 
@@ -199,15 +201,20 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status,code', [('busy', 503), ('completed', 200)])
-async def test_landed_reprocess_busy_response_remains_retryable(monkeypatch, status, code):
+@pytest.mark.parametrize('status,code', [('busy', 409), ('completed', 200)])
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(monkeypatch, caplog, status, code):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(module, 'run_enrichment', Mock(return_value=status))
+    caplog.set_level(logging.INFO, logger=module.__name__)
     response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
     assert response.status_code == code
+    assert json.loads(response.body) == {'status': status}
+    if status == 'busy':
+        messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
+        assert messages == ['event=batch_enrichment_sync_reprocess outcome=busy']
 
 
 def test_historical_dead_redrive_is_authenticated_stage_bound_and_idempotent(api, monkeypatch):

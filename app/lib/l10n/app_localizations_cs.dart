@@ -14223,4 +14223,9 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Uloženo $saved z $total zvuku';
+  }
 }

@@ -14259,4 +14259,9 @@ class AppLocalizationsHr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Spremljeno $saved od $total zvuka';
+  }
 }

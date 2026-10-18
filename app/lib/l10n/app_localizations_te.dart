@@ -14281,4 +14281,9 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ఆడియో సేవ్ చేయబడింది, మొత్తం $total';
+  }
 }

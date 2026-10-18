@@ -14000,4 +14000,9 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '已保存 $saved / $total 的音频';
+  }
 }

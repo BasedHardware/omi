@@ -14269,4 +14269,9 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು $total';
+  }
 }

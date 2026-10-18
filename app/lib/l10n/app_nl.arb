@@ -4336,5 +4336,6 @@
     "processingAction": "Wachtende opnamen verwerken",
     "processingProgress": "Je wachtende opnamen worden verwerkt…",
     "processingDeferred": "Wacht op verwerking",
-    "processingCount": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}"
+    "processingCount": "{count, plural, =1{1 gesprek wacht} other{{count} gesprekken wachten}}",
+    "playbackPartialAudioSaved": "{saved} van {total} audio opgeslagen"
 }

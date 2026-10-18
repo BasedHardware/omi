@@ -14122,4 +14122,9 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'נשמרו $saved מתוך $total של אודיו';
+  }
 }

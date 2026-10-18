@@ -14320,4 +14320,9 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ஆடியோ சேமிக்கப்பட்டது, மொத்தம் $total';
+  }
 }

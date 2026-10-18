@@ -4336,5 +4336,6 @@
     "processingAction": "Apstrādāt gaidošos ierakstus",
     "processingProgress": "Notiek gaidošo ierakstu apstrāde…",
     "processingDeferred": "Gaida apstrādi",
-    "processingCount": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}"
+    "processingCount": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}",
+    "playbackPartialAudioSaved": "Saglabāts {saved} no {total} audio"
 }

@@ -14296,4 +14296,9 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'S\'han desat $saved de $total d\'àudio';
+  }
 }

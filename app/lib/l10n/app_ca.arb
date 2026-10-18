@@ -4336,5 +4336,6 @@
     "processingAction": "Processa les gravacions pendents",
     "processingProgress": "S'estan processant les gravacions pendents…",
     "processingDeferred": "En espera de processament",
-    "processingCount": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}"
+    "processingCount": "{count, plural, =1{1 conversa en espera} other{{count} converses en espera}}",
+    "playbackPartialAudioSaved": "S'han desat {saved} de {total} d'àudio"
 }

@@ -4336,5 +4336,6 @@
     "processingAction": "Bearbeta väntande inspelningar",
     "processingProgress": "Bearbetar dina väntande inspelningar…",
     "processingDeferred": "Väntar på bearbetning",
-    "processingCount": "{count, plural, =1{1 samtal väntar} other{{count} samtal väntar}}"
+    "processingCount": "{count, plural, =1{1 samtal väntar} other{{count} samtal väntar}}",
+    "playbackPartialAudioSaved": "{saved} av {total} ljud sparat"
 }

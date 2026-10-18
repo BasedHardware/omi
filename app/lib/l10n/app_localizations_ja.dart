@@ -14020,4 +14020,9 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '音声を $saved 保存済み（全体 $total）';
+  }
 }

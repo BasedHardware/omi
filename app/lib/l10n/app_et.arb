@@ -4336,5 +4336,6 @@
     "processingAction": "Töötle ootel salvestisi",
     "processingProgress": "Sinu ootel salvestiste töötlemine…",
     "processingDeferred": "Ootab töötlemist",
-    "processingCount": "{count, plural, =1{1 vestlus ootel} other{{count} vestlust ootel}}"
+    "processingCount": "{count, plural, =1{1 vestlus ootel} other{{count} vestlust ootel}}",
+    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist"
 }

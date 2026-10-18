@@ -4336,5 +4336,6 @@
     "processingAction": "处理等待中的录音",
     "processingProgress": "正在处理等待中的录音…",
     "processingDeferred": "等待处理",
-    "processingCount": "{count, plural, =1{1段对话等待中} other{{count}段对话等待中}}"
+    "processingCount": "{count, plural, =1{1段对话等待中} other{{count}段对话等待中}}",
+    "playbackPartialAudioSaved": "已保存 {saved} / {total} 的音频"
 }

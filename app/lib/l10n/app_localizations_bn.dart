@@ -14218,4 +14218,9 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved অডিও সংরক্ষিত, মোট $total';
+  }
 }

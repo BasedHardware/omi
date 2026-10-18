@@ -14316,4 +14316,9 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Αποθηκεύτηκαν $saved από $total ήχου';
+  }
 }

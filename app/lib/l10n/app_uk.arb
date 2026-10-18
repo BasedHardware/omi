@@ -4336,5 +4336,6 @@
     "processingAction": "Обробити записи в очікуванні",
     "processingProgress": "Обробка записів в очікуванні…",
     "processingDeferred": "Очікує на обробку",
-    "processingCount": "{count, plural, =1{1 розмова в очікуванні} other{{count} розмов в очікуванні}}"
+    "processingCount": "{count, plural, =1{1 розмова в очікуванні} other{{count} розмов в очікуванні}}",
+    "playbackPartialAudioSaved": "Збережено {saved} з {total} аудіо"
 }

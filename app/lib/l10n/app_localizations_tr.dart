@@ -14235,4 +14235,9 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Sesin $saved kadarı kaydedildi (toplam $total)';
+  }
 }

@@ -17290,5 +17290,17 @@
                 "type": "int"
             }
         }
+    },
+    "playbackPartialAudioSaved": "{saved} of {total} audio saved",
+    "@playbackPartialAudioSaved": {
+        "description": "Conversation player label replacing remaining time when the stored audio covers much less than the conversation, e.g. \"0:03 of 5:49 audio saved\"",
+        "placeholders": {
+            "saved": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
     }
 }

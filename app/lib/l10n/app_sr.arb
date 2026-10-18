@@ -11762,5 +11762,6 @@
     "processingAction": "Обради снимке на чекању",
     "processingProgress": "Обрада ваших снимака на чекању…",
     "processingDeferred": "Чека обраду",
-    "processingCount": "{count, plural, =1{1 разговор на чекању} other{{count} разговора на чекању}}"
+    "processingCount": "{count, plural, =1{1 разговор на чекању} other{{count} разговора на чекању}}",
+    "playbackPartialAudioSaved": "Сачувано {saved} од {total} аудија"
 }

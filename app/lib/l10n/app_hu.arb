@@ -4432,5 +4432,6 @@
     "processingAction": "Várakozó felvételek feldolgozása",
     "processingProgress": "A várakozó felvételeid feldolgozása…",
     "processingDeferred": "Feldolgozásra vár",
-    "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}"
+    "processingCount": "{count, plural, =1{1 beszélgetés várakozik} other{{count} beszélgetés várakozik}}",
+    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve"
 }

@@ -11762,5 +11762,6 @@
     "processingAction": "עיבוד הקלטות ממתינות",
     "processingProgress": "ההקלטות הממתינות שלך בעיבוד…",
     "processingDeferred": "ממתין לעיבוד",
-    "processingCount": "{count, plural, =1{שיחה אחת בהמתנה} other{{count} שיחות בהמתנה}}"
+    "processingCount": "{count, plural, =1{שיחה אחת בהמתנה} other{{count} שיחות בהמתנה}}",
+    "playbackPartialAudioSaved": "נשמרו {saved} מתוך {total} של אודיו"
 }

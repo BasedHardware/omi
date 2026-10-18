@@ -4336,5 +4336,6 @@
     "processingAction": "Proses rakaman yang menunggu",
     "processingProgress": "Memproses rakaman anda yang menunggu…",
     "processingDeferred": "Menunggu pemprosesan",
-    "processingCount": "{count, plural, =1{1 perbualan menunggu} other{{count} perbualan menunggu}}"
+    "processingCount": "{count, plural, =1{1 perbualan menunggu} other{{count} perbualan menunggu}}",
+    "playbackPartialAudioSaved": "{saved} daripada {total} audio disimpan"
 }

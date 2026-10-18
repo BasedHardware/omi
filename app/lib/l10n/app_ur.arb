@@ -11762,5 +11762,6 @@
     "processingAction": "منتظر ریکارڈنگز پروسیس کریں",
     "processingProgress": "آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…",
     "processingDeferred": "پروسیسنگ کی منتظر",
-    "processingCount": "{count, plural, =1{1 گفتگو منتظر} other{{count} گفتگوئیں منتظر}}"
+    "processingCount": "{count, plural, =1{1 گفتگو منتظر} other{{count} گفتگوئیں منتظر}}",
+    "playbackPartialAudioSaved": "{saved} آڈیو محفوظ ہوا، کل {total}"
 }

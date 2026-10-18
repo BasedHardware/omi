@@ -11762,5 +11762,6 @@
     "processingAction": "Obdelaj čakajoče posnetke",
     "processingProgress": "Obdelovanje vaših čakajočih posnetkov…",
     "processingDeferred": "Čaka na obdelavo",
-    "processingCount": "{count, plural, =1{1 pogovor čaka} other{{count} pogovorov čaka}}"
+    "processingCount": "{count, plural, =1{1 pogovor čaka} other{{count} pogovorov čaka}}",
+    "playbackPartialAudioSaved": "Shranjeno {saved} od {total} zvoka"
 }

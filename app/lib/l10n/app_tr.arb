@@ -4371,5 +4371,6 @@
     "processingAction": "Bekleyen kayıtları işle",
     "processingProgress": "Bekleyen kayıtlarınız işleniyor…",
     "processingDeferred": "İşlenmeyi bekliyor",
-    "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}"
+    "processingCount": "{count, plural, =1{1 konuşma bekliyor} other{{count} konuşma bekliyor}}",
+    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})"
 }

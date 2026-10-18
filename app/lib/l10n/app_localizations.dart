@@ -25208,6 +25208,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}'**
   String processingCount(int count);
+
+  /// Conversation player label replacing remaining time when the stored audio covers much less than the conversation, e.g. "0:03 of 5:49 audio saved"
+  ///
+  /// In en, this message translates to:
+  /// **'{saved} of {total} audio saved'**
+  String playbackPartialAudioSaved(String saved, String total);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

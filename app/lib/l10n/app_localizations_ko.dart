@@ -14026,4 +14026,9 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '오디오 $saved 저장됨 (전체 $total)';
+  }
 }

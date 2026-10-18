@@ -4378,5 +4378,6 @@
     "processingAction": "Behandl ventende optagelser",
     "processingProgress": "Behandler dine ventende optagelser…",
     "processingDeferred": "Venter på behandling",
-    "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}"
+    "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
+    "playbackPartialAudioSaved": "{saved} af {total} lyd gemt"
 }

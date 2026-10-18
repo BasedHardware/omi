@@ -11762,5 +11762,6 @@
     "processingAction": "پردازش ضبط‌های منتظر",
     "processingProgress": "در حال پردازش ضبط‌های منتظر شما…",
     "processingDeferred": "در انتظار پردازش",
-    "processingCount": "{count, plural, =1{۱ گفتگو در انتظار} other{{count} گفتگو در انتظار}}"
+    "processingCount": "{count, plural, =1{۱ گفتگو در انتظار} other{{count} گفتگو در انتظار}}",
+    "playbackPartialAudioSaved": "{saved} از {total} صدا ذخیره شد"
 }

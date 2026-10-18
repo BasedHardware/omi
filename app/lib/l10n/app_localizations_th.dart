@@ -14152,4 +14152,9 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'บันทึกเสียงแล้ว $saved จาก $total';
+  }
 }

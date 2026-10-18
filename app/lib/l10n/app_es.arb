@@ -4336,5 +4336,6 @@
     "processingAction": "Procesar grabaciones pendientes",
     "processingProgress": "Procesando tus grabaciones pendientes…",
     "processingDeferred": "En espera de procesamiento",
-    "processingCount": "{count, plural, =1{1 conversación en espera} other{{count} conversaciones en espera}}"
+    "processingCount": "{count, plural, =1{1 conversación en espera} other{{count} conversaciones en espera}}",
+    "playbackPartialAudioSaved": "Se guardaron {saved} de {total} de audio"
 }

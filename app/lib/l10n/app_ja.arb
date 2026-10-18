@@ -4336,5 +4336,6 @@
     "processingAction": "待機中の録音を処理",
     "processingProgress": "待機中の録音を処理しています…",
     "processingDeferred": "処理待ち",
-    "processingCount": "{count, plural, =1{1件の会話が待機中} other{{count}件の会話が待機中}}"
+    "processingCount": "{count, plural, =1{1件の会話が待機中} other{{count}件の会話が待機中}}",
+    "playbackPartialAudioSaved": "音声を {saved} 保存済み（全体 {total}）"
 }

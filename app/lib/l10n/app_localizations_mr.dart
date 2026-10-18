@@ -14234,4 +14234,9 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved ऑडिओ जतन केला, एकूण $total';
+  }
 }

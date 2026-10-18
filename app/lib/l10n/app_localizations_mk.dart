@@ -14287,4 +14287,9 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Зачувано $saved од $total аудио';
+  }
 }

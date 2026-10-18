@@ -4336,5 +4336,6 @@
     "processingAction": "ประมวลผลบันทึกที่รออยู่",
     "processingProgress": "กำลังประมวลผลบันทึกที่รออยู่…",
     "processingDeferred": "รอประมวลผล",
-    "processingCount": "{count, plural, =1{1 การสนทนารออยู่} other{{count} การสนทนารออยู่}}"
+    "processingCount": "{count, plural, =1{1 การสนทนารออยู่} other{{count} การสนทนารออยู่}}",
+    "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}"
 }
