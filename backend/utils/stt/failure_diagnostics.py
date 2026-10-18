@@ -38,7 +38,10 @@ def transport_failure_fields(error: BaseException, age_seconds: float) -> Transp
 
     def close_code(frame: object) -> int:
         code = getattr(frame, 'code', None)
-        return code if type(code) is int and 1000 <= code <= 4999 else -1
+        if not isinstance(code, int) or isinstance(code, bool):
+            return -1
+        normalized_code = int(code)
+        return normalized_code if 1000 <= normalized_code <= 4999 else -1
 
     received = getattr(error, 'rcvd', None)
     sent = getattr(error, 'sent', None)

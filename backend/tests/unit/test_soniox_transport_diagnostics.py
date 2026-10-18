@@ -8,14 +8,79 @@ import pytest
 import websockets
 from websockets.exceptions import ConnectionClosedError
 from websockets.frames import Close
+from websockets.legacy.protocol import CloseCode, State, WebSocketCommonProtocol
 
 from utils.stt import soniox
 from utils.stt.failure_diagnostics import transport_failure_fields
 
 
-def test_ping_timeout_distinguishes_local_sent_close_from_remote_close():
-    fields = transport_failure_fields(ConnectionClosedError(None, Close(1011, 'keepalive ping timeout')), 120)
-    assert fields == ('ConnectionClosedError', -1, 1011, 'keepalive_ping_timeout', 'lt_5m')
+def test_websockets_12_keepalive_timeout_preserves_local_sent_close_code():
+    class PingTimeoutProtocol(WebSocketCommonProtocol):
+        async def ping(self):
+            return asyncio.get_running_loop().create_future()
+
+    async def run():
+        protocol = object.__new__(PingTimeoutProtocol)
+        protocol.ping_interval = 0
+        protocol.ping_timeout = 0.001
+        protocol.debug = False
+        protocol.logger = logging.getLogger(__name__)
+        protocol.state = State.OPEN
+        protocol.close_rcvd = None
+        protocol.loop = asyncio.get_running_loop()
+        protocol.close_connection_task = None
+        protocol.write_frame_sync = lambda *_args: None
+
+        await protocol.keepalive_ping()
+        error = ConnectionClosedError(None, protocol.close_sent)
+        assert error.sent.code is CloseCode.INTERNAL_ERROR
+        fields = transport_failure_fields(error, 120)
+
+        assert fields == ('ConnectionClosedError', -1, 1011, 'keepalive_ping_timeout', 'lt_5m')
+        assert type(fields.sent_close_code) is int
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    'payload,expected_code',
+    [(b'\x03\xf3peer close', 1011), (b'', 1005)],
+)
+def test_websockets_12_parsed_received_close_frame_preserves_code(payload, expected_code):
+    received = Close.parse(payload)
+    error = ConnectionClosedError(received, None)
+
+    fields = transport_failure_fields(error, 120)
+
+    assert fields.received_close_code == expected_code
+    assert type(fields.received_close_code) is int
+    assert fields.sent_close_code == -1
+
+
+class _IntSubclass(int):
+    pass
+
+
+@pytest.mark.parametrize(
+    'code,expected',
+    [
+        (_IntSubclass(1011), 1011),
+        (1000, 1000),
+        (4999, 4999),
+        (True, -1),
+        (False, -1),
+        (999, -1),
+        (5000, -1),
+        ('1011', -1),
+    ],
+)
+def test_close_codes_are_plain_bounded_non_bool_integers(code, expected):
+    error = SimpleNamespace(rcvd=SimpleNamespace(code=code), sent=None)
+
+    fields = transport_failure_fields(error, 120)
+
+    assert fields.received_close_code == expected
+    assert type(fields.received_close_code) is int
 
 
 @pytest.mark.parametrize(

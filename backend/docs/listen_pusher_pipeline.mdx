@@ -8,10 +8,12 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 Soniox transport exceptions log once at the first socket death, with bounded
 `operation`, `exception_class`, `received_close_code`, `sent_close_code`,
-`close_cause`, and `session_age_bucket` fields. A missing close frame is `-1`;
-`close_cause=keepalive_ping_timeout` identifies our WebSocket library's sent
-timeout close. These diagnostics omit exception text and provider close reasons,
-and retain the existing typed failure and recovery behavior.
+`close_cause`, and `session_age_bucket` fields. `-1` means no close frame was
+observed in that direction; an empty received close frame is reported as `1005`
+(no status received). The WebSocket library's keepalive timeout is a sent `1011`
+and has `close_cause=keepalive_ping_timeout`. These diagnostics omit exception
+text and provider close reasons, and retain the existing typed failure and
+recovery behavior.
 
 ## Default-off funded transcription cap
 
