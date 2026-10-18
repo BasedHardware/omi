@@ -227,14 +227,10 @@ void main() {
   });
 
   test('Limitless readiness during a Dart backoff attempt initializes only once', () {
-    withLateLimitless(
-      (async, connection, transport, writes) {
-        async.elapse(const Duration(seconds: 5));
-        expect(writes, hasLength(2), reason: 'native listener and pending Dart connect must share first-ready setup');
-      },
-      failBeforeReady: true,
-      waitForDartRetry: true,
-    );
+    withLateLimitless((async, connection, transport, writes) {
+      async.elapse(const Duration(seconds: 5));
+      expect(writes, hasLength(2), reason: 'native listener and pending Dart connect must share first-ready setup');
+    }, failBeforeReady: true, waitForDartRetry: true);
   });
 
   test('late Limitless ready preserves Transcribe Later instead of enabling realtime', () {
@@ -328,11 +324,8 @@ void main() {
       connection.setRealtimeAudioSuppressed(false);
       connection.onNetworkSocketReconnected();
       async.elapse(const Duration(seconds: 10));
-      expect(
-        writes,
-        hasLength(3),
-        reason: 'neither the delayed reconnect nor later settings callbacks may enable audio',
-      );
+      expect(writes, hasLength(3),
+          reason: 'neither the delayed reconnect nor later settings callbacks may enable audio');
     });
   });
 }

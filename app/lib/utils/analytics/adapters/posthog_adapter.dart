@@ -26,9 +26,9 @@ class PostHogAnalyticsAdapter
     Future<String?> Function()? distinctIdReader,
     this.personPropertiesForFlags,
     DateTime Function()? clock,
-  }) : _client = client,
-       _distinctIdReader = distinctIdReader,
-       _clock = clock ?? DateTime.now;
+  })  : _client = client,
+        _distinctIdReader = distinctIdReader,
+        _clock = clock ?? DateTime.now;
 
   final http.Client? _client;
   final Future<String?> Function()? _distinctIdReader;

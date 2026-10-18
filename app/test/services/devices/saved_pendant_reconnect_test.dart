@@ -25,8 +25,8 @@ void main() {
           refreshKilled: () => refresh == 'throws'
               ? Future.error(StateError('offline'))
               : refresh == 'hangs'
-              ? Completer<bool>().future
-              : Future.value(false),
+                  ? Completer<bool>().future
+                  : Future.value(false),
           record: (_, __, ___, ____) {},
         );
         retry.start();

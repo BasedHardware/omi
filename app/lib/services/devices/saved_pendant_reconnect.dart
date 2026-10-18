@@ -17,17 +17,15 @@ void recordSavedReconnect(String trigger, int attempt, String result, int discon
     'result': result,
     'disconnected_ms': disconnectedMs,
   };
-  const TypedEvents().emit(
-    SavedPendantReconnectObserved(
-      trigger: SavedPendantReconnectObservedTrigger.values.firstWhere((value) => value.wireName == trigger),
-      attempt: attempt,
-      result: SavedPendantReconnectObservedResult.values.firstWhere(
-        (value) => value.wireName == result.replaceAll(':', '_'),
-        orElse: () => SavedPendantReconnectObservedResult.failedConnection,
-      ),
-      disconnectedMs: disconnectedMs,
+  const TypedEvents().emit(SavedPendantReconnectObserved(
+    trigger: SavedPendantReconnectObservedTrigger.values.firstWhere((value) => value.wireName == trigger),
+    attempt: attempt,
+    result: SavedPendantReconnectObservedResult.values.firstWhere(
+      (value) => value.wireName == result.replaceAll(':', '_'),
+      orElse: () => SavedPendantReconnectObservedResult.failedConnection,
     ),
-  );
+    disconnectedMs: disconnectedMs,
+  ));
   unawaited(DebugLogManager.logEvent('saved_pendant_reconnect', properties));
 }
 
@@ -44,14 +42,13 @@ class SavedPendantReconnect {
     bool Function()? killed,
     Future<bool> Function()? refreshKilled,
     void Function(String, int, String, int)? record,
-  }) : _cachedKilled =
-           killed ?? (() => AnalyticsManager().isBooleanFeatureEnabledCached('saved-pendant-reconnect-kill')),
-       _refreshKilled =
-           refreshKilled ??
-           (killed != null
-               ? (() async => killed())
-               : (() => AnalyticsManager().refreshBooleanFeatureFlag('saved-pendant-reconnect-kill'))),
-       _record = record ?? recordSavedReconnect;
+  })  : _cachedKilled =
+            killed ?? (() => AnalyticsManager().isBooleanFeatureEnabledCached('saved-pendant-reconnect-kill')),
+        _refreshKilled = refreshKilled ??
+            (killed != null
+                ? (() async => killed())
+                : (() => AnalyticsManager().refreshBooleanFeatureFlag('saved-pendant-reconnect-kill'))),
+        _record = record ?? recordSavedReconnect;
 
   final String? Function() target;
   final bool Function(String) blocked;
@@ -97,12 +94,10 @@ class SavedPendantReconnect {
     if (_active) return;
     _active = true;
     _killActive = _cachedKilled();
-    _lifecycle = AppLifecycleListener(
-      onResume: () {
-        unawaited(refreshPolicy());
-        unawaited(ensure('resume'));
-      },
-    );
+    _lifecycle = AppLifecycleListener(onResume: () {
+      unawaited(refreshPolicy());
+      unawaited(ensure('resume'));
+    });
     _removeAdapter = BleBridge.instance.addBluetoothStateListener((state) {
       if (state == 'on') unawaited(ensure('adapter_on'));
     });
@@ -263,10 +258,10 @@ class SavedPendantReconnect {
       final reason = cause is BluetoothAdapterUnavailableException
           ? 'adapter_not_ready'
           : cause is TimeoutException
-          ? 'timeout'
-          : cause is String
-          ? (cause == 'pairing_lost' ? 'pairing_lost' : 'native_connect')
-          : 'connection';
+              ? 'timeout'
+              : cause is String
+                  ? (cause == 'pairing_lost' ? 'pairing_lost' : 'native_connect')
+                  : 'connection';
       if (current()) _emit(_trigger, _attempt, 'failed:$reason', _elapsed);
     } finally {
       if (_runningGeneration == generation) _runningGeneration = null;
