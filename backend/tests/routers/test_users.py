@@ -785,7 +785,7 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer(re
     'real_plan,refreshed_price,expected_capability',
     [
         ('plus', 'price_ci_ladder_plus', False),
-        ('plus', None, True),  # Stripe outage retains the real stored legacy identity.
+        ('plus', None, None),  # Stripe outage retains the snapshot but omits unknown capability.
         ('operator', 'price_ci_ladder_pro', True),
         ('architect', 'price_ci_ladder_architect', True),
         *[(plan.value, price, True) for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()],
@@ -817,17 +817,18 @@ def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(
         seen.append(already_read)
         return TranscriptionAllowance('managed', 5, 'plan_within_allowance')
 
-    stripe_subscription = MagicMock()
-    stripe_subscription.to_dict.return_value = {'items': {'data': [{'price': {'id': refreshed_price}}]}}
+    stripe_subscription = {'id': 'sub_synthetic', 'items': {'data': [{'price': {'id': refreshed_price}}]}}
     with patch.object(
-        users_router.stripe_utils.stripe.Subscription,
-        'retrieve',
+        users_router.screen_vector_entitlements,
+        'read_stripe_subscription',
         (
             MagicMock(return_value=stripe_subscription)
             if refreshed_price
             else MagicMock(side_effect=RuntimeError('Stripe unavailable'))
         ),
-    ), patch.object(users_router, 'should_show_new_plans', MagicMock(return_value=True)), patch.object(
+    ) as billed_identity, patch.object(
+        users_router, 'should_show_new_plans', MagicMock(return_value=True)
+    ), patch.object(
         users_router.users_db, 'is_byok_active', MagicMock(return_value=False)
     ), patch.object(
         users_router, 'get_user_subscription', MagicMock(return_value=subscription)
@@ -879,6 +880,7 @@ def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(
     assert response.cloud_screen_vectors is expected_capability
     assert response.subscription.plan is users_router.PlanType.unlimited  # the remap still ships to the client
     assert response.transcription_allowance.remaining_seconds == 5
+    billed_identity.assert_called_once_with('sub_synthetic')
 
 
 def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependencies():

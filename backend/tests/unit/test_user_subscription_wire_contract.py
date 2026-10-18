@@ -193,8 +193,8 @@ def test_optional_screen_capability_outage_preserves_subscription_http(monkeypat
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
     monkeypatch.setattr(route, '_user_subscription_response', lambda *a: _response(PlanType.unlimited))
     monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', Mock(return_value={'plan': 'basic'}))
-    target = route.users_db if failure == 'read' else route
-    name = 'get_user_valid_subscription' if failure == 'read' else 'resolve_subscription_entitlements'
+    target = route.users_db if failure == 'read' else route.screen_vector_entitlements
+    name = 'get_user_valid_subscription' if failure == 'read' else 'resolve_subscription'
     monkeypatch.setattr(target, name, Mock(side_effect=RuntimeError('authority unavailable')))
     fallback = Mock()
     monkeypatch.setattr(route, 'record_fallback', fallback)

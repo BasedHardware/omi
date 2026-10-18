@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -151,6 +152,14 @@ def main() -> int:
                 if name.startswith('LADDER_V1_') and name.endswith('_PRICE_ID')
             )
             _emit_output('ladder_price_env_vars', ladder_price_env_vars)
+            stripe_secret = desktop_state['services']['desktop-backend'].get('secrets', [])
+            _emit_output(
+                'screen_vector_stripe_secret',
+                '\n'.join(
+                    f'{entry["name"]}={entry["valueFrom"]["secretKeyRef"]["name"]}:{entry["valueFrom"]["secretKeyRef"]["key"]}'
+                    for entry in stripe_secret
+                ),
+            )
             _emit_output('firestore_read_env_vars', firestore_read_env_vars)
             return 0
 
@@ -267,15 +276,28 @@ def _render_secret_entries(secret_entries: ConfigDict) -> list[ConfigDict]:
     rendered: list[ConfigDict] = []
     for name, raw_entry in secret_entries.items():
         entry = _as_config_dict(raw_entry)
-        if entry is None or 'secret' not in entry:
-            raise ValueError(f'Cloud Run secret binding {name} must have a secret entry')
+        if entry is None:
+            raise ValueError(f'Cloud Run secret binding {name} must be a mapping')
+        if 'secret' in entry:
+            secret = str(entry['secret'])
+        elif 'env_var' in entry:
+            # The variable carries a resource reference, never a credential payload.
+            secret = _runtime_value(name, entry)
+            if not secret:
+                continue
+            if secret.startswith(('sk_', 'rk_')) or not re.fullmatch(
+                r'(?:projects/[a-z0-9][a-z0-9-]{0,62}/secrets/)?[A-Za-z0-9_-]{1,255}', secret
+            ):
+                raise ValueError(f'Cloud Run secret binding {name} has an invalid resource reference')
+        else:
+            raise ValueError(f'Cloud Run secret binding {name} must define secret or env_var')
         version = entry.get('version', 'latest')
         rendered.append(
             {
                 'name': str(name),
                 'valueFrom': {
                     'secretKeyRef': {
-                        'name': str(entry['secret']),
+                        'name': secret,
                         'key': str(version),
                     }
                 },
@@ -292,7 +314,7 @@ def _render_secrets(secret_entries: ConfigDict) -> str:
 
 
 def _render_secret_names(secret_entries: ConfigDict) -> str:
-    return ','.join(secret_entries.keys())
+    return ','.join(entry['name'] for entry in _render_secret_entries(secret_entries))
 
 
 def _render_flag_values(flag_entries: ConfigDict) -> dict[str, str]:
@@ -392,7 +414,15 @@ def _render_desktop_backend_state(env_config: ConfigDict) -> ConfigDict:
     """
     desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
     env_entries = _render_env_entries(_as_config_dict(desktop_backend.get('env')) or {})
-    return {'services': {'desktop-backend': {'env': env_entries}}}
+    mixed = any(
+        entry['name'].startswith('LADDER_V1_') and entry['name'].endswith('_PRICE_ID') and entry['value'].strip()
+        for entry in env_entries
+    )
+    entries = _as_config_dict(desktop_backend.get('secrets')) or {}
+    secrets = _render_secret_entries({'SCREEN_VECTOR_STRIPE_API_KEY': entries.get('SCREEN_VECTOR_STRIPE_API_KEY')})
+    if mixed and not secrets:
+        raise ValueError('Desktop ladder price bindings require SCREEN_VECTOR_STRIPE_READ_SECRET')
+    return {'services': {'desktop-backend': {'env': env_entries, 'secrets': secrets}}}
 
 
 def _runtime_value(name: str, entry: ConfigDict, *, allow_missing: bool = False) -> str | None:

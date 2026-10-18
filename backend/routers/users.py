@@ -55,7 +55,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from config.plan_catalog import resolve_subscription_entitlements
+from utils import screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
@@ -1240,20 +1240,32 @@ def get_user_subscription_endpoint(
             uid, **{key: value for key, value in already_read.items() if key in {'subscription', 'usage'}}
         )
         allowance = (
-            resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+            resolve_transcription_allowance(
+                uid,
+                source=x_app_platform,
+                **{
+                    key: value for key, value in already_read.items() if key in {'subscription', 'usage', 'byok_active'}
+                },
+            )
             if already_read.get('byok_active')
             else funded
         )
     else:
-        allowance = resolve_transcription_allowance(uid, source=x_app_platform, **already_read)
+        allowance = resolve_transcription_allowance(
+            uid,
+            source=x_app_platform,
+            **{key: value for key, value in already_read.items() if key in {'subscription', 'usage', 'byok_active'}},
+        )
         funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
     # Resolve from the real subscription, never the synthetic BYOK response plan.
     try:
         if 'subscription' not in already_read:
             already_read['subscription'] = users_db.get_user_valid_subscription(uid, provision=False)
-        response.cloud_screen_vectors = resolve_subscription_entitlements(
-            already_read.get('subscription') or {'plan': 'basic'}
+        if already_read.get('screen_vector_authority_unavailable'):
+            raise screen_vector_entitlements.ScreenVectorAuthorityUnavailable('Billed identity unavailable')
+        response.cloud_screen_vectors = screen_vector_entitlements.resolve_subscription(
+            uid, already_read.get('subscription'), already_fresh=already_read.get('screen_vector_identity_fresh', False)
         )['capabilities']['cloud_screen_vectors']
     except Exception:
         # This additive display field must not break the existing recovery endpoint.
@@ -1401,17 +1413,19 @@ def _user_subscription_response(
         # Return default basic plan if no valid subscription
         subscription = get_default_basic_subscription()
 
-    # Get current price ID from Stripe if subscription exists
-    if subscription.stripe_subscription_id:
-        try:
-            stripe_sub = stripe_utils.stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-            stripe_sub_dict = stripe_sub.to_dict()
-            if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
-                subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
-                if already_read['subscription'] is not None:
-                    already_read['subscription'].current_price_id = subscription.current_price_id
-        except Exception as e:
-            logger.error(f"Error retrieving current price ID: {e}")
+    # Explicit subscription refresh bypasses the bounded frame cache. Reuse its
+    # real identity for capability and allowance before either client plan remap.
+    try:
+        refreshed = screen_vector_entitlements.refresh_subscription(
+            uid, already_read['subscription'], force_refresh=True
+        )
+        already_read['subscription'] = refreshed
+        already_read['screen_vector_identity_fresh'] = True
+        if refreshed is not None:
+            subscription.current_price_id = refreshed.current_price_id
+    except Exception:
+        # Keep the existing subscription/allowance response, but not a guessed capability.
+        already_read['screen_vector_authority_unavailable'] = True
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)

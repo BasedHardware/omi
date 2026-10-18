@@ -12,8 +12,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from database import redis_db, users as users_db
-from database._client import get_customer_firestore_client
+from database import redis_db
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.byok import get_byok_key, get_byok_uid, has_validated_byok_keys
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -48,7 +47,7 @@ from utils.llm.desktop_llm_stub import (
 )
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt
-from config.plan_catalog import resolve_subscription_entitlements
+from utils.screen_vector_entitlements import resolve_for_uid as _cloud_screen_entitlements
 from utils.metrics import SCREEN_TASK_CLIENT_BYPASS_TOTAL
 from utils.managed_compute import Decision, authorize_managed_compute
 from utils.llm.screen_task_admission import enforce_flagged_screen_task_proxy
@@ -1413,14 +1412,6 @@ def _plan_gate_detail(decision: Decision) -> dict[str, str]:
     return detail
 
 
-def _cloud_screen_entitlements(uid: str) -> dict[str, Any]:
-    """Resolve customer-data authority entirely on the database executor."""
-    subscription = users_db.get_user_valid_subscription(
-        uid, provision=False, firestore_client=get_customer_firestore_client()
-    )
-    return resolve_subscription_entitlements(subscription or {'plan': 'basic'})
-
-
 async def _enforce_managed_plan_gate(uid: str, path: str, local_embeddings: str | None = None) -> None:
     try:
         _, model, action = _path_parts(path)
@@ -1442,7 +1433,7 @@ async def _enforce_managed_plan_gate(uid: str, path: str, local_embeddings: str 
         if funding_owner == 'byok' and has_validated_byok_keys() and get_byok_uid() == uid:
             return
         try:
-            entitlement = await run_blocking(db_executor, _cloud_screen_entitlements, uid)
+            entitlement = await _cloud_screen_entitlements(uid)
         except Exception as error:
             raise HTTPException(status_code=503, detail='plan authorization is temporarily unavailable') from error
         if entitlement['capabilities']['cloud_screen_vectors']:

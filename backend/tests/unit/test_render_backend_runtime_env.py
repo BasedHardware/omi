@@ -935,6 +935,7 @@ def test_integration_enrichment_renderer_targets_fresh_sync_handler(monkeypatch)
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
 @pytest.mark.parametrize('bound', [False, True])
 def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatch, tmp_path, capsys, env_name, bound):
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', 'fixture-subscription-reader')
     bindings = list(LADDER_V1_PRICE_BINDINGS.values())
     for index, row in enumerate(bindings):
         if bound:
@@ -946,7 +947,7 @@ def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatc
     assert _MODULE['main']() == 0
     output = capsys.readouterr().out
     marker = '__BACKEND_RUNTIME_ENV_ladder_price_env_vars__'
-    deployed = dict(line.split('=', 1) for line in output.split(marker)[1].strip().splitlines())
+    deployed = dict(line.split('=', 1) for line in output.split(marker)[1].strip().splitlines() if line)
     expected_state = {
         entry['name']: entry['value']
         for entry in json.loads(state_path.read_text())['services']['desktop-backend']['env']
@@ -967,8 +968,12 @@ def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatc
     for index, row in enumerate(bindings):
         key = row['env_var']
         expected = f'price_render_fixture_{index}' if bound else ''
-        assert deployed[key] == expected_state[key] == expected
-        assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == f'{key}={expected}'
+        if bound:
+            assert deployed[key] == expected_state[key] == expected
+            assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == f'{key}={expected}'
+        else:
+            assert key not in deployed and key not in expected_state
+            assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == ''
         assert f'{key}: ${{{{ vars.{key} }}}}' in workflow_text
         assert key not in workflow.get('env', {})
         assert deploy_steps[0]['env'][key] == '${{ vars.' + key + ' }}'
@@ -981,7 +986,7 @@ def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatc
             assert resolve_subscription_entitlements(subscription, deployed)['capabilities'][
                 'cloud_screen_vectors'
             ] is (row['plan_id'] != 'plus')
-    assert set(deployed) == {row['env_var'] for row in bindings}
+    assert set(deployed) == ({row['env_var'] for row in bindings} if bound else set())
     for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items():
         subscription = {
             'plan': plan.value,
@@ -989,3 +994,196 @@ def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatc
             'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
         }
         assert resolve_subscription_entitlements(subscription, deployed)['capabilities']['cloud_screen_vectors'] is True
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('reference', [None, 'fixture-reader', 'projects/fixture-project/secrets/fixture-reader'])
+def test_desktop_mixed_prices_require_only_optional_restricted_read_reference(
+    monkeypatch, tmp_path, capsys, environment, reference
+):
+    for binding in LADDER_V1_PRICE_BINDINGS.values():
+        monkeypatch.delenv(binding['env_var'], raising=False)
+    if reference is None:
+        monkeypatch.delenv('SCREEN_VECTOR_STRIPE_READ_SECRET', raising=False)
+    else:
+        monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', reference)
+    # Explicitly supplied references are mounted even when incoming prices are
+    # omitted: the effective service can retain previously configured prices.
+    config = _MANIFEST['environments'][environment]
+    optional = _MODULE['_render_desktop_backend_state'](config)['services']['desktop-backend']['secrets']
+    assert bool(optional) is (reference is not None)
+    monkeypatch.setenv('LADDER_V1_PLUS_MONTH_PRICE_ID', 'price_future_fixture')
+    path = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', environment, '--desktop-state-output', str(path)])
+    if reference is None:
+        with pytest.raises(ValueError, match='require SCREEN_VECTOR_STRIPE_READ_SECRET'):
+            _MODULE['main']()
+        assert not path.exists() and capsys.readouterr().out == ''
+    else:
+        assert _MODULE['main']() == 0
+        state = json.loads(path.read_text())['services']['desktop-backend']
+        assert state['secrets'] == [
+            {
+                'name': 'SCREEN_VECTOR_STRIPE_API_KEY',
+                'valueFrom': {'secretKeyRef': {'name': reference, 'key': 'latest'}},
+            }
+        ]
+        output = capsys.readouterr().out
+        assert f'\nSCREEN_VECTOR_STRIPE_API_KEY={reference}:latest\n' in output
+        assert '\nSTRIPE_API_KEY=' not in output
+        assert all(entry['name'] != 'SCREEN_VECTOR_STRIPE_READ_SECRET' for entry in state['env'])
+    workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
+    render = next(
+        (job, step)
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'desktop-expected-env'
+    )
+    assert render[0].get('environment')
+    assert (
+        render[1]['env']['SCREEN_VECTOR_STRIPE_READ_SECRET'] == '${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}'
+    )
+    assert 'SCREEN_VECTOR_STRIPE_READ_SECRET' not in workflow.get('env', {})
+    deploy = next(
+        step
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'deploy-candidate'
+    )
+    assert '${{ steps.desktop-expected-env.outputs.screen_vector_stripe_secret }}' in deploy['with']['secrets']
+    assert '\nSTRIPE_API_KEY=' not in deploy['with']['secrets']
+
+
+@pytest.mark.parametrize(
+    'reference',
+    [
+        'bad:latest',
+        'a,b=payload',
+        'bad\nSTRIPE_API_KEY=payload',
+        '../bad',
+        'projects/a/secrets/name/versions/1',
+        'sk_live_fixture',
+        'rk_live_fixture',
+    ],
+)
+def test_dynamic_secret_reference_rejects_injection_and_credential_payload_shapes(monkeypatch, reference):
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', reference)
+    with pytest.raises(ValueError, match='invalid resource reference') as error:
+        _MODULE['_render_secret_entries'](
+            {
+                'SCREEN_VECTOR_STRIPE_API_KEY': {
+                    'env_var': 'SCREEN_VECTOR_STRIPE_READ_SECRET',
+                    'default': '',
+                    'version': 'latest',
+                }
+            }
+        )
+    assert reference not in str(error.value)
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_cloud_run_omitted_price_updates_preserve_existing_identity(monkeypatch, environment):
+    keys = [row['env_var'] for row in LADDER_V1_PRICE_BINDINGS.values()]
+    for key in keys:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv('SCREEN_VECTOR_STRIPE_READ_SECRET', raising=False)
+    config = _MANIFEST['environments'][environment]
+    # Pin the actual owning deployment actions' merge contract rather than
+    # modeling an update independently of the checked-in caller.
+    desktop_workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
+    stack = yaml.safe_load((_REPO_ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    deploys = [step for step in stack['runs']['steps'] if step.get('id') == 'deploy-backend']
+    deploys += [
+        step
+        for job in desktop_workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'deploy-candidate'
+    ]
+    assert len(deploys) == 2
+    for deploy in deploys:
+        assert deploy['uses'] == 'google-github-actions/deploy-cloudrun@v3'
+        assert deploy['with'].get('env_vars_update_strategy', 'merge') == 'merge'
+        assert all(key not in deploy['with'].get('flags', '') for key in keys)
+    from scripts.attach_cloud_run_gmp_sidecar import _validate_expected_literal_env
+
+    prior = {key: f'price_existing_fixture_{index}' for index, key in enumerate(keys)}
+    for entries in [config['cloud_run']['services']['backend']['env'], config['desktop_backend']['env']]:
+        price_entries = {key: entries[key] for key in keys}
+        updates = _MODULE['_render_env_vars'](price_entries)
+        expected = _MODULE['_render_env_entries'](price_entries)
+        assert updates == '' and expected == []
+        # deploy-cloudrun merges only supplied env assignments; omitted names
+        # remain operator-owned, including when sidecar guard rewrites the export.
+        effective = dict(prior)
+        effective.update(dict(line.split('=', 1) for line in updates.splitlines()))
+        assert effective == prior
+        exported = {
+            'spec': {
+                'template': {
+                    'spec': {
+                        'containers': [
+                            {
+                                'name': 'ingress',
+                                'env': [{'name': key, 'value': value} for key, value in effective.items()],
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        _validate_expected_literal_env(exported, expected={}, ingress_container_name='ingress', phase='before')
+        assert {e['name']: e['value'] for e in exported['spec']['template']['spec']['containers'][0]['env']} == prior
+        monkeypatch.setenv(keys[0], 'price_explicit_fixture')
+        updates = _MODULE['_render_env_vars'](price_entries)
+        effective.update(dict(line.split('=', 1) for line in updates.splitlines()))
+        assert effective == dict(prior, **{keys[0]: 'price_explicit_fixture'})
+        assert _MODULE['_render_env_entries'](price_entries) == [{'name': keys[0], 'value': 'price_explicit_fixture'}]
+        monkeypatch.delenv(keys[0])
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_desktop_operator_price_realm_is_explicit_and_separate_from_main(monkeypatch, environment):
+    workflow = yaml.safe_load(_DESKTOP_WORKFLOWS[environment].read_text())
+    render_job, render = next(
+        (job, step)
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('id') == 'desktop-expected-env'
+    )
+    assert render_job.get('environment')
+    config = _MANIFEST['environments'][environment]
+    monkeypatch.setenv('SCREEN_VECTOR_STRIPE_READ_SECRET', 'fixture-desktop-customer-reader')
+    main = {}
+    desktop = {}
+    for index, binding in enumerate(LADDER_V1_PRICE_BINDINGS.values()):
+        key = binding['env_var']
+        assert render['env'][key] == '${{ vars.DESKTOP_' + key + ' }}'
+        assert key not in workflow.get('env', {})
+        assert '${{ vars.' + key + ' }}' not in _DESKTOP_WORKFLOWS[environment].read_text()
+        main[key] = f'price_main_plane_{index}'
+        desktop[key] = f'price_desktop_customer_plane_{index}'
+        monkeypatch.setenv(key, main[key])
+    main_env = {
+        e['name']: e['value']
+        for e in _MODULE['_render_env_entries'](
+            {key: config['cloud_run']['services']['backend']['env'][key] for key in main}
+        )
+    }
+    for key, value in desktop.items():
+        monkeypatch.setenv(key, value)
+    desktop_env = {
+        e['name']: e['value']
+        for e in _MODULE['_render_desktop_backend_state'](config)['services']['desktop-backend']['env']
+        if e['name'] in desktop
+    }
+    assert main_env == main and desktop_env == desktop
+    for index, binding in enumerate(LADDER_V1_PRICE_BINDINGS.values()):
+        for values, price in [(main_env, main[binding['env_var']]), (desktop_env, desktop[binding['env_var']])]:
+            subscription = {
+                'plan': binding['plan_id'],
+                'current_price_id': price,
+                'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+            }
+            assert resolve_subscription_entitlements(subscription, values)['capabilities']['cloud_screen_vectors'] is (
+                binding['plan_id'] != 'plus'
+            )

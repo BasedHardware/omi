@@ -234,12 +234,13 @@ jobs:
       - name: Render desktop backend expected env state
         id: desktop-expected-env
         env:
-          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
-          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
-          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
-          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
-          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
-          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
+          SCREEN_VECTOR_STRIPE_READ_SECRET: ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         run: |
           set -euo pipefail
           python3 backend/scripts/render_backend_runtime_env.py \
@@ -302,6 +303,7 @@ jobs:
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
+            ${{ steps.desktop-expected-env.outputs.screen_vector_stripe_secret }}
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

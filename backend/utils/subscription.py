@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
 import stripe
+from utils import screen_vector_entitlements
+from utils.observability.fallback import record_fallback
 
 import database.users as users_db
 import database.user_usage as user_usage_db
@@ -17,7 +19,6 @@ from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
-    resolve_subscription_entitlements,
     configured_ladder_prices,
     DESKTOP_ENTITLED_PLAN_TYPES,
     MOBILE_PLAN_TYPES,
@@ -134,40 +135,27 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 #
 # Because the rows are retained, a user who upgrades can have their vectors backfilled from the
 # stored OCR text: this gate defers the cost, it does not destroy the ability to recover.
-_SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS = 300
-_screen_vector_entitlement_cache: Dict[str, Tuple[bool, float]] = {}
-
-
-def grants_cloud_screen_vectors(uid: str) -> bool:
-    """True when this user's synced screen rows should also be written to the vector store.
-
-    Reads the catalog's versioned cloud_screen_vectors capability. Every paid
-    legacy price retains it; ladder Free/Plus do not. BYOK does not grant
-    server vector storage. This predicate is independent of the Pro-gates rollout.
-
-    Fails OPEN (writes the vector) on any lookup error, matching
-    `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
-    user's screen search. The failure mode is a small overspend, not a lost capability.
-    """
-    cached = _screen_vector_entitlement_cache.get(uid)
-    if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
-        return cached[0]
+async def grants_cloud_screen_vectors(uid: str) -> bool:
+    """Return established capability; unknown authority requires a batch retry."""
     try:
-        subscription = users_db.get_user_valid_subscription(
-            uid, firestore_client=get_customer_firestore_client(), provision=False
+        entitlement = await screen_vector_entitlements.resolve_for_uid(uid)
+        return entitlement['capabilities']['cloud_screen_vectors']
+    except Exception as error:
+        record_fallback(
+            component='firestore_read',
+            from_mode='screen_vectors',
+            to_mode='retry',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
         )
-        entitled = resolve_subscription_entitlements(subscription or {'plan': 'basic'})['capabilities'][
-            'cloud_screen_vectors'
-        ]
-    except Exception as e:
-        logger.warning("grants_cloud_screen_vectors lookup failed for uid=%s: %s", uid, e)
-        return True
-    _screen_vector_entitlement_cache[uid] = (entitled, time.monotonic())
-    return entitled
+        raise screen_vector_entitlements.ScreenVectorAuthorityUnavailable(
+            'Screen vector authority unavailable'
+        ) from error
 
 
 def clear_cloud_screen_vector_entitlement_cache(uid: str) -> None:
-    _screen_vector_entitlement_cache.pop(uid, None)
+    screen_vector_entitlements.clear(uid)
 
 
 def should_defer_desktop_processing(uid: str) -> bool:

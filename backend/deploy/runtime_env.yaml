@@ -579,6 +579,24 @@ environments:
       config_map:
         name: dev-omi-backend-config
         entries:
+          LADDER_V1_PLUS_MONTH_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_PLUS_YEAR_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_PRO_MONTH_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_PRO_YEAR_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
+            source: environment
+            default: ''
           CONVERSATION_SUMMARIZED_APP_IDS:
             source: environment
           GOOGLE_CLIENT_ID:
@@ -625,22 +643,22 @@ environments:
       env:
         LADDER_V1_PLUS_MONTH_PRICE_ID:
           env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_PLUS_YEAR_PRICE_ID:
           env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_PRO_MONTH_PRICE_ID:
           env_var: LADDER_V1_PRO_MONTH_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_PRO_YEAR_PRICE_ID:
           env_var: LADDER_V1_PRO_YEAR_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
           env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
           env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
-          default: ''
+          provisional: true
         OMI_VERTEX_RESERVATION_STATES:
           env_var: OMI_VERTEX_RESERVATION_STATES
           provisional: true
@@ -695,6 +713,10 @@ environments:
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
+        SCREEN_VECTOR_STRIPE_API_KEY:
+          env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
+          default: ''
+          version: latest
         GEMINI_API_KEY:
           version: latest
           secret: GEMINI_API_KEY
@@ -753,22 +775,22 @@ environments:
           env:
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_PLUS_YEAR_PRICE_ID:
               env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_PRO_MONTH_PRICE_ID:
               env_var: LADDER_V1_PRO_MONTH_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_PRO_YEAR_PRICE_ID:
               env_var: LADDER_V1_PRO_YEAR_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
               env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
-              default: ''
+              provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
@@ -2877,6 +2899,24 @@ environments:
       config_map:
         name: prod-omi-backend-config
         entries:
+          LADDER_V1_PLUS_MONTH_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_PLUS_YEAR_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_PRO_MONTH_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_PRO_YEAR_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
+            source: environment
+            default: ''
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
+            source: environment
+            default: ''
           CONVERSATION_SUMMARIZED_APP_IDS:
             source: environment
           GOOGLE_CLIENT_ID:
@@ -2935,22 +2975,22 @@ environments:
       env:
         LADDER_V1_PLUS_MONTH_PRICE_ID:
           env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_PLUS_YEAR_PRICE_ID:
           env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_PRO_MONTH_PRICE_ID:
           env_var: LADDER_V1_PRO_MONTH_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_PRO_YEAR_PRICE_ID:
           env_var: LADDER_V1_PRO_YEAR_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
           env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
-          default: ''
+          provisional: true
         LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
           env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
-          default: ''
+          provisional: true
         OMI_VERTEX_RESERVATION_STATES:
           env_var: OMI_VERTEX_RESERVATION_STATES
           provisional: true
@@ -3013,6 +3053,10 @@ environments:
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
+        SCREEN_VECTOR_STRIPE_API_KEY:
+          env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
+          default: ''
+          version: latest
         GEMINI_API_KEY:
           version: latest
           secret: DESKTOP_GEMINI_API_KEY
@@ -3094,22 +3138,22 @@ environments:
           env:
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_PLUS_YEAR_PRICE_ID:
               env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_PRO_MONTH_PRICE_ID:
               env_var: LADDER_V1_PRO_MONTH_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_PRO_YEAR_PRICE_ID:
               env_var: LADDER_V1_PRO_YEAR_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
               env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
-              default: ''
+              provisional: true
             LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
-              default: ''
+              provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}

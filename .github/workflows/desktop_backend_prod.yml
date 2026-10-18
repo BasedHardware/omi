@@ -328,12 +328,13 @@ jobs:
         # Price references resolve in the selected production environment; unset
         # bindings stay empty until the separate commercial cutover configures them.
         env:
-          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
-          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
-          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
-          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
-          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
-          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
+          SCREEN_VECTOR_STRIPE_READ_SECRET: ${{ vars.DESKTOP_SCREEN_VECTOR_STRIPE_READ_SECRET }}
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.DESKTOP_LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         run: |
           set -euo pipefail
           python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
@@ -398,6 +399,7 @@ jobs:
             ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
             ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
           secrets: |
+            ${{ steps.desktop-expected-env.outputs.screen_vector_stripe_secret }}
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

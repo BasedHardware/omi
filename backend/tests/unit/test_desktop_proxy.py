@@ -1,3 +1,4 @@
+from utils import screen_vector_entitlements as screen_authority
 import asyncio
 from unittest.mock import AsyncMock
 import io
@@ -2359,8 +2360,8 @@ async def test_embedding_refusal_requires_all_conjunction_predicates(monkeypatch
     monkeypatch.setenv('BASIC_PLAN_GATE_PROXY_EMBED_ENABLED', 'false' if header == '1' else 'true')
     monkeypatch.setenv('FREE_TIER_EMERGENCY_STOP', 'true')
     subscription = Mock(return_value=None)
-    monkeypatch.setattr(desktop_proxy.users_db, 'get_user_valid_subscription', subscription)
-    monkeypatch.setattr(desktop_proxy, 'get_customer_firestore_client', lambda: object())
+    monkeypatch.setattr(screen_authority.users_db, 'get_user_valid_subscription', subscription)
+    monkeypatch.setattr(screen_authority, 'get_customer_firestore_client', lambda: object())
     monkeypatch.setattr(
         desktop_proxy, 'get_byok_key', lambda provider: 'validated-key' if byok and provider == 'gemini' else None
     )
@@ -2395,10 +2396,10 @@ async def test_every_paid_legacy_price_passes_embedding_gate(monkeypatch, price,
 
     monkeypatch.delenv('CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED', raising=False)
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda provider: None)
-    monkeypatch.setattr(desktop_proxy, 'get_customer_firestore_client', lambda: object())
+    monkeypatch.setattr(screen_authority, 'get_customer_firestore_client', lambda: object())
     monkeypatch.setattr(desktop_proxy, 'run_blocking', _passthrough_run_blocking)
     monkeypatch.setattr(
-        desktop_proxy.users_db,
+        screen_authority.users_db,
         'get_user_valid_subscription',
         lambda *a, **k: {
             'plan': plan.value,
@@ -2420,10 +2421,10 @@ async def test_ladder_price_embedding_gate_and_route_use_capability(monkeypatch,
     monkeypatch.setenv(f'LADDER_V1_{env_key}_MONTH_PRICE_ID', 'price_fixture_ladder')
     monkeypatch.delenv('CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED', raising=False)
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda provider: None)
-    monkeypatch.setattr(desktop_proxy, 'get_customer_firestore_client', lambda: object())
+    monkeypatch.setattr(screen_authority, 'get_customer_firestore_client', lambda: object())
     monkeypatch.setattr(desktop_proxy, 'run_blocking', _passthrough_run_blocking)
     monkeypatch.setattr(
-        desktop_proxy.users_db,
+        screen_authority.users_db,
         'get_user_valid_subscription',
         lambda *a, **k: {
             'plan': plan,
@@ -2461,8 +2462,8 @@ async def test_embedding_byok_exemption_requires_validated_owner_and_gemini_key(
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda requested: 'key' if requested == provider else None)
     monkeypatch.setattr(desktop_proxy, 'has_validated_byok_keys', lambda: validated)
     monkeypatch.setattr(desktop_proxy, 'get_byok_uid', lambda: owner)
-    monkeypatch.setattr(desktop_proxy, 'get_customer_firestore_client', lambda: object())
-    monkeypatch.setattr(desktop_proxy.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
+    monkeypatch.setattr(screen_authority, 'get_customer_firestore_client', lambda: object())
+    monkeypatch.setattr(screen_authority.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
     monkeypatch.setattr(desktop_proxy, 'run_blocking', _passthrough_run_blocking)
     with pytest.raises(HTTPException) as error:
         await desktop_proxy._enforce_managed_plan_gate('synthetic', 'models/gemini-embedding-001:embedContent', '1')
@@ -2472,8 +2473,10 @@ async def test_embedding_byok_exemption_requires_validated_owner_and_gemini_key(
 @pytest.mark.asyncio
 async def test_unknown_embedding_entitlement_is_unavailable_not_a_free_plan_denial(monkeypatch):
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda _: None)
-    monkeypatch.setattr(desktop_proxy, 'get_customer_firestore_client', lambda: object())
-    monkeypatch.setattr(desktop_proxy.users_db, 'get_user_valid_subscription', lambda *a, **k: {'plan': 'future_paid'})
+    monkeypatch.setattr(screen_authority, 'get_customer_firestore_client', lambda: object())
+    monkeypatch.setattr(
+        screen_authority.users_db, 'get_user_valid_subscription', lambda *a, **k: {'plan': 'future_paid'}
+    )
     monkeypatch.setattr(desktop_proxy, 'run_blocking', _passthrough_run_blocking)
     with pytest.raises(HTTPException) as error:
         await desktop_proxy._enforce_managed_plan_gate('synthetic', 'models/gemini-embedding-001:embedContent', '1')
