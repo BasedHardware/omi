@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 
 from database import redis_db
+from database.staged_promote_cache import invalidate_around_write
 from database.read_boundary import MalformedDocError, parse_payload_strict
 from models.candidate import CandidateRecord
 from config.firestore_read_levers import lever_enabled
@@ -73,7 +74,7 @@ def invalidate_after_write(fn):
             logger.warning('Candidate compatibility cache invalidation unavailable')
         return result
 
-    return wrapped
+    return invalidate_around_write(wrapped)
 
 
 def load_compatibility_candidates(uid: str, generation: int, loader) -> list[CandidateRecord]:

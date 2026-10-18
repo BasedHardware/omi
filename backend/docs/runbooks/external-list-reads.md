@@ -3,7 +3,7 @@
 The three Developer API GET lists (`/v1/dev/user/conversations`, `/v1/dev/user/memories`,
 `/v1/dev/user/action-items`) and REST `GET /v1/mcp/memories` share a short response cache
 and HTTP outcome measurement. The staged-task promote POST uses the same HTTP counter and its
-own physical-empty probe. Hosted MCP JSON-RPC tools are outside this cache and rollout.
+own write-invalidated negative cache. Hosted MCP JSON-RPC tools are outside this cache and rollout.
 
 ## Behavior and rollback
 
@@ -16,7 +16,7 @@ All five independent env levers default **on**. Only a case-insensitive, whitesp
 | `OMI_EXTERNAL_LIST_CACHE_ENABLED` | Bypass all response cache reads/writes; run the original handlers. |
 | `OMI_MCP_MEMORY_LIST_BUDGET_ENABLED` | Restore the prior growing-prefix MCP compatibility scan with no shared budget. |
 | `OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED` | Restore unbudgeted Developer conversation offsets and omit new guidance/truncation headers. |
-| `OMI_STAGED_TASK_PROMOTE_EMPTY_PROBE_ENABLED` | Restore control + full projection for every staged promote poll. |
+| `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Restore control + full projection for every staged promote poll. |
 
 Full behavior rollback sets all five to `false`. No deployment/env values are changed by this PR.
 Cache keys include budget lever states, so switching either budget off cannot replay its headers/results.
@@ -120,25 +120,58 @@ continuation rules, never a new 4xx.
 ## Empty staged-task promote polls
 
 Old desktop clients may poll `POST /v1/staged-tasks/promote` every 60 seconds. With
-`OMI_STAGED_TASK_PROMOTE_EMPTY_PROBE_ENABLED` on, two unfiltered `limit(1).select([])` queries check
-`users/{uid}/staged_tasks` and `users/{uid}/candidates` before the control-fence read. Only physical
-emptiness of **both** stores proves the released response can be returned early:
+`OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` on, the route reads the account-generation
+control fence **first on every poll**, then checks a per-UID/generation/version negative cache.
+A hit returns the exact released response:
 `{"promoted":false,"reason":"No staged tasks available","promoted_task":null}`.
 
-No field predicate or field order excludes legacy rows. Any row is inconclusive, including completed,
-hidden, malformed or other-generation rows: the unchanged control/eligibility/merge projection decides
-what can be promoted. Candidate precedence and suppression of historical duplicates are unchanged.
-A probe failure uses the original reader and shared fallback telemetry. There is no negative cache,
-writer invalidation, new write, migration or index; the registered query driver proves both unfiltered
-collection shapes use built-in indexes. Nonempty polls pay one or two extra bounded probes.
+On a miss, the **unchanged complete** compatibility projection reads historical staged rows
+and Candidates, with its existing eligibility, generation, terminal suppression and merge ordering.
+Only an empty projection populates a boolean marker. Terminal, malformed, other-generation and
+non-staged Candidate history can therefore coexist with a cheap warm empty response. Legacy rows
+missing `completed`, timestamps or scores remain visible. Nonempty requests perform zero additional
+Firestore probe queries and retain the original selection. No response/user content is cached.
 
-The counted offline fixture models a physically empty poll as two empty queries (zero returned rows,
-two minimum billed reads), versus the prior control read plus two empty collection queries (three
-minimum billed reads). This is a one-read reduction per eligible poll, not a zero-read result. The
-~40M reads/day supplied snapshot alone does not reveal eligible request counts. If all of those reads
-were this three-read empty path, the ceiling would model ~13.3M fewer reads/day; terminal/nonempty
-stores and the added probes reduce or can negate that saving. Measure the eligible mix and actual
-origin reads/request after an authorized deploy; no deployed saving is claimed.
+The TTL is **90 seconds**, spanning a 60-second poll plus jitter. This is distinct from the four
+GET routes' ten-second response cache. The absolute Redis expiry (PXAT) is captured before the
+origin projection; slow/expired fills cannot extend freshness. Cache I/O is synchronous in the
+existing sync route, uses a lazy Redis client with 100ms socket/connect bounds, and never queues
+executor work. Read, fill and invalidation faults record shared fallback telemetry and preserve
+original reads/mutation results. Flag-off promote reads do no negative-cache Redis I/O.
+
+Each UID has a random version with a seven-day TTL, initialized with SET NX. Missing/evicted
+versions never fall back to a reusable token. The marker key includes authenticated UID (hashed),
+fresh account generation and the version captured **before** projection. Fill compares that version
+again and can only address its captured key; a concurrent write or version eviction cannot bless
+an old result under a new key. Hits recheck the version after reading the marker.
+
+All eight legacy staged mutation owners invalidate before mutation and in `finally`: create,
+delete, complete promotion, suppress terminal, batch scores, promote, clear and conversation-item
+recovery. Router retirement delegates to delete; migration/reconciliation delegates to Candidate
+owners. The existing Candidate invalidation decorator now surrounds its five mutation entrypoints
+(create/coalesce, compatibility score, resolve task, resolve without mutation, reconcile migrated)
+with the same before/finally fence. Workstream Candidate resolution also invalidates conservatively,
+even though its subject is outside staged compatibility. Claim/reservation helpers only write
+resolution-claim records, not either projected collection. No other in-tree application writer was
+found for these collections. Recursive account-subtree erasure also uses the before/finally
+fence, including partial erasure failures. Account-generation changes always select a new key.
+
+The final invalidation also fences fills started during a mutation, and runs on errors because a
+multi-batch writer may have committed a prefix. Writers invalidate even when their local read flag
+is off, protecting enabled readers on other revisions. With healthy Redis, a completed normal write
+is visible to the next poll. Redis outages, old deployed writers without these hooks, and external
+manual/operator writes can retain a marker until its original 90-second deadline; kill the cache
+lever during a coordinated older-writer rollback or when immediate freshness is required during an
+outage. The pre-existing Candidate compatibility cache retains its own independent outage TTL.
+
+If a cold empty projection costs R modeled billed Firestore reads (including its control read), a
+warm hit costs **one control read**, even with retained history. Stable polls every 60 seconds with
+90-second TTL alternate cold/warm: approximately half the origin projection scans are avoided;
+average reads become `(R + 1) / 2` before writes, jitter, cache faults or the independent Candidate
+cache affect the mix. The offline fixtures measure R=3 for physically empty stores and R=581 with
+retained history; warm hits cost 1 in both. No extra Firestore writes, new query, index, migration,
+rate limit or production configuration change is added. The supplied ~40M reads/day snapshot does
+not establish logical-empty frequency or R, so no 40M-read or deployed saving is claimed.
 
 ## Measurement and export
 
@@ -149,11 +182,15 @@ It includes dependency 401/403/429, query 400/413/422 and timeout/server failure
 the staged promote POST only; raw query
 strings, UID, keys and apps are never labels. `omi_external_list_cache_total{route,outcome}` counts
 `hit`, `miss`, `stored`; disabled, truncated and oversized writes are not `stored`.
+`omi_staged_promote_empty_cache_total{outcome}` separately counts bounded negative-cache outcomes
+`hit`, `miss`, `stored`, `expired`, `version_changed`, `invalidated`, `unavailable` and
+`invalidation_unavailable`. It has no UID, generation, client or query labels.
 
-Both counters register in the default Prometheus registry through `utils.observability.external_lists`,
+The HTTP/list counters register through `utils.observability.external_lists`; the negative-cache
+counter registers through `database.staged_promote_cache`. All use the default Prometheus registry,
 exported by the authenticated
 `routers/metrics.py` `/metrics` endpoint and `utils.metrics` sidecar port 9090 `/metrics` started in
-`main.py`. `backend/deploy/cloud_run_gmp_sidecar.yaml` keeps `omi_.*`, so both reach Managed
+`main.py`. `backend/deploy/cloud_run_gmp_sidecar.yaml` keeps `omi_.*`, so all reach Managed
 Prometheus for backend and backend-integration. The old `list_read_*` series do not match that filter.
 The in-cluster Stackdriver mirror only imports selected families from backend-integration; use the
 direct GMP query surface for these measurements. No exporter/workflow/deploy change is included.
