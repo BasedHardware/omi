@@ -52,22 +52,18 @@ Each line is a valid, standalone JSON object with compact formatting (`separator
 ```json
 {
   "id": "c_12345",
-  "created_at": "2026-10-15T12:00:00Z",
+  "title": "Sprint Planning",
+  "category": "work",
   "started_at": "2026-10-15T12:00:00Z",
   "finished_at": "2026-10-15T12:30:00Z",
   "source": "omi",
-  "language": "en",
-  "category": "work",
-  "title": "Sprint Planning",
   "overview": "Reviewed sprint backlog and finalized delivery goals.",
-  "emoji": "🚀",
   "action_items": [
     {
       "description": "Deploy firmware update",
       "completed": false
     }
-  ],
-  "events": []
+  ]
 }
 ```
 
@@ -79,6 +75,17 @@ Adds the `transcript_segments` array containing ordered speaker utterances and t
 {
   "id": "c_12345",
   "title": "Sprint Planning",
+  "category": "work",
+  "started_at": "2026-10-15T12:00:00Z",
+  "finished_at": "2026-10-15T12:30:00Z",
+  "source": "omi",
+  "overview": "Reviewed sprint backlog and finalized delivery goals.",
+  "action_items": [
+    {
+      "description": "Deploy firmware update",
+      "completed": false
+    }
+  ],
   "transcript_segments": [
     {
       "speaker": "SPEAKER_00",
@@ -96,4 +103,4 @@ Adds the `transcript_segments` array containing ordered speaker utterances and t
 - **Resilient Envelope Unwrapping**: Gracefully handles raw lists, single conversation dictionaries, or paginated envelopes (`conversations`, `data`, `items`, `results`).
 - **Normalized Timestamps**: Normalizes ISO-8601 strings to standard UTC `YYYY-MM-DDTHH:MM:SSZ` while safely tolerating boundary overflow cases (e.g., year > 9999).
 - **Surrogate & BOM Immunity**: Automatically handles UTF-8 Byte Order Marks (BOM) from Windows tools and strips lone surrogate code points to prevent decoding crashes.
-- **Atomic Exclusive Creation**: When writing to a file (`-o/--output`), writes to an adjacent temporary file and commits atomically, rejecting overwrites if the target file already exists (`FileExistsError`).
+- **Atomic Staging & Overwrite Guard**: When writing to a file (`-o/--output`), writes to an adjacent temporary file and commits atomically, rejecting accidental overwrites if the target file already exists (`FileExistsError`).

@@ -268,7 +268,8 @@ def write_jsonl_exclusive(output_path: Path, lines: Sequence[str]) -> None:
         with open(temp_path, "x", encoding="utf-8") as f:
             for line in lines:
                 f.write(line + "\n")
-        # Atomic rename to target
+        # Note: output_path.exists() is an advisory pre-check against accidental overwrite;
+        # os.replace() replaces unconditionally on POSIX and modern Windows.
         os.replace(temp_path, output_path)
     except Exception:
         if temp_path.exists():
