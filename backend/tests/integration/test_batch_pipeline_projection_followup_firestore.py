@@ -193,7 +193,7 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
         lane.projector.store.ready(sid, batch.binding, lane.clock())
     assert lane.projector.store.prepare_accounting(batch.binding, lane.clock()) is None
     assert batch.ledger.get().to_dict()['status'] == 'processing'
-    later = lane.seed(('zz-actionable',), capture_at=10000)
+    later = lane.seed(('zz-actionable',), capture_at=10000, owner_id=lane.uid + '-other')
     lane.finish(later, outcome='silence')
     legacy = lane.store.projection_pending()
     assert len(legacy) == 100 and all(sid in batch.ids[:-1] for sid in legacy)
@@ -208,26 +208,21 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
     lane.projector.sweep()
     assert lane.projector.store.ref('results', batch.ids[-1]).get().to_dict()['projection']
     assert lane.projector.store.ref('results', later.ids[0]).get().to_dict()['projection']
-    # Give the ready rows a deliberately blocked head. The follow-up cursor is
-    # independent of assignment, and must reach and finish the later content.
+    # The follow-up cursor starts independently at the blocked head. Its first
+    # page cannot complete content while the final sibling is only persisted.
     runner = projection_followup.ProjectionFollowups(lane.projector)
-    original = lane.projector.complete_content
-
-    def held(sid, binding):
-        if binding.content_id == batch.binding.content_id:
-            return None
-        return original(sid, binding)
-
-    monkeypatch.setattr(lane.projector, 'complete_content', held)
-    for _ in range(2):
-        await runner.schedule()
-        while runner.tasks:
-            await asyncio.gather(*list(runner.tasks.values()))
-            await asyncio.sleep(0)
-    assert later.ledger.get().to_dict()['status'] == 'completed'
+    await runner.schedule()
+    while runner.tasks:
+        await asyncio.gather(*list(runner.tasks.values()))
+        await asyncio.sleep(0)
     assert batch.ledger.get().to_dict()['status'] == 'processing'
-    monkeypatch.setattr(lane.projector, 'complete_content', original)
-    # Restart resets only hints. All ordinary sibling/accounting fences now pass.
+    assert later.ledger.get().to_dict()['status'] == 'processing'
+    await runner.schedule()
+    while runner.tasks:
+        await asyncio.gather(*list(runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert later.ledger.get().to_dict()['status'] == 'completed'
+    # Restart resets only hints. Completed rows have left the discovery query.
     restarted = projection_followup.ProjectionFollowups(lane.projector)
     await restarted.schedule()
     while restarted.tasks:

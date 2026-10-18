@@ -49,7 +49,7 @@ def entries():
             covered_by=('database.batch_pipeline_store.projection_page',),
             reason='legacy first-page adapter discards the cursor only',
             expect_observed=False,
-            body_digest='8b91b972ddad61d2a9409419668d4699171076b508fcc32f593e6df76b5b8dd3',
+            body_digest='52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
