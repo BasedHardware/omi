@@ -3,6 +3,18 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 
 void main() {
+  test('response parser edits change the live config identity', () {
+    const before = CustomSttConfig(provider: SttProvider.deepgramLive, schemaJson: {'text_path': 'before'});
+    const after = CustomSttConfig(provider: SttProvider.deepgramLive, schemaJson: {'text_path': 'after'});
+    expect(before.sttConfigId, isNot(after.sttConfigId));
+  });
+
+  test('audio field edits change the batch config identity', () {
+    const before = CustomSttConfig(provider: SttProvider.custom, audioFieldName: 'audio');
+    const after = CustomSttConfig(provider: SttProvider.custom, audioFieldName: 'file');
+    expect(before.sttConfigId, isNot(after.sttConfigId));
+  });
+
   group('CustomSttConfig raw audio forwarding', () {
     test('legacy configs keep forwarding raw audio to Omi', () {
       final config = CustomSttConfig.fromJson({'provider': 'customLive'});
