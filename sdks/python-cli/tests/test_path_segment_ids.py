@@ -13,19 +13,21 @@ from omi_cli.main import app
     ("raw", "encoded"),
     [
         ("abc123", "abc123"),
+        ("  abc123  ", "abc123"),
         ("a/b", "a%2Fb"),
         ("a?x=1", "a%3Fx%3D1"),
         ("a#frag", "a%23frag"),
         ("../x", "..%2Fx"),
         ("a b", "a%20b"),
+        ("  a b  ", "a%20b"),
     ],
 )
 def test_path_segment_encodes_reserved_characters(raw: str, encoded: str) -> None:
     assert path_segment(raw) == encoded
 
 
-@pytest.mark.parametrize("raw", ["", ".", ".."])
-def test_path_segment_rejects_dot_segments(raw: str) -> None:
+@pytest.mark.parametrize("raw", ["", "   ", "\t\n", ".", "..", "  .  ", "  ..  "])
+def test_path_segment_rejects_dot_segments_and_whitespace(raw: str) -> None:
     with pytest.raises(Exception) as excinfo:
         path_segment(raw)
     assert excinfo.value.exit_code == 1
