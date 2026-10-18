@@ -1083,3 +1083,102 @@ def test_detach_cli_propagates_gcloud_failures(monkeypatch, phase):
     monkeypatch.setattr(module, '_run', fake_run)
     with pytest.raises(RuntimeError, match='PERMISSION_DENIED'):
         module.detach_job_sidecar(SimpleNamespace(service='notifications-job', project='test', region='us-central1'))
+
+
+@pytest.mark.parametrize(
+    'service_name', ['backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend', 'desktop-backend']
+)
+def test_sync_resource_profile_survives_render_without_changing_app(service_name):
+    module = _load_module()
+    source = _service()
+    source['metadata']['name'] = service_name
+    app = source['spec']['template']['spec']['containers'][0]
+    app['resources'] = {'limits': {'cpu': '2', 'memory': '8Gi'}}
+    app['env'] = [{'name': 'SAFE', 'value': 'on'}]
+    app['startupProbe'] = {'tcpSocket': {'port': 8080}, 'periodSeconds': 10}
+    patched = module.patch_service(
+        source,
+        project_number='123',
+        base_revision='base',
+        latest_created_revision='base',
+        final_revision='final',
+        ingress_container_name=app['name'],
+        config_secret='cloud-run-gmp-sync-config',
+        config_secret_version='7',
+    )
+    rendered = yaml.load(yaml.safe_dump(patched), Loader=module.GcloudExportLoader)
+    template = rendered['spec']['template']
+    assert template['spec']['containers'][0] == app
+    collector = next(c for c in template['spec']['containers'] if c['name'] == 'collector')
+    assert collector['resources']['limits'] == (
+        {'cpu': '0.08', 'memory': '128Mi'}
+        if service_name in {'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+        else {'cpu': '1', 'memory': '512Mi'}
+    )
+    assert template['metadata']['annotations']['run.googleapis.com/cpu-throttling'] == 'false'
+    assert rendered['spec']['traffic'] == source['spec']['traffic']
+    volume = next(v for v in template['spec']['volumes'] if v['name'] == module.CONFIG_VOLUME_NAME)
+    assert volume['secret'] == {
+        'secretName': 'cloud-run-gmp-sync-config',
+        'items': [{'key': '7', 'path': 'config.yaml'}],
+    }
+
+
+def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
+    root = SCRIPT.parents[2]
+    config = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    endpoint = config['spec']['endpoints'][0]
+    assert endpoint['interval'] == '60s'
+    rules = endpoint['metricRelabeling']
+
+    def kept(name, component=''):
+        labels = {'__name__': name, 'component': component}
+        for rule in rules:
+            matched = re.fullmatch(rule['regex'], ';'.join(labels.get(k, '') for k in rule['sourceLabels']))
+            if rule['action'] == 'keep' and not matched or rule['action'] == 'drop' and matched:
+                return False
+        return True
+
+    # The existing dev/prod sync exporter is the authoritative bridge consumer.
+    for env in ('dev', 'prod'):
+        exporter = yaml.safe_load(
+            (
+                root
+                / f'backend/charts/monitoring/prometheus-stackdriver-exporter/{env}_sync_omi_cloud_run_metrics_exporter.yaml'
+            ).read_text()
+        )
+        for prefix in exporter['stackdriver']['metrics']['prefixes']:
+            family = prefix.removeprefix('prometheus.googleapis.com/').rstrip('/')
+            assert kept(family + ('events_total' if family.endswith('_') else ''))
+            if family.endswith('_'):
+                assert kept(family + 'duration_seconds_bucket')
+    # Direct GMP consumers: sentinel batch_metrics.py/completion_telemetry.py.
+    # fleet_gate/david_gate use logs, durable state and native request_count.
+    for name in (
+        'omi_batch_pipeline_events_total',
+        'omi_batch_pipeline_oldest_age_seconds',
+        'omi_accept_to_summary_seconds_bucket',
+        'omi_accept_to_summary_seconds_count',
+        'omi_accept_to_summary_seconds_sum',
+        'omi_summary_terminal_total',
+        'omi_summary_debt_overdue',
+        'omi_summary_debt_oldest_age_seconds',
+        'omi_summary_debt_sample_timestamp_seconds',
+        'omi_live_session_transcript_outcome_total',
+        'omi_firestore_documents_per_operation_bucket',
+    ):
+        assert kept(name), name
+    for component in ('sync', 'summary_delivery', 'storage'):
+        assert kept('omi_fallback_total', component)
+    for name, component in (
+        ('omi_stt_cost_routing_settlements_total', ''),
+        ('omi_subscription_events_total', ''),
+        ('omi_product_event_total', ''),
+        ('omi_vertex_non_dream_flash_after_cutover_attempts_total', ''),
+        ('omi_fallback_total', 'stt_live_session'),
+        ('omi_fallback_total', 'stt_selection'),
+    ):
+        assert not kept(name, component)
+    shared = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
+    assert shared['spec']['endpoints'][0]['interval'] == '30s'
+    assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == 'omi_.*'
