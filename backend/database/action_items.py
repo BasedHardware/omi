@@ -489,13 +489,29 @@ def _list_scan_budget(row_budget: int) -> int:
     return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
 
 
+def _coerce_item_datetime(val: Any, default: datetime) -> datetime:
+    if val is None:
+        return default
+    if isinstance(val, datetime):
+        return val if val.tzinfo is not None else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, str):
+        try:
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return default
+    return default
+
+
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
     """Active-first product order (see get_action_items)."""
+    due = _coerce_item_datetime(item.get('due_at'), datetime.max.replace(tzinfo=timezone.utc))
+    created = _coerce_item_datetime(item.get('created_at'), datetime.min.replace(tzinfo=timezone.utc))
     return (
         bool(item.get('completed')),
         item.get('due_at') is None,
-        item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-        -((item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+        due,
+        -(created.timestamp()),
     )
 
 

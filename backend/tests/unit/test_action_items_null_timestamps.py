@@ -79,3 +79,30 @@ def test_action_item_list_sort_key_handles_none_created_at():
     ]
     sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
     assert [item['id'] for item in sorted_items] == ['valid-created', 'null-created']
+
+
+def test_action_item_list_sort_key_coerces_iso_string_and_naive_datetimes():
+    now_utc = datetime(2026, 10, 18, 12, 0, tzinfo=timezone.utc)
+    items = [
+        {
+            'id': 'string-due',
+            'completed': False,
+            'due_at': '2026-10-25T14:00:00Z',
+            'created_at': '2026-10-18T10:00:00Z',
+        },
+        {
+            'id': 'naive-due',
+            'completed': False,
+            'due_at': datetime(2026, 10, 24, 14, 0),
+            'created_at': now_utc,
+        },
+        {
+            'id': 'aware-due',
+            'completed': False,
+            'due_at': datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc),
+            'created_at': now_utc,
+        },
+    ]
+    # Sorting mixed string and naive datetimes must not raise TypeError or AttributeError
+    sorted_items = sorted(items, key=action_items_db._action_item_list_sort_key)
+    assert [item['id'] for item in sorted_items] == ['naive-due', 'string-due', 'aware-due']
