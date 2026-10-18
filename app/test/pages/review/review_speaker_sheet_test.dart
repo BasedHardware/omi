@@ -14,8 +14,12 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/ui/ui.dart';
 
-Person _person(String id, String name) =>
-    Person(id: id, name: name, createdAt: DateTime.utc(2026, 9, 1), updatedAt: DateTime.utc(2026, 9, 1));
+Person _person(String id, String name) => Person(
+      id: id,
+      name: name,
+      createdAt: DateTime.utc(2026, 9, 1),
+      updatedAt: DateTime.utc(2026, 9, 1),
+    );
 
 /// Two voice candidates: Béla is also in the people list, Riley is not (the server can rank
 /// someone the cached list has not caught up with).
@@ -29,10 +33,7 @@ const _speaker = ReviewItem(
     conversationTitle: 'Sync',
     start: 0,
     end: 5,
-    candidates: [
-      PersonRef(personId: 'p-bela', name: 'Béla'),
-      PersonRef(personId: 'p-riley', name: 'Riley'),
-    ],
+    candidates: [PersonRef(personId: 'p-bela', name: 'Béla'), PersonRef(personId: 'p-riley', name: 'Riley')],
   ),
 );
 
@@ -93,15 +94,11 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('the sheet keeps the candidate chips and Me, and Someone Else… opens a searchable picker', (
-    tester,
-  ) async {
+  testWidgets('the sheet keeps the candidate chips and Me, and Someone Else… opens a searchable picker',
+      (tester) async {
     final sent = <(String, Map<String, dynamic>)>[];
-    await _pumpSheet(
-      tester,
-      review: await _review(sent),
-      people: [_person('p-dana', 'Dana'), _person('p-alex', 'Alex')],
-    );
+    await _pumpSheet(tester,
+        review: await _review(sent), people: [_person('p-dana', 'Dana'), _person('p-alex', 'Alex')]);
     expect(find.text('Béla'), findsOneWidget);
     expect(find.text('Me'), findsOneWidget);
 
@@ -142,9 +139,8 @@ void main() {
     expect(_speakerAnswer(sent)['is_me'], false);
   });
 
-  testWidgets('optimistic placeholder people never appear in the picker, so their temp ids cannot be sent', (
-    tester,
-  ) async {
+  testWidgets('optimistic placeholder people never appear in the picker, so their temp ids cannot be sent',
+      (tester) async {
     final sent = <(String, Map<String, dynamic>)>[];
     await _pumpSheet(
       tester,
@@ -173,11 +169,9 @@ void main() {
     await tester.pumpAndSettle();
 
     int personRows() => tester
-        .widgetList(
-          find.byWidgetPredicate(
-            (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('speaker_picker_person_'),
-          ),
-        )
+        .widgetList(find.byWidgetPredicate(
+          (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('speaker_picker_person_'),
+        ))
         .length;
     expect(personRows(), 24);
     expect(find.byKey(const Key('speaker_picker_show_all')), findsOneWidget);

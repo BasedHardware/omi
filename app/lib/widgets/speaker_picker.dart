@@ -9,7 +9,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// One voice-match suggestion the picker lists apart from everyone: [matchLevel] (when the server
 /// ranked it) drives the meter, [pinned] swaps the row icon for a pin.
 class SpeakerPickerCandidate {
-  const SpeakerPickerCandidate({required this.personId, required this.name, this.matchLevel, this.pinned = false});
+  const SpeakerPickerCandidate({
+    required this.personId,
+    required this.name,
+    this.matchLevel,
+    this.pinned = false,
+  });
 
   final String personId;
   final String name;
@@ -21,37 +26,37 @@ class SpeakerPickerCandidate {
 /// ("That's Me") or not a person at all (a TV, a voice assistant).
 class SpeakerPickerChoice {
   const SpeakerPickerChoice.person(String this.personId, this.displayName)
-    : name = null,
-      unknown = false,
-      me = false,
-      notAPerson = false;
+      : name = null,
+        unknown = false,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.newPerson(String this.name)
-    : personId = null,
-      displayName = null,
-      unknown = false,
-      me = false,
-      notAPerson = false;
+      : personId = null,
+        displayName = null,
+        unknown = false,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.unknown()
-    : personId = null,
-      name = null,
-      displayName = null,
-      unknown = true,
-      me = false,
-      notAPerson = false;
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = true,
+        me = false,
+        notAPerson = false;
   const SpeakerPickerChoice.me()
-    : personId = null,
-      name = null,
-      displayName = null,
-      unknown = false,
-      me = true,
-      notAPerson = false;
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = false,
+        me = true,
+        notAPerson = false;
   const SpeakerPickerChoice.notAPerson()
-    : personId = null,
-      name = null,
-      displayName = null,
-      unknown = false,
-      me = false,
-      notAPerson = true;
+      : personId = null,
+        name = null,
+        displayName = null,
+        unknown = false,
+        me = false,
+        notAPerson = true;
 
   final String? personId;
   final String? name;
@@ -151,10 +156,7 @@ class _SpeakerPickerState extends State<_SpeakerPicker> {
       for (final p in widget.people) p.name.toLowerCase(),
       for (final c in widget.candidates) c.name.toLowerCase(),
     };
-    final name = await showDialog<String>(
-      context: context,
-      builder: (_) => _NameDialog(existingNames: names),
-    );
+    final name = await showDialog<String>(context: context, builder: (_) => _NameDialog(existingNames: names));
     if (name != null && mounted) _returnNamed(name);
   }
 
@@ -310,7 +312,10 @@ class _NameDialogState extends State<_NameDialog> {
           autofocus: true,
           maxLength: 40,
           textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(hintText: context.l10n.speakerTagPromptNameHint, errorText: _duplicateError),
+          decoration: InputDecoration(
+            hintText: context.l10n.speakerTagPromptNameHint,
+            errorText: _duplicateError,
+          ),
           onChanged: (_) => setState(() {}),
           onSubmitted: (_) {
             if (_valid) Navigator.of(context).pop(_controller.text.trim());
