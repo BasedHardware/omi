@@ -8,6 +8,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db, get_firestore_client
+from database import conversation_visibility_counts
 from database.document_ids import system_folder_doc_id
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
@@ -324,24 +325,82 @@ def get_conversations_in_folder(
     include_discarded: bool = False,
 ) -> List[Dict[str, Any]]:
     """Get all conversations in a specific folder."""
+    from database import conversations as conversations_db
+
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection('conversations')
 
-    query = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+    base_query = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
 
     if not include_discarded:
-        query = query.where(filter=FieldFilter('discarded', '==', False))
+        base_query = base_query.where(filter=FieldFilter('discarded', '==', False))
 
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-    query = query.offset(offset).limit(limit)
+    base_query = base_query.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    raw_conversations: List[Dict[str, Any]] = []
+    if include_discarded:
+        skipped_visible = 0
+        for doc in base_query.stream():
+            conv_data = conversations_db.document_data_with_revision(doc)
+            if conv_data is None:
+                continue
+            conv_data['id'] = doc.id
+            if not conversations_db.is_visible_conversation(conv_data, include_discarded=True):
+                continue
+            if skipped_visible < offset:
+                skipped_visible += 1
+                continue
+            raw_conversations.append(conv_data)
+            if len(raw_conversations) >= limit:
+                break
+    else:
+        page_query = base_query.limit(limit).offset(offset)
+        last_doc = None
+        fetched = 0
+        for doc in page_query.stream():
+            fetched += 1
+            last_doc = doc
+            conv_data = conversations_db.document_data_with_revision(doc)
+            if conv_data is None:
+                continue
+            conv_data['id'] = doc.id
+            if not conversations_db.is_visible_conversation(conv_data, include_discarded=False):
+                continue
+            raw_conversations.append(conv_data)
+
+        skipped = fetched - len(raw_conversations)
+        skip_cap = getattr(conversations_db, '_RULE_DISCARD_PAGE_SKIP_CAP', 200)
+        while (
+            len(raw_conversations) < limit
+            and fetched == limit
+            and last_doc is not None
+            and skipped <= skip_cap
+            and hasattr(base_query, 'start_after')
+        ):
+            follow = base_query.start_after(last_doc).limit(limit)
+            fetched = 0
+            for doc in follow.stream():
+                fetched += 1
+                last_doc = doc
+                conv_data = conversations_db.document_data_with_revision(doc)
+                if conv_data is None:
+                    continue
+                conv_data['id'] = doc.id
+                if not conversations_db.is_visible_conversation(conv_data, include_discarded=False):
+                    skipped += 1
+                    continue
+                raw_conversations.append(conv_data)
+                if len(raw_conversations) >= limit:
+                    break
 
     conversations: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        conv_data = _typed_doc(doc)
-        if conv_data.get('deleted'):
-            continue
-        conv_data['id'] = doc.id
-        conversations.append(conv_data)
+    for conv_data in raw_conversations:
+        decoded = conversations_db.prepare_conversation_for_read(conv_data, uid)
+        if decoded is not None:
+            decoded['id'] = conv_data['id']
+            conversations.append(decoded)
+        else:
+            conversations.append(conv_data)
 
     return conversations
 
@@ -436,6 +495,10 @@ def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_clie
     count_query = query.count()
     result = count_query.get()
     count = int(result[0][0].value or 0)
+    hidden = conversation_visibility_counts.count_hidden(
+        conversations_ref, include_discarded=False, folder_id=folder_id
+    )
+    count = max(0, count - hidden)
 
     folder_ref = user_ref.collection('folders').document(folder_id)
     try:
