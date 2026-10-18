@@ -1,0 +1,3 @@
+{
+  "change": "Pairing a PLAUD device no longer claims its firmware works great with Omi; the note now says newer PLAUD firmware may not record with Omi"
+}

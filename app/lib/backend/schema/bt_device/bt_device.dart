@@ -667,8 +667,10 @@ class BtDevice {
   String getFirmwareWarningMessage() {
     switch (type) {
       case DeviceType.plaud:
-        return 'Your $name\'s current firmware works great with Omi.\n\n'
-            'We recommend keeping your current firmware and not updating through the PLAUD app, as newer versions may affect compatibility.';
+        // Omi cannot read a PLAUD's firmware version, so it must not claim this unit is compatible.
+        return 'Omi connects to your $name directly over Bluetooth and does not use the PLAUD app.\n\n'
+            'Firmware updates from the PLAUD app can change how the device works, and newer firmware may stop '
+            'Omi from recording. If your $name pairs but does not record, its firmware may not be supported yet.';
 
       case DeviceType.bee:
         if (isBeeFirmwareUnsupported) {
