@@ -13,6 +13,22 @@ from urllib.parse import urlparse
 
 NEG_STATUS_ANNOTATION = "cloud.google.com/neg-status"
 NEG_GROUP_PATH = "networkEndpointGroups"
+RECONCILE_PERMISSIONS = (
+    "compute.backendServices.get",
+    "compute.backendServices.list",
+    "compute.backendServices.update",
+    "compute.networkEndpointGroups.get",
+    "compute.networkEndpointGroups.list",
+    "compute.networkEndpointGroups.use",
+)
+_DENIED_PERMISSION_RE = re.compile(r"\b(?:required|permission)\s+['\"]?(compute\.[A-Za-z0-9.]+)['\"]?", re.IGNORECASE)
+_DENIED_RESOURCE_RE = re.compile(
+    r"\b(?:for|on)\s+(?:resource\s+)?['\"]?"
+    r"((?:https?://www\.googleapis\.com/compute/v1/)?"
+    r"projects/[A-Za-z0-9._-]+/(?:global/backendServices/[A-Za-z0-9._-]+|"
+    r"zones/[A-Za-z0-9-]+/networkEndpointGroups/[A-Za-z0-9._-]+))['\"]?",
+    re.IGNORECASE,
+)
 
 # Backend fields exposed by `gcloud compute backend-services add-backend`.
 CAPACITY_FIELDS = {
@@ -66,6 +82,18 @@ def _permission_denied(stderr: str) -> bool:
             'required "compute.',
         )
     )
+
+
+def _permission_denial_details(stderr: str) -> tuple[str | None, str | None]:
+    """Extract only a Compute permission and known resource path from gcloud output."""
+    permission_match = _DENIED_PERMISSION_RE.search(stderr)
+    resource_match = _DENIED_RESOURCE_RE.search(stderr)
+    resource = resource_match.group(1) if resource_match else None
+    if resource and resource.startswith("https://www.googleapis.com/compute/v1/"):
+        resource = resource.removeprefix("https://www.googleapis.com/compute/v1/")
+    elif resource and resource.startswith("http://www.googleapis.com/compute/v1/"):
+        resource = resource.removeprefix("http://www.googleapis.com/compute/v1/")
+    return permission_match.group(1) if permission_match else None, resource
 
 
 def _run_json(command: Sequence[str], *, operation: str, permission: str | None = None) -> Any:
@@ -316,8 +344,14 @@ def reconcile(args: argparse.Namespace) -> None:
             raise ReconcileError(f"failed to attach zone {zone}: gcloud could not start") from None
         if result.returncode != 0:
             if _permission_denied(result.stderr):
+                denied_permission, denied_resource = _permission_denial_details(result.stderr)
+                detail = denied_permission or "permission unavailable"
+                if denied_resource:
+                    detail += f" on {denied_resource}"
+                permissions = ", ".join(RECONCILE_PERMISSIONS)
                 raise ReconcileError(
-                    f"failed to attach zone {zone}: grant compute.backendServices.update on the target backend service"
+                    f"failed to attach zone {zone}: permission denied ({detail}); "
+                    f"required permissions: {permissions}"
                 )
             raise ReconcileError(f"failed to attach zone {zone}: backend update failed")
     print(

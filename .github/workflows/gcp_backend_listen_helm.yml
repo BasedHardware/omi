@@ -415,7 +415,7 @@ jobs:
       # GKE creates standalone NEGs from the Service annotation but does not
       # attach every newly appearing zone to this manually managed LB backend.
       - name: Reconcile prod listen NEG zones on the LB backend
-        if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' && vars.LISTEN_NEG_RECONCILE_ENABLED != 'false' }}
         env:
           RECONCILE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
           RECONCILE_NAMESPACE: ${{ vars.ENV }}-omi-backend

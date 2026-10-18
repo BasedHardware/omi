@@ -68,6 +68,14 @@ elif args[:3] == ["compute", "backend-services", "describe"]:
     print(json.dumps({"backends": backends}))
 elif args[:3] == ["compute", "backend-services", "add-backend"]:
     if os.environ.get("FAKE_ADD_MODE") == "permission-denied":
+        print(
+            "Required 'compute.networkEndpointGroups.use' permission for "
+            "'projects/based-hardware/zones/us-central1-c/networkEndpointGroups/prod-backend-listen-neg' "
+            "raw-resource-id",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    elif os.environ.get("FAKE_ADD_MODE") == "permission-denied-generic":
         print("PERMISSION_DENIED raw-resource-id", file=sys.stderr)
         sys.exit(1)
 else:
@@ -157,12 +165,32 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
             self.assertNotIn("--max-rate-per-endpoint", " ".join(call))
             self.assertNotIn("--max-connections-per-endpoint", " ".join(call))
 
-    def test_attach_permission_error_is_sanitized(self):
+    def test_attach_permission_error_reports_denied_permission_and_resource(self):
         result = self._run(add_mode="permission-denied")
 
         self.assertEqual(result.returncode, 1)
-        self.assertIn("compute.backendServices.update", result.stderr)
+        self.assertIn("compute.networkEndpointGroups.use", result.stderr)
+        self.assertIn(
+            "projects/based-hardware/zones/us-central1-c/networkEndpointGroups/prod-backend-listen-neg", result.stderr
+        )
         self.assertIn("us-central1-c", result.stderr)
+        for permission in (
+            "compute.backendServices.get",
+            "compute.backendServices.list",
+            "compute.backendServices.update",
+            "compute.networkEndpointGroups.get",
+            "compute.networkEndpointGroups.list",
+            "compute.networkEndpointGroups.use",
+        ):
+            self.assertIn(permission, result.stderr)
+        self.assertNotIn("raw-resource-id", result.stderr)
+
+    def test_attach_permission_error_does_not_guess_when_gcloud_omits_permission(self):
+        result = self._run(add_mode="permission-denied-generic")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("permission unavailable", result.stderr)
+        self.assertIn("required permissions:", result.stderr)
         self.assertNotIn("raw-resource-id", result.stderr)
 
     def test_fails_when_service_status_declares_an_unlistable_zone(self):

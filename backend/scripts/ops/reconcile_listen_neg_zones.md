@@ -16,9 +16,14 @@ if status declares a zone whose NEG is not listable or if attached backends do
 not agree on the settings to copy. `--dry-run` performs the same reads and
 reports zone names and counts without attaching anything.
 
-The production deploy identity needs exactly these Compute permissions:
-`compute.backendServices.get`, `compute.backendServices.list`,
-`compute.backendServices.update`, `compute.networkEndpointGroups.get`, and
-`compute.networkEndpointGroups.list`. A permission denial must fail the
-deploy; grant the permissions through the deployment IAM process rather than
-adding them here.
+The production deploy identity needs this Compute permission set:
+
+- `compute.backendServices.get` and `compute.backendServices.update` on the
+  target global backend service, plus `compute.backendServices.list` at project
+  scope.
+- `compute.networkEndpointGroups.get` and
+  `compute.networkEndpointGroups.list` at project scope, plus
+  `compute.networkEndpointGroups.use` on each target zonal NEG.
+
+A permission denial must fail the deploy; grant the permissions through the
+deployment IAM process rather than adding them here.
