@@ -177,11 +177,11 @@ void main() {
       _wal(DateTime(2026, 10, 18, 8), 60, WalStatus.uploaded),
       _wal(DateTime(2026, 10, 16, 8), 60, WalStatus.uploaded),
     ]);
-    expect(tester.getSemantics(_day('2026-10-18')), containsSemantics(isHeader: true, isExpanded: true));
-    expect(tester.getSemantics(_day('2026-10-16')), containsSemantics(isHeader: true, isExpanded: false));
+    expect(tester.getSemantics(_day('2026-10-18')), isSemantics(isHeader: true, isExpanded: true));
+    expect(tester.getSemantics(_day('2026-10-16')), isSemantics(isHeader: true, isExpanded: false));
     await tester.tap(_day('2026-10-16'));
     await tester.pump();
-    expect(tester.getSemantics(_day('2026-10-16')), containsSemantics(isHeader: true, isExpanded: true));
+    expect(tester.getSemantics(_day('2026-10-16')), isSemantics(isHeader: true, isExpanded: true));
     handle.dispose();
   });
 
