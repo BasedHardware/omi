@@ -15,7 +15,7 @@ from fastapi import Request, Response
 from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
-from database import redis_db
+from database import redis_db, action_item_versions
 from utils.encryption import derive_key
 from utils.executors import db_executor, submit_with_context
 from utils.mcp_server.cursors import decode_cursor
@@ -26,6 +26,7 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 TTL_SECONDS = 10
+VERSIONED_TTL_SECONDS = 900
 MAX_BODY_BYTES = 256 * 1024
 MAX_ENTRY_BYTES = MAX_BODY_BYTES + 8192
 MAX_CACHE_POPULATIONS = 32
@@ -69,6 +70,8 @@ class _Entry:
     route: str
     expires_at: float
     started: float
+    ttl: int = TTL_SECONDS
+    version: str | None = None
 
     def eligible(self, response: Response) -> bool:
         return (
@@ -78,7 +81,7 @@ class _Entry:
                 for header in ('x-omi-list-truncated', 'x-scan-truncated')
             )
             and len(response.body) <= MAX_BODY_BYTES
-            and time.monotonic() - self.started < TTL_SECONDS
+            and time.monotonic() - self.started < self.ttl
             and time.time() < self.expires_at
             and lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED')
         )
@@ -86,6 +89,8 @@ class _Entry:
     def store(self, response: Response) -> None:
         # Recheck after queue delay; the deadline still belongs to query start.
         if not self.eligible(response):
+            return
+        if self.version is not None and action_item_versions.version(self.uid) != self.version:
             return
         body = bytes(response.body)
         try:
@@ -99,14 +104,12 @@ class _Entry:
             ).encode('utf-8')
             nonce = os.urandom(12)
             ciphertext = nonce + AESGCM(derive_key(self.uid)).encrypt(nonce, envelope, self.key.encode())
-            if len(ciphertext) > MAX_ENTRY_BYTES or time.monotonic() - self.started >= TTL_SECONDS:
+            if len(ciphertext) > MAX_ENTRY_BYTES or time.monotonic() - self.started >= self.ttl:
                 return
             # Deduct query/serialization time using the existing Redis SET PX
             # surface. The encrypted absolute deadline also rejects late gets
             # if socket delay makes Redis retain the bytes slightly longer.
-            remaining_ms = int(
-                1000 * min(self.expires_at - time.time(), TTL_SECONDS - (time.monotonic() - self.started))
-            )
+            remaining_ms = int(1000 * min(self.expires_at - time.time(), self.ttl - (time.monotonic() - self.started)))
             if remaining_ms <= 0:
                 return
             _redis().set(self.key, ciphertext, px=remaining_ms)
@@ -133,7 +136,16 @@ def cached_list_response(
     if request is None or not lever_enabled('OMI_EXTERNAL_LIST_CACHE_ENABLED'):
         return None
     route = request.url.path
+    version = None
+    ttl = TTL_SECONDS
+    if route == '/v1/dev/user/action-items' and lever_enabled('OMI_DEV_ACTION_ITEMS_VERSION_CACHE_ENABLED'):
+        version = action_item_versions.version(uid)
+        if version is None:
+            EXTERNAL_LIST_CACHE_TOTAL.labels(route=route, outcome='version_bypass').inc()
+            return None  # Busy or unavailable: origin only, never a short-cache fallback.
+        ttl = VERSIONED_TTL_SECONDS
     identity = {
+        'collection_version': version,
         'uid': uid,
         'app': getattr(context, 'app_id', None),
         'key': getattr(context, 'key_id', None),
@@ -145,16 +157,18 @@ def cached_list_response(
         'conversation_budget': lever_enabled('OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED'),
     }
     key = (
-        'external-list:v1:'
+        'external-list:v2:'
         + hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
     )
-    entry = _Entry(uid, key, route, time.time() + TTL_SECONDS, time.monotonic())
+    entry = _Entry(uid, key, route, time.time() + ttl, time.monotonic(), ttl, version)
     request.state.external_list_cache_entry = entry
     try:
         raw = _redis().get(key)
         if raw and len(raw) <= MAX_ENTRY_BYTES:
             payload = json.loads(AESGCM(derive_key(uid)).decrypt(raw[:12], raw[12:], key.encode()))
-            if time.time() < payload['expires_at'] <= time.time() + TTL_SECONDS:
+            if time.time() < payload['expires_at'] <= time.time() + ttl and (
+                version is None or action_item_versions.version(uid) == version
+            ):
                 headers = {k: v for k, v in payload['headers'].items() if k.lower() in _HEADERS}
                 if response is not None:
                     headers.update(response.headers)
