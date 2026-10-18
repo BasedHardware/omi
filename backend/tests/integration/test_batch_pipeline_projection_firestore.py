@@ -111,7 +111,7 @@ def lane(monkeypatch):
         ledger = sync_content_ledger_ref(client, uid, binding.content_id)
         leases = {}
         for _ in range(240):
-            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, len(items))})
+            leases.update({lease.item.segment_id: lease for lease in queue.pull(0, min(32, len(items)))})
             if len(leases) == len(items):
                 break
         assert len(leases) == len(items)

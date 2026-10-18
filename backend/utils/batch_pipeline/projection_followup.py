@@ -23,6 +23,8 @@ from utils.executors import db_executor, postprocess_executor, run_blocking, sta
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
 
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+
 logger = logging.getLogger(__name__)
 MAX_FOLLOWUPS = 4
 FOLLOWUP_TIMEOUT_SECONDS = 120.0
@@ -36,6 +38,7 @@ class ProjectionFollowups:
         self.after: str | None = None
         self.pending: deque[str] = deque()
         self.closed = False
+        self.discovery = ProjectionDiscovery(projector.store.store)
 
     def candidates(self):
         store = self.projector.store
@@ -43,13 +46,17 @@ class ProjectionFollowups:
         # follow-up slots ahead of rows that have actually persisted.
         return [
             sid
-            for sid in store.store.projection_pending(limit=100)
+            for sid in self.discovery.next(limit=100)
             if (store.ref('results', sid).get().to_dict() or {}).get('projection')
         ]
 
     async def schedule(self):
-        # No await of slow follow-ups in the serving pass. Bound in-memory work;
-        # unfinished rows remain in the existing 100-row query after restart.
+        # Finish launching this bounded page before advancing discovery. Slow
+        # tasks must not cause the next serving pass to discard queued rows.
+        if self.pending:
+            self.launch()
+            return
+        # No await of slow follow-ups. Durable rows are rediscovered after restart.
         segments = await run_blocking(db_executor, self.candidates)
         if self.after in segments:
             offset = segments.index(self.after) + 1

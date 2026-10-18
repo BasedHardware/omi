@@ -171,3 +171,77 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
     assert sync_jobs.get_sync_job(batch.binding.job_id) == client_job
     assert lane.loads == loads
     assert active_rows(lane)[0]['sync_content_revision'] == 1
+
+
+@pytest.mark.asyncio
+async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch):
+    """The old first page pins forever; both real scanners must escape it."""
+    import asyncio
+    from database import batch_pipeline_projection_claim as claims
+    from utils.batch_pipeline import projection_followup
+    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
+    # All commit timestamps tie. Document-ID ordering must still cross pages.
+    batch = lane.seed(tuple(f'a{i:03}' for i in range(101)) + ('z-sibling',))
+    for i in range(len(batch.ids)):
+        assert lane.finish(batch, i, outcome='silence')['segment_id'] == batch.ids[i]
+    for sid in batch.ids[:-1]:
+        lane.projector.persist(sid)
+        lane.projector.store.ready(sid, batch.binding, lane.clock())
+    assert lane.projector.store.prepare_accounting(batch.binding, lane.clock()) is None
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    later = lane.seed(('zz-actionable',), capture_at=10000)
+    lane.finish(later, outcome='silence')
+    legacy = lane.store.projection_pending()
+    assert len(legacy) == 100 and all(sid in batch.ids[:-1] for sid in legacy)
+    assert batch.ids[-1] not in legacy and later.ids[0] not in legacy
+    # Rollback reproduces the original stall without changing a fence.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'false')
+    for _ in range(2):
+        lane.projector.sweep()
+    assert not lane.projector.store.ref('results', batch.ids[-1]).get().to_dict().get('projection')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    lane.projector.sweep()
+    lane.projector.sweep()
+    assert lane.projector.store.ref('results', batch.ids[-1]).get().to_dict()['projection']
+    assert lane.projector.store.ref('results', later.ids[0]).get().to_dict()['projection']
+    # Give the ready rows a deliberately blocked head. The follow-up cursor is
+    # independent of assignment, and must reach and finish the later content.
+    runner = projection_followup.ProjectionFollowups(lane.projector)
+    original = lane.projector.complete_content
+
+    def held(sid, binding):
+        if binding.content_id == batch.binding.content_id:
+            return None
+        return original(sid, binding)
+
+    monkeypatch.setattr(lane.projector, 'complete_content', held)
+    for _ in range(2):
+        await runner.schedule()
+        while runner.tasks:
+            await asyncio.gather(*list(runner.tasks.values()))
+            await asyncio.sleep(0)
+    assert later.ledger.get().to_dict()['status'] == 'completed'
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    monkeypatch.setattr(lane.projector, 'complete_content', original)
+    # Restart resets only hints. All ordinary sibling/accounting fences now pass.
+    restarted = projection_followup.ProjectionFollowups(lane.projector)
+    await restarted.schedule()
+    while restarted.tasks:
+        await asyncio.gather(*list(restarted.tasks.values()))
+        await asyncio.sleep(0)
+    completed = batch.ledger.get().to_dict()
+    assert completed['status'] == 'completed'
+    assert not lane.loads  # No STT/result reload, including across replay/restart.
+    assert not lane.tasks  # Silence creates no enrichment obligation.
+    assert len(lane.published) == 2
+    for _ in range(3):
+        lane.projector.sweep()
+        await restarted.schedule()
+        while restarted.tasks:
+            await asyncio.gather(*list(restarted.tasks.values()))
+    assert batch.ledger.get().to_dict() == completed
+    assert len(lane.published) == 2

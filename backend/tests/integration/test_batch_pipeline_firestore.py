@@ -354,3 +354,19 @@ def test_head_priority_does_not_flush_privacy_fenced_link_mutations(store, monke
     assert queue.pull(1)[0].item.segment_id == 'newer'
     assert queue.pull(2) == []
     assert store.run(lambda tx: tx.get('jobs', 'head'))['state'] == 'ready'
+
+
+def test_projection_cursor_handles_timestamp_ties_deleted_anchor_wrap_and_restart(store):
+    from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+
+    collection = store.client.collection(f'{store.namespace}_results')
+    for sid in ('a', 'b', 'c'):
+        collection.document(sid).set({'projection_state': 'ready', 'committed_at': 2.0})
+    scan = ProjectionDiscovery(store)
+    assert scan.next(1) == ['a']
+    collection.document('a').delete()
+    assert scan.next(1) == ['b']
+    assert scan.next(1) == ['c']
+    assert scan.next(1) == []
+    assert scan.next(1) == ['b']
+    assert ProjectionDiscovery(store).next(1) == ['b']

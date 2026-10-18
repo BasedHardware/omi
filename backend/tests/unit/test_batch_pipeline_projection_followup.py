@@ -89,6 +89,9 @@ def followup(monkeypatch, owner_claim):
     )
     projector.store.check = Mock(side_effect=ProjectionReplay({'state': 'persisted'}))
     projector.store.store.projection_pending = Mock(return_value=list(jobs))
+    projector.store.store.projection_page = Mock(
+        side_effect=lambda **kw: (projector.store.store.projection_pending(), None)
+    )
     projector.store.ref = Mock(
         side_effect=lambda _, sid: SimpleNamespace(
             get=lambda: SimpleNamespace(to_dict=lambda: {'projection': receipts[sid]})
@@ -397,3 +400,34 @@ async def test_deleted_bridge_keeps_existing_supersession_contract(followup, mon
     assert f.projector.playback.call_count == int(after_playback)
     f.projector.store.mark_enrichment.assert_not_called()
     f.projector.store.ready.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_slow_followup_keeps_unlaunched_page_before_advancing(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    release = asyncio.Event()
+    launched = []
+    f.runner.candidates = Mock(side_effect=[['head', 'later'], ['next-page']])
+
+    async def run(sid):
+        launched.append(sid)
+        await release.wait()
+
+    f.runner.run = run
+    await f.runner.schedule()
+    await asyncio.sleep(0)
+    await f.runner.schedule()
+    assert launched == ['head']
+    assert list(f.runner.pending) == ['later']
+    f.runner.candidates.assert_called_once()
+    release.set()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert launched == ['head', 'later']
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+    assert launched == ['head', 'later', 'next-page']
