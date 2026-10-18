@@ -11135,11 +11135,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Enlace de audio detenido — se transcribirá cuando se recupere';
 
   @override
-  String get captureIngressRecovering => 'El audio no llega a la aplicación — recuperación en curso';
+  String get captureIngressNeedsReconnect => 'El audio no llega a la aplicación — vuelve a conectar tu Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'La aplicación ya no puede recibir audio del dispositivo Omi. Está intentando recuperar la conexión; si sigue fallando, desconecta y vuelve a conectar el dispositivo desde los ajustes del dispositivo. El audio guardado en el dispositivo se sincronizará más tarde.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'La aplicación ya no puede recibir audio del dispositivo Omi y no pudo restaurar la conexión automáticamente. Desconecta y vuelve a conectar el dispositivo — desde los ajustes del dispositivo o apagándolo y encendiéndolo. El audio guardado en el dispositivo se sincronizará más tarde.';
 
   @override
   String get captureStillRecording => 'Sigue grabando';

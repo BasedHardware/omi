@@ -11091,11 +11091,11 @@ class AppLocalizationsDa extends AppLocalizations {
       'Lydbindingen er gået i stå — transskriptionen fortsætter, når den er genoprettet';
 
   @override
-  String get captureIngressRecovering => 'Lyd når ikke appen — genopretting er i gang';
+  String get captureIngressNeedsReconnect => 'Lyden når ikke appen — tilslut din Omi igen';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Appen kan ikke længere modtage lyd fra Omi-enheden. Den prøver at gendanne forbindelsen; hvis det stadig mislykkes, så frakobl og tilslut enheden igen fra enhedsindstillingerne. Lyd, der er gemt på enheden, synkroniseres senere.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Appen kan ikke længere modtage lyd fra Omi-enheden og kunne ikke gendanne forbindelsen automatisk. Frakobl og tilslut enheden igen — fra enhedsindstillingerne eller ved at slå den fra og til. Lyd, der er gemt på enheden, synkroniseres senere.';
 
   @override
   String get captureStillRecording => 'Optager stadig';

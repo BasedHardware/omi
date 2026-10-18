@@ -10935,11 +10935,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'オーディオ接続が停滞しています — 復旧後に文字起こしが再開されます';
 
   @override
-  String get captureIngressRecovering => 'オーディオがアプリに届いていません — 復元を実行中です';
+  String get captureIngressNeedsReconnect => 'オーディオがアプリに届いていません — Omiを再接続してください';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'アプリはOmiデバイスからのオーディオをこれ以上受信できません。接続の復元を試みています。引き続き失敗する場合は、デバイス設定でデバイスの接続を解除してから再接続してください。デバイスに保存されたオーディオは後で同期されます。';
+  String get captureIngressNeedsReconnectExplanation =>
+      'アプリはOmiデバイスからのオーディオを受信できず、接続を自動的に復元できませんでした。デバイスの接続を解除して再接続してください — デバイス設定から、または電源を切って入れ直してください。デバイスに保存されたオーディオは後で同期されます。';
 
   @override
   String get captureStillRecording => '録音は継続中';

@@ -11164,11 +11164,11 @@ class AppLocalizationsIt extends AppLocalizations {
       'Collegamento audio interrotto — la trascrizione riprende quando si ristabilisce';
 
   @override
-  String get captureIngressRecovering => 'L\'audio non raggiunge l\'app — ripristino in corso';
+  String get captureIngressNeedsReconnect => 'L\'audio non raggiunge l\'app — riconnetti il tuo Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'L\'app non riesce più a ricevere audio dal dispositivo Omi. Sta cercando di ripristinare la connessione; se continua a non riuscirci, scollega e ricollega il dispositivo dalle impostazioni del dispositivo. L\'audio salvato sul dispositivo verrà sincronizzato in seguito.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'L\'app non riesce più a ricevere audio dal dispositivo Omi e non è riuscita a ripristinare la connessione automaticamente. Scollega e ricollega il dispositivo — dalle impostazioni del dispositivo o spegnendolo e riaccendendolo. L\'audio salvato sul dispositivo verrà sincronizzato in seguito.';
 
   @override
   String get captureStillRecording => 'Registrazione in corso';

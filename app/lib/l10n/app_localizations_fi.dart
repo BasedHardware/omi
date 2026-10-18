@@ -11105,11 +11105,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Ääneyhteys katkesi — tekstitys jatkuu yhteyden palattua';
 
   @override
-  String get captureIngressRecovering => 'Ääni ei tavoita sovellusta — palautus on käynnissä';
+  String get captureIngressNeedsReconnect => 'Ääni ei tavoita sovellusta — yhdistä Omi uudelleen';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Sovellus ei enää saa ääntä Omi-laitteesta. Se yrittää palauttaa yhteyttä; jos se epäonnistuu edelleen, irrota ja yhdistä laite uudelleen laiteasetuksista. Laitteeseen tallennettu ääni synkronoidaan myöhemmin.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Sovellus ei enää saa ääntä Omi-laitteesta eikä onnistunut palauttamaan yhteyttä automaattisesti. Irrota ja yhdistä laite uudelleen — laiteasetuksista tai sammuttamalla ja käynnistämällä se. Laitteeseen tallennettu ääni synkronoidaan myöhemmin.';
 
   @override
   String get captureStillRecording => 'Tallennus jatkuu';

@@ -944,6 +944,36 @@ void main() {
       );
     });
 
+    test('a dismissed ingress episode stays dismissed across native re-ticks of the same incident', () async {
+      CaptureIngressHealth snapshot(String generation) => CaptureIngressHealth(
+            phase: 'actionRequired',
+            generation: generation,
+            reason: 'subscription_timeout',
+            validUntilMs: 0,
+            subscriptionConfirmed: false,
+            unverifiedSinceMs: 60000,
+          );
+      final monitor = makeMonitor(withRetry: true);
+      monitor.observeIngressHealth('dev-a', snapshot('g1'));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed);
+
+      monitor.dismissVisibleEpisode('dev-a');
+      expect(monitor.visiblePrompt, isNull, reason: 'the reader dismissed the incident');
+
+      // iOS republishes the same actionable snapshot every ~5s: the dismissal
+      // must hold for an unchanged incident instead of resurrecting the banner.
+      monitor.observeIngressHealth('dev-a', snapshot('g1'));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull, reason: 'same generation re-tick does not resurrect the banner');
+
+      // A new incident (new connection generation) alerts again.
+      monitor.observeIngressHealth('dev-a', snapshot('g2'));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerIngressRecoveryFailed,
+          reason: 'a genuinely new incident is a new alert');
+    });
+
     test('a positive session during retry resolves without a prompt', () async {
       final retryGate = Completer<void>();
       final monitor = makeMonitor(withRetry: true, bleRetry: (deviceId) => retryGate.future);

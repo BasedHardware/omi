@@ -205,8 +205,8 @@ void main() {
 
       final context = tester.element(find.byType(CaptureRecoveryBanner));
       final l10n = AppLocalizations.of(context);
-      expect(find.text(l10n.captureIngressRecovering), findsOneWidget,
-          reason: 'the title states the app-owned recovery, not "tap to reconnect"');
+      expect(find.text(l10n.captureIngressNeedsReconnect), findsOneWidget,
+          reason: 'the title names the required manual action, not a wait or a retry');
       expect(find.text(l10n.captureRecoveryBanner), findsNothing,
           reason: '"tap to reconnect" would promise an action this trigger cannot perform');
       expect(find.text(l10n.captureAudioSavedTranscribesLater), findsNothing,

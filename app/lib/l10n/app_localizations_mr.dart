@@ -11112,11 +11112,11 @@ class AppLocalizationsMr extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'ऑडिओ लिंक थांबला — कनेक्शन परत आल्यावर ट्रान्सक्रिप्ट होईल';
 
   @override
-  String get captureIngressRecovering => 'ऑडियो अॅपपर्यंत पोहोचत नाही — पुनर्प्राप्ती सुरू आहे';
+  String get captureIngressNeedsReconnect => 'ऑडिओ अॅपपर्यंत पोहोचत नाही — तुमचे Omi पुन्हा कनेक्ट करा';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'अॅप आता Omi डिव्हाइसमधून ऑडिओ घेऊ शकत नाही. ती कनेक्शन पुनर्स्थापित करण्याचा प्रयत्न करत आहे; जर ते पुन्हा अयशस्वी झाले, तर डिव्हाइस सेटिंग्जमधून डिव्हाइस डिस्कनेक्ट करा आणि पुन्हा कनेक्ट करा. डिव्हाइसवर जतन केलेले ऑडिओ नंतर सिंक होईल.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'अॅप आता Omi डिव्हाइसमधून ऑडिओ घेऊ शकत नाही आणि कनेक्शन आपोआप पुनर्स्थापित होऊ शकले नाही. डिव्हाइस डिस्कनेक्ट करा आणि पुन्हा कनेक्ट करा — डिव्हाइस सेटिंग्जमधून, किंवा बंद करून चालू करून. डिव्हाइसवर जतन केलेले ऑडियो नंतर सिंक होईल.';
 
   @override
   String get captureStillRecording => 'अजूनही रेकॉर्डिंग सुरू आहे';

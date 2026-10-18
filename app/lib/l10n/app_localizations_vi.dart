@@ -11103,11 +11103,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Kết nối âm thanh bị gián đoạn — sẽ chép lại tiếp khi khôi phục';
 
   @override
-  String get captureIngressRecovering => 'Âm thanh không đến ứng dụng — đang khôi phục';
+  String get captureIngressNeedsReconnect => 'Âm thanh không đến ứng dụng — kết nối lại Omi của bạn';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Ứng dụng không còn nhận được âm thanh từ thiết bị Omi. Ứng dụng đang cố khôi phục kết nối; nếu vẫn thất bại, hãy ngắt kết nối rồi kết nối lại thiết bị trong cài đặt thiết bị. Âm thanh đã lưu trên thiết bị sẽ được đồng bộ sau.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Ứng dụng không còn nhận được âm thanh từ thiết bị Omi và không thể khôi phục kết nối tự động. Hãy ngắt kết nối rồi kết nối lại thiết bị — trong cài đặt thiết bị hoặc bằng cách tắt rồi bật nó. Âm thanh đã lưu trên thiết bị sẽ được đồng bộ sau.';
 
   @override
   String get captureStillRecording => 'Vẫn đang ghi âm';

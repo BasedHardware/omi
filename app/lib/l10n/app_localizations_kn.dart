@@ -11138,11 +11138,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'ಆಡಿಯೊ ಲಿಂಕ್ ಸ್ಥಗಿತಗೊಂಡಿದೆ — ಮರಳಿ ಸಿಕ್ಕಾಗ ಲಿಪ್ಯಂತರಗೊಳ್ಳುತ್ತದೆ';
 
   @override
-  String get captureIngressRecovering => 'ಆಡಿಯೊ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತಲುಪುತ್ತಿಲ್ಲ — ಚೇತರಿಕೆ ಪ್ರಗತಿಯಲ್ಲಿದೆ';
+  String get captureIngressNeedsReconnect => 'ಆಡಿಯೊ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತಲುಪುತ್ತಿಲ್ಲ — ನಿಮ್ಮ Omi ಅನ್ನು ಮರುಸಂಪರ್ಕಿಸಿ';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'ಅಪ್ಲಿಕೇಶನ್ ಈಗ Omi ಸಾಧನದಿಂದ ಆಡಿಯೊ ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಸಂಪರ್ಕವನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಪ್ರಯತ್ನಿಸುತ್ತಿದೆ; ಮುಂದುವರಿದು ವಿಫಲವಾದರೆ, ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಂದ ಸಾಧನವನ್ನು ಸಂಪರ್ಕ ಕಡಿದು ಮರುಸಂಪರ್ಕಿಸಿ. ಸಾಧನದಲ್ಲಿ ಉಳಿಸಿದ ಆಡಿಯೊ ನಂತರ ಸಿಂಕ್ ಆಗುತ್ತದೆ.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'ಅಪ್ಲಿಕೇಶನ್ ಈಗ Omi ಸಾಧನದಿಂದ ಆಡಿಯೊ ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ ಮತ್ತು ಸಂಪರ್ಕವನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಸಾಧನವನ್ನು ಸಂಪರ್ಕ ಕಡಿದು ಮರುಸಂಪರ್ಕಿಸಿ — ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಂದ ಅಥವಾ ಆಫ್ ಮಾಡಿ ಆನ್ ಮಾಡಿ. ಸಾಧನದಲ್ಲಿ ಉಳಿಸಿದ ಆಡಿಯೊ ನಂತರ ಸಿಂಕ್ ಆಗುತ್ತದೆ.';
 
   @override
   String get captureStillRecording => 'ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';

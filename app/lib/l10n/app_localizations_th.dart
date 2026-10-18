@@ -11041,11 +11041,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'ลิงก์เสียงหยุดชะงัก — จะถอดเสียงต่อเมื่อกลับมาเชื่อมต่อแล้ว';
 
   @override
-  String get captureIngressRecovering => 'เสียงไม่ถึงแอป — กำลังกู้คืนอยู่';
+  String get captureIngressNeedsReconnect => 'เสียงไม่ถึงแอป — เชื่อมต่อ Omi ของคุณใหม่';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'แอปไม่สามารถรับเสียงจากอุปกรณ์ Omi ได้อีกต่อไป กำลังพยายามกู้คืนการเชื่อมต่ออยู่ หากยังคงล้มเหลว ให้ยกเลิกการเชื่อมต่อและเชื่อมต่ออุปกรณ์ใหม่จากการตั้งค่าอุปกรณ์ เสียงที่บันทึกไว้ในอุปกรณ์จะซิงก์ในภายหลัง';
+  String get captureIngressNeedsReconnectExplanation =>
+      'แอปไม่สามารถรับเสียงจากอุปกรณ์ Omi ได้อีกต่อไปและไม่สามารถกู้คืนการเชื่อมต่อโดยอัตโนมัติ ให้ยกเลิกการเชื่อมต่อและเชื่อมต่ออุปกรณ์ใหม่ — จากการตั้งค่าอุปกรณ์หรือปิดแล้วเปิดใหม่ เสียงที่บันทึกไว้ในอุปกรณ์จะซิงก์ในภายหลัง';
 
   @override
   String get captureStillRecording => 'ยังบันทึกอยู่';

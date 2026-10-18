@@ -13219,13 +13219,13 @@
     "@captureLinkStalledTranscribesLater": {
         "description": "Capture recovery banner, second line for a BLE-health wedge: the link stalled and transcripts resume once it recovers. Does not promise the audio was saved."
     },
-    "captureIngressRecovering": "Audio isn't reaching the app — recovery in progress",
-    "@captureIngressRecovering": {
-        "description": "Capture recovery banner title for an ingress_recovery_failed episode: the app lost audio ingress and the app is itself retrying recovery. Not a retry affordance."
+    "captureIngressNeedsReconnect": "Audio isn't reaching the app — reconnect your Omi",
+    "@captureIngressNeedsReconnect": {
+        "description": "Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim."
     },
-    "captureIngressRecoveryExplanation": "The app stopped receiving audio from your Omi. It is trying to restore the connection itself; if it keeps failing, disconnect and reconnect the device from device settings. Any audio saved on the device will sync later.",
-    "@captureIngressRecoveryExplanation": {
-        "description": "Details sheet body for an ingress_recovery_failed capture episode: the app lost the audio link, is running its own recovery, and the manual fallback is disconnect/reconnect from device settings."
+    "captureIngressNeedsReconnectExplanation": "The app stopped receiving audio from your Omi and could not restore the connection automatically. Disconnect and reconnect the device — from device settings, or by powering it off and on. Any audio saved on the device will sync later.",
+    "@captureIngressNeedsReconnectExplanation": {
+        "description": "Details sheet body for an ingress_recovery_failed capture episode: automatic recovery is exhausted; the manual fix is disconnect/reconnect. Sync-later wording is scoped to audio actually saved on the device."
     },
     "captureStillRecording": "Still recording",
     "@captureStillRecording": {

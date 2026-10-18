@@ -11095,11 +11095,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Heliühendus seiskus — transkriptsioon jätkub pärast taastamist';
 
   @override
-  String get captureIngressRecovering => 'Heli ei jõua rakendusse — taastamine on käimas';
+  String get captureIngressNeedsReconnect => 'Heli ei jõua rakendusse — ühenda Omi uuesti';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Rakendus ei saa enam Omi seadmelt heli kätte. See proovib ühendust taastada; kui see jätkuvalt ebaõnnestub, ühenda seade seadete kaudu lahti ja uuesti tagasi. Seadmesse salvestatud heli sünkroniseeritakse hiljem.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Rakendus ei saa enam Omi seadmelt heli kätte ega suutnud ühendust automaatselt taastada. Ühenda seade lahti ja tagasi — seadete kaudu või välja ja sisse lülitades. Seadmesse salvestatud heli sünkroniseeritakse hiljem.';
 
   @override
   String get captureStillRecording => 'Salvestamine jätkub';

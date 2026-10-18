@@ -11109,11 +11109,11 @@ class AppLocalizationsSv extends AppLocalizations {
       'Ljudlänken avbröts — transkriberingen fortsätter när den återställs';
 
   @override
-  String get captureIngressRecovering => 'Ljudet når inte appen — återställning pågår';
+  String get captureIngressNeedsReconnect => 'Ljudet når inte appen — anslut din Omi igen';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Appen kan inte längre ta emot ljud från Omi-enheten. Den försöker återställa anslutningen; om det fortsätter att misslyckas, koppla från och anslut enheten igen från enhetsinställningarna. Ljud som sparats på enheten synkroniseras senare.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Appen kan inte längre ta emot ljud från Omi-enheten och kunde inte återställa anslutningen automatiskt. Koppla från och anslut enheten igen — från enhetsinställningarna eller genom att stänga av och slå på den. Ljud som sparats på enheten synkroniseras senare.';
 
   @override
   String get captureStillRecording => 'Spelar fortfarande in';

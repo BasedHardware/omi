@@ -11132,11 +11132,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Сувязь аўдыё перарвалася — транскрыпцыя з\'явіцца пасля аднаўлення';
 
   @override
-  String get captureIngressRecovering => 'Аўдыё не даходзіць да праграмы — ідзе аднаўленне';
+  String get captureIngressNeedsReconnect => 'Аўдыё не даходзіць да праграмы — перападлучыце Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Праграма больш не можа прымаць аўдыё з прылады Omi. Яна спрабуе аднавіць сувязь; калі гэта працягвае не атрымлівацца, адлучыце і зноў падлучыце прыладу ў наладах прылады. Аўдыё, якое захавана на прыладзе, сінхранізуецца пазней.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Праграма больш не прымае аўдыё з прылады Omi і не змагла аднавіць сувязь аўтаматычна. Адлучыце і зноў падлучыце прыладу — у наладах прылады або выключыўшы і ўключыўшы яе. Аўдыё, якое захавана на прыладзе, сінхранізуецца пазней.';
 
   @override
   String get captureStillRecording => 'Запіс працягваецца';

@@ -11123,11 +11123,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Garso ryšys nutrūko — transkripcija bus tęsiama jį atstačius';
 
   @override
-  String get captureIngressRecovering => 'Garsas nepasiekia programos — vyksta atkūrimas';
+  String get captureIngressNeedsReconnect => 'Garsas nepasiekia programos — iš naujo prijunkite Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Programa nebegauna gauti garso iš Omi įrenginio. Ji bando atkurti ryšį; jei tai ir toliau nepavyksta, atjunkite ir vėl prijunkite įrenginį įrenginio nustatymuose. Įrenginyje išsaugotas garsas bus sinchronizuotas vėliau.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Programa nebegauna gauti garso iš Omi įrenginio ir nepavyko automatiškai atkurti ryšio. Atjunkite ir vėl prijunkite įrenginį — įrenginio nustatymuose arba jį išjungdami ir vėl įjungdami. Įrenginyje išsaugotas garsas bus sinchronizuotas vėliau.';
 
   @override
   String get captureStillRecording => 'Įrašymas tęsiamas';

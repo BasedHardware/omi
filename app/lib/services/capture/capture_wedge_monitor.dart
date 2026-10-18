@@ -106,6 +106,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// projection, or let a transcript resolve an ingress failure.
   void observeIngressHealth(String deviceId, CaptureIngressHealth? health) {
     final state = _stateFor(deviceId);
+    state.lastIngressHealth = health;
     if (health?.reason == CaptureIngressHealth.cccdRecoveryReason) {
       _cccdRecoveryDevices.add(deviceId);
       _nativeIngressDevices.add(deviceId);
@@ -145,7 +146,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       }
     }
     if (health?.actionable == true) {
-      if (state.episode?.trigger != triggerIngressRecoveryFailed) {
+      final dismissedGeneration = state.dismissedIngressGeneration;
+      final sameIncident = dismissedGeneration != null && health!.generation == dismissedGeneration;
+      if (!sameIncident && state.episode?.trigger != triggerIngressRecoveryFailed) {
         state.episode = CaptureWedgeEpisode(
           deviceId: deviceId,
           source: 'omi',
@@ -153,9 +156,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
           declaredAt: _now(),
         )..retryAttempted = true;
       }
-      state.episode!.promptVisible = true;
-    } else if (state.episode?.trigger == triggerIngressRecoveryFailed) {
-      state.episode = null;
+      if (!sameIncident) state.episode?.promptVisible = true;
+    } else {
+      if (state.episode?.trigger == triggerIngressRecoveryFailed) state.episode = null;
+      // Health left actionRequired (or the owner went away): the incident is
+      // over, so a later actionable snapshot of a *new* incident may alert.
+      state.dismissedIngressGeneration = null;
     }
     notifyListeners();
   }
@@ -493,6 +499,15 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _devices[deviceId];
     if (state == null || state.episode == null) return;
     state.rapidDropEnds.clear();
+    final episode = state.episode!;
+    if (episode.trigger == triggerIngressRecoveryFailed) {
+      // The native side republishes the same actionable snapshot every few
+      // seconds, and observeIngressHealth would recreate a nulled episode on
+      // the next tick — resurrecting a dismissed banner. Remember the
+      // dismissed incident (its connection generation) until health actually
+      // changes; a new generation or a healthy/quiet snapshot re-allows it.
+      state.dismissedIngressGeneration = state.lastIngressHealth?.generation;
+    }
     state.episode = null;
     notifyListeners();
   }
@@ -721,6 +736,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
 }
 
 class _DeviceWedgeState {
+  CaptureIngressHealth? lastIngressHealth;
+  String? dismissedIngressGeneration;
   final List<DateTime> zeroByteSessionEnds = [];
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];

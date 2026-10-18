@@ -11091,11 +11091,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Audio link stalled — transcribes when it recovers';
 
   @override
-  String get captureIngressRecovering => 'Audio isn\'t reaching the app — recovery in progress';
+  String get captureIngressNeedsReconnect => 'Audio isn\'t reaching the app — reconnect your Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'The app stopped receiving audio from your Omi. It is trying to restore the connection itself; if it keeps failing, disconnect and reconnect the device from device settings. Any audio saved on the device will sync later.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'The app stopped receiving audio from your Omi and could not restore the connection automatically. Disconnect and reconnect the device — from device settings, or by powering it off and on. Any audio saved on the device will sync later.';
 
   @override
   String get captureStillRecording => 'Still recording';

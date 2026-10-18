@@ -11102,11 +11102,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'অডিও সংযোগ বিচ্ছিন্ন হয়েছে — সংযোগ ফিরলে লেখা হবে';
 
   @override
-  String get captureIngressRecovering => 'অডিও অ্যাপে পৌঁছাচ্ছে না — পুনরুদ্ধার চলছে';
+  String get captureIngressNeedsReconnect => 'অডিও অ্যাপে পৌঁছাচ্ছে না — Omi পুনরায় সংযুক্ত করুন';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'অ্যাপটি আর Omi ডিভাইস থেকে অডিও আনতে পারছে না। এটি সংযোগ পুনরুদ্ধার করার চেষ্টা করছে; বারবার ব্যর্থ হলে ডিভাইস সেটিংস থেকে ডিভাইসটি বিচ্ছিন্ন করে আবার সংযুক্ত করুন। ডিভাইসে সংরক্ষিত অডিও পরে সিঙ্ক হবে।';
+  String get captureIngressNeedsReconnectExplanation =>
+      'অ্যাপটি আর Omi ডিভাইস থেকে অডিও আনতে পারছে না এবং স্বয়ংক্রিয়ভাবে সংযোগ পুনরুদ্ধার করতে পারেনি। ডিভাইসটি বিচ্ছিন্ন করে আবার সংযুক্ত করুন — ডিভাইস সেটিংস থেকে, অথবা বন্ধ করে চালু করে। ডিভাইসে সংরক্ষিত অডিও পরে সিঙ্ক হবে।';
 
   @override
   String get captureStillRecording => 'এখনও রেকর্ড হচ্ছে';

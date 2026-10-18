@@ -11198,11 +11198,11 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nahinto ang audio link — magpapatuloy ang transcript kapag nakabawi na';
 
   @override
-  String get captureIngressRecovering => 'Hindi naabot ng audio ang app — recovery ang nagaganap';
+  String get captureIngressNeedsReconnect => 'Hindi naabot ng audio ang app — i-reconnect ang iyong Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Hindi na makuha ng app ang audio mula sa Omi device. Sinusubukang nito ibalik ang koneksyon; kung patuloy itong nabibigo, i-disconnect at i-reconnect ang device mula sa mga setting ng device. Ang audio na naka-save sa device ay magsi-sync sa ibang pagkakataon.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Hindi na makuha ng app ang audio mula sa Omi device at hindi nito mabawi ang koneksyon nang awtomatiko. I-disconnect at i-reconnect ang device — mula sa mga setting ng device, o sa pagpatay at pagbukas nito. Ang audio na naka-save sa device ay magsi-sync sa ibang pagkakataon.';
 
   @override
   String get captureStillRecording => 'Nagre-record pa rin';

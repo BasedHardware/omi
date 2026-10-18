@@ -11155,11 +11155,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Legătura audio s-a oprit — transcrierea continuă la revenirea ei';
 
   @override
-  String get captureIngressRecovering => 'Audio nu ajunge la aplicație — recuperarea este în curs';
+  String get captureIngressNeedsReconnect => 'Audio nu ajunge la aplicație — reconectați-vă Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Aplicația nu mai poate primi audio de la dispozitivul Omi. Încearcă să recupereze conexiunea; dacă continuă să eșueze, deconectează și reconectează dispozitivul din setările dispozitivului. Audio salvat pe dispozitiv se va sincroniza mai târziu.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplicația nu mai poate primi audio de la dispozitivul Omi și nu a reușit să recupereze conexiunea automat. Deconectează și reconectează dispozitivul — din setările dispozitivului sau stingându-l și repornindu-l. Audio salvat pe dispozitiv se va sincroniza mai târziu.';
 
   @override
   String get captureStillRecording => 'Înregistrarea continuă';

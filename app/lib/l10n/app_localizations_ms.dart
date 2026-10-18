@@ -11125,11 +11125,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Pautan audio terhenti — transkripsi diteruskan apabila pulih';
 
   @override
-  String get captureIngressRecovering => 'Audio tidak sampai ke aplikasi — pemulihan sedang berlangsung';
+  String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan semula Omi anda';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Aplikasi tidak lagi dapat menerima audio daripada peranti Omi. Ia sedang cuba memulihkan sambungan; jika masih gagal, putuskan sambungan dan sambungkan semula peranti daripada tetapan peranti. Audio yang disimpan pada peranti akan disegerakkan kemudian.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikasi tidak lagi dapat menerima audio daripada peranti Omi dan tidak dapat memulihkan sambungan secara automatik. Putuskan sambungan dan sambungkan semula peranti — daripada tetapan peranti, atau dengan mematikan dan menyalakannya. Audio yang disimpan pada peranti akan disegerakkan kemudian.';
 
   @override
   String get captureStillRecording => 'Masih merakam';

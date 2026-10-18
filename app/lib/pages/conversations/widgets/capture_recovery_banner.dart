@@ -45,7 +45,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
         final title = isTransferRecovery
             ? '${l10n.phoneStorage}: ${l10n.recordingsNotSynced}'
             : isIngressFailure
-                ? l10n.captureIngressRecovering
+                ? l10n.captureIngressNeedsReconnect
                 : l10n.captureRecoveryBanner;
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -129,7 +129,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                               explanation: isTransferRecovery
                                   ? l10n.recordingsNotSynced
                                   : isIngressFailure
-                                      ? l10n.captureIngressRecoveryExplanation
+                                      ? l10n.captureIngressNeedsReconnectExplanation
                                       : l10n.captureWedgeBleExplanation,
                             );
                           },

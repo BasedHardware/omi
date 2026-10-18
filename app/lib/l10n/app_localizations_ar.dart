@@ -11036,11 +11036,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'توقف الاتصال بالصوت — ستتم الكتابة عند استعادته';
 
   @override
-  String get captureIngressRecovering => 'الصوت لا يصل إلى التطبيق — جرٍ الاستعادة';
+  String get captureIngressNeedsReconnect => 'الصوت لا يصل إلى التطبيق — أعد توصيل Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'تعذّر على التطبيق استقبال الصوت من جهاز Omi بعد الآن. إنه يحاول استعادة الاتصال؛ إذا استمر الفشل، جرّب فصل الجهاز وإعادة توصيله من إعدادات الجهاز. أي صوت يُحفظ على الجهاز سيُزامَن لاحقاً.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'لم يعد التطبيق يستقبل الصوت من جهاز Omi ولم يتمكن من استعادة الاتصال تلقائياً. افصل الجهاز وأعد توصيله — من إعدادات الجهاز أو بإيقاف تشغيله وتشغيله. أي صوت يُحفظ على الجهاز سيُزامَن لاحقاً.';
 
   @override
   String get captureStillRecording => 'لا يزال التسجيل جاريًا';

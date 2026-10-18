@@ -11113,11 +11113,11 @@ class AppLocalizationsSr extends AppLocalizations {
       'Аудио веза је прекинута — транскрипција се наставља када се опорави';
 
   @override
-  String get captureIngressRecovering => 'Аудио не стиже до апликације — опоравак је у току';
+  String get captureIngressNeedsReconnect => 'Аудио не стиже до апликације — поново повежите Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Апликација више не може да прима аудио са Omi уређаја. Покушава да поврати везу; ако и даље не успева, искључите и поново повежите уређај у подешавањима уређаја. Аудио сачуван на уређају синхронизоваће се касније.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Апликација више не може да прима аудио са Omi уређаја и није успела аутоматски да поврати везу. Искључите и поново повежите уређај — у подешавањима уређаја или га искључите и укључите. Аудио сачуван на уређају синхронизоваће се касније.';
 
   @override
   String get captureStillRecording => 'Снимање се наставља';

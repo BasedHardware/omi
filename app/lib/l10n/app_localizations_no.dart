@@ -11105,11 +11105,11 @@ class AppLocalizationsNo extends AppLocalizations {
       'Lydkoblingen stanset — transkriberingen fortsetter når den er gjenopprettet';
 
   @override
-  String get captureIngressRecovering => 'Lyden når ikke appen — gjenoppretting pågår';
+  String get captureIngressNeedsReconnect => 'Lyden når ikke appen — koble til Omi-enheten din på nytt';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Appen kan ikke lenger motta lyd fra Omi-enheten. Den prøver å gjenopprette forbindelsen; hvis den fortsatt feiler, koble fra og koblet til enheten på nytt fra enhetsinnstillingene. Lyd som er lagret på enheten, synkroniseres senere.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Appen kan ikke lenger motta lyd fra Omi-enheten og klarte ikke å gjenopprette forbindelsen automatisk. Koble fra og til igjen enheten — fra enhetsinnstillingene eller ved å slå den av og på. Lyd som er lagret på enheten, synkroniseres senere.';
 
   @override
   String get captureStillRecording => 'Tar fortsatt opp';

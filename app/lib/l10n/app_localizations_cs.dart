@@ -11103,11 +11103,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Zvukové spojení se zastavilo — přepis pokračuje po jeho obnovení';
 
   @override
-  String get captureIngressRecovering => 'Zvuk se do aplikace nedostává — obnova probíhá';
+  String get captureIngressNeedsReconnect => 'Zvuk se do aplikace nedostává — znovu připojte Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Aplikace už nedokáže přijímat zvuk ze zařízení Omi. Zkouší obnovit spojení; pokud to dál nefunguje, odpojte a znovu připojte zařízení v nastavení zařízení. Zvuk uložený v zařízení se synchronizuje později.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikace už nedokáže přijímat zvuk ze zařízení Omi a nepodařilo se jí spojení automaticky obnovit. Odpojte a znovu připojte zařízení — v nastavení zařízení nebo jeho vypnutím a zapnutím. Zvuk uložený v zařízení se synchronizuje později.';
 
   @override
   String get captureStillRecording => 'Stále se nahrává';

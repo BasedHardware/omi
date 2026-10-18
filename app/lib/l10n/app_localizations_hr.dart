@@ -11139,11 +11139,11 @@ class AppLocalizationsHr extends AppLocalizations {
       'Audio veza je prekinuta — transkripcija se nastavlja kad se oporavi';
 
   @override
-  String get captureIngressRecovering => 'Audio ne stiže do aplikacije — oporavak je u tijeku';
+  String get captureIngressNeedsReconnect => 'Audio ne stiže do aplikacije — ponovno povežite Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Aplikacija više ne može primati audio s Omi uređaja. Pokušava vratiti vezu; ako i dalje ne uspijeva, isključite i ponovo povežite uređaj u postavkama uređaja. Audio spremljen na uređaju sinkronizirat će se kasnije.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikacija više ne može primati audio s Omi uređaja i nije uspjela automatski vratiti vezu. Isključite i ponovo povežite uređaj — iz postavki uređaja ili ga isključite i uključite. Audio spremljen na uređaju sinkronizirat će se kasnije.';
 
   @override
   String get captureStillRecording => 'Snimanje se nastavlja';

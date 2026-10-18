@@ -11196,11 +11196,11 @@ class AppLocalizationsFr extends AppLocalizations {
       'Liaison audio interrompue — la transcription reprendra une fois rétablie';
 
   @override
-  String get captureIngressRecovering => 'L\'audio n\'atteint pas l\'application — récupération en cours';
+  String get captureIngressNeedsReconnect => 'L\'audio n\'atteint pas l\'application — rebranchez votre Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'L\'application ne peut plus recevoir l\'audio de l\'appareil Omi. Elle tente de rétablir la connexion ; si cela échoue toujours, déconnectez puis reconnectez l\'appareil depuis les réglages de l\'appareil. L\'audio enregistré sur l\'appareil sera synchronisé plus tard.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'L\'application ne peut plus recevoir l\'audio de l\'appareil Omi et n\'a pas pu rétablir la connexion automatiquement. Débranchez puis rebranchez l\'appareil — depuis les réglages de l\'appareil ou en l\'éteignant puis en le rallumant. L\'audio enregistré sur l\'appareil sera synchronisé plus tard.';
 
   @override
   String get captureStillRecording => 'Enregistrement en cours';

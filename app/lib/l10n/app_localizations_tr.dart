@@ -11114,11 +11114,11 @@ class AppLocalizationsTr extends AppLocalizations {
       'Ses bağlantısı kesildi — bağlantı geri geldiğinde yazıya döküm sürer';
 
   @override
-  String get captureIngressRecovering => 'Ses uygulamaya ulaşmıyor — kurtarma sürüyor';
+  String get captureIngressNeedsReconnect => 'Ses uygulamaya ulaşmıyor — Omi\'nizi yeniden bağlayın';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Uygulama artık Omi cihazından ses alamıyor. Bağlantıyı kurtarmaya çalışıyor; başarısız olmaya devam ederse, cihaz ayarlarından cihazın bağlantısını kesip yeniden bağlayın. Cihazda kayıtlı ses daha sonra eşitlenecek.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Uygulama artık Omi cihazından ses alamıyor ve bağlantıyı otomatik olarak kurtaramadı. Cihazın bağlantısını kesip yeniden bağlayın — cihaz ayarlarından veya cihazı kapatıp açarak. Cihazda kayıtlı ses daha sonra eşitlenecek.';
 
   @override
   String get captureStillRecording => 'Kayıt sürüyor';

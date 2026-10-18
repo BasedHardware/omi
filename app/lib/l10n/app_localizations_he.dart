@@ -11017,11 +11017,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'חיבור האודיו נקטע — התמלול יימשך כשיחזור';
 
   @override
-  String get captureIngressRecovering => 'האודיו לא מגיע לאפליקציה — ההתאוששות בעיצומה';
+  String get captureIngressNeedsReconnect => 'האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'האפליקציה כבר לא מצליחה לקבל אודיו ממכשיר ה-Omi. היא מנסה לשחזר את החיבור; אם הוא ממשיך להיכשל, נתק וחבר מחדש את המכשיר מהגדרות המכשיר. אודיו שנשמר במכשיר יסונכרן מאוחר יותר.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'האפליקציה כבר לא מצליחה לקבל אודיו ממכשיר ה-Omi ולא הצליחה לשחזר את החיבור אוטומטית. נתק וחבר מחדש את המכשיר — מהגדרות המכשיר או על ידי כיבוי והדלקה. אודיו שנשמר במכשיר יסונכרן מאוחר יותר.';
 
   @override
   String get captureStillRecording => 'עדיין מקליט';

@@ -11096,11 +11096,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'اتصال صدا قطع شده است — پس از بازیابی، گفتار به متن تبدیل می‌شود';
 
   @override
-  String get captureIngressRecovering => 'صدا به برنامه نمی‌رسد — بازیابی در حال انجام است';
+  String get captureIngressNeedsReconnect => 'صدا به برنامه نمی‌رسد — Omi را دوباره وصل کنید';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'برنامه دیگر نمی‌تواند صدا را از دستگاه Omi دریافت کند. در حال تلاش برای بازیابی اتصال است؛ اگر همچنان ناموفق بود، دستگاه را از تنظیمات دستگاه قطع و دوباره وصل کنید. صدای ذخیره‌شده روی دستگاه بعداً همگام‌سازی می‌شود.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'برنامه دیگر نمی‌تواند صدا را از دستگاه Omi دریافت کند و نتوانست اتصال را به‌طور خودکار بازیابی کند. دستگاه را قطع و دوباره وصل کنید — از تنظیمات دستگاه یا با خاموش و روشن کردن آن. صدای ذخیره‌شده روی دستگاه بعداً همگام‌سازی می‌شود.';
 
   @override
   String get captureStillRecording => 'ضبط ادامه دارد';

@@ -11133,11 +11133,11 @@ class AppLocalizationsNl extends AppLocalizations {
       'Audioverbinding liep vast — transcriptie gaat door zodra deze herstelt';
 
   @override
-  String get captureIngressRecovering => 'Audio bereikt de app niet — herstel is bezig';
+  String get captureIngressNeedsReconnect => 'Audio bereikt de app niet — verbind je Omi opnieuw';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'De app kan geen audio meer ontvangen van het Omi-apparaat. Er wordt geprobeerd de verbinding te herstellen; als het blijft mislukken, koppel het apparaat los en opnieuw in de apparaatinstellingen. Audio die op het apparaat is opgeslagen, wordt later gesynchroniseerd.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'De app kan geen audio meer ontvangen van het Omi-apparaat en kon de verbinding niet automatisch herstellen. Koppel het apparaat los en opnieuw — via de apparaatinstellingen of door het uit en weer aan te zetten. Audio die op het apparaat is opgeslagen, wordt later gesynchroniseerd.';
 
   @override
   String get captureStillRecording => 'Neemt nog op';

@@ -11107,11 +11107,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureLinkStalledTranscribesLater => 'Tautan audio terputus — transkripsi berlanjut saat pulih';
 
   @override
-  String get captureIngressRecovering => 'Audio tidak mencapai aplikasi — pemulihan sedang berjalan';
+  String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan ulang Omi Anda';
 
   @override
-  String get captureIngressRecoveryExplanation =>
-      'Aplikasi tidak lagi bisa menerima audio dari perangkat Omi. Aplikasi mencoba memulihkan koneksi; jika tetap gagal, putuskan lalu sambungkan kembali perangkat dari pengaturan perangkat. Audio yang tersimpan di perangkat akan disinkronkan nanti.';
+  String get captureIngressNeedsReconnectExplanation =>
+      'Aplikasi tidak lagi bisa menerima audio dari perangkat Omi dan tidak dapat memulihkan koneksi secara otomatis. Putuskan lalu sambungkan kembali perangkat — dari pengaturan perangkat, atau dengan mematikan lalu menyalakannya. Audio yang tersimpan di perangkat akan disinkronkan nanti.';
 
   @override
   String get captureStillRecording => 'Masih merekam';
