@@ -17,6 +17,8 @@ entry like "1.0.531" matches every build of that semantic version.
 
 from typing import Any, Optional, cast
 
+from google.api_core.exceptions import GoogleAPICallError
+
 from database._client import db
 from database.announcements import parse_version, compare_versions
 from database.cache import get_memory_cache
@@ -33,9 +35,11 @@ def _fetch_review_config(platform: str, firestore_client: Optional[Any] = None) 
             return {}
         raw: object = doc.to_dict()
         return cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
-    except Exception:
-        # A transient Firestore failure must not 500 the callers — treat as
-        # no review config (visible subscription surfaces, same as missing doc).
+    except (GoogleAPICallError, OSError, TimeoutError):
+        # A transient data-plane failure must not 500 the callers — treat as
+        # no review config (visible subscription surfaces, same as missing
+        # doc). Programming errors still propagate instead of masquerading
+        # as "no config".
         return {}
 
 

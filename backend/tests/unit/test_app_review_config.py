@@ -4,6 +4,9 @@ Covers platform normalization, UID sanitization, plausible-version
 gating (no (0,0,0) collisions), and resilient Firestore fetch.
 """
 
+import pytest
+from google.api_core.exceptions import ServiceUnavailable
+
 import database.app_review_config as arc
 
 
@@ -132,7 +135,7 @@ def test_empty_version_entry_ignored():
 
 def test_fetch_error_returns_empty_and_hides_nothing():
     assert hide('rev-1', 'ios', None, cfg=None) is False
-    client = FakeClient(error=RuntimeError('firestore down'))
+    client = FakeClient(error=ServiceUnavailable('firestore down'))
     assert arc.should_hide_subscription_ui('rev-1', 'ios', None, firestore_client=client) is False
 
 
@@ -144,3 +147,10 @@ def test_missing_document_returns_empty():
 def test_non_dict_document_returns_empty():
     client = FakeClient(FakeDoc(True, ['not-a-dict']))
     assert arc._fetch_review_config('ios', client) == {}
+
+
+def test_programming_error_propagates_not_swallowed():
+    """The narrowed fetch catch must not masquerade bugs as no-config."""
+    client = FakeClient(error=AttributeError('misconfigured client'))
+    with pytest.raises(AttributeError):
+        arc._fetch_review_config('ios', client)
