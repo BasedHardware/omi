@@ -22,6 +22,7 @@ from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLag
 from utils.stt import streaming as st
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import demand_cohort
+from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.live_metrics import (
     WINDOW_ACTIVE,
     WINDOW_ADMISSION,
@@ -291,6 +292,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
         self._demand_cohort = demand_cohort()
+        # Pin intent-to-treat identity before any POST/background callback. A
+        # fallback leg keeps the session arm even if task context later changes.
+        self._routing_cohort = current_routing_cohort.get()
         self.progress_deadline_enabled = False
         self.allow_no_text_rescue: Callable[[], bool] = lambda: True
         self._first_text_deadline = _positive_float_env(
@@ -848,12 +852,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     self._first_text_recorded = True
                     self._cancel_first_text_timer()
                     if self._first_speech_at is not None:
+                        first_text_seconds = max(0.0, time.monotonic() - self._first_speech_at)
                         record_metric(
                             WINDOW_FIRST_TEXT,
                             {'demand_cohort': getattr(self, '_demand_cohort', 'ineligible')},
-                            max(0.0, time.monotonic() - self._first_speech_at),
+                            first_text_seconds,
                             observe=True,
                         )
+                        cohort = getattr(self, '_routing_cohort', None)
+                        if cohort is not None:
+                            cohort.window_first_text(first_text_seconds)
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,
