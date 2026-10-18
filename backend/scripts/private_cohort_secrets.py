@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from config.messaging import validate_channel_policy
+
 PRIVATE_COHORT_ENV_NAMES = frozenset(
     {
         'BATCH_PIPELINE_UID_ALLOWLIST',
@@ -34,5 +36,15 @@ def valid_private_cohort_payload(name: str, payload: str | bytes) -> bool:
             policy = json.loads(payload)
         except (ValueError, TypeError):
             return False
-        return isinstance(policy, dict) and bool(policy)
-    return any(member.strip() for member in payload.split(','))
+        if not isinstance(policy, dict) or not policy:
+            return False
+        try:
+            for channel, row in policy.items():
+                validate_channel_policy(channel, row)
+        except (ValueError, TypeError, AttributeError):
+            return False
+        return True
+    members = [member.strip() for member in payload.split(',') if member.strip()]
+    if name == 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST':
+        return bool(members) and all('/' not in member and len(member.encode('utf-8')) <= 256 for member in members)
+    return bool(members)

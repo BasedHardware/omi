@@ -5,7 +5,7 @@ env variable. Cloud Run declares these under `cloud_run.services.*.secrets` in
 `deploy/runtime_env/prod.overlay.yaml`; the renderer emits `secretKeyRef` state
 and deploy-cloudrun secret inputs. GKE uses the existing backend-secrets
 ExternalSecret/SecretStore and required `valueFrom.secretKeyRef` entries in the
-listen/pusher prod values. No application parsing or feature defaults change. The mobile batch selector and
+listen/pusher prod values. Runtime policy validation is reused by deployment gates; application parsing and feature defaults are unchanged. The mobile batch selector and
 messaging cohorts also contain owner identities: `MOBILE_STANDARD_BATCH_UIDS` and
 `OMI_MESSAGING_CHANNELS_UIDS` use their own secrets; `OMI_MESSAGING_CHANNEL_POLICY`
 keeps its complete JSON policy in a same-name secret. Preserve the complete JSON
@@ -122,7 +122,7 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
 1. Provision and verify all thirteen secrets and IAM first. The normal prebuild
    Secret Manager existence and private payload checks must pass. The Cloud Run
    preflight reads each distinct private version in memory, rejects empty parsed
-   CSV cohorts or invalid/empty policy JSON, and emits a fixed error message without data-derived identifiers.
+   CSV cohorts or invalid/empty policy JSON, applies the runtime messaging schema and recovery-owner ID rules, and emits a fixed error message without data-derived identifiers.
    This includes the lineage empty-value case that would otherwise widen admission.
 2. Deploy the complete backend stack (`deploy_targets=all`) at the reviewed SHA.
    Cloud Run deploy inputs use the existing merge strategy: unrelated retained
@@ -145,7 +145,11 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
    `envFrom`; this PR retains the binding in the rendered list. Missing Secret
    keys prevent the new pod from starting rather than admitting an empty cohort.
    Verify ExternalSecret readiness before the separate owning pusher deployment
-   too. Keep the secret chart installed; do not roll it back independently.
+   too. Its existing deploy-backend-config helper validates the decoded private
+   cohorts before both the proposed canary ConfigMap and the shared ConfigMap,
+   so an invalid rotation stops before either Helm install. Shared Dream and
+   speaker-grouping sources must match exactly across listen and pusher.
+   Keep the secret chart installed; do not roll it back independently.
 
 The legacy `sync_cloudrun_secrets_from_chart.sh` helper excludes all private
 cohorts; normal per-service manifest deploys own these bindings and their atomic

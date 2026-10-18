@@ -510,12 +510,21 @@ def _read_values(root: Path, service: str, env: str) -> tuple[dict[str, EnvEntry
     return parse_env_entries(text), parse_envfrom_configmaps(text)
 
 
+def _private_cohort_source_matches(name: str, entry: EnvEntry | None) -> bool:
+    return (
+        entry is not None
+        and entry.value is None
+        and entry.secret_name == 'prod-omi-backend-secrets'
+        and entry.secret_key == name
+    )
+
+
 def _prod_scope_matches(name: str, entry: EnvEntry | None, expected: str) -> bool:
     if entry is None:
         return False
     if name in PROD_PRIVATE_COHORT_NAMES:
         # Membership is private. Verify its exact source; the lead verifies payload equality.
-        return entry.value is None and entry.secret_name == 'prod-omi-backend-secrets' and entry.secret_key == name
+        return _private_cohort_source_matches(name, entry)
     return entry.value == expected
 
 
@@ -593,6 +602,9 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
         # Accept only a complete reviewed stage, never independently widened flags.
         prod_scope = {**PROD_SHADOW_VALUES, **PROD_FINAL_PASS_SHADOW_VALUES}
         if env == "prod":
+            for name in ('DREAM_AGENT_UID_ALLOWLIST', 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST'):
+                if not all(_private_cohort_source_matches(name, host.get(name)) for host in (pusher_env, listen_env)):
+                    errors.append(f'[{env}] shared private cohort {name} requires identical required secret sources')
             for name in PROD_PRIVATE_COHORT_NAMES:
                 if not _prod_scope_matches(name, pusher_env.get(name), '') or name in listen_env:
                     errors.append(

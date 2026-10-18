@@ -367,3 +367,20 @@ def test_prod_shadow_requires_exact_private_binding(gate, chart_fixture, name, d
     }[defect]
     replace_once(path, before, after)
     assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
+
+
+@pytest.mark.parametrize('host', ['pusher', 'backend-listen'])
+@pytest.mark.parametrize('name', ['DREAM_AGENT_UID_ALLOWLIST', 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST'])
+@pytest.mark.parametrize('field', ['name', 'key'])
+def test_shared_private_cohorts_reject_source_drift(gate, chart_fixture, host, name, field):
+    stem = 'pusher' if host == 'pusher' else 'backend_listen'
+    path = chart_fixture / f'backend/charts/{host}/prod_omi_{stem}_values.yaml'
+    text = path.read_text()
+    pattern = r'(  - name: ' + name + r'\n)(.*?)(?=  - name:|\Z)'
+    match = re.search(pattern, text, re.S)
+    assert match
+    previous = 'name: prod-omi-backend-secrets' if field == 'name' else f'key: {name}'
+    changed = match.group().replace(previous, f'{field}: wrong-source', 1)
+    assert changed != match.group()
+    path.write_text(text[: match.start()] + changed + text[match.end() :])
+    assert any(f'shared private cohort {name}' in error for error in gate.validate_preflight(chart_fixture))

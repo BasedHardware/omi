@@ -125,3 +125,78 @@ def test_reviewed_stages_and_guard_constants_contain_no_membership():
 )
 def test_private_policy_requires_a_nonempty_json_object(payload, expected):
     assert valid_private_cohort_payload('OMI_MESSAGING_CHANNEL_POLICY', payload) is expected
+
+
+@pytest.mark.parametrize('payload', ['/', 'x' * 257, 'é' * 129, 'valid-owner,/'])
+def test_recovery_payload_rejects_runtime_filtered_owners(payload):
+    assert not valid_private_cohort_payload('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', payload)
+
+
+@pytest.mark.parametrize('payload', ['x' * 256, 'é' * 128, ' valid-owner,other-owner '])
+def test_recovery_payload_accepts_runtime_owner_boundaries(payload):
+    assert valid_private_cohort_payload('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST', payload)
+
+
+@pytest.mark.parametrize(
+    'row',
+    [
+        [],
+        {},
+        {'enabled': True, 'cohort': True},
+        {'enabled': True, 'seat_cap': True},
+        {'enabled': True, 'seat_cap': None},
+        {'enabled': True, 'plans': None},
+        {'enabled': True, 'plans': [42]},
+        {'enabled': True, 'seat_cap': -1},
+    ],
+)
+def test_private_policy_rejects_runtime_invalid_schema(row):
+    assert not valid_private_cohort_payload('OMI_MESSAGING_CHANNEL_POLICY', json.dumps({'imessage': row}))
+
+
+@pytest.mark.parametrize('canary', [False, True])
+def test_standalone_pusher_stops_before_config_or_helm_on_empty_cohort(tmp_path, canary):
+    # Execute the exact helper called before both Helm installs, with fake kubectl IO.
+    import yaml
+
+    chart = ROOT / 'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml'
+    data = {name: base64.b64encode(b'synthetic-owner').decode() for name in k8s.expected_keys(chart)}
+    data['OMI_MESSAGING_CHANNEL_POLICY'] = base64.b64encode(b'{"imessage":{"enabled":true}}').decode()
+    data['DREAM_AGENT_UID_ALLOWLIST'] = ''
+    secret = tmp_path / 'secret.json'
+    secret.write_text(json.dumps({'data': data}))
+    log = tmp_path / 'calls'
+    fake = tmp_path / 'kubectl'
+    fake.write_text(
+        '#!'
+        + sys.executable
+        + '\n'
+        + 'import os, pathlib, sys\n'
+        + 'with open(os.environ["CALLS"], "a") as f: f.write(" ".join(sys.argv[1:]) + "\\n")\n'
+        + 'print(pathlib.Path(os.environ["FAKE_SECRET"]).read_text())\n'
+    )
+    fake.chmod(0o755)
+    env = {
+        **os.environ,
+        'PATH': str(tmp_path) + os.pathsep + str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'],
+        'ENVIRONMENT': 'prod',
+        'SERVICE': 'pusher',
+        'CALLS': str(log),
+        'FAKE_SECRET': str(secret),
+    }
+    if canary:
+        env['CONFIG_MAP_NAME_OVERRIDE'] = 'prod-omi-backend-config-canary-123'
+    result = subprocess.run(
+        ['bash', 'backend/scripts/deploy-backend-config.sh'], cwd=ROOT, env=env, capture_output=True, text=True
+    )
+    assert result.returncode != 0
+    assert 'empty or invalid private cohort' in result.stderr
+    assert log.read_text().splitlines() == ['-n prod-omi-backend get secret prod-omi-backend-secrets -o json']
+    assert 'synthetic-owner' not in result.stdout + result.stderr
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend_pusher.yml').read_text())
+    assert workflow['env']['SERVICE'] == "${{ github.event.inputs.service || 'pusher' }}"
+    steps = workflow['jobs']['deploy']['steps']
+    canary_step = next(
+        i for i, step in enumerate(steps) if step['name'] == 'Create isolated production Pusher and listener canary'
+    )
+    assert any('backend/scripts/deploy-backend-config.sh' in step.get('run', '') for step in steps[:canary_step])
