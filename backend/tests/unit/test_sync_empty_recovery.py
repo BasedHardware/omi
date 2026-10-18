@@ -99,3 +99,31 @@ def test_flag_reads_current_environment_and_defaults_dark(monkeypatch):
     assert recovery.enabled() is False
     monkeypatch.setenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'true')
     assert recovery.enabled() is True
+
+
+@pytest.mark.parametrize('result', ['silence', 'speech', 'provider_error', 'denied', 'inspection_error'])
+def test_strict_observation_precedes_dispatch_and_includes_failed_recovery(tmp_path, monkeypatch, result):
+    spans = [] if result == 'silence' else [{'start': 0.1, 'end': 0.8}]
+    path = setup_audio(tmp_path, monkeypatch, None if result == 'inspection_error' else spans)
+    observed = []
+
+    def observe(duration, verdict):
+        observed.append((duration, verdict))
+
+    def authorize():
+        assert observed == [(1.0, spans)]
+        if result == 'denied':
+            raise RuntimeError('denied')
+
+    def dispatch(*args, **kwargs):
+        assert observed == [(1.0, spans)]
+        if result == 'provider_error':
+            return [], 'multi'
+        return [{'text': 'Synthetic', 'timestamp': [0.1, 0.8]}], 'vi'
+
+    if result in ('provider_error', 'denied', 'inspection_error'):
+        with pytest.raises((RuntimeError, TranscriptionFailure)):
+            recovery.recover(path, transcribe=dispatch, authorize=authorize, observe=observe)
+    else:
+        recovery.recover(path, transcribe=dispatch, authorize=authorize, observe=observe)
+    assert observed == ([(None, None)] if result == 'inspection_error' else [(1.0, spans)])

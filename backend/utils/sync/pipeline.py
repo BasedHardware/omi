@@ -1260,6 +1260,19 @@ class _OrderedTurnstile:
 def _recover_empty_segment(
     path: str, uid: str, provider: str, lane: str, job_id: str | None, attempt_ref: str | None
 ) -> tuple[list[TranscriptSegment], str] | None:
+    def observe_inspection(duration: float | None, spans: list[dict] | None):
+        logger.info(
+            'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
+            'duration_seconds=%.3f vad_spans=%d speech_seconds=%.3f',
+            'inspection_error' if spans is None else ('speech' if spans else 'silence'),
+            _bounded_sync_lane(lane),
+            bounded_provider(provider),
+            compute_sync_segment_id(uid, path),
+            duration or 0,
+            len(spans or []),
+            sum(span['end'] - span['start'] for span in spans or []),
+        )
+
     def authorize_recovery():
         if provider != 'parakeet':
             # Positive VAD after multilingual double-empty is unresolved;
@@ -1290,7 +1303,7 @@ def _recover_empty_segment(
             raise failure_from_exception(error, provider='modulate') from None
 
     words, recovered_language, duration, spans = empty_recovery.recover(
-        path, transcribe=multilingual_once, authorize=authorize_recovery
+        path, transcribe=multilingual_once, authorize=authorize_recovery, observe=observe_inspection
     )
     logger.info(
         'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '

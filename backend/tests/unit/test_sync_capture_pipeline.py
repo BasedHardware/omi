@@ -596,7 +596,8 @@ def test_cached_multilingual_response_does_not_increment_submitted_audio(pipelin
     module.modulate_prerecorded_from_bytes = MagicMock()
     module.record_cap_audio = MagicMock()
 
-    def inspect_and_recover(path, *, transcribe, authorize):
+    def inspect_and_recover(path, *, transcribe, authorize, observe):
+        observe(3, [{'start': 0, 'end': 3}])
         authorize()
         words, language = transcribe(b'synthetic-canonical-wav')
         return words, language, 3, [{'start': 0, 'end': 3}]
@@ -605,3 +606,23 @@ def test_cached_multilingual_response_does_not_increment_submitted_audio(pipelin
     assert module._recover_empty_segment('synthetic.wav', 'synthetic-owner', 'parakeet', 'fresh', None, None)
     module.modulate_prerecorded_from_bytes.assert_not_called()
     module.record_cap_audio.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'spans,outcome', [([], 'silence'), ([{'start': 0, 'end': 3}], 'speech'), (None, 'inspection_error')]
+)
+def test_strict_vad_log_survives_failed_recovery_without_content(pipeline, monkeypatch, caplog, spans, outcome):
+    module, _ = pipeline
+    module.compute_sync_segment_id = lambda *args: 'synthetic-sealed-segment'
+
+    def inspect_then_fail(path, *, transcribe, authorize, observe):
+        observe(None if spans is None else 3, spans)
+        raise RuntimeError('synthetic recovery failure')
+
+    monkeypatch.setattr(module.empty_recovery, 'recover', inspect_then_fail)
+    with caplog.at_level('INFO'), pytest.raises(RuntimeError, match='synthetic recovery failure'):
+        module._recover_empty_segment('private-path.wav', 'private-owner', 'parakeet', 'fresh', None, None)
+    events = [record.message for record in caplog.records if 'event=sync_empty_strict_vad ' in record.message]
+    assert len(events) == 1
+    assert f'outcome={outcome} lane=fresh provider=parakeet segment_ref=synthetic-sealed-segment' in events[0]
+    assert 'private-owner' not in events[0] and 'private-path' not in events[0]

@@ -5569,3 +5569,11 @@ recognition, or empty postprocessing remain retryable failures and preserve
 retry material. Existing cap-recovery intents retain their separate budget and
 reconciliation path. This flag does not route jobs into batch or change intake.
 Rollback: set the flag to `false`; no historical completion is rewritten.
+
+While enabled, `sync_empty_strict_vad` logs the acoustic verdict **before** funded
+admission or multilingual dispatch: `speech`, `silence`, or `inspection_error`.
+It includes lane, provider, a stable HMAC segment reference, full segment duration,
+strict span count and speech seconds; it never includes owner IDs or content.
+Deduplicate by lane/segment reference within one release window and retain unknown
+inspections separately. Speech / valid inspections measures strict-VAD-positive
+double-empty segments even when recovery later fails; it is not ASR accuracy.

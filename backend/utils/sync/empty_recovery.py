@@ -20,7 +20,11 @@ def enabled() -> bool:
 
 
 def recover(
-    path: str | Path, *, transcribe: Callable[..., Any], authorize: Callable[[], None]
+    path: str | Path,
+    *,
+    transcribe: Callable[..., Any],
+    authorize: Callable[[], None],
+    observe: Callable[[float | None, list[dict] | None], None] | None = None,
 ) -> tuple[list[dict], str, float, list[dict]]:
     """Only validated zero-span VAD authorizes silence; all uncertainty fails closed.
 
@@ -47,9 +51,15 @@ def recover(
             SimpleNamespace(duration_seconds=len(segment.raw_data) / 32000), output.getvalue()
         )
     except Exception:
+        if observe is not None:
+            observe(None, None)
         # RecoveryFailure is a ValueError; don't misclassify VAD uncertainty as
         # permanent bad user input in the legacy public failure classifier.
         raise RuntimeError('sync empty recovery inspection failed') from None
+    # Observe every strict verdict before admission/provider/result handling can
+    # fail. Logging only successful recovery would bias the speech-loss sample.
+    if observe is not None:
+        observe(duration, spans)
     if not spans:
         return [], '', duration, spans
     authorize()
