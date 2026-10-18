@@ -742,6 +742,36 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_open",
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - sustained new managed leg settlement gap",
+      "owner_uid": "omi-stt-leg-settlement-omission",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "clamp_min((omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} offset 1h - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"} offset 1h) or (0 * omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}), 0)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_managed_legs_open",
+        "omi_stt_managed_legs_opened_total",
+        "omi_stt_managed_legs_settled_total"
+      ],
+      "owner_title": "Live STT - sustained new managed leg settlement gap",
+      "owner_uid": "omi-stt-leg-settlement-omission",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_stt_cost_routing_decisions_total{job=\"backend-listen-metrics\"}[5m]))",
       "file": "alerts/live-stt.json",
       "issues": [],
@@ -2901,7 +2931,7 @@
   ],
   "counts": {
     "explicit_bridge": 21,
-    "query_consumers": 189
+    "query_consumers": 191
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

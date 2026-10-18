@@ -235,7 +235,16 @@ telemetry-coverage safety gates. An unexplained accounting HOLD prevents automat
 qualification and needs an explicit recorded operator decision, not a silent pass.
 The fleet rule with stable UID `omi-stt-leg-lifecycle-gap` now checks the valid
 exactly-once invariant `settled > opened`, with Grafana `for: 2m`; it no longer
-uses transport liveness to infer missing settlements.
+uses transport liveness to infer missing settlements. A separate warning,
+`omi-stt-leg-settlement-omission`, catches a positive per-instance/target
+`opened-settled-open` above its nonnegative carry-in one hour earlier,
+sustained for **15 minutes** of Grafana pending time. Live legs are subtracted;
+unchanged positive control carry-in and negative gaps do not trigger it. A
+new instance without hour-old samples uses a label-matched zero baseline;
+missing current components remain no data and require a coverage HOLD.
+The rolling baseline detects new debt and ages it out after an hour; retain
+the recorded discrepancy until investigated even after the warning resolves.
+This warning requests investigation and HOLD, never a serving abort by itself.
 
 ```promql
 # Accounting diagnostic only; never a serving abort or missing-settlement proof.
@@ -405,7 +414,7 @@ record numerators, denominators, language/provider mix and histogram counts:
 
 | Watch | Baseline and post-deploy measure |
 |---|---|
-| Exhausted chains | `increase(omi_stt_chain_exhausted_total)` / `increase(omi_listen_accepted_total)` |
+| Exhausted chains | `sum(increase(omi_stt_chain_exhausted_total[15m])) / sum(increase(omi_listen_accepted_total[15m]))` (repeat with `[30m]`) |
 | Terminal after text | `increase(omi_live_session_terminal_after_text_total)` / accepted sessions |
 | Transcript success | transcribed / (transcribed + no_transcript) from `omi_live_session_transcript_outcome_total`; exclude too_short |
 | First-text p95 | `histogram_quantile(0.95, sum by(le)(rate(omi_stt_window_first_text_seconds_bucket[15m])))` plus its count |

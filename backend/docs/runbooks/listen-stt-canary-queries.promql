@@ -51,3 +51,7 @@ up{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track="canar
 backend_listen_active_ws_connections{job="backend-listen-metrics",namespace="prod-omi-backend",listen_track!="canary",pod=~"${canary_pods:regex}"}
 # Adapter query: compare against external.metrics API value (API uses milli-units).
 avg(backend_listen_active_ws_connections{job="backend-listen-metrics",listen_track!="canary"})
+
+# Exhausted-chain events / accepts: aggregate both sides before division because
+# their labels differ. Repeat with [30m] and exact control pods; missing = HOLD.
+sum(increase(omi_stt_chain_exhausted_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m])) / sum(increase(omi_listen_accepted_total{job="backend-listen-metrics",namespace="prod-omi-backend",pod=~"${canary_pods:regex}"}[15m]))
