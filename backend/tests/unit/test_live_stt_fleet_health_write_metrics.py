@@ -325,3 +325,49 @@ async def test_cost_bench_commit_then_identity_change_records_commit_and_drop(mo
     assert _value(FLEET_HEALTH_WRITE_ATTEMPTED, **labels) == attempted_before + 1
     assert _value(FLEET_HEALTH_WRITE_WRITTEN, **labels) == written_before + 1
     assert _value(FLEET_HEALTH_WRITE_DROPPED, **dropped_labels) == dropped_before + 1
+
+
+@pytest.mark.asyncio
+async def test_cost_bench_post_commit_identity_check_error_is_not_a_drop(monkeypatch):
+    from dataclasses import replace
+
+    from utils.stt.live_gate import GateState
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+
+    class Redis:
+        async def time(self):
+            return (1000, 0)
+
+        async def get(self, _key):
+            return None
+
+        async def eval(self, *_args):
+            return 1
+
+    health = FleetHealth(clock=lambda: 1000.0, redis_client=Redis())
+    health._identity = 'stable'
+    checks = {'count': 0}
+
+    def check_identity():
+        checks['count'] += 1
+        if checks['count'] == 5:
+            raise RuntimeError('synthetic post-commit identity read failure')
+        return 'stable'
+
+    monkeypatch.setattr(health, '_check_identity', check_identity)
+    labels = {'write_path': 'cost_bench', 'kind': 'bench'}
+    written_before = _value(FLEET_HEALTH_WRITE_WRITTEN, **labels)
+    dropped_labels = {**labels, 'reason': 'identity_changed_after_commit'}
+    dropped_before = _value(FLEET_HEALTH_WRITE_DROPPED, **dropped_labels)
+    retry_at = health._redis_retry_at
+
+    await health._write_cost_quarantine(
+        'modulate-velma-2',
+        lambda state: replace(state, stage=0, until=2000.0, generation=1),
+        expected_identity='stable',
+    )
+
+    assert _value(FLEET_HEALTH_WRITE_WRITTEN, **labels) == written_before + 1
+    assert _value(FLEET_HEALTH_WRITE_DROPPED, **dropped_labels) == dropped_before
+    assert health._redis_retry_at == retry_at

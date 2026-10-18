@@ -499,8 +499,8 @@ class CostHealthMixin(ABC):
                 try:
                     identity_changed = self._check_identity() != identity
                 except Exception:
-                    identity_changed = True
                     logger.debug('Cost-state post-commit identity check failed', exc_info=True)
+                    return new
                 if identity_changed:
                     if on_identity_changed is not None:
                         try:
