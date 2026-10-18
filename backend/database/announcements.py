@@ -613,7 +613,7 @@ def get_pending_announcements(
 
         # 8. Check test_uids (if set, only those users see the announcement)
         if targeting.test_uids:
-            clean_test_uids = {u.strip() for u in targeting.test_uids if isinstance(u, str)}
+            clean_test_uids = {u.strip() for u in targeting.test_uids}
             if clean_uid not in clean_test_uids:
                 continue
 
