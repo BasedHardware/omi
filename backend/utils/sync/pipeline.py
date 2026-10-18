@@ -23,7 +23,7 @@ import uuid
 from collections import deque
 from functools import partial
 from datetime import datetime, timezone
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -1265,7 +1265,7 @@ def _recover_empty_segment(
         if stt_cap_dispatch_enabled() and not sync_allowed(uid):
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
 
-    def multilingual_once(audio, **kwargs):
+    def multilingual_once(audio: bytes, **kwargs: Any):
         def dispatch():
             response = modulate_prerecorded_from_bytes(audio, **kwargs)
             if stt_cap_dispatch_enabled():
