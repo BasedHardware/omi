@@ -4989,8 +4989,9 @@ instead of emitting a per-row repair error.
 `FIRST_SUMMARY_DEADLINE_ENABLED` (default false) caps the existing outbox's first
 summary dispatch at original pending time + `FIRST_SUMMARY_DEADLINE_SECONDS`
 (default 120, bounded 60–120); the private `first-summary` cohort supports a
-canary. The old UID env key remains a migration fallback; absent keys use
-Firestore and deny nonmembers.
+canary. A nonempty old UID env list remains a migration fallback; both empty
+and absent keys deny nonmembers unless the independent percentage ramp admits
+them, preserving main #22113.
 First-summary work bypasses demand-tier waiting and uses a 120s lease, renewed
 every 30s for the same owner/task token while the request is alive. Only a
 replacement conversation owner fences persistence; the same owner's result can

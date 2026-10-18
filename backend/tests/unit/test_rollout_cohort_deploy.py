@@ -49,15 +49,21 @@ def test_no_secret_manager_cohort_provisioning_remains():
     assert not (ROOT / 'backend/scripts/private_cohort_secrets.py').exists()
 
 
-def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime():
+def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime(monkeypatch):
     # Cloud Run merge may retain a legacy literal; runtime supports it only for
     # an absent Firestore field. Helm replaces the env list; absent keys deny.
     from config.batch_pipeline import enabled_for
     from database import rollout_cohorts
 
     assert callable(enabled_for) and callable(rollout_cohorts.in_rollout_cohort)
-    source = (ROOT / 'backend/config/summary_guarantee.py').read_text()
-    assert "'FIRST_SUMMARY_UID_ALLOWLIST' in os.environ" in source
+    from config import summary_guarantee
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
+    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    assert not summary_guarantee.enabled('nonmember')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    assert not summary_guarantee.enabled('nonmember')
     listen = (ROOT / 'backend/routers/transcribe.py').read_text()
     assert listen.index('await warm_rollout_cohorts(request.uid)') < listen.index('run_listen_session(request)')
 

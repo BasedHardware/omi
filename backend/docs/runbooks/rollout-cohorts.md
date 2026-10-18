@@ -65,9 +65,11 @@ kill switches, eligibility checks and already-admitted durable work retain their
 contracts. Removing membership does not override a separate percentage rollout.
 
 Public manifests and listen/pusher chart env lists omit all UID allowlist keys.
-First-summary and sync-lineage now distinguish **absent** (Firestore membership)
-from the explicitly configured legacy empty value (the previous enable-all
-contract). Thus Helm env replacement cannot widen either cohort. Production
+First-summary empty or absent keys deny nonmembers, preserving main #22113
+([fail-safe summary cohort](https://github.com/BasedHardware/omi/pull/22113)).
+Sync-lineage distinguishes **absent** (Firestore membership) from an explicitly
+configured legacy empty value (its prior enable-all contract). Thus Helm env
+replacement cannot widen either cohort. Production
 percentage/ramp/feature switches are unchanged, including live admission off.
 
 ## Operator commands
