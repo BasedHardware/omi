@@ -59,10 +59,7 @@ class ProbeActivity : Activity() {
             }
             if (mode == "burst" || mode == "restart") {
                 handler.postDelayed({ Log.i("FGS_PROBE", "ACTIVE mode=$mode") }, 1500)
-                handler.postDelayed({
-                    Log.i("FGS_PROBE", "STOP_REQUESTED mode=$mode")
-                    SyncTransferForegroundService.stop(this)
-                }, 4000)
+                handler.postDelayed({ SyncTransferForegroundService.stop(this) }, 4000)
             }
             handler.postDelayed({ Log.i("FGS_PROBE", "SURVIVED mode=$mode") }, 6000)
         }, 500)
