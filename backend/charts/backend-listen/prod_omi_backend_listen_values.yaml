@@ -596,7 +596,7 @@ env:
   - name: SONIOX_IDLE_CLOSE_SECONDS
     value: "45"
   - name: STT_ROUTING_MODE
-    value: "on"
+    value: "off"
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
   - name: STT_ROUTING_ON_PERCENT
