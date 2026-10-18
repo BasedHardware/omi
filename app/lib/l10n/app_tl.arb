@@ -11566,6 +11566,11 @@
     "homePendingCatchingUp": "Hinahabol ang naunang audio",
     "onTheWayTitle": "Paparating",
     "onTheWayAlmostReady": "Halos handa na",
+    "onTheWayRecordingCount": "{count, plural, =1{1 recording} other{{count} recording}}",
+    "onTheWaySummary": "{totals} paparating",
+    "onTheWayUploadingCount": "{count} ina-upload",
+    "onTheWayAlmostReadyCount": "{count} halos handa na",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 ang kailangang asikasuhin} other{{count} ang kailangang asikasuhin}}",
     "activityEmpty": "Wala pang aktibidad",
     "activityNewSemantics": "Aktibidad, mga bagong item",
     "activityLoadFailed": "Hindi ma-load ang lahat ng iyong aktibidad",
@@ -11654,5 +11659,6 @@
     "summaryLimitTitle": "Naabot na ang limitasyon ng buod",
     "summaryLimitBody": "Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.",
     "summaryFailedTitle": "Hindi ma-summarize",
-    "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito."
+    "summaryFailedBody": "Nagkaproblema habang ini-summarize ang usapang ito.",
+    "playbackPartialAudioSaved": "{saved} sa {total} ng audio ang na-save"
 }

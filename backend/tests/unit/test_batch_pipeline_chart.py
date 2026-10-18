@@ -177,6 +177,10 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert project_env['BUCKET_BATCH_PIPELINE']['value'] == bucket
     defaults = yaml.safe_load((CHART / 'values.yaml').read_text())
     environment_values = yaml.safe_load(values.read_text())
+    head_priority_enabled = environment_values.get('worker', {}).get(
+        'headPriorityEnabled', defaults['worker']['headPriorityEnabled']
+    )
+    assert project_env['BATCH_PIPELINE_HEAD_PRIORITY_ENABLED']['value'] == str(head_priority_enabled).lower()
     batch_size = environment_values.get('worker', {}).get('batchSize', defaults['worker']['batchSize'])
     assert batch_size == 8
     assert project_env['BATCH_PIPELINE_MODEL_BATCH_SIZE']['value'] == str(batch_size)

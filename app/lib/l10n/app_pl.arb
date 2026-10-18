@@ -4178,6 +4178,11 @@
     "homePendingCatchingUp": "Nadrabiamy wcześniejsze nagrania",
     "onTheWayTitle": "W drodze",
     "onTheWayAlmostReady": "Prawie gotowe",
+    "onTheWayRecordingCount": "{count, plural, =1{1 nagranie} other{Nagrania: {count}}}",
+    "onTheWaySummary": "{totals} w drodze",
+    "onTheWayUploadingCount": "Przesyłanie: {count}",
+    "onTheWayAlmostReadyCount": "Prawie gotowe: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 wymaga uwagi} other{Wymaga uwagi: {count}}}",
     "activityEmpty": "Brak aktywności",
     "activityNewSemantics": "Aktywność, nowe elementy",
     "activityLoadFailed": "Nie udało się wczytać całej aktywności",
@@ -4266,5 +4271,6 @@
     "summaryLimitTitle": "Osiągnięto limit podsumowań",
     "summaryLimitBody": "W ciągu ostatniej godziny kilkakrotnie wygenerowano ponownie podsumowania. Spróbuj ponownie później.",
     "summaryFailedTitle": "Nie udało się podsumować",
-    "summaryFailedBody": "Coś poszło nie tak podczas podsumowywania tej rozmowy."
+    "summaryFailedBody": "Coś poszło nie tak podczas podsumowywania tej rozmowy.",
+    "playbackPartialAudioSaved": "Zapisano {saved} z {total} dźwięku"
 }

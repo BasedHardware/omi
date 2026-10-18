@@ -13522,6 +13522,43 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onTheWayAlmostReady => 'Nästan klart';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar',
+      one: '1 inspelning',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals på väg';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count laddas upp';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Nästan klart: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count behöver uppmärksamhet',
+      one: '1 behöver uppmärksamhet',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Ingen aktivitet än';
 
   @override
@@ -13817,4 +13854,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Något gick fel när det här samtalet skulle sammanfattas.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved av $total ljud sparat';
+  }
 }

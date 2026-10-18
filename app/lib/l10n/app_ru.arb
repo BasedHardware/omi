@@ -4178,6 +4178,11 @@
     "homePendingCatchingUp": "Обрабатываем более раннее аудио",
     "onTheWayTitle": "В пути",
     "onTheWayAlmostReady": "Почти готово",
+    "onTheWayRecordingCount": "{count, plural, =1{1 запись} other{Записей: {count}}}",
+    "onTheWaySummary": "{totals} в пути",
+    "onTheWayUploadingCount": "Загружается: {count}",
+    "onTheWayAlmostReadyCount": "Почти готово: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 требует внимания} other{Требуют внимания: {count}}}",
     "activityEmpty": "Пока нет активности",
     "activityNewSemantics": "Активность, новые элементы",
     "activityLoadFailed": "Не удалось загрузить всю активность",
@@ -4266,5 +4271,6 @@
     "summaryLimitTitle": "Достигнут лимит сводок",
     "summaryLimitBody": "За последний час вы несколько раз пересоздали сводки. Повторите попытку позже.",
     "summaryFailedTitle": "Не удалось обобщить",
-    "summaryFailedBody": "При обобщении этого разговора что-то пошло не так."
+    "summaryFailedBody": "При обобщении этого разговора что-то пошло не так.",
+    "playbackPartialAudioSaved": "Сохранено {saved} из {total} аудио"
 }

@@ -4143,6 +4143,11 @@
     "homePendingCatchingUp": "กำลังประมวลผลเสียงก่อนหน้า",
     "onTheWayTitle": "กำลังมา",
     "onTheWayAlmostReady": "ใกล้เสร็จแล้ว",
+    "onTheWayRecordingCount": "{count, plural, =1{1 การบันทึก} other{{count} การบันทึก}}",
+    "onTheWaySummary": "{totals} กำลังมา",
+    "onTheWayUploadingCount": "กำลังอัปโหลด {count}",
+    "onTheWayAlmostReadyCount": "ใกล้เสร็จแล้ว {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{ต้องการความสนใจ 1} other{ต้องการความสนใจ {count}}}",
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
@@ -4231,5 +4236,6 @@
     "summaryLimitTitle": "ถึงขีดจำกัดการสรุปแล้ว",
     "summaryLimitBody": "คุณสร้างสรุปใหม่หลายครั้งในชั่วโมงที่ผ่านมา โปรดลองอีกครั้งในภายหลัง",
     "summaryFailedTitle": "สรุปไม่ได้",
-    "summaryFailedBody": "เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้"
+    "summaryFailedBody": "เกิดข้อผิดพลาดขณะสรุปบทสนทนานี้",
+    "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}"
 }

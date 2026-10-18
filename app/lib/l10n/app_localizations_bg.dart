@@ -13565,6 +13565,43 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onTheWayAlmostReady => 'Почти готово';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записа',
+      one: '1 запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals на път';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Качване: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Почти готови: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count изискват внимание',
+      one: '1 изисква внимание',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Все още няма активност';
 
   @override
@@ -13859,4 +13896,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Нещо се обърка при обобщаването на този разговор.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Запазени $saved от $total аудио';
+  }
 }

@@ -4143,6 +4143,11 @@
     "homePendingCatchingUp": "Обробляємо попереднє аудіо",
     "onTheWayTitle": "У дорозі",
     "onTheWayAlmostReady": "Майже готово",
+    "onTheWayRecordingCount": "{count, plural, =1{1 запис} other{Записів: {count}}}",
+    "onTheWaySummary": "{totals} у дорозі",
+    "onTheWayUploadingCount": "Завантажується: {count}",
+    "onTheWayAlmostReadyCount": "Майже готово: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 потребує уваги} other{Потребують уваги: {count}}}",
     "activityEmpty": "Поки немає активності",
     "activityNewSemantics": "Активність, нові елементи",
     "activityLoadFailed": "Не вдалося завантажити всю активність",
@@ -4231,5 +4236,6 @@
     "summaryLimitTitle": "Досягнуто ліміту підсумків",
     "summaryLimitBody": "За останню годину ви кілька разів повторно створили підсумки. Спробуйте пізніше.",
     "summaryFailedTitle": "Не вдалося підсумувати",
-    "summaryFailedBody": "Під час підсумовування цієї розмови сталася помилка."
+    "summaryFailedBody": "Під час підсумовування цієї розмови сталася помилка.",
+    "playbackPartialAudioSaved": "Збережено {saved} з {total} аудіо"
 }

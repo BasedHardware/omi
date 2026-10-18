@@ -13526,6 +13526,43 @@ class AppLocalizationsSr extends AppLocalizations {
   String get onTheWayAlmostReady => 'Скоро спремно';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Снимака: $count',
+      one: '1 снимак',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals на путу';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Отпрема се: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Скоро спремно: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Захтева пажњу: $count',
+      one: '1 захтева пажњу',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Још нема активности';
 
   @override
@@ -13820,4 +13857,9 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Дошло је до грешке приликом сажимања овог разговора.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Сачувано $saved од $total аудија';
+  }
 }

@@ -173,37 +173,13 @@ def test_archive_failure_propagates_for_retry(monkeypatch, tmp_path):
         storage.archive_mobile_batch_raw_files('owner', [str(audio)])
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('archive_fails', [False, True])
-async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(archive_fails):
+@pytest.fixture
+def mobile_sync_router():
+    # Router/module loading and dependency stubs are fixture setup, not upload
+    # behavior. Keep their cleanup paired here, including on assertion failure.
     module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
     try:
-        calls = []
-
-        def archive(uid, paths, metadata=None):
-            calls.append(('archive', uid, list(paths)))
-            if archive_fails:
-                raise OSError('archive unavailable')
-
-        module.archive_mobile_batch_raw_files = archive
-        module.start_background_task = MagicMock()
-        uploads = [
-            UploadFile(filename='audio_omimobilebatch001_opus_16000_1_fs160_1000.bin', file=bytes_io(b'original'))
-        ]
-        if archive_fails:
-            with pytest.raises(module.HTTPException) as rejected:
-                await module.sync_local_files_v2(files=uploads, uid='test-uid')
-            assert rejected.value.status_code == 500
-            response = None
-        else:
-            response = await module.sync_local_files_v2(files=uploads, uid='test-uid')
-        assert calls and calls[0][0] == 'archive'
-        if archive_fails:
-            module.enqueue_sync_job.assert_not_called()
-            module.start_background_task.assert_not_called()
-            jobs.mark_job_completed.assert_not_called()
-        else:
-            assert response.status_code == 202
+        yield module, jobs, bytes_io
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -212,6 +188,36 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(arc
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('archive_fails', [False, True])
+async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mobile_sync_router, archive_fails):
+    module, jobs, bytes_io = mobile_sync_router
+    calls = []
+
+    def archive(uid, paths, metadata=None):
+        calls.append(('archive', uid, list(paths)))
+        if archive_fails:
+            raise OSError('archive unavailable')
+
+    module.archive_mobile_batch_raw_files = archive
+    module.start_background_task = MagicMock()
+    uploads = [UploadFile(filename='audio_omimobilebatch001_opus_16000_1_fs160_1000.bin', file=bytes_io(b'original'))]
+    if archive_fails:
+        with pytest.raises(module.HTTPException) as rejected:
+            await module.sync_local_files_v2(files=uploads, uid='test-uid')
+        assert rejected.value.status_code == 500
+        response = None
+    else:
+        response = await module.sync_local_files_v2(files=uploads, uid='test-uid')
+    assert calls and calls[0][0] == 'archive'
+    if archive_fails:
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+        jobs.mark_job_completed.assert_not_called()
+    else:
+        assert response.status_code == 202
 
 
 def test_visibility_resume_keeps_the_existing_live_capture_wall_clock_gap():

@@ -11566,6 +11566,11 @@
     "homePendingCatchingUp": "Ги обработуваме претходните аудиозаписи",
     "onTheWayTitle": "На пат",
     "onTheWayAlmostReady": "Речиси готово",
+    "onTheWayRecordingCount": "{count, plural, =1{1 снимка} other{{count} снимки}}",
+    "onTheWaySummary": "{totals} на пат",
+    "onTheWayUploadingCount": "Се прикачуваат: {count}",
+    "onTheWayAlmostReadyCount": "Речиси готови: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 бара внимание} other{{count} бараат внимание}}",
     "activityEmpty": "Сè уште нема активност",
     "activityNewSemantics": "Активност, нови ставки",
     "activityLoadFailed": "Не можевме да ја вчитаме целата ваша активност",
@@ -11654,5 +11659,6 @@
     "summaryLimitTitle": "Достигнато е ограничувањето за резимеа",
     "summaryLimitBody": "Во последниот час повеќе пати повторно генериравте резимеа. Обидете се повторно подоцна.",
     "summaryFailedTitle": "Не може да се сумира",
-    "summaryFailedBody": "Нешто тргна наопаку при сумирањето на овој разговор."
+    "summaryFailedBody": "Нешто тргна наопаку при сумирањето на овој разговор.",
+    "playbackPartialAudioSaved": "Зачувано {saved} од {total} аудио"
 }

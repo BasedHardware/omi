@@ -13553,6 +13553,43 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onTheWayAlmostReady => 'Bijna klaar';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnamen',
+      one: '1 opname',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals onderweg';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Uploaden: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Bijna klaar: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vragen aandacht',
+      one: '1 vraagt aandacht',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Nog geen activiteit';
 
   @override
@@ -13847,4 +13884,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Er ging iets mis bij het samenvatten van dit gesprek.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved van $total audio opgeslagen';
+  }
 }

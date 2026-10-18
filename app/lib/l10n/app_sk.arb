@@ -4143,6 +4143,11 @@
     "homePendingCatchingUp": "Spracúvame skorší zvuk",
     "onTheWayTitle": "Na ceste",
     "onTheWayAlmostReady": "Takmer hotovo",
+    "onTheWayRecordingCount": "{count, plural, =1{1 nahrávka} other{Nahrávok: {count}}}",
+    "onTheWaySummary": "{totals} na ceste",
+    "onTheWayUploadingCount": "Nahráva sa: {count}",
+    "onTheWayAlmostReadyCount": "Takmer hotovo: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 si vyžaduje pozornosť} other{Vyžaduje pozornosť: {count}}}",
     "activityEmpty": "Zatiaľ žiadna aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodarilo sa načítať celú vašu aktivitu",
@@ -4231,5 +4236,6 @@
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",
     "summaryFailedTitle": "Zhrnutie sa nepodarilo",
-    "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo."
+    "summaryFailedBody": "Pri zhrnutí tohto rozhovoru sa niečo pokazilo.",
+    "playbackPartialAudioSaved": "Uložené {saved} z {total} zvuku"
 }

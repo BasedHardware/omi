@@ -13518,6 +13518,43 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onTheWayAlmostReady => 'Téměř hotovo';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nahrávek: $count',
+      one: '1 nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals na cestě';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Nahrává se: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Téměř hotovo: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vyžaduje pozornost: $count',
+      one: '1 vyžaduje pozornost',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Zatím žádná aktivita';
 
   @override
@@ -13812,4 +13849,9 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Při shrnování této konverzace se něco pokazilo.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Uloženo $saved z $total zvuku';
+  }
 }

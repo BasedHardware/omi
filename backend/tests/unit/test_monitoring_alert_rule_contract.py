@@ -392,6 +392,43 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert 'or vector(0)' in endpoint_rule["data"][0]["model"]["expr"]
 
 
+def test_backend_listen_neg_zone_coverage_and_socket_skew_alerts():
+    split = _rules(ALERT_SOURCES / "transcription-services.json")
+    combined = _rules(MONITORING / "alert-rules.json")
+    expected = {"omi-listen-neg-zone-no-traffic", "omi-listen-websocket-zone-skew"}
+
+    assert expected <= split.keys()
+    assert expected <= combined.keys()
+    for uid in expected:
+        assert split[uid] == combined[uid]
+        assert split[uid]["for"] == "10m"
+        assert split[uid]["data"][0]["datasourceUid"] == "prometheus"
+
+    missing_zone = split["omi-listen-neg-zone-no-traffic"]
+    missing_expr = missing_zone["data"][0]["model"]["expr"]
+    assert "kube_pod_status_ready" in missing_expr
+    assert 'condition="true"' in missing_expr
+    assert "kube_pod_info" in missing_expr
+    assert 'kube_node_info{job="kube-state-metrics"}' in missing_expr
+    assert '"provider_id"' in missing_expr
+    assert 'backend_scope' in missing_expr
+    assert 'backend_name="prod-backend-listen-neg"' in missing_expr
+    assert 'avg_over_time(avg without (instance)' in missing_expr
+    assert 'rate(stackdriver_' not in missing_expr
+    assert "unless on (zone)" in missing_expr
+    assert missing_zone["noDataState"] == "Alerting"
+    assert missing_zone["labels"]["severity"] == "critical"
+
+    skew = split["omi-listen-websocket-zone-skew"]
+    skew_expr = skew["data"][0]["model"]["expr"]
+    assert "backend_listen_active_ws_connections" in skew_expr
+    assert "< bool on () group_left()" in skew_expr
+    assert "0.5" in skew_expr
+    assert "> 100" in skew_expr
+    assert skew["noDataState"] == "OK"
+    assert skew["labels"]["severity"] == "warning"
+
+
 def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
     for rules in _all_rule_exports().values():
         expression = rules["bfobs1llmgfb01"]["data"][0]["model"]["expr"]
@@ -1041,8 +1078,10 @@ EXTERNAL_ALERT_METRICS = {
     "kube_deployment_status_replicas_ready": "kube-state-metrics",
     "kube_endpoint_address": "kube-state-metrics",
     "kube_horizontalpodautoscaler_status_target_metric": "kube-state-metrics",
+    "kube_node_info": "kube-state-metrics",
     "kube_pod_container_resource_limits": "kube-state-metrics",
     "kube_pod_container_status_restarts_total": "kube-state-metrics",
+    "kube_pod_info": "kube-state-metrics",
     "kube_pod_status_ready": "kube-state-metrics",
     "namespace_workload_pod:kube_pod_owner:relabel": "kube-state-metrics relabeling rule",
     # cAdvisor

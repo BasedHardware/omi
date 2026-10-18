@@ -11566,6 +11566,11 @@
     "homePendingCatchingUp": "Obdelujemo prejšnji zvok",
     "onTheWayTitle": "Na poti",
     "onTheWayAlmostReady": "Skoraj pripravljeno",
+    "onTheWayRecordingCount": "{count, plural, =1{1 posnetek} other{Posnetkov: {count}}}",
+    "onTheWaySummary": "{totals} na poti",
+    "onTheWayUploadingCount": "Nalaganje: {count}",
+    "onTheWayAlmostReadyCount": "Skoraj pripravljeno: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 potrebuje pozornost} other{Potrebuje pozornost: {count}}}",
     "activityEmpty": "Še ni dejavnosti",
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
@@ -11654,5 +11659,6 @@
     "summaryLimitTitle": "Dosežena omejitev povzetkov",
     "summaryLimitBody": "V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.",
     "summaryFailedTitle": "Povzemanje ni uspelo",
-    "summaryFailedBody": "Pri povzemanju tega pogovora je prišlo do napake."
+    "summaryFailedBody": "Pri povzemanju tega pogovora je prišlo do napake.",
+    "playbackPartialAudioSaved": "Shranjeno {saved} od {total} zvoka"
 }

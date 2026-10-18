@@ -4143,6 +4143,11 @@
     "homePendingCatchingUp": "Zpracováváme dřívější zvuk",
     "onTheWayTitle": "Na cestě",
     "onTheWayAlmostReady": "Téměř hotovo",
+    "onTheWayRecordingCount": "{count, plural, =1{1 nahrávka} other{Nahrávek: {count}}}",
+    "onTheWaySummary": "{totals} na cestě",
+    "onTheWayUploadingCount": "Nahrává se: {count}",
+    "onTheWayAlmostReadyCount": "Téměř hotovo: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vyžaduje pozornost} other{Vyžaduje pozornost: {count}}}",
     "activityEmpty": "Zatím žádná aktivita",
     "activityNewSemantics": "Aktivita, nové položky",
     "activityLoadFailed": "Nepodařilo se načíst celou vaši aktivitu",
@@ -4231,5 +4236,6 @@
     "summaryLimitTitle": "Dosažen limit shrnutí",
     "summaryLimitBody": "Za poslední hodinu jste několikrát znovu vygenerovali shrnutí. Zkuste to později.",
     "summaryFailedTitle": "Shrnutí se nezdařilo",
-    "summaryFailedBody": "Při shrnování této konverzace se něco pokazilo."
+    "summaryFailedBody": "Při shrnování této konverzace se něco pokazilo.",
+    "playbackPartialAudioSaved": "Uloženo {saved} z {total} zvuku"
 }

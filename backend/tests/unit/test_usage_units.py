@@ -219,7 +219,9 @@ def test_v1_and_v2_usage_projections_keep_separate_card_identity(units, monkeypa
     )
     assert v1_annotation['rate_card_version'] == 'v1'
     assert v2_annotation['rate_card_version'] == 'v2'
-    assert v2_annotation['micro_units'] > v1_annotation['micro_units']
+    # v2's corrected 2.5 Flash card carries v1's Standard rates, so the same
+    # Flash event prices identically; only the card identity differs.
+    assert v2_annotation['micro_units'] == v1_annotation['micro_units']
     assert v1_rollup['shadow_v1']['rate_card_version'] == 'v1'
     assert v2_rollup['shadow_v2']['rate_card_version'] == 'v2'
     assert v1_hourly['shadow_v1']['features']['transcription']['funding']['omi']['rate_card_version'] == 'v1'
@@ -245,7 +247,7 @@ def test_v1_and_v2_usage_projections_keep_separate_card_identity(units, monkeypa
     )
     assert v1['rate_card_version'] == 'v1'
     assert v2['rate_card_version'] == 'v2'
-    assert v2['used_units'] > v1['used_units']
+    assert v2['used_units'] == v1['used_units']
     combined = units.get_usage_units('u', datetime(2026, 10, 1, tzinfo=timezone.utc), firestore_client=store)
     assert combined['rate_card_version'] == 'v2'
     assert combined['rate_card_versions'] == ['v1', 'v2']

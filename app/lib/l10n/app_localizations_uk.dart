@@ -13547,6 +13547,43 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onTheWayAlmostReady => 'Майже готово';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Записів: $count',
+      one: '1 запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals у дорозі';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Завантажується: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Майже готово: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Потребують уваги: $count',
+      one: '1 потребує уваги',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Поки немає активності';
 
   @override
@@ -13841,4 +13878,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Під час підсумовування цієї розмови сталася помилка.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Збережено $saved з $total аудіо';
+  }
 }

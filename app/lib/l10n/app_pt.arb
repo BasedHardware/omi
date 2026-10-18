@@ -4178,6 +4178,11 @@
     "homePendingCatchingUp": "Processando áudio anterior",
     "onTheWayTitle": "A caminho",
     "onTheWayAlmostReady": "Quase pronto",
+    "onTheWayRecordingCount": "{count, plural, =1{1 gravação} other{{count} gravações}}",
+    "onTheWaySummary": "{totals} a caminho",
+    "onTheWayUploadingCount": "Enviando: {count}",
+    "onTheWayAlmostReadyCount": "Quase prontas: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 precisa de atenção} other{{count} precisam de atenção}}",
     "activityEmpty": "Nenhuma atividade ainda",
     "activityNewSemantics": "Atividade, novos itens",
     "activityLoadFailed": "Não foi possível carregar toda a sua atividade",
@@ -4266,5 +4271,6 @@
     "summaryLimitTitle": "Limite de resumos atingido",
     "summaryLimitBody": "Você gerou novamente vários resumos na última hora. Tente novamente mais tarde.",
     "summaryFailedTitle": "Não foi possível resumir",
-    "summaryFailedBody": "Algo deu errado ao resumir esta conversa."
+    "summaryFailedBody": "Algo deu errado ao resumir esta conversa.",
+    "playbackPartialAudioSaved": "{saved} de {total} de áudio guardado"
 }

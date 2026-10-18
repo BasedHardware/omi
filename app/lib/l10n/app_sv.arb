@@ -4143,6 +4143,11 @@
     "homePendingCatchingUp": "Kommer ikapp tidigare ljud",
     "onTheWayTitle": "På väg",
     "onTheWayAlmostReady": "Nästan klart",
+    "onTheWayRecordingCount": "{count, plural, =1{1 inspelning} other{{count} inspelningar}}",
+    "onTheWaySummary": "{totals} på väg",
+    "onTheWayUploadingCount": "{count} laddas upp",
+    "onTheWayAlmostReadyCount": "Nästan klart: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 behöver uppmärksamhet} other{{count} behöver uppmärksamhet}}",
     "activityEmpty": "Ingen aktivitet än",
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
@@ -4231,5 +4236,6 @@
     "summaryLimitTitle": "Gränsen för sammanfattningar har nåtts",
     "summaryLimitBody": "Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.",
     "summaryFailedTitle": "Det gick inte att sammanfatta",
-    "summaryFailedBody": "Något gick fel när det här samtalet skulle sammanfattas."
+    "summaryFailedBody": "Något gick fel när det här samtalet skulle sammanfattas.",
+    "playbackPartialAudioSaved": "{saved} av {total} ljud sparat"
 }

@@ -5233,7 +5233,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, and the date the STT and SaaS estimates were read (\"stale\" after 35 days; \"STT measured\" once FinOps carries a vendor line).",
+      "description": "Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, and the source used for each all-in line. Estimates are dated and marked stale after 35 days; measured SaaS is labeled from Mercury.",
       "targets": [
         {
           "refId": "A",
@@ -5299,7 +5299,7 @@
     {
       "type": "stat",
       "title": "Health",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (estimate as of 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate as of 2026-10-16. An estimate older than 35 days is marked stale under Margin by plan. Cost / day is the settled day D\u22122; cost / user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. Cost / day is the settled day D\u22122; cost / user is the 30-day all-in cost \u00f7 monthly users. MAU here is qualified MAU (~10K). The \"Omi Cost vs Revenue\" artifact divides by any-event PostHog MAU (~22K, $3.41 in October), so its per-user cost is about half of this one. Relative % change; up is bad.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -5543,7 +5543,7 @@
     {
       "type": "timeseries",
       "title": "Cost vs revenue",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT has no invoice feed yet: it is a $5.3K/month estimate from the Soniox console (estimate as of 2026-10-16; the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS is a fixed $4.8K/month estimate as of 2026-10-16. An estimate older than 35 days is marked stale under Margin by plan. Settled through D\u22122. Invoiced lines are the solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are the sand-colored segments. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. Settled through D\u22122. Measured/invoiced lines are solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are sand-colored. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -5591,12 +5591,22 @@
               "type": "number"
             },
             {
-              "selector": "stt",
+              "selector": "sttMeasuredUsd",
+              "text": "STT measured",
+              "type": "number"
+            },
+            {
+              "selector": "sttEstimateUsd",
               "text": "STT est.",
               "type": "number"
             },
             {
-              "selector": "saas",
+              "selector": "saasMeasuredUsd",
+              "text": "SaaS measured (Mercury)",
+              "type": "number"
+            },
+            {
+              "selector": "saasEstimateUsd",
               "text": "SaaS est.",
               "type": "number"
             },
@@ -5723,6 +5733,44 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#cdd5df"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "STT measured"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STT measured"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#aab6c6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SaaS measured (Mercury)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "SaaS measured (Mercury)"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8494ab"
                 }
               }
             ]
@@ -5874,11 +5922,13 @@
               "Vertex LLM": 2,
               "OpenAI": 3,
               "Anthropic": 4,
-              "STT est.": 5,
-              "SaaS est.": 6,
-              "Revenue": 7,
-              "One-time excluded": 8,
-              "All-in total": 9
+              "STT measured": 5,
+              "STT est.": 6,
+              "SaaS measured (Mercury)": 7,
+              "SaaS est.": 8,
+              "Revenue": 9,
+              "One-time excluded": 10,
+              "All-in total": 11
             },
             "excludeByName": {},
             "renameByName": {}

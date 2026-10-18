@@ -172,6 +172,10 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED
+    value: "false"
+  - name: BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED
+    value: "false"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -490,6 +494,8 @@ env:
         key: ADMIN_KEY
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
+  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
+    value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED

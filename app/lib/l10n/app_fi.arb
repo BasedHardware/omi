@@ -4143,6 +4143,11 @@
     "homePendingCatchingUp": "Käsitellään aiempaa ääntä",
     "onTheWayTitle": "Tulossa",
     "onTheWayAlmostReady": "Melkein valmis",
+    "onTheWayRecordingCount": "{count, plural, =1{1 tallenne} other{{count} tallennetta}}",
+    "onTheWaySummary": "{totals} tulossa",
+    "onTheWayUploadingCount": "Lähetetään: {count}",
+    "onTheWayAlmostReadyCount": "Melkein valmiina: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vaatii huomiota} other{{count} vaatii huomiota}}",
     "activityEmpty": "Ei vielä toimintaa",
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
@@ -4231,5 +4236,6 @@
     "summaryLimitTitle": "Tiivistelmien raja saavutettu",
     "summaryLimitBody": "Olet luonut useita tiivistelmiä uudelleen viimeisen tunnin aikana. Yritä myöhemmin uudelleen.",
     "summaryFailedTitle": "Tiivistäminen epäonnistui",
-    "summaryFailedBody": "Jokin meni vikaan tätä keskustelua tiivistettäessä."
+    "summaryFailedBody": "Jokin meni vikaan tätä keskustelua tiivistettäessä.",
+    "playbackPartialAudioSaved": "Ääntä tallennettu {saved} / {total}"
 }

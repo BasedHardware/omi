@@ -13443,6 +13443,43 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onTheWayAlmostReady => 'على وشك الجاهزية';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'التسجيلات: $count',
+      one: 'تسجيل واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals في الطريق';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'قيد الرفع: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'على وشك الجاهزية: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'بحاجة إلى المراجعة: $count',
+      one: 'تسجيل واحد بحاجة إلى المراجعة',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'لا يوجد نشاط بعد';
 
   @override
@@ -13735,4 +13772,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'حدث خطأ ما أثناء تلخيص هذه المحادثة.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'تم حفظ $saved من $total من الصوت';
+  }
 }

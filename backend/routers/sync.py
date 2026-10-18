@@ -1738,10 +1738,28 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     if durable is not None:
         return with_poll_hint(durable, surface_open=surface_open)
     job = get_sync_job(job_id)
+    if job and job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
+    # A read can reconcile a proven content completion without rewriting Redis,
+    # binding a run lease or competing with the worker's terminal authority.
+    from utils.sync.completed_status import get_completed_legacy_status
+
+    try:
+        completed = get_completed_legacy_status(job_id, uid, job)
+    except Exception as error:
+        logger.error('event=sync_status_reconciliation outcome=retrying exception_type=%s', type(error).__name__)
+        raise _sync_finalization_retrying()
+    if completed is not None:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='redis_status',
+            to_mode='durable_completion',
+            reason='unavailable',
+            outcome='recovered',
+        )
+        return with_poll_hint(completed, surface_open=surface_open)
     if not job:
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
-    if job['uid'] != uid:
-        raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
 
     # A stale state can only be finalized by the holder of the same run lease
     # as Cloud Tasks/inline execution. Re-read after acquiring it so an active
