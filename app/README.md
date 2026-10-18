@@ -19,9 +19,11 @@ Before getting started, make sure your device is connected and unlocked. If you'
    PROVIDER_MODE=offline make dev-up
    ```
 
-   `make dev-init` builds `backend/.venv` from whatever `python3` resolves to,
-   and the backend requires **Python 3.11** (not 3.12+). The harness also needs a
-   Java runtime and `firebase-tools`/`npx`; `make dev-up` names what's missing.
+   `make dev-init` builds `backend/.venv` with **Python 3.11** (not 3.12+)
+   regardless of what `python3` resolves to: it looks for `python3.11` on `PATH`,
+   then the Homebrew `python@3.11` prefixes, then a `uv`-managed 3.11, and stops
+   with a clear error if none is found. The harness also needs a Java runtime and
+   `firebase-tools`/`npx`; `make dev-up` names what's missing.
 
    `make dev-status` shows what came up; `make dev-down` stops it. Ports, seeded
    users, and troubleshooting: [`backend/docs/runbooks/local-emulator-manual-qa.md`](../backend/docs/runbooks/local-emulator-manual-qa.md).
