@@ -5,6 +5,7 @@ same content under a new handle. Unknown/failed/held work is never ACKed.
 """
 
 import os
+from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -15,7 +16,7 @@ from database.sync_ledger import is_valid_completed_sync_content_result, sync_co
 from utils.sync.stage import collection_name
 
 
-def get_completed_legacy_status(job_id: str, uid: str, job: dict | None) -> dict | None:
+def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
     # No Firestore client or lookup on the dark path, including TTL misses.
     if os.getenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'false').strip().lower() != 'true':
         return None
@@ -28,7 +29,7 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict | None) -> dict
     client = get_firestore_client()
 
     @firestore.transactional
-    def read(transaction):
+    def read(transaction: Any) -> dict[str, Any] | None:
         content_id = (job or {}).get('content_id')
         exact_handle = False
         if not content_id:
@@ -69,7 +70,11 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict | None) -> dict
         result = ledger.get('result')
         if exact_handle and ledger.get('job_id') != job_id:
             return None
-        if ledger.get('status') != 'completed' or not is_valid_completed_sync_content_result(result):
+        if (
+            ledger.get('status') != 'completed'
+            or not isinstance(result, dict)
+            or not is_valid_completed_sync_content_result(result)
+        ):
             return None
         # Preserve the batch status route's privacy boundary, including empty
         # completions, deleted accounts and redirected/deleted result targets.
