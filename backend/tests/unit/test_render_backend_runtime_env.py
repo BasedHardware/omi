@@ -917,6 +917,21 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
+    cohorts = {
+        'DREAM_AGENT_UID_ALLOWLIST',
+        'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST',
+        'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
+        'BATCH_PIPELINE_UID_ALLOWLIST',
+    }
+    for service in baseline:
+        baseline[service] |= cohorts
+        if service != 'backend-integration':
+            baseline[service] |= {'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'}
+        if service in {'backend-sync', 'backend-sync-backfill'}:
+            baseline[service].add('SYNC_LEGACY_FRESH_UID_ALLOWLIST')
+        if service != 'backend':
+            baseline[service].add('FIRST_SUMMARY_UID_ALLOWLIST')
+    baseline['backend-integration'].add('BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST')
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
         refs = _MODULE['_render_secret_entries'](prod['cloud_run']['services'][service]['secrets'])

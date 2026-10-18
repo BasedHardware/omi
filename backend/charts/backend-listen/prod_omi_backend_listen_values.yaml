@@ -156,7 +156,10 @@ env:
   - name: BATCH_PIPELINE_RECOVERY_MODE
     value: "off"
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
-    value: ""
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -317,7 +320,10 @@ env:
   - name: SPEAKER_GROUPING_SHADOW_PERCENT
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
   - name: SPEAKER_GROUPING_MODE
     value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
@@ -329,7 +335,10 @@ env:
   - name: DREAM_AGENT_ELIGIBILITY
     value: 'allowlist'
   - name: DREAM_AGENT_UID_ALLOWLIST
-    value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DREAM_AGENT_UID_ALLOWLIST
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
   - name: REVIEW_SURFACE_MODE
@@ -369,7 +378,10 @@ env:
   # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
   # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
   - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -564,7 +576,10 @@ env:
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
   - name: STT_LIVE_DEMAND_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: STT_LIVE_DEMAND_UID_ALLOWLIST
   - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
     value: "15"
   - name: MOBILE_STANDARD_BATCH_ENABLED
@@ -791,6 +806,11 @@ env:
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
 
+  - name: BATCH_PIPELINE_UID_ALLOWLIST
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: BATCH_PIPELINE_UID_ALLOWLIST
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little

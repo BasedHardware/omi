@@ -58,11 +58,16 @@ FIRESTORE_READ_RUNTIME_ENV_NAMES = (
 
 
 def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
-    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    """Retired literals and allowlist type migrations, each with a leading comma."""
     listed: set[str] = set(RETIRED_ENV_NAMES)
     if service not in PUSHER_CLIENT_SERVICES:
         listed.add('HOSTED_PUSHER_API_URL')
-    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
+    # gcloud must remove a literal before installing a secret of the same name.
+    # Both flags belong to ONE deploy call/revision; never issue a removal-only update.
+    removals = set(service_config.get('forbidden_env', [])) | {
+        name for name in service_config.get('secrets', {}) if name.endswith('UID_ALLOWLIST')
+    }
+    return ''.join(f',{name}' for name in sorted(removals - listed))
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -81,17 +86,26 @@ def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check
     hosts = [(f'cloud_run/{name}', services.get(name, {})) for name in _SYNC_LINEAGE_CLOUD_RUN_HOSTS]
     hosts.append(('gke/backend-listen', listener))
     errors = []
-    values = []
+    bindings = []
     for scope, host in hosts:
         entry = host.get('env', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
-        if not isinstance(entry, dict) or not isinstance(entry.get('value'), str):
-            errors.append(
-                f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must be an explicit literal (empty deliberately widens)'
-            )
+        secret = host.get('secrets', {}).get(_SYNC_LINEAGE_ALLOWLIST_KEY)
+        if scope.startswith('cloud_run/') and isinstance(secret, dict) and not entry:
+            bindings.append(('secret', secret.get('secret'), str(secret.get('version', 'latest'))))
+        elif isinstance(entry, dict) and isinstance(entry.get('secret'), dict) and 'value' not in entry:
+            ref = entry['secret']
+            if ref.get('name') != 'prod-omi-backend-secrets':
+                errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} must use the backend secret')
+            bindings.append(('secret', ref.get('key'), 'latest'))
+        elif isinstance(entry, dict) and isinstance(entry.get('value'), str):
+            # Replay historical releases, including explicitly reviewed empty widening.
+            bindings.append(('literal', entry['value']))
         else:
-            values.append(entry['value'])
-    if len(set(values)) > 1:
+            errors.append(f'{scope}: {_SYNC_LINEAGE_ALLOWLIST_KEY} requires an explicit literal or secret binding')
+    if len(set(bindings)) > 1:
         errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must be identical on all five hosts')
+    if bindings and bindings[0][0] == 'secret' and bindings[0][1:] != (_SYNC_LINEAGE_ALLOWLIST_KEY, 'latest'):
+        errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} must use its same-name Secret Manager secret at latest')
     if check_chart and not errors:
         values_file = listener.get('values_file')
         if not isinstance(values_file, str):
@@ -99,7 +113,14 @@ def validate_sync_lineage_rollout(env: str, env_config: dict[str, Any], *, check
         else:
             chart = yaml.safe_load((ROOT / values_file).read_text())
             entries = [entry for entry in chart.get('env', []) if entry.get('name') == _SYNC_LINEAGE_ALLOWLIST_KEY]
-            if len(entries) != 1 or entries[0].get('value') != values[0]:
+            expected = listener['env'][_SYNC_LINEAGE_ALLOWLIST_KEY]
+            matches = len(entries) == 1
+            if matches and 'secret' in expected:
+                matches = entries[0].get('valueFrom', {}).get('secretKeyRef') == expected['secret']
+                matches = matches and 'value' not in entries[0]
+            elif matches:
+                matches = entries[0].get('value') == expected.get('value')
+            if not matches:
                 errors.append(f'{_SYNC_LINEAGE_ALLOWLIST_KEY} listen chart must match the five-host manifest')
     return errors
 

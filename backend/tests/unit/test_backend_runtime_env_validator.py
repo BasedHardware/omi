@@ -3366,7 +3366,7 @@ def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
 
 def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_chart():
     stages = json.loads((ROOT.parent / 'config/diarization-cohort-stages.json').read_text())
-    controls = stages['A']
+    controls = {key: value for key, value in stages['A'].items() if not key.endswith('UID_ALLOWLIST')}
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
@@ -3374,7 +3374,7 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
     for source in (prod, overlay):
         pusher = source['gke']['pusher']['env']
         selected = {key: pusher[key]['value'] for key in controls}
-        assert selected in stages.values()
+        assert selected in [{k: v for k, v in stage.items() if k in controls} for stage in stages.values()]
         for scope, env in _manifest_env_blocks(source):
             if scope in (
                 'gke/pusher',

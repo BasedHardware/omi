@@ -164,7 +164,6 @@ environments:
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {category: rollout, value: 'false'}
           STT_ROUTING_MODE: {category: rollout, value: shadow}
@@ -304,7 +303,6 @@ environments:
             category: service_discovery
             value: https://api.omiapi.com
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -330,11 +328,12 @@ environments:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: ''
+          STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
@@ -347,6 +346,7 @@ environments:
           MEMORY_OWNER_JEV_FLIP_ENABLED: {value: 'true', category: rollout}
           MEMORY_OWNER_JEV_FLIP_PERCENT: {value: '0', category: rollout}
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST: {value: '', category: rollout}
+          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -435,7 +435,6 @@ environments:
             category: service_discovery
             value: http://172.16.48.49/diarizer
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -452,6 +451,7 @@ environments:
           MEMORY_OWNER_JEV_SHADOW_DAILY_CAP: {value: '60000', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: omi-release-probe, category: rollout}
@@ -926,7 +926,6 @@ environments:
               value: dev-v1
               category: memory_rollout
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -959,6 +958,7 @@ environments:
             BATCH_PIPELINE_UID_ALLOWLIST:
               value: ''
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             FIREBASE_SIGNER_SERVICE_ACCOUNT:
@@ -1175,7 +1175,6 @@ environments:
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'false'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'false'}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: ''}
             SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '0'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               category: reliability
@@ -1221,7 +1220,6 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -1256,7 +1254,9 @@ environments:
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST:
               value: ''
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: ''}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: '', category: rollout}
@@ -1464,7 +1464,6 @@ environments:
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'false'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'false'}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: ''}
             SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '0'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               category: reliability
@@ -1505,7 +1504,6 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -1535,7 +1533,9 @@ environments:
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST:
               value: ''
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: ''}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1739,7 +1739,6 @@ environments:
             GCP_LOCATION:
               value: us-central1
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -1754,11 +1753,11 @@ environments:
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             BATCH_PIPELINE_UID_ALLOWLIST:
               value: ''
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
@@ -1778,6 +1777,7 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2422,7 +2422,6 @@ environments:
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {category: rollout, value: 'true'}
           STT_ROUTING_MODE: {category: rollout, value: 'on'}
@@ -2562,7 +2561,6 @@ environments:
             category: service_discovery
             value: https://omi.me
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -2588,9 +2586,18 @@ environments:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
+          STT_LIVE_DEMAND_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: STT_LIVE_DEMAND_UID_ALLOWLIST
+            category: rollout
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: DREAM_AGENT_UID_ALLOWLIST
+            category: rollout
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             category: telemetry
@@ -2611,7 +2618,11 @@ environments:
           MENTOR_PIPELINE: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+            category: rollout
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -2681,7 +2692,21 @@ environments:
               key: MCP_OAUTH_CLIENTS_JSON
           CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+            category: rollout
+          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+            category: rollout
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: BATCH_PIPELINE_UID_ALLOWLIST
+            category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -2766,7 +2791,6 @@ environments:
             category: service_discovery
             value: http://172.16.160.20/diarizer
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -2787,18 +2811,31 @@ environments:
             category: service_discovery
           TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
           TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
           TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
           TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+            category: rollout
           TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
           TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
           TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
           TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
           DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: DREAM_AGENT_UID_ALLOWLIST
+            category: rollout
           POSTHOG_PRODUCT_CAPTURE_TOKEN:
             value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
             category: telemetry
@@ -2823,7 +2860,11 @@ environments:
           MENTOR_PIPELINE: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
           SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+            secret:
+              name: prod-omi-backend-secrets
+              key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+            category: rollout
           SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
           SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -3029,6 +3070,24 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              secret: BATCH_PIPELINE_UID_ALLOWLIST
+              version: latest
+            DREAM_AGENT_UID_ALLOWLIST:
+              secret: DREAM_AGENT_UID_ALLOWLIST
+              version: latest
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+              secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+              version: latest
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+              version: latest
+            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+              secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+              version: latest
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+              secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+              version: latest
           env:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
@@ -3216,7 +3275,6 @@ environments:
               value: prod-v1
               category: memory_rollout
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -3253,13 +3311,11 @@ environments:
               category: service_discovery
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
@@ -3288,7 +3344,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
@@ -3360,7 +3415,6 @@ environments:
               category: oauth_metadata
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SYNC_TASKS_OIDC_AUDIENCE:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
@@ -3394,6 +3448,30 @@ environments:
               version: latest
             DREAM_AGENT_FEEDBACK_SALT:
               secret: DREAM_AGENT_FEEDBACK_SALT
+              version: latest
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              secret: BATCH_PIPELINE_UID_ALLOWLIST
+              version: latest
+            DREAM_AGENT_UID_ALLOWLIST:
+              secret: DREAM_AGENT_UID_ALLOWLIST
+              version: latest
+            FIRST_SUMMARY_UID_ALLOWLIST:
+              secret: FIRST_SUMMARY_UID_ALLOWLIST
+              version: latest
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+              secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+              version: latest
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+              secret: SYNC_LEGACY_FRESH_UID_ALLOWLIST
+              version: latest
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+              version: latest
+            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+              secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+              version: latest
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+              secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
               version: latest
           env:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -3552,7 +3630,6 @@ environments:
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'true'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '100'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               category: reliability
@@ -3598,7 +3675,6 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -3638,13 +3714,11 @@ environments:
               category: service_discovery
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
@@ -3661,7 +3735,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: {value: 'true', category: rollout}
@@ -3714,7 +3787,6 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_RESCUE: {value: shadow, category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
             SYNC_BACKFILL_ORDER_PERCENT: {value: '100', category: rollout}
@@ -3763,6 +3835,30 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              secret: BATCH_PIPELINE_UID_ALLOWLIST
+              version: latest
+            DREAM_AGENT_UID_ALLOWLIST:
+              secret: DREAM_AGENT_UID_ALLOWLIST
+              version: latest
+            FIRST_SUMMARY_UID_ALLOWLIST:
+              secret: FIRST_SUMMARY_UID_ALLOWLIST
+              version: latest
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+              secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+              version: latest
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+              secret: SYNC_LEGACY_FRESH_UID_ALLOWLIST
+              version: latest
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+              version: latest
+            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+              secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+              version: latest
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+              secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
               version: latest
           env:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -3916,7 +4012,6 @@ environments:
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {category: rollout, value: 'true'}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {category: rollout, value: 'true'}
-            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             SYNC_LEGACY_FRESH_PERCENT: {category: rollout, value: '100'}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               category: reliability
@@ -3957,7 +4052,6 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -3992,13 +4086,11 @@ environments:
               category: service_discovery
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             TRANSCRIPTION_SHADOW_PERCENT: {value: '5', category: rollout}
             TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1200', category: rollout}
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '150', category: rollout}
@@ -4008,7 +4100,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -4061,7 +4152,6 @@ environments:
             CONVERSATION_RELEVANCE_JEV_ENABLED: {value: 'true', category: rollout}
             CONVERSATION_RELEVANCE_JEV_PERCENT: {value: '100', category: rollout}
             NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             SYNC_BACKFILL_ORDER: {value: newest, category: rollout}
             SYNC_BACKFILL_ORDER_PERCENT: {value: '0', category: rollout}
@@ -4114,6 +4204,24 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
+              secret: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+              version: latest
+            BATCH_PIPELINE_UID_ALLOWLIST:
+              secret: BATCH_PIPELINE_UID_ALLOWLIST
+              version: latest
+            DREAM_AGENT_UID_ALLOWLIST:
+              secret: DREAM_AGENT_UID_ALLOWLIST
+              version: latest
+            FIRST_SUMMARY_UID_ALLOWLIST:
+              secret: FIRST_SUMMARY_UID_ALLOWLIST
+              version: latest
+            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+              secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+              version: latest
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
               version: latest
           env:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
@@ -4266,7 +4374,6 @@ environments:
             GCP_LOCATION:
               value: us-central1
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -4281,7 +4388,6 @@ environments:
             BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: shadow, category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
@@ -4290,7 +4396,6 @@ environments:
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
-            SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             SPEAKER_GROUPING_MODE: {value: incumbent, category: rollout}
             SPEAKER_MATCH_SCORES_ENABLED: {value: 'true', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
@@ -4328,7 +4433,6 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
-            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
           forbidden_env:

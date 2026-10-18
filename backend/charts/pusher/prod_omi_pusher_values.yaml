@@ -170,7 +170,10 @@ env:
   - name: DREAM_AGENT_ELIGIBILITY
     value: 'allowlist'
   - name: DREAM_AGENT_UID_ALLOWLIST
-    value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DREAM_AGENT_UID_ALLOWLIST
   - name: DREAM_ON_DEMAND_ENABLED
     value: 'true'
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
@@ -326,7 +329,10 @@ env:
   - name: SPEAKER_GROUPING_SHADOW_PERCENT
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
   - name: SPEAKER_GROUPING_MODE
     value: "incumbent"
   - name: SPEAKER_MATCH_SCORES_ENABLED
@@ -353,7 +359,10 @@ env:
   - name: TRANSCRIPTION_FINAL_PASS_BACKEND
     value: "pyannote"
   - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
     value: "5"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
@@ -370,7 +379,10 @@ env:
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
     value: "false"
   - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
   - name: TRANSCRIPTION_SHADOW_PERCENT
     value: "5"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS

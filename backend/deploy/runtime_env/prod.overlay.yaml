@@ -65,7 +65,10 @@ overlay:
         STT_LIVE_DEMAND_ENABLED:
           value: 'true'
         STT_LIVE_DEMAND_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: STT_LIVE_DEMAND_UID_ALLOWLIST
+          category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
         STT_ROUTING_MODE:
@@ -100,7 +103,10 @@ overlay:
           value: 'true'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: DREAM_AGENT_UID_ALLOWLIST
+          category: rollout
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: telemetry
@@ -128,7 +134,9 @@ overlay:
           value: '10'
           category: rollout
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
           category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
@@ -226,7 +234,19 @@ overlay:
           value: 'true'
           category: rollout
         SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+          category: rollout
+        BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
+          secret:
+            name: prod-omi-backend-secrets
+            key: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+          category: rollout
+        BATCH_PIPELINE_UID_ALLOWLIST:
+          secret:
+            name: prod-omi-backend-secrets
+            key: BATCH_PIPELINE_UID_ALLOWLIST
           category: rollout
     pusher:
       env:
@@ -267,7 +287,9 @@ overlay:
           value: pyannote
           category: rollout
         TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
           category: rollout
         TRANSCRIPTION_FINAL_PASS_PERCENT:
           value: '5'
@@ -285,7 +307,9 @@ overlay:
           value: 'false'
           category: rollout
         TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '5'
@@ -303,7 +327,10 @@ overlay:
           value: 'true'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: DREAM_AGENT_UID_ALLOWLIST
+          category: rollout
         POSTHOG_PRODUCT_CAPTURE_TOKEN:
           value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
           category: telemetry
@@ -335,7 +362,9 @@ overlay:
           value: '10'
           category: rollout
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          secret:
+            name: prod-omi-backend-secrets
+            key: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
           category: rollout
         SPEAKER_GROUPING_MODE:
           value: incumbent
@@ -471,6 +500,24 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            secret: BATCH_PIPELINE_UID_ALLOWLIST
+            version: latest
+          DREAM_AGENT_UID_ALLOWLIST:
+            secret: DREAM_AGENT_UID_ALLOWLIST
+            version: latest
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+            version: latest
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+            version: latest
+          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+            secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+            version: latest
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+            version: latest
         env:
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -523,9 +570,6 @@ overlay:
           TRANSCRIPTION_FINAL_PASS_BACKEND:
             value: pyannote
             category: rollout
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT:
             value: '5'
             category: rollout
@@ -540,9 +584,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -589,8 +630,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           DREAM_AGENT_PASSES_PER_DAY:
             value: '6'
             category: rollout
@@ -617,9 +656,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -710,9 +746,6 @@ overlay:
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -796,6 +829,30 @@ overlay:
           DREAM_AGENT_FEEDBACK_SALT:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            secret: BATCH_PIPELINE_UID_ALLOWLIST
+            version: latest
+          DREAM_AGENT_UID_ALLOWLIST:
+            secret: DREAM_AGENT_UID_ALLOWLIST
+            version: latest
+          FIRST_SUMMARY_UID_ALLOWLIST:
+            secret: FIRST_SUMMARY_UID_ALLOWLIST
+            version: latest
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+            version: latest
+          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+            secret: SYNC_LEGACY_FRESH_UID_ALLOWLIST
+            version: latest
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+            version: latest
+          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+            secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+            version: latest
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+            version: latest
         env:
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -849,8 +906,6 @@ overlay:
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           SYNC_LEGACY_FRESH_PERCENT:
             value: '100'
             category: rollout
@@ -875,9 +930,6 @@ overlay:
           TRANSCRIPTION_FINAL_PASS_BACKEND:
             value: pyannote
             category: rollout
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT:
             value: '5'
             category: rollout
@@ -892,9 +944,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -914,8 +963,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
@@ -945,9 +992,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -1022,9 +1066,6 @@ overlay:
             value: '100'
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
-            category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
@@ -1210,8 +1251,6 @@ overlay:
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           SYNC_LEGACY_FRESH_PERCENT:
             value: '100'
             category: rollout
@@ -1234,9 +1273,6 @@ overlay:
           TRANSCRIPTION_FINAL_PASS_BACKEND:
             value: pyannote
             category: rollout
-          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           TRANSCRIPTION_FINAL_PASS_PERCENT:
             value: '5'
             category: rollout
@@ -1251,9 +1287,6 @@ overlay:
             category: rollout
           TRANSCRIPTION_SHADOW_KILL_SWITCH:
             value: 'false'
-            category: rollout
-          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           TRANSCRIPTION_SHADOW_PERCENT:
             value: '5'
@@ -1273,8 +1306,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1283,9 +1314,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -1356,9 +1384,6 @@ overlay:
             category: rollout
           NOTES_TIER_ESCALATION_ENABLED:
             value: 'true'
-            category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
@@ -1487,6 +1512,31 @@ overlay:
             value: '7200'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        secrets:
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            secret: BATCH_PIPELINE_UID_ALLOWLIST
+            version: latest
+          DREAM_AGENT_UID_ALLOWLIST:
+            secret: DREAM_AGENT_UID_ALLOWLIST
+            version: latest
+          FIRST_SUMMARY_UID_ALLOWLIST:
+            secret: FIRST_SUMMARY_UID_ALLOWLIST
+            version: latest
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+            version: latest
+          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+            secret: SYNC_LEGACY_FRESH_UID_ALLOWLIST
+            version: latest
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+            version: latest
+          TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST:
+            secret: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+            version: latest
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            secret: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+            version: latest
       backend-integration:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -1541,8 +1591,6 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           MENTOR_PIPELINE:
             value: cohort
             category: rollout
@@ -1551,9 +1599,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
           SPEAKER_GROUPING_MODE:
             value: incumbent
@@ -1598,14 +1643,9 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
-          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-            category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'on'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'true'
             category: rollout
@@ -1673,6 +1713,25 @@ overlay:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        secrets:
+          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
+            secret: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
+            version: latest
+          BATCH_PIPELINE_UID_ALLOWLIST:
+            secret: BATCH_PIPELINE_UID_ALLOWLIST
+            version: latest
+          DREAM_AGENT_UID_ALLOWLIST:
+            secret: DREAM_AGENT_UID_ALLOWLIST
+            version: latest
+          FIRST_SUMMARY_UID_ALLOWLIST:
+            secret: FIRST_SUMMARY_UID_ALLOWLIST
+            version: latest
+          SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
+            secret: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+            version: latest
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            secret: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+            version: latest
     jobs:
       notifications-job:
         flags:

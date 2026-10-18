@@ -288,8 +288,6 @@ environment_shared:
         STT_LIVE_DEMAND_PERCENT:
           value: '0'
           category: rollout
-        STT_LIVE_DEMAND_UID_ALLOWLIST:
-          category: rollout
         STT_LIVE_DEMAND_MIN_DWELL_SECONDS:
           value: '15'
           category: rollout
@@ -495,8 +493,6 @@ environment_shared:
         DREAM_AGENT_ELIGIBILITY:
           value: allowlist
           category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
-          category: rollout
         DREAM_ON_DEMAND_ENABLED:
           value: 'true'
           category: rollout
@@ -557,9 +553,6 @@ environment_shared:
           category: rollout
         BATCH_PIPELINE_RECOVERY_MODE:
           value: 'off'
-          category: rollout
-        BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-          value: ''
           category: rollout
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
           value: 'off'
@@ -732,8 +725,6 @@ environment_shared:
           category: service_discovery
         DREAM_AGENT_ELIGIBILITY:
           value: allowlist
-          category: rollout
-        DREAM_AGENT_UID_ALLOWLIST:
           category: rollout
         DREAM_ON_DEMAND_ENABLED:
           value: 'true'
@@ -1291,8 +1282,6 @@ environment_shared:
           DREAM_AGENT_ELIGIBILITY:
             value: allowlist
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            category: rollout
           DREAM_ON_DEMAND_ENABLED:
             value: 'true'
             category: rollout
@@ -1654,8 +1643,6 @@ environment_shared:
             category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            category: rollout
           SYNC_LEGACY_FRESH_PERCENT:
             category: rollout
           SYNC_LEGACY_FRESH_HOURLY_TOKENS:
@@ -1712,8 +1699,6 @@ environment_shared:
             category: memory_rollout
           DREAM_AGENT_ELIGIBILITY:
             value: allowlist
-            category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
             category: rollout
           DREAM_ON_DEMAND_ENABLED:
             value: 'true'
@@ -2057,8 +2042,6 @@ environment_shared:
             category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
-          SYNC_LEGACY_FRESH_UID_ALLOWLIST:
-            category: rollout
           SYNC_LEGACY_FRESH_PERCENT:
             category: rollout
           SYNC_LEGACY_FRESH_HOURLY_TOKENS:
@@ -2101,8 +2084,6 @@ environment_shared:
             category: memory_rollout
           DREAM_AGENT_ELIGIBILITY:
             value: allowlist
-            category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
             category: rollout
           DREAM_ON_DEMAND_ENABLED:
             value: 'true'
@@ -2437,8 +2418,6 @@ environment_shared:
           DREAM_AGENT_ELIGIBILITY:
             value: allowlist
             category: rollout
-          DREAM_AGENT_UID_ALLOWLIST:
-            category: rollout
           DREAM_ON_DEMAND_ENABLED:
             value: 'true'
             category: rollout
@@ -2474,9 +2453,6 @@ environment_shared:
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
-            category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
             category: rollout
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE:
             value: 'off'

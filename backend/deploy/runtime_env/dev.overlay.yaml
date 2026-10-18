@@ -42,6 +42,7 @@ overlay:
         STT_LIVE_DEMAND_ENABLED:
           value: 'false'
         STT_LIVE_DEMAND_UID_ALLOWLIST:
+          category: rollout
           value: ''
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'false'
@@ -77,6 +78,7 @@ overlay:
           value: 'on'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
+          category: rollout
           value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
@@ -108,6 +110,9 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_PERCENT:
           value: '0'
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
           value: ''
           category: rollout
     pusher:
@@ -145,6 +150,7 @@ overlay:
           value: 'on'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
+          category: rollout
           value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-dev-screen-frames
@@ -407,6 +413,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_UID_ALLOWLIST:
+            category: rollout
             value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -498,6 +505,7 @@ overlay:
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
           SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+            category: rollout
             value: ''
           SYNC_LEGACY_FRESH_PERCENT:
             value: '0'
@@ -515,6 +523,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_UID_ALLOWLIST:
+            category: rollout
             value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-dev-screen-frames
@@ -618,6 +627,7 @@ overlay:
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
           SYNC_LEGACY_FRESH_UID_ALLOWLIST:
+            category: rollout
             value: ''
           SYNC_LEGACY_FRESH_PERCENT:
             value: '0'
@@ -633,6 +643,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_UID_ALLOWLIST:
+            category: rollout
             value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -708,6 +719,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_UID_ALLOWLIST:
+            category: rollout
             value: ''
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -728,6 +740,9 @@ overlay:
           OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
             value: '3600'
             category: replay_capture
+          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
+            value: ''
+            category: rollout
     jobs:
       notifications-job:
         flags:
