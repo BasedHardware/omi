@@ -105,9 +105,6 @@ def test_valid_positive_limit_preserved():
 
 
 def test_fetch_error_returns_empty_and_defaults_apply():
-    def boom():
-        raise RuntimeError('firestore down')
-
     assert pcc._fetch_config(FakeClient(error=RuntimeError('down'))) == {}
     eff = pcc._effective_config('free', {})
     assert eff['allowed_countries'] == []
