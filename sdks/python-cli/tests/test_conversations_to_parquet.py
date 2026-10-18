@@ -6,7 +6,6 @@ raw_json preservation, dedupe, atomic write. Requires pyarrow.
 """
 
 import json
-import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -21,10 +20,15 @@ except ImportError:
     HAVE_PARQUET = False
 
 HERE = Path(__file__).resolve()
-sys.path.insert(0, str(HERE.parents[1] / "examples"))
 
 if HAVE_PARQUET:
-    import conversations_to_parquet as m  # noqa: E402
+    import importlib.util
+
+    _spec = importlib.util.spec_from_file_location(
+        "conversations_to_parquet", HERE.parents[1] / "examples" / "conversations_to_parquet.py"
+    )
+    m = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(m)
 
 
 CONV = {

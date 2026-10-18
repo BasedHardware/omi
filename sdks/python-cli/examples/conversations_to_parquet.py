@@ -10,7 +10,7 @@ Usage:
     omi --json conversation list --limit 200 > conversations.json
     python conversations_to_parquet.py conversations.json [page2.json ...] -o conversations.parquet
 
-    duckdb -c "SELECT structured.category, COUNT(*) FROM 'conversations.parquet' GROUP BY 1"
+    duckdb -c "SELECT category, COUNT(*) FROM 'conversations.parquet' GROUP BY 1"
 """
 
 import argparse
