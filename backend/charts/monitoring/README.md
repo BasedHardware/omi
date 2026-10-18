@@ -1380,6 +1380,9 @@ boolean threshold units, reduction/math support and pending periods on rate,
 ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
 a rule hash; any rule edit invalidates the exception. It is debt, never deployment
 approval. The snapshot is historical presence, not proof of current ingestion.
+`declared_metrics` records source-backed metric names that are not yet in that
+historical snapshot; offline lint accepts them, while a live replay still checks
+the actual Prometheus series and fails if they have not been deployed or scraped.
 Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains

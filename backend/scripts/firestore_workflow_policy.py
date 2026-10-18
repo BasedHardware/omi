@@ -239,7 +239,7 @@ _CUTOVER = re.compile(r'sync_ledger_fence_cutover\.py\s+(?:stage|activate)')
 _CUTOVER_WORKFLOW = 'sync_ledger_fence_cutover.yml'
 _LISTEN_REPLAY = re.compile(r'BACKEND_LISTEN_IMAGE_TAG|\brollback\b')
 _LISTEN_MUTATION_RUN = re.compile(
-    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:upgrade|rollback)\b'
+    r'deploy-backend-config\.sh|deploy-backend-secrets\.sh|\bhelm\s+(?:[^\s]+\s+){0,4}(?:upgrade|rollback)\b'
 )
 _LISTEN_SELECT_STEP = 'Resolve backend-listen image tag'
 _LISTEN_DEPLOY_IF = "${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}"
@@ -994,6 +994,7 @@ def workflow_gate_violations(
             )
 
     gate_jobs: set[str] = set()
+    listen_mutation_jobs: set[str] = set()
     uncovered: dict[str, list[frozenset[str]]] = {}
     job_if_atoms: dict[str, frozenset | None] = {}
     for job_id, job in jobs.items():
@@ -1035,16 +1036,14 @@ def workflow_gate_violations(
         gate_positions = [(index, scope) for index, _step, scope in valid_gates]
         if is_listen:
             gate_index = next((index for index, _step, scope in valid_gates if scope == {_LISTEN_SOURCE_ATOM}), None)
-            if gate_index is None:
-                errors.append(
-                    f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate'
-                )
             mutations = [
                 index
                 for index, step in enumerate(expanded)
                 if isinstance(step.get('run'), str) and _LISTEN_MUTATION_RUN.search(step['run'])
             ]
-            if mutations and (gate_index is None or gate_index > min(mutations)):
+            if mutations:
+                listen_mutation_jobs.add(job_id)
+            if mutations and gate_index is not None and gate_index > min(mutations):
                 errors.append(
                     f'{name}:{job_id}: the conditional readiness gate must run before any '
                     'backend config, secret, or Helm mutation step'
@@ -1077,6 +1076,12 @@ def workflow_gate_violations(
                     protected.add(job_id)
                     changed = True
                     break
+
+    for job_id in listen_mutation_jobs - protected:
+        errors.append(
+            f'{name}:{job_id}: listen requires the env.BACKEND_LISTEN_SOURCE_SHA-conditional readiness gate '
+            'in this job or a successful required job'
+        )
 
     for job_id, names_list in uncovered.items():
         if job_id not in gate_jobs and job_id in protected:

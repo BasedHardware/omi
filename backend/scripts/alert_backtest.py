@@ -468,7 +468,11 @@ def lint_rule(rule, inventory):
     for node in rule['data']:
         model = node['model']
         if prometheus(node):
-            missing = metric_names(model['expr']) - set(inventory['metrics'])
+            # The observed snapshot remains historical production evidence.
+            # Declared metrics let a source-backed exporter add alert contracts
+            # before deployment without pretending its series were observed.
+            known_metrics = set(inventory['metrics']) | set(inventory.get('declared_metrics', []))
+            missing = metric_names(model['expr']) - known_metrics
             if missing:
                 errors.append('missing metrics: ' + ', '.join(sorted(missing)))
             if seconds(rule['for']) == 0 and re.search(r'\brate\(|/|\bavg\(', model['expr']):
@@ -573,6 +577,7 @@ def main():
                     captured_at=end,
                     window_days=10,
                     metrics=sorted(metrics),
+                    declared_metrics=old.get('declared_metrics', []),
                     legacy_debt=old.get('legacy_debt', {}),
                     admission_holds=old.get('admission_holds', {}),
                 ),
