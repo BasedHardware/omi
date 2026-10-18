@@ -329,6 +329,13 @@ jobs:
         # falls back from environment to repository scope, so the only way to make
         # a development cohort structurally unable to reach production is for the
         # production workflow never to read one. Prod renders literal empties.
+        env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         run: |
           set -euo pipefail
           python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/render_backend_runtime_env.py" \
@@ -390,6 +397,7 @@ jobs:
             OMI_CUSTOMER_DATA_PROJECT=${{ vars.GCP_PROJECT_ID }}
             FIRESTORE_READ_LEDGER=1
             FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
             ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
           secrets: |
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest

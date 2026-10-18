@@ -12,6 +12,12 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from datetime import datetime, timezone
+from config.plan_catalog import (
+    LADDER_V1_PRICE_BINDINGS,
+    RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
+    resolve_subscription_entitlements,
+)
 
 _SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render_backend_runtime_env.py'
 _MODULE = runpy.run_path(str(_SCRIPT), run_name='render_backend_runtime_env')
@@ -728,6 +734,10 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
     literal_project = {'dev': 'based-hardware-dev', 'prod': 'based-hardware'}[env_name]
     for entry in state['services']['desktop-backend']['env']:
         name, value = entry['name'], entry['value']
+        if name in {row['env_var'] for row in LADDER_V1_PRICE_BINDINGS.values()}:
+            assert '${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}' in workflow
+            assert f'{name}: ${{{{ vars.{name} }}}}' in workflow
+            continue
         if name in _MODULE['FIRESTORE_READ_RUNTIME_ENV_NAMES']:
             assert '${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}' in workflow
             continue
@@ -792,8 +802,9 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
         capture_output=True,
         text=True,
     )
-    assert result.stdout.startswith(
+    assert (
         'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"candidates_page":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"people_scan_dedupe":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0}\n'
+        in result.stdout
     )
     assert result.stdout.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
     entries = json.loads(state.read_text())['services']['desktop-backend']['env']
@@ -919,3 +930,52 @@ def test_integration_enrichment_renderer_targets_fresh_sync_handler(monkeypatch)
     assert f'SYNC_TASKS_HANDLER_URL={handler}' in rendered
     assert f'SYNC_TASKS_OIDC_AUDIENCE={handler}' in rendered
     assert 'SYNC_TASKS_INVOKER_SA=invoker@example.invalid' in rendered
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+@pytest.mark.parametrize('bound', [False, True])
+def test_rendered_price_bindings_preserve_versioned_screen_capability(monkeypatch, tmp_path, capsys, env_name, bound):
+    bindings = list(LADDER_V1_PRICE_BINDINGS.values())
+    for index, row in enumerate(bindings):
+        if bound:
+            monkeypatch.setenv(row['env_var'], f'price_render_fixture_{index}')
+        else:
+            monkeypatch.delenv(row['env_var'], raising=False)
+    state_path = tmp_path / 'desktop-state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', env_name, '--desktop-state-output', str(state_path)])
+    assert _MODULE['main']() == 0
+    output = capsys.readouterr().out
+    marker = '__BACKEND_RUNTIME_ENV_ladder_price_env_vars__'
+    deployed = dict(line.split('=', 1) for line in output.split(marker)[1].strip().splitlines())
+    expected_state = {
+        entry['name']: entry['value']
+        for entry in json.loads(state_path.read_text())['services']['desktop-backend']['env']
+    }
+    backend_entries = _MANIFEST['environments'][env_name]['cloud_run']['services']['backend']['env']
+    backend_workflow = (
+        _REPO_ROOT / '.github/workflows' / ('gcp_backend_auto_dev.yml' if env_name == 'dev' else 'gcp_backend.yml')
+    )
+    workflow_text = backend_workflow.read_text()
+    for index, row in enumerate(bindings):
+        key = row['env_var']
+        expected = f'price_render_fixture_{index}' if bound else ''
+        assert deployed[key] == expected_state[key] == expected
+        assert _MODULE['_render_env_vars']({key: backend_entries[key]}) == f'{key}={expected}'
+        assert f'{key}: ${{{{ vars.{key} }}}}' in workflow_text
+        if bound:
+            subscription = {
+                'plan': row['plan_id'],
+                'current_price_id': expected,
+                'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+            }
+            assert resolve_subscription_entitlements(subscription, deployed)['capabilities'][
+                'cloud_screen_vectors'
+            ] is (row['plan_id'] != 'plus')
+    assert set(deployed) == {row['env_var'] for row in bindings}
+    for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items():
+        subscription = {
+            'plan': plan.value,
+            'current_price_id': price,
+            'current_period_end': datetime.now(timezone.utc).timestamp() + 3600,
+        }
+        assert resolve_subscription_entitlements(subscription, deployed)['capabilities']['cloud_screen_vectors'] is True

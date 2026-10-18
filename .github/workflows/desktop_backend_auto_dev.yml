@@ -233,6 +233,13 @@ jobs:
       # manifest so it cannot drift from the values actually deployed.
       - name: Render desktop backend expected env state
         id: desktop-expected-env
+        env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         run: |
           set -euo pipefail
           python3 backend/scripts/render_backend_runtime_env.py \
@@ -277,6 +284,7 @@ jobs:
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIRESTORE_READ_LEDGER=1
             FIRESTORE_READ_LEDGER_SERVICE=desktop-backend
+            ${{ steps.desktop-expected-env.outputs.ladder_price_env_vars }}
             ${{ steps.desktop-expected-env.outputs.firestore_read_env_vars }}
             FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}

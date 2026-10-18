@@ -13,6 +13,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+  LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+  LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+  LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+  LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+  LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
   SERVICE: backend
   REGION: us-central1
   # Cloud Run tags are service-scoped. Reusing this tag atomically moves each

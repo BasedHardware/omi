@@ -145,6 +145,12 @@ def main() -> int:
                 f'{name}={_escape_deploy_cloud_run_env_value(desktop_env[name])}'
                 for name in FIRESTORE_READ_RUNTIME_ENV_NAMES
             )
+            ladder_price_env_vars = '\n'.join(
+                f'{name}={_escape_deploy_cloud_run_env_value(desktop_env[name])}'
+                for name in desktop_env
+                if name.startswith('LADDER_V1_') and name.endswith('_PRICE_ID')
+            )
+            _emit_output('ladder_price_env_vars', ladder_price_env_vars)
             _emit_output('firestore_read_env_vars', firestore_read_env_vars)
             return 0
 

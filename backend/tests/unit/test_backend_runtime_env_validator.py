@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from config.plan_catalog import LADDER_V1_PRICE_BINDINGS
 
 from config.jev_decisions import (
     CONVERSATION_RELEVANCE_JEV_ENABLED_ENV,
@@ -521,6 +522,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '1000000000',
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
+    # Unbound W3 references render as empty strings in the main API service.
+    translation_defaults.update({binding['env_var']: '' for binding in LADDER_V1_PRICE_BINDINGS.values()})
     entries = ',\n'.join('        ' + json.dumps({'name': k, 'value': v}) for k, v in translation_defaults.items())
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',

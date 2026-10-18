@@ -623,6 +623,24 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        LADDER_V1_PLUS_MONTH_PRICE_ID:
+          env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
+          default: ''
+        LADDER_V1_PLUS_YEAR_PRICE_ID:
+          env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
+          default: ''
+        LADDER_V1_PRO_MONTH_PRICE_ID:
+          env_var: LADDER_V1_PRO_MONTH_PRICE_ID
+          default: ''
+        LADDER_V1_PRO_YEAR_PRICE_ID:
+          env_var: LADDER_V1_PRO_YEAR_PRICE_ID
+          default: ''
+        LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
+          env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
+          default: ''
+        LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
+          env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
+          default: ''
         OMI_VERTEX_RESERVATION_STATES:
           env_var: OMI_VERTEX_RESERVATION_STATES
           provisional: true
@@ -733,6 +751,24 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            LADDER_V1_PLUS_MONTH_PRICE_ID:
+              env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
+              default: ''
+            LADDER_V1_PLUS_YEAR_PRICE_ID:
+              env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
+              default: ''
+            LADDER_V1_PRO_MONTH_PRICE_ID:
+              env_var: LADDER_V1_PRO_MONTH_PRICE_ID
+              default: ''
+            LADDER_V1_PRO_YEAR_PRICE_ID:
+              env_var: LADDER_V1_PRO_YEAR_PRICE_ID
+              default: ''
+            LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
+              env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
+              default: ''
+            LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
+              env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
+              default: ''
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
@@ -2897,6 +2933,24 @@ environments:
     region: us-central1
     desktop_backend:
       env:
+        LADDER_V1_PLUS_MONTH_PRICE_ID:
+          env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
+          default: ''
+        LADDER_V1_PLUS_YEAR_PRICE_ID:
+          env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
+          default: ''
+        LADDER_V1_PRO_MONTH_PRICE_ID:
+          env_var: LADDER_V1_PRO_MONTH_PRICE_ID
+          default: ''
+        LADDER_V1_PRO_YEAR_PRICE_ID:
+          env_var: LADDER_V1_PRO_YEAR_PRICE_ID
+          default: ''
+        LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
+          env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
+          default: ''
+        LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
+          env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
+          default: ''
         OMI_VERTEX_RESERVATION_STATES:
           env_var: OMI_VERTEX_RESERVATION_STATES
           provisional: true
@@ -3038,6 +3092,24 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            LADDER_V1_PLUS_MONTH_PRICE_ID:
+              env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
+              default: ''
+            LADDER_V1_PLUS_YEAR_PRICE_ID:
+              env_var: LADDER_V1_PLUS_YEAR_PRICE_ID
+              default: ''
+            LADDER_V1_PRO_MONTH_PRICE_ID:
+              env_var: LADDER_V1_PRO_MONTH_PRICE_ID
+              default: ''
+            LADDER_V1_PRO_YEAR_PRICE_ID:
+              env_var: LADDER_V1_PRO_YEAR_PRICE_ID
+              default: ''
+            LADDER_V1_ARCHITECT_MONTH_PRICE_ID:
+              env_var: LADDER_V1_ARCHITECT_MONTH_PRICE_ID
+              default: ''
+            LADDER_V1_ARCHITECT_YEAR_PRICE_ID:
+              env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
+              default: ''
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
             REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}

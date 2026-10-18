@@ -17,6 +17,20 @@ or replacing a legacy billing env ID is rejected. Recognition of a bound ladder
 price does not depend on the storefront switch, so renewals retain their identity
 on rollback. Binding env vars must remain present while subscribers use those IDs.
 
+The main backend and the separate desktop-backend deploy paths propagate these
+same six optional GitHub environment/repository variables through the runtime
+manifest. Unset references render as empty strings and do not require W3 prices
+or enable checkout. Both desktop workflows deploy the renderer's binding output;
+their sidecar expected state contains the same values. This is reference plumbing,
+not price creation, activation, or a reclassification of any legacy price.
+
+The subscription endpoint resolves `cloud_screen_vectors` and its allowance from
+the real subscription snapshot, including a successfully refreshed Stripe price,
+before any released-client plan remap. Synthetic BYOK display plans grant no cloud
+storage capability. If the optional capability authority is unavailable, the
+endpoint omits that field and records a degraded fallback; the embedding proxy
+still returns 503 when its required entitlement authority is unavailable.
+
 Only `STOREFRONT_LADDER_V1_ENABLED=true` admits purchases of those IDs. The existing
 v1 purchase catalog and its platform partition stay compatible with installed
 clients. The v2 sheet offers the unified ladder on all platforms. Checkout and

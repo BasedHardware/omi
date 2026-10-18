@@ -56,6 +56,7 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.plan_catalog import resolve_subscription_entitlements
+from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import execution_admission_enabled as funded_processing_enabled
@@ -1248,11 +1249,23 @@ def get_user_subscription_endpoint(
         funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
     # Resolve from the real subscription, never the synthetic BYOK response plan.
-    if 'subscription' not in already_read:
-        already_read['subscription'] = users_db.get_user_valid_subscription(uid, provision=False)
-    response.cloud_screen_vectors = resolve_subscription_entitlements(
-        already_read.get('subscription') or {'plan': 'basic'}
-    )['capabilities']['cloud_screen_vectors']
+    try:
+        if 'subscription' not in already_read:
+            already_read['subscription'] = users_db.get_user_valid_subscription(uid, provision=False)
+        response.cloud_screen_vectors = resolve_subscription_entitlements(
+            already_read.get('subscription') or {'plan': 'basic'}
+        )['capabilities']['cloud_screen_vectors']
+    except Exception:
+        # This additive display field must not break the existing recovery endpoint.
+        # Unknown authority grants neither a capability nor a false Free-plan denial.
+        record_fallback(
+            component='firestore_read',
+            from_mode='subscription_capability',
+            to_mode='unknown',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
     # A closed result with no resolved total is not an unlimited allowance.
     # Keep the already-built finite snapshot instead of emitting the wire's
     # 0 == unlimited sentinel. Known totals (including exhaustion) still win.
@@ -1395,6 +1408,8 @@ def _user_subscription_response(
             stripe_sub_dict = stripe_sub.to_dict()
             if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
                 subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
+                if already_read['subscription'] is not None:
+                    already_read['subscription'].current_price_id = subscription.current_price_id
         except Exception as e:
             logger.error(f"Error retrieving current price ID: {e}")
 
