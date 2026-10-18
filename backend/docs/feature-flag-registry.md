@@ -301,6 +301,7 @@ and an explicit empty literal renders as `''`.
 | `SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM` | Retire Redis-absent unbound backfill heads before dispatch; default and current dev/prod manifests off pending durable redrive guard | backend | env | closed | declared | false | false | — | pending | 2026-11-14 | dazheng |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | off | off | on | — | pending | 2026-10-27 | dazheng |
 | `SYNC_DURABLE_REDRIVE_GUARD` | Default-off durable custody before expired accepted sync requests leave dispatch | backend | env | closed | — | — | — | — | pending | 2026-11-17 | dazheng |
+| `SYNC_DURABLE_STATUS_RECONCILIATION` | Default off; legacy sync polling reads proven durable content completion after expiry or redrive | backend | env | closed | — | — | — | — | pending | 2026-11-17 | dazheng |
 | `SYNC_LEGACY_COMPLETION_CONVERGENCE` | Default-off under-lock durable completion convergence before legacy provider retries | backend | env | closed | — | — | — | — | pending | 2026-11-17 | dazheng |
 | `SYNC_LEGACY_FRESH_ENABLED` | Admit recent LEGACY offline sync to fresh under an atomic per-user upload and byte budget | backend | env | closed | declared | false | true | — | pending | 2026-11-14 | dazheng |
 | `SYNC_LEGACY_FRESH_PERCENT` | Stable SHA-256 UID percentage for recent LEGACY fresh admission; default zero | backend | env | closed | declared | 0 | 100 | — | pending | 2026-11-15 | dazheng |
@@ -578,6 +579,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_BACKFILL_ORDER_UID_ALLOWLIST` — Comma-separated UID cohort for newest backfill ordering; empty by default and newest master policy required (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_DURABLE_REDRIVE_GUARD` — Default-off durable custody before expired accepted sync requests leave dispatch (fail: closed)
+- `SYNC_DURABLE_STATUS_RECONCILIATION` — Default off; legacy sync polling reads proven durable content completion after expiry or redrive (fail: closed)
 - `SYNC_LEGACY_COMPLETION_CONVERGENCE` — Default-off under-lock durable completion convergence before legacy provider retries (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
 - `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
