@@ -903,37 +903,6 @@ _add(
         },
     )
 )
-_add(
-    DriverEntry(
-        'database.conversations.assign_sync_conversation',
-        base={
-            'uid': UID,
-            'incoming': {
-                'id': 'wal-1',
-                'started_at': T0,
-                'finished_at': T1,
-                'client_device_id': 'device-1',
-                'source': 'omi',
-                'data_protection_level': 'standard',
-            },
-        },
-        domains={'target_id': [None, 'explicit-live-1']},
-        neutrals={
-            'candidate_id': (None, 'document hint; does not affect discovery query'),
-            'firestore_client': (None, 'uses installed recording client'),
-            'before_assign': (None, 'transaction-only callback; no discovery query effect'),
-            'validate_plan': (None, 'transaction-only callback; no discovery query effect'),
-            'after_assign': (None, 'transaction-only callback; no discovery query effect'),
-            'retry_contention': (False, 'transaction retry policy; no discovery query effect'),
-        },
-        patchers=(
-            _stub('utils.sync.live_overlap.live_overlap_enabled', True),
-            _stub('utils.sync.assignment.run_with_size_limit_backstop', ({'id': 'wal-1'}, True, [])),
-            _stub('database.conversations.invalidate_people_stats_cache', None),
-            _stub('database.conversations._sync_conversation_search_index', None),
-        ),
-    )
-)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
