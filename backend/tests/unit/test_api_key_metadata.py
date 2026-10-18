@@ -54,9 +54,9 @@ class TestDatetimeCoercion:
         assert _coerce_utc_datetime([1, 2]) is None
         assert _coerce_utc_datetime(object()) is None
 
-    def test_overflow_boundary_returns_none(self):
+    def test_far_future_aware_datetime_survives(self):
         far = datetime(9999, 12, 31, 23, 59, tzinfo=timezone.utc)
-        # offset conversion past datetime range -> OverflowError -> None
+        # UTC offset conversion at the top of the range must not overflow.
         assert _coerce_utc_datetime(far) == far
 
     def test_to_datetime_wrong_type_returns_none(self):
@@ -97,3 +97,17 @@ class TestProjection:
     def test_hash_validation_shape(self):
         assert is_valid_api_key_hash('a' * 64)
         assert not is_valid_api_key_hash('z' * 64)
+
+
+class TestDocumentIdInterplay:
+    def test_raw_id_mismatch_projects_document_id(self):
+        """A stored row whose raw['id'] disagrees with the Firestore doc id
+        projects the canonical doc id — the auth read boundary flags
+        DOCUMENT_ID repair upstream; this pins the projection side."""
+        out = project_api_key_metadata(
+            document_id='doc-real',
+            raw={'id': 'doc-stale', 'name': 'service', 'key_prefix': 'omc_abcdef12'},
+            snapshot_create_time=None,
+            key_kind='mcp',
+        )
+        assert out.metadata['id'] == 'doc-real'
