@@ -240,6 +240,7 @@ environment_shared:
           secret:
             name: '{env}-omi-backend-secrets'
             key: ELEVENLABS_API_KEY
+        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
@@ -789,6 +790,7 @@ environment_shared:
           source: environment
         REDIS_DB_HOST:
           source: environment
+        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
@@ -1205,6 +1207,7 @@ environment_shared:
             category: service_auth
           USE_VERTEX_AI:
             value: 'true'
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1595,6 +1598,7 @@ environment_shared:
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1997,6 +2001,7 @@ environment_shared:
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -2380,6 +2385,7 @@ environment_shared:
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy

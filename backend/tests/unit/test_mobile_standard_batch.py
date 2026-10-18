@@ -178,15 +178,16 @@ def test_archive_failure_propagates_for_retry(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def upload_router():
-    # Import/setup and module restoration are outside the behavior CPU budget.
-    loaded = _load_sync_router_for_fast_path()
+def mobile_sync_router():
+    # Router/module loading and dependency stubs are fixture setup, not upload
+    # behavior. Keep their cleanup paired here, including on assertion failure.
+    module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
     try:
-        yield loaded
+        yield module, jobs, bytes_io
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
-        for name, original in loaded[1].items():
+        for name, original in saved.items():
             if original is None:
                 sys.modules.pop(name, None)
             else:
@@ -195,8 +196,8 @@ def upload_router():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('archive_fails', [False, True])
-async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(archive_fails, upload_router):
-    module, _, jobs, bytes_io, _, _ = upload_router
+async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mobile_sync_router, archive_fails):
+    module, jobs, bytes_io = mobile_sync_router
     calls = []
 
     def archive(uid, paths, metadata=None):

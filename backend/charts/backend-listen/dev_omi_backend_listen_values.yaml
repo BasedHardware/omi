@@ -478,6 +478,8 @@ env:
         key: ADMIN_KEY
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
+  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
+    value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: DEEPGRAM_SELF_HOSTED_ENABLED

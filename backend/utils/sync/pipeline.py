@@ -23,7 +23,7 @@ import uuid
 from collections import deque
 from functools import partial
 from datetime import datetime, timezone
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -147,7 +147,14 @@ from utils.stt.voiceprints import usable_person_voiceprint
 from config.stt_cap_dispatch import enabled as stt_cap_dispatch_enabled
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
-from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
+from utils.stt.pre_recorded import (
+    get_prerecorded_service,
+    modulate_prerecorded_from_bytes,
+    postprocess_words,
+    prerecorded,
+)
+from utils.sync import empty_recovery
+from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
     TranscriptionOutcome,
@@ -1251,6 +1258,84 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
+def _recover_empty_segment(
+    path: str, uid: str, provider: str, lane: str, job_id: str | None, attempt_ref: str | None
+) -> tuple[list[TranscriptSegment], str] | None:
+    def observe_inspection(duration: float | None, spans: list[dict] | None):
+        logger.info(
+            'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
+            'duration_seconds=%.3f vad_spans=%d speech_seconds=%.3f',
+            'inspection_error' if spans is None else ('speech' if spans else 'silence'),
+            _bounded_sync_lane(lane),
+            bounded_provider(provider),
+            compute_sync_segment_id(uid, path),
+            duration or 0,
+            len(spans or []),
+            sum(span['end'] - span['start'] for span in spans or []),
+        )
+
+    def authorize_recovery():
+        if provider != 'parakeet':
+            # Positive VAD after multilingual double-empty is unresolved;
+            # buying the same call again is not independent recovery.
+            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+        if stt_cap_dispatch_enabled() and not sync_allowed(uid):
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
+
+    def multilingual_once(audio: bytes, **kwargs: Any):
+        def dispatch():
+            response = modulate_prerecorded_from_bytes(audio, **kwargs)
+            if stt_cap_dispatch_enabled():
+                allowance = funded_allowance(uid)
+                record_cap_audio(
+                    'sync',
+                    'accepted',
+                    'modulate',
+                    (len(audio) - 44) / 32000,
+                    allowance.reason == 'plan_allowance_exhausted',
+                )
+            return response
+
+        try:
+            return dispatch_empty_recovery_once(uid, compute_sync_segment_id(uid, path), dispatch)
+        except (ValueError, TypeError):
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate') from None
+        except Exception as error:
+            raise failure_from_exception(error, provider='modulate') from None
+
+    words, recovered_language, duration, spans = empty_recovery.recover(
+        path, transcribe=multilingual_once, authorize=authorize_recovery, observe=observe_inspection
+    )
+    logger.info(
+        'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '
+        'vad_spans=%d speech_seconds=%.3f job_ref=%s attempt_ref=%s',
+        'speech' if spans else 'silence',
+        _bounded_sync_lane(lane),
+        duration,
+        len(spans),
+        sum(span['end'] - span['start'] for span in spans),
+        _bounded_correlation_ref(job_id),
+        _bounded_correlation_ref(attempt_ref),
+    )
+    if not spans:
+        return None
+    transcript_segments = postprocess_words(words, 0)
+    if not transcript_segments:
+        raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate')
+    if sync_safety_wal_enabled():
+        for segment in transcript_segments:
+            segment.stt_provider = 'velma-2'
+    record_fallback(
+        component='sync_dispatch',
+        from_mode=provider,
+        to_mode='modulate',
+        reason='empty_streak',
+        outcome='recovered',
+        log=logger,
+    )
+    return transcript_segments, recovered_language
+
+
 def process_segment(
     path: str,
     uid: str,
@@ -1346,14 +1431,8 @@ def process_segment(
         # rather than Deepgram's detection (avoids overriding explicit selection).
         use_return_language = not (single_language_mode and user_language)
 
-        # A provider that returns without error and produces no words is
-        # reporting that the audio holds no transcribable speech. VAD
-        # admitting the segment is not evidence to the contrary — it
-        # over-reports on noise — so one identical bounded retry confirms the
-        # same valid empty result as VAD finding nothing, not a failure to
-        # retry further. Counting it as a failed segment finalized the whole
-        # job failed, and the client re-uploaded the same noise on every pass
-        # until it gave up and showed the recording as permanently failed.
+        # Retain the bounded confirmation retry. With strict recovery enabled,
+        # recognizer emptiness cannot by itself authorize silence.
         def _log_empty_retry(outcome: str, words: int = 0, raw_empty: bool = False) -> None:
             logger.info(
                 'event=sync_transcription_empty_retry outcome=%s provider=%s model=%s lane=%s '
@@ -1442,9 +1521,16 @@ def process_segment(
                     deferred_outcome['recovery_ambiguous'] = True
                 return False
             if empty_retried:
-                # Words survived the provider but nothing survived post-processing:
-                # again no transcribable speech, valid and empty rather than failed.
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
+                if empty_recovery.enabled():
+                    phase = 'provider_call'
+                    recovered = _recover_empty_segment(path, uid, provider, sync_lane, job_id, attempt_ref)
+                    if recovered is not None:
+                        transcript_segments, recovered_language = recovered
+                        provider, model = 'modulate', 'velma-2'
+                        language = user_language if (single_language_mode and user_language) else recovered_language
+                        recovered_via_retry = True
+                        break
                 _record_empty_segment_as_silence(
                     provider=provider,
                     model=model,

@@ -114,6 +114,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
+    value: "false"
   - name: FIRST_SUMMARY_DEADLINE_PERCENT
     value: "0"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
