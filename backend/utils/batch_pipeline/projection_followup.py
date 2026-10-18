@@ -87,7 +87,9 @@ class ProjectionFollowups:
         # This is a segment claim, never the owner's assignment claim. Redis
         # remains advisory; identical side effects are replay-safe if unavailable.
         store = self.projector.store
-        claim = projection_claim(store.store.namespace + ':followup', owner_key(segment))
+        claim = await run_blocking(
+            db_executor, projection_claim, store.store.namespace + ':followup', owner_key(segment)
+        )
         entered = False
         try:
             acquired = await run_blocking(db_executor, claim.__enter__)
