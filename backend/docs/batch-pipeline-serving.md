@@ -455,7 +455,8 @@ by this change. Rollback each to false; ordinary queue links and existing
 persisted/ready receipts remain compatible with the synchronous path.
 
 Head priority splices the owner's earliest `merge_pending` job to the front of
-its existing priority queue when it is ready and found within 64 links. The
+its existing priority queue when it is ready and found within a shared budget
+of 64 head-query/link reads per shard transaction. The
 selected job still pays its actual DRR cost, passes privacy checks, and respects
 fresh reservations, duration and shared-GPU capacity. It never steals a live
 lease, changes priority class, invents silence, or resolves an uncertain paid

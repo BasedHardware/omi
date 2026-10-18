@@ -50,13 +50,16 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 
-def _prefer_merge_head(tx: Transaction, queue: dict, job: dict) -> dict:
-    """Splice the ready ordered head ahead of later queued work, bounded to 64 reads.
+def _prefer_merge_head(tx: Transaction, queue: dict, job: dict, budget: list[int]) -> dict:
+    """Splice the ready ordered head, sharing a 64-read budget across this shard.
 
     No new queue class, tombstones or lease takeover: rollback reads an ordinary
     FIFO. Priorities, DRR charges and pool/privacy checks still apply to the
     selected job. Quarantine is not merge_pending and is never selected here.
     """
+    if budget[0] <= 0:
+        return job
+    budget[0] -= 1
     head = tx.first_pending(job['owner_key'])
     if (
         not head
@@ -66,10 +69,11 @@ def _prefer_merge_head(tx: Transaction, queue: dict, job: dict) -> dict:
     ):
         return job
     previous = job
-    for _ in range(HEAD_LOOKAHEAD):
+    while budget[0] > 0:
         sid = previous.get('next')
         if not sid:
             break
+        budget[0] -= 1
         candidate = tx.get('jobs', sid)
         if not candidate:
             break
@@ -238,6 +242,7 @@ class Scheduler:
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
+            head_budget = [HEAD_LOOKAHEAD]
             for _ in range(MAX_VISITS):
                 if not ring:
                     break
@@ -250,7 +255,7 @@ class Scheduler:
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
                     if head_priority_enabled():
-                        job = _prefer_merge_head(tx, queue, job)
+                        job = _prefer_merge_head(tx, queue, job, head_budget)
                         tx.put('queues', queue_key, queue)
                     job.setdefault('unit_kind', 'conversation')
                     try:

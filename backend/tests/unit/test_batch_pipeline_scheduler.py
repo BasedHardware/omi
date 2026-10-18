@@ -563,3 +563,26 @@ def test_head_promotion_never_buffers_link_writes_for_privacy_fenced_job(monkeyp
     assert store.rows['jobs', 'head']['state'] == 'ready'
     assert store.rows['jobs', 'head']['next'] == ''
     assert queue.pull(2) == []
+
+
+def test_head_lookahead_budget_is_shared_by_all_visited_owners(monkeypatch):
+    from utils.batch_pipeline import scheduler
+
+    monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    monkeypatch.setattr(scheduler, 'HEAD_LOOKAHEAD', 1)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    other = colliding_owner('heavy')
+    for owner in ('heavy', other):
+        queue.enqueue(item('new-' + owner, owner=owner, capture=20, duration=100), 0)
+        queue.enqueue(item('head-' + owner, owner=owner, capture=10), 0)
+    calls = []
+    first = MemoryTransaction.first_pending
+
+    def count(tx, key):
+        calls.append(key)
+        return first(tx, key)
+
+    monkeypatch.setattr(MemoryTransaction, 'first_pending', count)
+    assert queue.pull(1)
+    assert len(calls) == 1
