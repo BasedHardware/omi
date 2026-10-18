@@ -327,7 +327,11 @@ class QuarantineRecovery:
                     self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
                 try:
                     outcome = (self.dispatch if recovery_tasks_enabled() else self.recover)(segment_id, owner_id)
-                except Exception:
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
                     outcome = 'held'
                 counts[outcome] = counts.get(outcome, 0) + 1
                 try:
