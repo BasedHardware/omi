@@ -1043,7 +1043,8 @@ async def update_persona(
 
     # Only retire the old logo after the new data validates — a 422 must not
     # destroy the image the stored persona still references.
-    if file and persona['image'].startswith('https://storage.googleapis.com/'):
+    # Legacy persona rows predate the image field — .get like update_app uses.
+    if file and persona.get('image', '').startswith('https://storage.googleapis.com/'):
         await run_blocking(storage_executor, delete_app_logo, persona['image'])
 
     await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
