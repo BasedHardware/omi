@@ -21,6 +21,13 @@ void main() {
       expect(message, contains('may not be supported'));
       expect(message, contains('$vendorApp app'));
       expect(device.getFirmwareWarningTitle(), 'Compatibility Note');
+      // A "Don't show again" given to the old note must not hide this one.
+      expect(device.firmwareWarningAcknowledgedKey, isNot('firmware_warning_acknowledged_DeviceType.${type.name}'));
     });
   }
+
+  test("Bee keeps its acknowledgment key: its note's wording did not change", () {
+    final bee = BtDevice(name: 'Bee', id: 'bee-1', type: DeviceType.bee, rssi: -50);
+    expect(bee.firmwareWarningAcknowledgedKey, 'firmware_warning_acknowledged_DeviceType.bee');
+  });
 }

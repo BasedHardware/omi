@@ -662,6 +662,17 @@ class BtDevice {
     }
   }
 
+  /// Preference key for "Don't show again" on this type's pairing note. The reworded
+  /// third-party notes use a new key so dismissing the old "works great" note does not hide them.
+  String get firmwareWarningAcknowledgedKey => switch (type) {
+        DeviceType.plaud ||
+        DeviceType.fieldy ||
+        DeviceType.friendPendant ||
+        DeviceType.limitless =>
+          'firmware_warning_acknowledged_v2_$type',
+        _ => 'firmware_warning_acknowledged_$type',
+      };
+
   /// The pairing note for third-party hardware whose firmware Omi has no compatibility check for.
   /// Its device info falls back to a 1.0.0 placeholder, so the note must not claim this unit works.
   String _unverifiedFirmwareNote(String vendorApp) =>
