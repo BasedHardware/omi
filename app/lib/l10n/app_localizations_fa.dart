@@ -9319,6 +9319,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'حدود ۱ دقیقه';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'رفتن به $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count مورد دیگر';
+  }
+
+  @override
   String get jumpToLatestMessage => 'پرش به آخرین پیام';
 
   @override

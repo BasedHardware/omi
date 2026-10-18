@@ -3032,6 +3032,8 @@
     "deviceOnboardingIntroTitle": "Omi を知ろう",
     "deviceOnboardingIntroSubtitle": "リアルタイム文字起こし、質問、ダブルタップのショートカットを試してみましょう。",
     "deviceOnboardingIntroDuration": "約1分",
+    "quoteJumpToTime": "{duration}に移動",
+    "quoteMoreTimestamps": "+他{count}件",
     "jumpToLatestMessage": "最新のメッセージにジャンプ",
     "latest": "最新",
     "flashFirmware": "ファームウェアを書き込む",

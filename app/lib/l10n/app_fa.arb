@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "با Omi خود آشنا شوید",
     "deviceOnboardingIntroSubtitle": "رونویسی زنده، پرسیدن یک سؤال و میان‌بر دوبار ضربه را امتحان کنید.",
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
+    "quoteJumpToTime": "رفتن به {duration}",
+    "quoteMoreTimestamps": "+{count} مورد دیگر",
     "jumpToLatestMessage": "پرش به آخرین پیام",
     "latest": "آخرین",
     "flashFirmware": "فلش کردن میان‌افزار",

@@ -9322,6 +9322,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Přejít na $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count dalších';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Přejít na nejnovější zprávu';
 
   @override

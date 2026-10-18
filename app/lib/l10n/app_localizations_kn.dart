@@ -9352,6 +9352,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationಗೆ ಹೋಗಿ';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ಇನ್ನೂ $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ';
 
   @override

@@ -9362,6 +9362,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Ugrás ide: $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count további';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
 
   @override

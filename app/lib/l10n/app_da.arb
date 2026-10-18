@@ -3040,6 +3040,8 @@
     "deviceOnboardingIntroTitle": "Lær din Omi at kende",
     "deviceOnboardingIntroSubtitle": "Prøv live-transskription, stil et spørgsmål og genvejen med dobbelttryk.",
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
+    "quoteJumpToTime": "Gå til {duration}",
+    "quoteMoreTimestamps": "+{count} mere",
     "jumpToLatestMessage": "Gå til nyeste besked",
     "latest": "Nyeste",
     "flashFirmware": "Flash firmware",

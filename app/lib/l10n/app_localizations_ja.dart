@@ -9184,6 +9184,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '約1分';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationに移動';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+他$count件';
+  }
+
+  @override
   String get jumpToLatestMessage => '最新のメッセージにジャンプ';
 
   @override

@@ -2998,6 +2998,8 @@
     "deviceOnboardingIntroTitle": "Coneix el teu Omi",
     "deviceOnboardingIntroSubtitle": "Prova la transcripció en directe, fer una pregunta i la drecera de doble toc.",
     "deviceOnboardingIntroDuration": "Aproximadament 1 minut",
+    "quoteJumpToTime": "Ves a {duration}",
+    "quoteMoreTimestamps": "+{count} més",
     "jumpToLatestMessage": "Vés a l'últim missatge",
     "latest": "Últim",
     "flashFirmware": "Grava el microprogramari",

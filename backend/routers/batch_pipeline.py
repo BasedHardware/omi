@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response, JSONResponse
 
+from config.batch_pipeline import read_only_metrics_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
@@ -146,7 +147,10 @@ async def reconcile(body: WorkerRequest):
 @router.get('/metrics', include_in_schema=False)
 async def metrics():
     service = serving_for_stage(current_stage())
-    await run_blocking(sync_executor, service.reconcile)
+    if read_only_metrics_enabled() and service.metrics is not None:
+        await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
+    else:
+        await run_blocking(sync_executor, service.reconcile)
     return Response(generate_latest(), headers={'Content-Type': CONTENT_TYPE_LATEST})
 
 

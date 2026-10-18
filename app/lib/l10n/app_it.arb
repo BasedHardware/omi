@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Scopri il tuo Omi",
     "deviceOnboardingIntroSubtitle": "Prova la trascrizione dal vivo, fai una domanda e usa la scorciatoia con doppio tocco.",
     "deviceOnboardingIntroDuration": "Circa 1 minuto",
+    "quoteJumpToTime": "Vai a {duration}",
+    "quoteMoreTimestamps": "+{count} altri",
     "jumpToLatestMessage": "Vai all'ultimo messaggio",
     "latest": "Più recente",
     "flashFirmware": "Installa il firmware",

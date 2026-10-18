@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Запознајте се со вашиот Omi",
     "deviceOnboardingIntroSubtitle": "Пробајте живо транскрибирање, поставување прашање и кратенката со двојно допрување.",
     "deviceOnboardingIntroDuration": "Околу 1 минута",
+    "quoteJumpToTime": "Оди на {duration}",
+    "quoteMoreTimestamps": "+ уште {count}",
     "jumpToLatestMessage": "Оди до последната порака",
     "latest": "Најново",
     "flashFirmware": "Инсталирај фирмвер",

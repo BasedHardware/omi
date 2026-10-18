@@ -62,6 +62,7 @@ environment_shared:
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
+        FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_PERCENT:
@@ -548,6 +549,8 @@ environment_shared:
         BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
           value: 'false'
           category: rollout
+        BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
           value: 'false'
           category: rollout
@@ -573,6 +576,9 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
@@ -955,6 +961,7 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
@@ -1343,6 +1350,8 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -1390,6 +1399,7 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
@@ -1756,6 +1766,8 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -1791,6 +1803,7 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
@@ -2134,6 +2147,8 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -2172,6 +2187,7 @@ environment_shared:
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_PERCENT:
@@ -2448,6 +2464,8 @@ environment_shared:
           BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED:
             value: 'false'
             category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout

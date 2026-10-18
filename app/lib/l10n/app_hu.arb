@@ -3103,6 +3103,8 @@
     "deviceOnboardingIntroTitle": "Ismerd meg az Omidat",
     "deviceOnboardingIntroSubtitle": "Próbáld ki az élő átírást, a kérdésfeltevést és a dupla koppintásos gyorsbillentyűt.",
     "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
+    "quoteJumpToTime": "Ugrás ide: {duration}",
+    "quoteMoreTimestamps": "+{count} további",
     "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
     "latest": "Legújabb",
     "flashFirmware": "Firmware flashelése",
