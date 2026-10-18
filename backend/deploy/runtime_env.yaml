@@ -931,7 +931,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1218,7 +1217,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -1496,7 +1494,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1722,7 +1719,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
               category: service_auth
@@ -3069,7 +3065,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
@@ -3442,7 +3437,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
@@ -3799,7 +3793,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             HOSTED_DIARIZATION_API_URL:
@@ -4099,7 +4092,6 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
-            BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
             BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app
               category: service_auth

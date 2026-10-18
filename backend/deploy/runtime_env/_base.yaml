@@ -1257,9 +1257,6 @@ environment_shared:
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
       backend-sync:
         capabilities:
         - conversation.finalize.persisted
@@ -1642,9 +1639,6 @@ environment_shared:
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
       backend-sync-backfill:
         secrets:
           GOOGLE_CLIENT_SECRET:
@@ -2007,9 +2001,6 @@ environment_shared:
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
             category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
-            category: rollout
         provisional: true
       backend-integration:
         flags:
@@ -2319,9 +2310,6 @@ environment_shared:
             category: rollout
           BATCH_PIPELINE_RECOVERY_MODE:
             value: 'off'
-            category: rollout
-          BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST:
-            value: ''
             category: rollout
     jobs:
       notifications-job:
