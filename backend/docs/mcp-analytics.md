@@ -6,7 +6,7 @@ permanent compatibility alias) produces three telemetry surfaces:
 1. A 100% structured `mcp_request` log line per POST — the per-request metrics
    source, consumed through Cloud Logging log-based metrics (not PostHog).
 2. A sampled `MCP Tool Call` PostHog event per attempted `tools/call`.
-3. A deduplicated `MCP Active` PostHog event marking daily active users.
+3. A deduplicated `MCP Active` PostHog event marking daily active users per client.
 
 Request-level volume is deliberately kept out of PostHog: at ~600k POSTs/day,
 per-request events are the dominant capture cost, so POST telemetry lives only
@@ -101,11 +101,21 @@ blocks tool calls.
 
 ## `MCP Active`
 
-At most one event per UID per UTC day, used for DAU/WAU. A Redis marker
-`mcp:active:{YYYYMMDD}:{uid}` is claimed with `SET NX EX 172800` (two days, so
+At most one event per UID + normalized client per UTC day. A Redis marker
+`mcp:active:{YYYYMMDD}:{uid}:{client_name}` is claimed with `SET NX EX 172800` (two days, so
 a late-UTC-day claim survives into the next day boundary); only the claiming
 request emits the event. Redis failures fail open — the marker lookup throws,
-the event is skipped, and the request is unaffected.
+the event is skipped, and the request is unaffected. The bounded process-local cache uses the
+same UID/client pair and resets on UTC rollover; Redis remains the cross-instance authority.
+Client names are checked against the existing closed enum before either dedupe layer.
+
+DAU/WAU queries must use **distinct users** (`COUNT(DISTINCT distinct_id)`), never
+raw event counts. A user active in two clients emits two events but counts once globally;
+client breakdowns count distinct users within each client and cannot be summed for a
+global DAU. The first tool/transport now belongs to that client's first claiming POST.
+No event name, property name, UID distinct-ID contract or sampling policy changes.
+Old UID-only markers are not consulted: during the first rollout day, a previously
+active user may emit an additional event for each client; distinct-user queries remain valid.
 
 | Property | Values / meaning |
 | --- | --- |
