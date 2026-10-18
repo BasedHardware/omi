@@ -16,11 +16,19 @@ sys.path.insert(0, str(HERE.parents[1] / "examples"))
 
 import goals_to_todotxt as m  # noqa: E402
 
+# Real GoalResponse shape — metric fields nest under "metric".
 GOAL = {
     "id": "g1",
     "title": "Drink water",
+    "metric": {"type": "numeric", "current": 1.0, "target": 2.0, "unit": "liters"},
+    "is_active": True,
+}
+
+# A pre-flattened export — the fallback path also reads flat keys.
+GOAL_FLAT = {
+    "id": "g2",
+    "title": "Drink water",
     "category": "health",
-    "goal_type": "numeric",
     "current_value": 1.0,
     "target_value": 2.0,
     "unit": "liters",
@@ -39,9 +47,14 @@ class TestGoalLine(unittest.TestCase):
         self.assertTrue(line.startswith("x "))
         self.assertNotIn("(B)", line)
 
-    def test_category_to_project_tag(self):
+    def test_metric_type_to_project_tag(self):
         line = m.goal_line(GOAL)
+        self.assertIn("+numeric", line)
+
+    def test_flat_shape_fallback_still_works(self):
+        line = m.goal_line(GOAL_FLAT)
         self.assertIn("+health", line)
+        self.assertIn("cur:1", line)
 
     def test_metric_tags(self):
         line = m.goal_line(GOAL)

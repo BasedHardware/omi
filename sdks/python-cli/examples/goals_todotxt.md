@@ -27,15 +27,15 @@ directory — stdlib-only, zero external dependencies.
 |---|---|
 | `is_active: true` | `(B)` priority prefix |
 | `is_active: false` | `x` completion prefix |
-| `category` | `+<Category>` project tag |
-| `current_value`/`target_value`/`unit` | `cur:X`, `target:Y`, `unit:Z` tags |
+| `metric.type` | `+<Type>` project tag (the goal's category) |
+| `metric.current`/`metric.target`/`metric.unit` | `cur:X`, `target:Y`, `unit:Z` tags |
 | progress ratio | `pct:NN%` tag |
 | `id` | `omi:<id>` tag |
 
 Example line:
 
 ```
-(B) Drink water +health cur:1 target:2 unit:liters pct:50% omi:g1
+(B) Drink water +numeric cur:1 target:2 unit:liters pct:50% omi:g1
 ```
 
 ## Usage

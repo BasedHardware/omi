@@ -14,7 +14,7 @@ Usage:
 Mapping (per the recipe):
     active goal     ->  "(B) <title> ..."   (priority B)
     inactive goal   ->  "x <title> ..."     (todo.txt completion prefix)
-    category        ->  "+<Category>"       (project tag)
+    metric.type     ->  "+<Type>"           (project tag — the goal's category)
     metric goals    ->  "cur:<current> target:<target> pct:<percent>%"
     every row       ->  "omi:<id>"          (round-trippable id)
 
@@ -113,16 +113,21 @@ def goal_line(item: Dict[str, Any]) -> str:
         parts.append("(B)")
     parts.append(task_text(item.get("title") or item.get("description")))
 
-    cat = one_line(item.get("category"))
+    # GoalResponse nests the categorical + metric under "metric"
+    # ({type, current, target, unit, ...}) — read it, falling back to flat
+    # keys for exports that already flattened the shape.
+    metric = item.get("metric") if isinstance(item.get("metric"), dict) else {}
+    cat = one_line(metric.get("type") or item.get("category"))
     if cat and " " not in cat:
         parts.append(f"+{cat.lstrip('+')}")
 
-    cur, target = number(item.get("current_value")), number(item.get("target_value"))
+    cur = number(metric.get("current") if metric.get("current") is not None else item.get("current_value"))
+    target = number(metric.get("target") if metric.get("target") is not None else item.get("target_value"))
     if cur is not None:
         parts.append(f"cur:{fmt_num(cur)}")
     if target is not None:
         parts.append(f"target:{fmt_num(target)}")
-    unit = one_line(item.get("unit"))
+    unit = one_line(metric.get("unit") or item.get("unit"))
     if unit:
         parts.append(f"unit:{unit}")
     if cur is not None and target is not None and target != 0:
