@@ -172,12 +172,11 @@ class _SpeakerPickerState extends State<_SpeakerPicker> {
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final exact = widget.people.any((p) => p.name.toLowerCase() == lower);
     final canAdd = q.length >= 2 && q.length <= 40 && !exact;
-    final isSearching = q.isNotEmpty;
-    // Bounded Everyone tail: cap the initial render behind a "Show all N"
-    // expander (search results are already query-bounded), so a large roster
-    // does not lay out every row on open or per keystroke.
-    final showAllEveryone = _showAllEveryone || isSearching;
-    final visibleEveryone = showAllEveryone ? everyone : everyone.take(_kEveryoneCap).toList();
+    // Everyone is always bounded — roster and search results alike: at most
+    // [_kEveryoneCap] rows render behind a "Show all N" expander, so neither
+    // a large roster nor a broad query lays out every match on open or per
+    // keystroke.
+    final visibleEveryone = _showAllEveryone ? everyone : everyone.take(_kEveryoneCap).toList();
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
       child: ListView(
@@ -254,7 +253,7 @@ class _SpeakerPickerState extends State<_SpeakerPicker> {
                     leading: PersonAvatar(person: p, size: 32, showVoiceBadge: false),
                     onTap: () => _pick(SpeakerPickerChoice.person(p.id, p.name)),
                   ),
-                if (!showAllEveryone && everyone.length > _kEveryoneCap)
+                if (!_showAllEveryone && everyone.length > _kEveryoneCap)
                   OmiSettingsRow(
                     key: const Key('speaker_picker_show_all'),
                     title: l10n.showAllPeople(everyone.length),

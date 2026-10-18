@@ -153,6 +153,36 @@ void main() {
     expect(find.byKey(const Key('speaker_picker_person_p-dana')), findsOneWidget);
   });
 
+  testWidgets('a broad query stays bounded: at most 24 matches render behind Show all', (tester) async {
+    final sent = <(String, Map<String, dynamic>)>[];
+    // 30 people all matching the single-character query "a".
+    await _pumpSheet(
+      tester,
+      review: await _review(sent),
+      people: [for (var i = 0; i < 30; i++) _person('p-a$i', 'A Person $i')],
+    );
+    await _openPicker(tester);
+    // "person" matches all 30 fixture people but neither fixture candidate
+    // (Béla, Marcus), so the count below is purely the bounded Everyone tail.
+    await tester.enterText(find.byType(OmiSearchField), 'person');
+    await tester.pumpAndSettle();
+
+    int personRows() => tester
+        .widgetList(find.byWidgetPredicate(
+          (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('speaker_picker_person_'),
+        ))
+        .length;
+    expect(personRows(), 24);
+    expect(find.byKey(const Key('speaker_picker_show_all')), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('speaker_picker_show_all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('speaker_picker_show_all')));
+    await tester.pumpAndSettle();
+    expect(personRows(), 30);
+    expect(find.byKey(const Key('speaker_picker_show_all')), findsNothing);
+  });
+
   testWidgets('typing an existing name offers no new person, so the listed person is what gets sent', (tester) async {
     final sent = <(String, Map<String, dynamic>)>[];
     await _pumpSheet(tester, review: await _review(sent), people: [_person('p-dana', 'Dana')]);
