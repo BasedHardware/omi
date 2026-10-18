@@ -4,8 +4,12 @@
 See goals_todotxt.md for the full recipe.
 
 Usage:
-    omi --json goal list > goals.json
+    omi --json goal list --include-inactive --limit 100 > goals.json
     python goals_to_todotxt.py goals.json omi_goals.txt
+
+    (--include-inactive is required — `goal list` defaults to active
+    goals only, so the `x ...` rows never reach the export. `--limit`
+    defaults to 10, max 100.)
 
 Mapping (per the recipe):
     active goal     ->  "(B) <title> ..."   (priority B)

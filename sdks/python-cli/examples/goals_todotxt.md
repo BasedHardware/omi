@@ -8,8 +8,13 @@ authenticated `omi-cli` for the initial export.
 Export your goals:
 
 ```sh
-omi --json goal list > goals.json
+omi --json goal list --include-inactive --limit 100 > goals.json
 ```
+
+`--include-inactive` is required — without it `goal list` returns only
+active goals, so the `x ...` (done/cancelled) rows this recipe maps
+never reach the export. `--limit` defaults to 10 (max 100) — raise it
+for larger goal sets.
 
 ## The converter
 
