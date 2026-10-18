@@ -971,12 +971,15 @@ async def update_persona_prompt(persona: Dict[str, Any]):
         limit=250,
         offset=0,
     )
-    memories = [memory.dict() for memory in universal_memories if memory.visibility == 'public']
+    memories = [
+        memory.dict() for memory in universal_memories if memory.visibility == 'public' and not memory.is_locked
+    ]
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
-    # Get and condense recent conversations
+    # Get and condense recent conversations — exclude locked content, same
+    # as generate_persona_prompt; legacy rows without the flag stay eligible.
     all_conversations = await run_blocking(db_executor, get_conversations, uid, limit=10)
-    conversations = deserialize_conversations(all_conversations)
+    conversations = deserialize_conversations([c for c in all_conversations if not c.get('is_locked')])
     conversation_history = conversations_to_string(conversations)
     with track_usage(uid, Features.PERSONA):
         conversation_history = await run_blocking(llm_executor, condense_conversations, [conversation_history])
