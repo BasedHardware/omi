@@ -9,7 +9,7 @@ Provides functions for migrating speaker samples across versions:
 Uses in-process locking to prevent concurrent migrations.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 
 import asyncio
 
@@ -26,6 +26,23 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def get_samples_version(person: Mapping[str, Any], default: int = 1) -> int:
+    """Read ``speech_samples_version`` defensively from a person document.
+
+    Firestore documents can store ``speech_samples_version`` as ``None`` instead
+    of omitting the field; ``dict.get('speech_samples_version', 1)`` then returns
+    ``None`` and any ``>=``/``<``/``==`` comparison raises ``TypeError``, taking
+    down the migration (and the live listen WebSocket profile load that shares
+    this module). Bools are excluded as well since ``isinstance(True, int)`` is
+    true but ``True`` is never a real version.
+    """
+    value = person.get('speech_samples_version')
+    if isinstance(value, bool) or not isinstance(value, int):
+        return default
+    return value
+
 
 # In-process locks to prevent concurrent migration for same person
 _migration_locks: dict[tuple[str, str], asyncio.Lock] = {}
@@ -81,7 +98,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> D
     Returns:
         Updated person dict with migrated fields
     """
-    version = person.get('speech_samples_version', 1)
+    version = get_samples_version(person)
     if version >= 2:
         return person
 
@@ -92,7 +109,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> D
         async with lock:
             # Re-check version inside lock (another call may have migrated)
             fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-            if fresh_person and fresh_person.get('speech_samples_version', 1) >= 2:
+            if fresh_person and get_samples_version(fresh_person) >= 2:
                 return fresh_person
 
             samples = person.get('speech_samples', [])
@@ -204,7 +221,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> D
     Returns:
         Updated person dict with migrated fields
     """
-    version = person.get('speech_samples_version', 1)
+    version = get_samples_version(person)
     if version >= 3:
         return person
     if version < 2:
@@ -218,7 +235,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> D
         async with lock:
             # Re-check version inside lock (another call may have migrated)
             fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-            if fresh_person and fresh_person.get('speech_samples_version', 1) >= 3:
+            if fresh_person and get_samples_version(fresh_person) >= 3:
                 return fresh_person
 
             samples = person.get('speech_samples', [])
@@ -291,7 +308,7 @@ async def migrate_person_samples_v1_to_v3(uid: str, person: Dict[str, Any]) -> D
     Returns:
         Updated person dict with migrated fields
     """
-    version = person.get('speech_samples_version', 1)
+    version = get_samples_version(person)
     if version >= 3:
         return person
 
@@ -299,7 +316,7 @@ async def migrate_person_samples_v1_to_v3(uid: str, person: Dict[str, Any]) -> D
     if version < 2:
         person = await migrate_person_samples_v1_to_v2(uid, person)
         # Check if v1→v2 succeeded
-        if person.get('speech_samples_version', 1) < 2:
+        if get_samples_version(person) < 2:
             return person  # Transient failure, retry later
 
     # Now do v2→v3
@@ -321,7 +338,7 @@ async def maybe_migrate_person_samples(uid: str, person: Dict[str, Any]) -> Dict
     Returns:
         Updated person dict (may be unchanged if already v3 or migration fails)
     """
-    version = person.get('speech_samples_version', 1)
+    version = get_samples_version(person)
     if version >= 3:
         return person
 
