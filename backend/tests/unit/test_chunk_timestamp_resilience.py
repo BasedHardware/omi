@@ -46,3 +46,15 @@ def test_mixed_malformed_mid_gap_chain():
     groups = group_chunks_by_coverage(chunks, gap_threshold=30.0)
     assert len(groups) == 2
     assert len(groups[0]) == 3 and len(groups[1]) == 1
+
+
+def test_malformed_chunk_masks_the_following_gap():
+    """Fail-toward-merge semantics, pinned: a malformed chunk merges into the
+    current group — and because the next gap compares against that same
+    malformed tail, [0, {}, 500] stays ONE group instead of splitting at 500.
+    A future refactor that compares against the last well-formed chunk would
+    silently flip this — keep the mask deliberate."""
+    chunks = [_chunk(0.0), {}, _chunk(500.0)]
+    groups = group_chunks_by_coverage(chunks, gap_threshold=30.0)
+    assert len(groups) == 1
+    assert len(groups[0]) == 3
