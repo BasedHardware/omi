@@ -16,6 +16,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.projection import projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 
@@ -114,6 +115,10 @@ class ProjectionFollowups:
             if entered:
                 await run_blocking(db_executor, claim.__exit__, None, None, None)
 
+    async def step(self, phase, executor, function, *args, **kwargs):
+        with projection_phase(phase):
+            return await run_blocking(executor, function, *args, **kwargs)
+
     async def finish_part(self, item, binding, receipt, index):
         if receipt['state'] == 'ready':
             return
@@ -122,19 +127,28 @@ class ProjectionFollowups:
 
             canonical = receipt['conversation_id']
             if not binding.record_origin:
-                canonical = await run_blocking(postprocess_executor, finish_sync_bridges, binding.owner_id, canonical)
+                canonical = await self.step(
+                    'bridge', postprocess_executor, finish_sync_bridges, binding.owner_id, canonical
+                )
             if receipt.get('audio_required') and not binding.native_record:
                 if self.projector.playback is not None:
-                    await run_blocking(postprocess_executor, self.projector.playback, item, canonical)
+                    await self.step('playback', postprocess_executor, self.projector.playback, item, canonical)
                 else:
-                    await run_blocking(
-                        postprocess_executor, self.projector.persist_playback, item, binding, canonical, receipt
+                    await self.step(
+                        'playback',
+                        postprocess_executor,
+                        self.projector.persist_playback,
+                        item,
+                        binding,
+                        canonical,
+                        receipt,
                     )
                 if not binding.record_origin:
                     # A later assignment can bridge this target while audio is
                     # being stored. Follow its redirect and recopy late donor
                     # audio even if an earlier bridge already checkpointed it.
-                    canonical = await run_blocking(
+                    canonical = await self.step(
+                        'bridge',
                         postprocess_executor,
                         finish_sync_bridges,
                         binding.owner_id,
@@ -142,7 +156,8 @@ class ProjectionFollowups:
                         audio_source_id=canonical,
                     )
             if receipt['enrichment_required']:
-                await run_blocking(
+                await self.step(
+                    'enrichment',
                     db_executor,
                     self.projector.store.mark_enrichment,
                     item.segment_id,
