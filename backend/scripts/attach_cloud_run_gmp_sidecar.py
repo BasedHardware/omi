@@ -502,6 +502,10 @@ def patch_service(
                     if name not in retained_secret_names:
                         entries.pop(name, None)
                 if entries:
+                    entries = {
+                        name: _normalize_secret_resource(resource, project_number=project_number)
+                        for name, resource in entries.items()
+                    }
                     annotations[SECRET_ANNOTATION] = _render_secret_annotation(entries)
                 else:
                     annotations.pop(SECRET_ANNOTATION, None)

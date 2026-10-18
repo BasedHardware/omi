@@ -85,12 +85,16 @@ def test_config_uses_existing_secret_when_secrets_create_is_denied(monkeypatch, 
 
 
 @pytest.mark.parametrize('config_name', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
-def test_env_config_is_revision_local_and_removes_only_unused_collector_secrets(config_name):
+@pytest.mark.parametrize('annotation_project', ['123', 'based-hardware'])
+def test_env_config_is_revision_local_and_removes_only_unused_collector_secrets(config_name, annotation_project):
     module = _load_module()
     config = module.read_run_monitoring_config(SCRIPT.parents[1] / 'deploy' / config_name)
     service = _service()
     secret_annotation = 'run.googleapis.com/secrets'
-    references = 'cloud-run-gmp-config:projects/123/secrets/cloud-run-gmp-config,existing:projects/123/secrets/existing'
+    references = (
+        f'cloud-run-gmp-config:projects/{annotation_project}/secrets/cloud-run-gmp-config,'
+        f'existing:projects/{annotation_project}/secrets/existing'
+    )
     service['metadata']['annotations'] = {secret_annotation: references}
     service['spec']['template']['metadata']['annotations'][secret_annotation] = references
     service['spec']['template']['spec']['volumes'].append(
