@@ -912,7 +912,6 @@ def test_first_summary_fulfilled_during_append_starts_a_later_revision_window(st
 @pytest.mark.parametrize('preserve', [False, True])
 def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_enabled(state, monkeypatch, preserve):
     from config import summary_guarantee
-    from utils.conversations.summary_delivery import SummaryOutputUnavailable
 
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
@@ -929,8 +928,9 @@ def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_ena
         return None
 
     if preserve:
-        with pytest.raises(SummaryOutputUnavailable):
+        with pytest.raises(reprocess.FirstSummaryCallbackPending):
             reprocess.run(key, token, no_output, now=120)
+        assert 'summary_empty_failures' not in rows[key]
         assert rows[key]['first_pending_at'] == 0
         assert rows[key]['due_at'] == rows[key]['task_due_at'] == 120
         assert rows[key]['lease_until'] == 240  # Short admitted-deadline lease, not 1800s.
@@ -992,3 +992,43 @@ def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_qu
 
         assert not summary_guarantee.preserves_admitted(rows[key])
         rows[key].update({field: False for field in exclusions})
+
+
+def test_preserved_callback_rule_discard_receipt_settles_without_empty_failure(state, monkeypatch):
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+
+    def rule_discard(*_):
+        context = reprocess.summary_delivery.PROCESS_CONTEXT.get()
+        assert context is not None
+        context['discarded'] = True
+        return None
+
+    assert reprocess.run(key, token, rule_discard, now=120) == 'processed'
+    assert key not in rows
+
+
+@pytest.mark.parametrize('persisted', [False, True])
+def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monkeypatch, persisted):
+    monkeypatch.setattr(
+        pipeline.conversations_db,
+        'get_conversation',
+        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'transcript_segments': []},
+    )
+    monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
+    monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *a, **k: persisted)
+    monkeypatch.setattr(pipeline, 'record_conversation_relevance', Mock())
+    context = {}
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        assert pipeline._reprocess_conversation_after_update('u', 'c', 'en') is None
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    assert context.get('discarded', False) == persisted

@@ -50,6 +50,10 @@ COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into 
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 
 
+class FirstSummaryCallbackPending(RuntimeError):
+    """No processing output exists yet; retain the lease/debt without empty-result spend."""
+
+
 def key(uid: str, conversation_id: str) -> str:
     return hashlib.sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest()
 
@@ -386,14 +390,13 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     summary_seen = output is not None and summary_delivery.present(
                         summary_delivery.field(output, 'structured')
                     )
-                    discarded = output is not None and summary_delivery.field(output, 'discarded', False)
+                    discarded = (output is not None and summary_delivery.field(output, 'discarded', False)) or (
+                        preserves_admitted(row) and bool(process_context and process_context.get('discarded'))
+                    )
                     blocked = bool(process_context and process_context.get('blocked_reason'))
-                    if (
-                        (output is not None or preserves_admitted(row))
-                        and not summary_seen
-                        and not discarded
-                        and not blocked
-                    ):
+                    if output is None and preserves_admitted(row) and not discarded and not blocked:
+                        raise FirstSummaryCallbackPending('first-summary callback has no output yet')
+                    if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except summary_delivery.SummaryRepairSuperseded as error:
             output = None
