@@ -25,3 +25,5 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+worker:
+  headPriorityEnabled: false
