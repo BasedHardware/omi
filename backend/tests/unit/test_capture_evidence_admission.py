@@ -31,6 +31,11 @@ S1_SERVICES = (
     'cloud_run/backend-integration',
 )
 
+# Parsed once at import — the fast-unit guard only measures call-phase CPU,
+# and re-parsing this 4.7k-line manifest inside a test call already crossed
+# the 1s fail limit on a loaded runner.
+_COMPOSED = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=_MANIFEST_LOADER)
+
 
 def test_code_default_stays_off(monkeypatch):
     monkeypatch.delenv(FLAG, raising=False)
@@ -38,9 +43,9 @@ def test_code_default_stays_off(monkeypatch):
 
 
 def test_composed_declarations_admit_s1_on_evidence_hosts():
-    composed = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=_MANIFEST_LOADER)
+
     for environment in ('dev', 'prod'):
-        env = composed['environments'][environment]
+        env = _COMPOSED['environments'][environment]
         scopes = {
             'gke/backend-listen': env['gke']['backend-listen']['env'],
             **{f'cloud_run/{name}': service['env'] for name, service in env['cloud_run']['services'].items()},
