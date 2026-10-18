@@ -134,4 +134,12 @@ void main() {
     final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
     expect((backup['wals'] as List).map((w) => w['timer_start']), [1000]);
   });
+
+  test('a malformed backup file returns an empty list', () async {
+    walFile.writeAsStringSync('');
+    backupFile.writeAsStringSync('{"wals": [');
+
+    final recovered = await WalFileManager.loadWals();
+    expect(recovered, isEmpty);
+  });
 }
