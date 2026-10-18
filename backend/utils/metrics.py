@@ -793,14 +793,14 @@ LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS = Gauge(
 )
 
 _LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK = threading.Lock()
-_LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED = False
+_listen_finalization_summary_metrics_registered = False
 
 
 def register_listen_finalization_summary_metrics() -> None:
     """Expose Firestore-derived gauges only after a successful summary is ready."""
-    global _LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED
+    global _listen_finalization_summary_metrics_registered
     with _LISTEN_FINALIZATION_SUMMARY_METRIC_LOCK:
-        if _LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED:
+        if _listen_finalization_summary_metrics_registered:
             return
         for metric in (
             LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
@@ -808,7 +808,7 @@ def register_listen_finalization_summary_metrics() -> None:
             LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
         ):
             REGISTRY.register(metric)
-        _LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED = True
+        _listen_finalization_summary_metrics_registered = True
 
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived

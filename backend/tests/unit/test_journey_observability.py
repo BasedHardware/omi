@@ -80,7 +80,7 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
 def test_listener_projects_the_closed_durable_finalization_states(monkeypatch):
     registry = CollectorRegistry()
     monkeypatch.setattr(metrics, 'REGISTRY', registry)
-    monkeypatch.setattr(metrics, '_LISTEN_FINALIZATION_SUMMARY_METRICS_REGISTERED', False)
+    monkeypatch.setattr(metrics, '_listen_finalization_summary_metrics_registered', False)
     assert generate_registry_latest(registry) == b''
 
     durable = MagicMock()
