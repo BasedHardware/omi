@@ -6,22 +6,26 @@ Neutral ``vector_search_service`` is the source of truth. Canonical vector searc
 """
 
 
+import logging
 import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 try:
-    from database.vector_db import query_memory_vector_candidates
+    from database.vector_db import delete_memory_vectors_batch, query_memory_vector_candidates
 except ModuleNotFoundError:
+    delete_memory_vectors_batch = None
     query_memory_vector_candidates = None
 
 from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
-from models.product_memory import MemoryAccessPolicy, MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.vector_search_telemetry import (
     VectorSearchTelemetryConfig,
     emit_memory_vector_search_telemetry,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MEMORY_VECTOR_SEARCH_LIMIT = 10
 MAX_MEMORY_VECTOR_SEARCH_LIMIT = 100
@@ -30,6 +34,9 @@ DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES = 50
 MAX_MEMORY_VECTOR_OVERFETCH_FACTOR = 10
 DEFAULT_MEMORY_VECTOR_MAX_QUERIES = 3
 MAX_MEMORY_VECTOR_MAX_QUERIES = 10
+# One search may drop at most this many stale index ids. The remainder waits
+# for a later request so a dirty index cannot turn a read into an unbounded delete.
+MAX_STALE_INDEX_DELETES_PER_REQUEST = 50
 
 
 def fetch_default_vector_memory_search(
@@ -41,6 +48,7 @@ def fetch_default_vector_memory_search(
     vector_query: Optional[Callable[..., Any]] = None,
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
     repair_purge_outbox_writer: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
+    stale_index_deleter: Optional[Callable[[str, List[str]], Any]] = None,
     telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]] = None,
     telemetry_config: Optional[VectorSearchTelemetryConfig] = None,
     limit: int = DEFAULT_MEMORY_VECTOR_SEARCH_LIMIT,
@@ -86,6 +94,7 @@ def fetch_default_vector_memory_search(
     all_hits: List[SearchVectorHit] = []
     hydrated_items: Dict[str, MemoryItem] = {}
     missing_authoritative_memory_ids: Set[str] = set()
+    stale_index_memory_ids: List[str] = []
     hydration_read_count = 0
     timeout_exhausted = False
     vector_query_budget_exhausted = False
@@ -119,6 +128,7 @@ def fetch_default_vector_memory_search(
             hits=all_hits,
             hydrated_items=hydrated_items,
             missing_authoritative_memory_ids=missing_authoritative_memory_ids,
+            stale_index_memory_ids=stale_index_memory_ids,
             max_candidate_hydration_reads=hydration_read_budget,
             candidate_hydration_read_count=hydration_read_count,
             deadline=deadline,
@@ -156,6 +166,11 @@ def fetch_default_vector_memory_search(
         )
 
     returned_results = list(gateway_result.results)[:bounded_limit]
+    stale_index_deleted_count = _delete_stale_vector_index_ids(
+        uid=uid,
+        memory_ids=stale_index_memory_ids,
+        deleter=stale_index_deleter,
+    )
     repair_purge_candidates = list(gateway_result.repair_purge_candidates)
     repair_purge_outbox_records = build_vector_repair_purge_outbox_records(uid=uid, candidates=repair_purge_candidates)
     if repair_purge_candidates and repair_purge_callback is not None:
@@ -210,6 +225,7 @@ def fetch_default_vector_memory_search(
             gateway_result.decisions, SearchDecision.access_denied
         ),
         'vector_rejected_count': vector_rejected_count,
+        'stale_index_deleted_count': stale_index_deleted_count,
         'repair_purge_candidate_count': len(repair_purge_candidates),
         'repair_purge_candidates': repair_purge_candidates,
         'repair_purge_outbox_record_count': len(repair_purge_outbox_records),
@@ -309,6 +325,7 @@ def _hydrate_vector_candidate_items_by_id(
     hits: List[SearchVectorHit],
     hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],
+    stale_index_memory_ids: List[str],
     max_candidate_hydration_reads: int,
     candidate_hydration_read_count: int,
     deadline: Optional[float],
@@ -330,17 +347,61 @@ def _hydrate_vector_candidate_items_by_id(
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         if not payload:
+            # A missing canonical row is not a live item. Do not consult
+            # historical_overrides here: that second lookup is the paired
+            # NOT_FOUND, and the index delete below stops the repeat.
             missing_authoritative_memory_ids.add(hit.memory_id)
+            _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id)
             continue
         item = MemoryItem.model_validate(payload)
         if item.uid != uid:
             raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
+        if item.status == MemoryItemStatus.tombstoned:
+            # The item document already suppresses. Do not re-read
+            # historical_overrides. Drop the stale vector so the next query
+            # does not hydrate this id again. Access policy still excludes it.
+            _note_stale_index_memory_id(stale_index_memory_ids, hit.memory_id)
         hydrated_items[item.memory_id] = item
     return {
         'candidate_hydration_read_count': candidate_hydration_read_count,
         'hydration_read_budget_exhausted': hydration_read_budget_exhausted,
         'timeout_exhausted': timeout_exhausted,
     }
+
+
+def _note_stale_index_memory_id(stale_index_memory_ids: List[str], memory_id: str) -> None:
+    if memory_id and memory_id not in stale_index_memory_ids:
+        stale_index_memory_ids.append(memory_id)
+
+
+def _delete_stale_vector_index_ids(
+    *,
+    uid: str,
+    memory_ids: List[str],
+    deleter: Optional[Callable[[str, List[str]], Any]],
+) -> int:
+    """Delete a bounded batch of stale memory vectors after hydration.
+
+    Missing and tombstoned authoritative rows stay out of results, but the
+    vector id would otherwise be hydrated on every later query. The repair
+    outbox is a separate, flag-gated write; this delete is what stops the
+    repeat Firestore lookup. Failures stay off the search result.
+    """
+
+    bounded = [memory_id for memory_id in memory_ids if memory_id][:MAX_STALE_INDEX_DELETES_PER_REQUEST]
+    if not bounded:
+        return 0
+    delete = deleter if deleter is not None else delete_memory_vectors_batch
+    if delete is None:
+        return 0
+    try:
+        deleted = delete(uid, bounded)
+    except Exception:
+        logger.warning('stale memory vector index delete failed uid=%s count=%d', uid, len(bounded))
+        return 0
+    if isinstance(deleted, int):
+        return deleted
+    return len(bounded)
 
 
 def _filter_read_candidate_hits(

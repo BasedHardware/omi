@@ -1294,6 +1294,81 @@ def test_sdk_read_surface_matches_the_installed_package():
     assert len(seen) == len(probe.SDK_READ_SURFACE)
 
 
+def test_vector_hydration_counts_one_memory_item_miss_and_no_override_miss():
+    """A stale index id is one memory_items NOT_FOUND. Live rows do not pair it with overrides."""
+
+    firestore_document = pytest.importorskip('google.cloud.firestore_v1.document')
+    document_reference = firestore_document.DocumentReference
+    from datetime import datetime, timezone
+
+    from models.product_memory import MemoryItemStatus, MemoryTier
+    from tests.unit.test_vector_search_service import _hit, _memory_item, _stored_item
+    from utils.memory.vector_search_service import _hydrate_vector_candidate_items_by_id
+
+    now = datetime.now(timezone.utc)
+    live = _memory_item('live', tier=MemoryTier.long_term, now=now)
+    tombstoned = _memory_item('dead', tier=MemoryTier.long_term, now=now, status=MemoryItemStatus.tombstoned)
+    docs = {
+        'users/u1/memory_items/live': _stored_item(live),
+        'users/u1/memory_items/dead': _stored_item(tombstoned),
+        'users/u1/memory_historical_overrides/live': {'status': 'tombstoned'},
+        'users/u1/memory_historical_overrides/dead': {'status': 'tombstoned'},
+        'users/u1/memory_historical_overrides/gone': {'status': 'tombstoned'},
+    }
+
+    def fake_get(self, *args, **kwargs):
+        payload = docs.get('/'.join(self._path))
+
+        class _HydrationSnapshot:
+            exists = payload is not None
+
+            def to_dict(self):
+                return None if payload is None else dict(payload)
+
+        return _HydrationSnapshot()
+
+    original = document_reference.get
+    setattr(document_reference, 'get', fake_get)
+    try:
+        install_document_read_probe.__globals__['_installed'] = False
+        install_document_read_probe()
+        items_hit_before = _count('users/memory_items', 'hit')
+        items_miss_before = _count('users/memory_items', 'miss')
+        items_not_found_before = _billed('users/memory_items', 'not_found')
+        overrides_miss_before = _count('users/memory_historical_overrides', 'miss')
+        overrides_hit_before = _count('users/memory_historical_overrides', 'hit')
+        overrides_not_found_before = _billed('users/memory_historical_overrides', 'not_found')
+
+        class _Client:
+            def document(self, path):
+                ref = document_reference.__new__(document_reference)
+                ref._path = tuple(path.split('/'))
+                return ref
+
+        _hydrate_vector_candidate_items_by_id(
+            uid='u1',
+            db_client=_Client(),
+            hits=[_hit(live, score=0.9), _hit(tombstoned, score=0.8), _hit(_memory_item('gone', now=now), score=0.7)],
+            hydrated_items={},
+            missing_authoritative_memory_ids=set(),
+            stale_index_memory_ids=[],
+            max_candidate_hydration_reads=10,
+            candidate_hydration_read_count=0,
+            deadline=None,
+            clock=lambda: 0.0,
+        )
+
+        assert _count('users/memory_items', 'hit') == items_hit_before + 2
+        assert _count('users/memory_items', 'miss') == items_miss_before + 1
+        assert _billed('users/memory_items', 'not_found') == items_not_found_before + 1
+        assert _count('users/memory_historical_overrides', 'miss') == overrides_miss_before
+        assert _count('users/memory_historical_overrides', 'hit') == overrides_hit_before
+        assert _billed('users/memory_historical_overrides', 'not_found') == overrides_not_found_before
+    finally:
+        setattr(document_reference, 'get', original)
+        install_document_read_probe.__globals__['_installed'] = False
+
+
 def test_product_code_does_not_call_on_snapshot():
     import subprocess
 
