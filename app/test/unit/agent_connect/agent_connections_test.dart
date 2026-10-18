@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:omi/backend/http/api/mcp_api.dart';
 import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_connections.dart';
