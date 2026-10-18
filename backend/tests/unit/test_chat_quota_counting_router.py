@@ -199,6 +199,21 @@ def test_v2_messages_does_not_accept_an_unconsumed_chat_response_stream(chat_env
         _cleanup(saved)
 
 
+def test_v2_messages_pairs_chat_response_when_timezone_setup_raises(chat_environment):
+    client, module, saved = chat_environment
+    module.notification_db.sync_user_time_zone_from_client.side_effect = RuntimeError('timezone lookup failed')
+    try:
+        with pytest.raises(RuntimeError, match='timezone lookup failed'):
+            client.post('/v2/messages', json={'text': 'hello', 'file_ids': [], 'time_zone': 'UTC'})
+
+        assert len(module.JourneyAttempt.instances) == 1
+        attempt = module.JourneyAttempt.instances[0]
+        assert attempt.journey == 'chat_response'
+        assert attempt.outcomes == ['failure']
+    finally:
+        _cleanup(saved)
+
+
 def test_v2_messages_records_post_2xx_error_frame_as_mobile_chat_failure(chat_environment):
     client, module, saved = chat_environment
     try:
