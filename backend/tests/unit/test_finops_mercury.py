@@ -393,6 +393,41 @@ def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury,
         loader.ready_snapshot(tmp_path, config)
 
 
+def test_rule_classified_aggregates_survive_the_loader(mercury, tmp_path):
+    # Classifier output must round-trip through the BigQuery loader's key validation.
+    loader = load('load_mercury')
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    base = {'status': 'sent', 'postedAt': '2026-10-17T12:00:00Z', 'counterpartyName': 'Unlisted'}
+    transactions = [
+        dict(base, id='a', kind='debitCardTransaction', amount='-12.50', mercuryCategory='Software'),
+        dict(base, id='b', kind='outgoingPayment', amount='-900', categoryData={'name': 'Manufacturing'}),
+        dict(base, id='c', kind='outgoingPayment', amount='-5000'),
+        dict(base, id='d', kind='debitCardTransaction', amount='-7'),
+        dict(base, id='e', kind='debitCardTransaction', amount='-20', counterpartyName='Vercel'),
+    ]
+    totals = {}
+    costs.aggregate_page(transactions, config, '2026-10-17', '2026-10-17', totals, set())
+    rows = costs.aggregate_rows(totals, '2026-10-17', '2026-10-17')
+    assert {(r['vendor'], r['category']) for r in rows} == {
+        ('mercury_category', 'saas'),
+        ('category_data', 'hardware_cogs'),
+        ('uncategorized_payment', 'other_opex'),
+        ('unmapped', 'unmapped'),
+        ('vercel', 'saas'),
+    }
+    (tmp_path / mercury.FILENAME).write_text(
+        json.dumps({'status': 'ready', 'start': '2026-10-17', 'end': '2026-10-17', 'rows': rows})
+    )
+    assert loader.ready_snapshot(tmp_path, config)['rows'] == rows
+    rows[0]['vendor'] = 'Some Raw Name'
+    (tmp_path / mercury.FILENAME).write_text(
+        json.dumps({'status': 'ready', 'start': '2026-10-17', 'end': '2026-10-17', 'rows': rows})
+    )
+    with pytest.raises(loader.MercuryError, match='unknown Mercury aggregate key'):
+        loader.ready_snapshot(tmp_path, config)
+
+
 def test_real_cli_missing_mount_exits_successfully(mercury, tmp_path):
     import os
     import subprocess
