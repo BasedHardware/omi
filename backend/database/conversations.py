@@ -43,6 +43,7 @@ from utils.manual_speaker_assignments import (
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
+from database.sync_live_overlap import find_sync_live_overlap_candidates
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -4009,6 +4010,12 @@ def assign_sync_conversation(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
+    from utils.sync.live_overlap import live_overlap_enabled
+
+    live_candidate_ids: tuple[str, ...] = ()
+    if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+        live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+
     score_snapshots: dict = {}
 
     def decode(raw):
@@ -4055,6 +4062,7 @@ def assign_sync_conversation(
             encode=encode,
             invalidate=clear_client_processing,
             full_ids=full_ids,
+            live_candidate_ids=live_candidate_ids,
         )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']

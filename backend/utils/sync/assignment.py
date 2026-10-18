@@ -208,6 +208,7 @@ def assign_in_transaction(
     encode: Callable[[dict], dict],
     invalidate: Callable[[dict], None],
     full_ids: frozenset[str] = frozenset(),
+    live_candidate_ids: tuple[str, ...] = (),
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -302,6 +303,17 @@ def assign_in_transaction(
         # redirects its late repair audio to the survivor; temporal fallback would
         # recreate the donor as a duplicate row. A deleted survivor supersedes it.
         target_id, target = resolve(target_id)
+    # Discovery is a hint only. Re-read every candidate under the same
+    # transaction as the append, so deletion, lifecycle and provenance win.
+    from utils.sync.live_overlap import choose_live_overlap, live_overlap_enabled
+
+    temporal_live = False
+    if not target_id and live_candidate_ids and live_overlap_enabled():
+        live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids]
+        live_id = choose_live_overlap(live_rows, incoming)
+        if live_id:
+            target_id, target = live_id, load(live_id)
+            temporal_live = True
     target_hint = target_id
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
@@ -431,7 +443,7 @@ def assign_in_transaction(
             and plan_target
             and isinstance(plan_target.get('audio_timeline'), dict)
             and plan_target.get('audio_timeline')
-            and sync_lineage_resolve_active_for(user_ref.id)
+            and (temporal_live or sync_lineage_resolve_active_for(user_ref.id))
         )
         if pinned_live_origin and plan_target:
             # Live keeps emitting offsets against this durable first-audio pin.
@@ -763,6 +775,8 @@ def assign_in_transaction(
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
             True, target_id, matched.get(canonical), result
         )
+    if temporal_live:
+        logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     return result, created, survivors
 
 
