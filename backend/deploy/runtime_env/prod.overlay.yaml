@@ -1018,6 +1018,9 @@ overlay:
           FIRST_SUMMARY_DEADLINE_ENABLED:
             value: 'true'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
+            value: 'true'
+            category: rollout
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
             category: rollout
@@ -1334,6 +1337,9 @@ overlay:
           FIRST_SUMMARY_DEADLINE_ENABLED:
             value: 'true'
             category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
+            value: 'true'
+            category: rollout
           REPEAT_WORK_LLM_VERSION:
             value: '2026-10-16-v1'
             category: rollout
@@ -1424,6 +1430,12 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED:
+            value: 'true'
+            category: rollout
+          BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_API_URL:
@@ -1560,6 +1572,9 @@ overlay:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_DEADLINE_ENABLED:
+            value: 'true'
+            category: rollout
+          FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
           REPEAT_WORK_LLM_VERSION:
