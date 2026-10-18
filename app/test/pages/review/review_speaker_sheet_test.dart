@@ -41,7 +41,7 @@ Future<ReviewProvider> _review(List<(String, Map<String, dynamic>)> sent) async 
   final provider = ReviewProvider(
     isEligible: () => true,
     reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-    loadItems: () async => ApiSuccess(ReviewItemsResponse(items: const [_speaker], remainingToday: 1)),
+    loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [_speaker], remainingToday: 1)),
     sendAnswer: (item, answer) async {
       sent.add((item.itemId, answer.toJson(item.kind)));
       return const ApiSuccess(0);
