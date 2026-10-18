@@ -13,6 +13,7 @@ import pytest
 from google.api_core import exceptions as google_api_exceptions
 
 from database import jev_shadow as store
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from utils import executors, metrics
 from utils.conversations import jev_shadow as shadow
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -334,8 +335,8 @@ def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch)
     assert record['expire_at'] - record['created_at'] == timedelta(days=60)
     client.collection.assert_any_call('users')
     client.collection.assert_any_call('account_deletions')
-    marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
-    ref.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
+    marker.get.assert_called_once_with(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=pytest.approx(0.4))
+    ref.get.assert_called_once_with(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=pytest.approx(0.4))
     assert transaction.set.call_args.args[0] is ref
 
 
@@ -397,7 +398,7 @@ def test_store_write_is_fenced_by_account_deletion(monkeypatch):
     monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
     assert store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.4, firestore_client=client) is False
     transaction = client.transaction.return_value
-    marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
+    marker.get.assert_called_once_with(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=pytest.approx(0.4))
     transaction.set.assert_not_called()
 
 
@@ -826,7 +827,7 @@ def test_aborted_without_a_winning_record_is_a_failure_not_deduped(monkeypatch):
     with pytest.raises(google_api_exceptions.Aborted):
         store.write_jev_shadow('user', 'id', {}, deadline=time.monotonic() + 1, firestore_client=client)
     ref.get.assert_called_once()
-    assert ref.get.call_args.kwargs['retry'] is None
+    assert ref.get.call_args.kwargs['retry'] is FIRESTORE_NO_RETRY
     assert 0 < ref.get.call_args.kwargs['timeout'] <= 1
 
 
