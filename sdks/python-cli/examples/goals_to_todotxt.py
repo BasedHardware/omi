@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-ZWSP = "​"  # zero-width space: defuses a word that would parse as todo.txt syntax
+ZWSP = "​"  # zero-width space: defuses a word that would parse as todotxt syntax
 RESERVED_KEYS = {"due", "t", "pri", "rec", "h", "id", "p"}
 ENVELOPE_KEYS = ("goals", "items", "data")
 
@@ -143,7 +143,7 @@ def convert(source, destination):
     # Active (priority (B)) first, inactive/completed goals last.
     lines.sort(key=lambda line: line.startswith("x"))
     # Build the whole file before touching the filesystem, so a conversion
-    # failure cannot leave a truncated todo.txt behind.
+    # failure cannot leave a truncated output behind.
     payload = strip_surrogates("".join(line + "\n" for line in lines)).encode("utf-8")
     output_path = Path(destination)
     if ".." in output_path.parts:
