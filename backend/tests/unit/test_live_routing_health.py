@@ -13,12 +13,13 @@ import pytest
 from unittest.mock import AsyncMock, Mock
 
 from utils.stt import live_gate, live_health, live_session, streaming as st
+from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED
 from config.live_stt_registry import DEFAULT_TARGETS, routing_on
 from utils.stt.live_router import connecting_target
 
 
 def _dropped_total(kind):
-    family = live_health.FLEET_HEALTH_WRITE_DROPPED.collect()[0]
+    family = FLEET_HEALTH_WRITE_DROPPED.collect()[0]
     return sum(sample.value for sample in family.samples if sample.labels.get('kind') == kind)
 
 

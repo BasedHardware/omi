@@ -24,7 +24,7 @@ from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned
 from utils.stt import live_chain, live_failure, live_health, live_router, live_session, streaming as st
 from utils.stt.live_cost_health import CostHealthUnavailable
 from utils.stt.live_gate import GateState, transition
-from utils.stt.live_metrics import COST_DECISION, COST_LANGUAGE_STATE, COST_VOTES
+from utils.stt.live_metrics import COST_DECISION, COST_LANGUAGE_STATE, COST_VOTES, FLEET_HEALTH_WRITE_DROPPED
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 
 
@@ -680,9 +680,7 @@ async def test_write_result_identity_change_stops_cleanup_and_new_scope_writes(m
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-credential')
     monkeypatch.setenv('SONIOX_WS_URL', 'wss://old.invalid/ws')
     reason = 'identity_changed' if pause_on == 'mget' else 'identity_changed_after_commit'
-    dropped_counter = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(
-        write_path='transcript_result', kind='result', reason=reason
-    )
+    dropped_counter = FLEET_HEALTH_WRITE_DROPPED.labels(write_path='transcript_result', kind='result', reason=reason)
     dropped = dropped_counter._value.get()
 
     class PausedRedis(MemoryRedis):
@@ -1277,7 +1275,7 @@ async def test_write_result_malformed_state_batch_fails_to_local_retry(malformed
 
     redis = MalformedRedis(clock=lambda: now[0])
     pod = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
-    dropped_counter = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(
+    dropped_counter = FLEET_HEALTH_WRITE_DROPPED.labels(
         write_path='transcript_result', kind='result', reason='redis_error'
     )
     dropped = dropped_counter._value.get()
