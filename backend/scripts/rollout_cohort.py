@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add/remove private cohort membership with one merge write and no UID output."""
+"""Manage private cohorts and migrate live membership without UID output."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def main(argv=None, *, client_factory=None, live_reader=None) -> int:
     parser.add_argument('--kube-context', help='Explicit Kubernetes context for live Helm reads')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
-        '--dry-run', action='store_true', help='Validate input without credentials, reads or writes (default)'
+        '--dry-run', action='store_true', help='No writes (default); --seed-live reads live source counts'
     )
     mode.add_argument('--apply', action='store_true', help='Perform the merge write using the operator tier')
     args = parser.parse_args(argv)
