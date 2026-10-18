@@ -159,3 +159,15 @@ def speech_empty_multilingual_enabled() -> bool:
 def terminal_empty_disposition_enabled() -> bool:
     """Dark, evidenced terminal empty result; never grants another paid intent."""
     return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+
+
+def read_only_metrics_enabled() -> bool:
+    """A scrape may stop draining only while the supervised drain is enabled."""
+    return (
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
+        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    )
+
+
+def projection_timing_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', 'false').strip().lower() == 'true'

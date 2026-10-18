@@ -907,3 +907,88 @@ def test_first_summary_fulfilled_during_append_starts_a_later_revision_window(st
     reprocess.mark('u', 'c', 'en', now=10002)
     assert rows[key]['first_pending_at'] == 10000
     assert rows[key]['due_at'] == 10602
+
+
+@pytest.mark.parametrize('preserve', [False, True])
+def test_percent_rollback_cannot_forget_admitted_first_summary_when_drain_is_enabled(state, monkeypatch, preserve):
+    from config import summary_guarantee
+    from utils.conversations.summary_delivery import SummaryOutputUnavailable
+
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', str(preserve).lower())
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    assert not summary_guarantee.enabled('u')
+
+    def no_output(*_):
+        assert summary_guarantee.enabled('u') == preserve
+        assert not summary_guarantee.enabled('unrelated-owner')
+        return None
+
+    if preserve:
+        with pytest.raises(SummaryOutputUnavailable):
+            reprocess.run(key, token, no_output, now=120)
+        assert rows[key]['first_pending_at'] == 0
+        assert rows[key]['due_at'] == rows[key]['task_due_at'] == 120
+        assert rows[key]['lease_until'] == 240  # Short admitted-deadline lease, not 1800s.
+        reprocess.mark('u', 'c', 'en', now=180)
+        assert rows[key]['due_at'] == 120
+        assert rows[key]['task_token'] == token
+        output = SimpleNamespace(discarded=False, structured={'overview': 'Synthetic recovered summary'})
+        assert reprocess.run(key, token, lambda *_: output, now=240) == 'processed'
+        assert rows[key]['summary_seen'] and rows[key]['dormant']
+    else:
+        assert reprocess.run(key, token, no_output, now=120) == 'processed'
+        assert key not in rows  # Reproduce the legacy loss of scheduling debt.
+    assert not summary_guarantee.enabled('u')
+    assert summary_guarantee.ADMITTED_OWNER.get() is None
+    reprocess.mark('u', 'new-conversation', 'en', now=300)
+    new = rows[reprocess.key('u', 'new-conversation')]
+    assert new['due_at'] == 900 and 'summary_deadline_at' not in new
+
+
+@pytest.mark.parametrize('deadline', [None, True, '120', float('nan'), float('inf')])
+def test_invalid_deadline_never_grants_summary_drain_eligibility(monkeypatch, deadline):
+    from config import summary_guarantee
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    row = {'uid': 'u', 'summary_deadline_at': deadline}
+    assert not summary_guarantee.first_summary_pending(row)
+
+
+def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_queued_token(state, monkeypatch):
+    from utils import cloud_tasks
+    from utils.conversations import demand_processing as demand
+
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'other-owner')
+    schedule, enqueue = Mock(), Mock()
+    monkeypatch.setattr(demand, 'schedule', schedule)
+    monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
+    _ENQUEUE(rows[key])
+    schedule.assert_not_called()
+    assert enqueue.call_args.kwargs['schedule_at'] == 120
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key)]
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+    assert reprocess.sweep(now=240) == {'repaired': 1, 'error': 0}
+    assert rows[key]['task_token'] == token and rows[key]['wake_generation'] == 1
+    for exclusions in ({'effects_only': True}, {'summary_seen': True}):
+        rows[key].update(exclusions)
+        from config import summary_guarantee
+
+        assert not summary_guarantee.preserves_admitted(rows[key])
+        rows[key].update({field: False for field in exclusions})
