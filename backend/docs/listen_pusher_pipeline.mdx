@@ -5611,3 +5611,20 @@ are independent of new admission; rollback reuses the same queues and receipts.
 See [projection tail controls](batch-pipeline-serving.md#dark-projection-tail-controls)
 for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
+
+
+### Sync finalize target recovery
+
+`SYNC_FINALIZE_TARGET_RECOVERY_ENABLED` defaults on (unset/blank); explicit off or
+an unrecognized token restores strict donor-refresh failures. After transcript
+assignment and audio persistence, donor refresh follows only the server-authored
+`sync_merged_into` returned by the rejecting transaction, with at most 16 targets.
+Deleted/missing targets without a successor complete without refresh or donor
+retraction. Other refresh errors defer cleanup, preserving donor tasks and the
+pending revision receipt; later appends retry it. Audio copy remains strict.
+The transaction still rejects writes into deleted conversations. Bounded
+`sync_bridge_refresh` reasons expose degraded completion. Remaining internal
+finalize errors are retryable `sync_finalize_failed`, provider/model `unknown`,
+with a class/site-only `sync_finalize_exception` diagnostic. The batch projection
+caller also completes a deleted target without playback or enrichment. Roll back recovery with
+the kill switch on every sync-intake service; classification remains internal.

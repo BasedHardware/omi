@@ -440,6 +440,9 @@ class Projector:
                     if binding.record_origin
                     else finish_sync_bridges(binding.owner_id, receipt['conversation_id'])
                 )
+            if canonical is None:
+                self.store.ready(item.segment_id, binding, self.clock(), part_index=index)
+                return
             if receipt.get('audio_required') and not binding.native_record:
                 with projection_phase('playback'):
                     if self.playback is not None:

@@ -245,6 +245,8 @@ env:
     value: "shadow"
   - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
     value: "true"
+  - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
+    value: "true"
   - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE

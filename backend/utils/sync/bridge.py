@@ -14,6 +14,8 @@ from _thread import LockType
 from typing import NotRequired, TypedDict
 
 from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.sync_finalize import sync_finalize_target_recovery_enabled
+from database.action_item_refresh import RefreshConversationUnavailable
 from database import conversations as conversations_db
 from database.legal_holds import (
     DestructiveOperationInProgress,
@@ -65,19 +67,41 @@ def _deferred_retraction_reason(error: BaseException) -> str | None:
     return None
 
 
-def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
+def _record_refresh_deferred(reason: str, error: BaseException | None = None) -> None:
+    _record_bridge_retraction('deferred', reason)
+    logger.warning(
+        'event=sync_bridge_refresh outcome=deferred reason=%s exception_type=%s',
+        reason,
+        bounded_exception_type(error) if error is not None else 'none',
+    )
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='retract',
+        to_mode='deferred',
+        reason='other',
+        outcome='degraded',
+        log=logger,
+    )
+
+
+def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str | None:
+    recovery = sync_finalize_target_recovery_enabled()
     visited: set[str] = set()
     while True:
-        if conversation_id in visited:
+        if conversation_id in visited or len(visited) >= 16:
             raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
         visited.add(conversation_id)
         row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
+            if recovery:
+                _record_refresh_deferred('target_unavailable')
+                return None
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         if row.get('sync_merged_into'):
             conversation_id = row['sync_merged_into']
             continue
         flatten = smart_merge_flatten_enabled() and (row.get('smart_merge') or {}).get('role') == 'survivor'
+        redirected = False
         for source_id in row.get('sync_merged_from', []):
             source = read_metadata(conversations_db, uid, source_id, operation='bridge')
             if (
@@ -98,8 +122,29 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 _record_bridge_retraction('attempted')
                 logger.info('event=sync_bridge outcome=attempted uid=%s source_id=%s', uid, source_id)
                 try:
-                    transfer_donor(uid, source_id, conversation_id)
-                    retract_sync_bridge_source(uid, source_id)
+                    try:
+                        transfer_donor(uid, source_id, conversation_id)
+                    except RefreshConversationUnavailable as error:
+                        if not recovery:
+                            raise
+                        _record_refresh_deferred(
+                            'target_redirected' if error.successor_id else 'target_unavailable', error
+                        )
+                        if not error.successor_id:
+                            return None
+                        conversation_id = error.successor_id
+                        redirected = True
+                        break
+                    except Exception as error:
+                        if not recovery:
+                            raise
+                        # Never retract donor tasks or stamp cleanup after a failed
+                        # transfer. Persisted intake can complete; the receipt stays
+                        # pending for a later append/reconciliation.
+                        _record_refresh_deferred('refresh_failed', error)
+                        cleanup_deferred = True
+                    if not cleanup_deferred:
+                        retract_sync_bridge_source(uid, source_id)
                 except Exception as error:
                     reason = _deferred_retraction_reason(error)
                     if reason is None:
@@ -145,11 +190,16 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
                 if needs_cleanup:
                     _record_bridge_retraction('converged')
                     logger.info('event=sync_bridge outcome=converged uid=%s source_id=%s', uid, source_id)
+        if redirected:
+            continue
         current = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if current and current.get('sync_merged_into'):
             conversation_id = current['sync_merged_into']
             continue
         if not current or current.get('deleted'):
+            if recovery:
+                _record_refresh_deferred('target_unavailable')
+                return None
             raise SyncAssignmentSuperseded('sync conversation deleted during bridge')
         return conversation_id
 
@@ -172,8 +222,9 @@ def finish_sync_segment(
         with lock:
             response['new_memories'].discard(conversation_id)
             response['updated_memories'].discard(conversation_id)
-            response['updated_memories'].add(canonical_id)
+            if canonical_id is not None:
+                response['updated_memories'].add(canonical_id)
             merged = response.setdefault('_merged', {})
             merged.pop(conversation_id, None)
-            if assigned['sync_relevance'] == 'keep':
+            if canonical_id is not None and assigned['sync_relevance'] == 'keep':
                 merged[canonical_id] = language
