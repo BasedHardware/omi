@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.auth.credentials import AnonymousCredentials
@@ -160,6 +160,7 @@ def test_equal_timestamp_pages_reach_every_sibling_through_sdk_protocol(monkeypa
 @pytest.fixture
 def job_harness(monkeypatch):
     real_page = worker._page
+    real_process = worker._process
     job = {
         'state': 'processing',
         'period': '2026-10',
@@ -170,7 +171,7 @@ def job_harness(monkeypatch):
         'remaining': 10,
         'reserved': {},
     }
-    processed, pauses, scheduled = [], [], []
+    processed, finishes, scheduled = [], [], []
     monkeypatch.setattr(worker.funded_processing, 'enabled', lambda: True)
     monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: '2026-10')
     monkeypatch.setattr(worker.funded_processing, 'allowance', lambda uid: SimpleNamespace(managed=True))
@@ -179,6 +180,8 @@ def job_harness(monkeypatch):
     monkeypatch.setattr(worker.store, 'read', lambda uid: deepcopy(job))
 
     def claim(uid, token, period):
+        if job['state'] != 'processing' or job['token'] != token or job['period'] != period:
+            return None
         job['lease_until'] = worker.time.time() + 1800
         return 'lease'
 
@@ -191,16 +194,25 @@ def job_harness(monkeypatch):
         job.update(deepcopy(updates))
         return True
 
-    def pause(uid, token, lease):
-        pauses.append((uid, token, lease))
+    def finish(uid, token, lease, period):
+        finishes.append((uid, token, lease, period))
         if not fenced(token, lease) or job.get('reserved'):
             return False
-        job.update(state='waiting_choice', lease_until=0)
-        return True
-
-    def finish(uid, token, lease, period):
-        assert fenced(token, lease)
-        job.update(state='waiting_choice', lease_until=0)
+        pending = job.get('pending_upgrade') or {}
+        if pending.get('period') == period == job['period']:
+            job.update(
+                state='processing',
+                token='upgrade-choice',
+                remaining=pending['remaining'],
+                cutoff=pending['cutoff'],
+                pending_upgrade={},
+                reserved={},
+                cursor_audio=None,
+                cursor_text=None,
+                lease_until=0,
+            )
+            return True
+        job.update(state='waiting_choice', pending_upgrade={}, lease_until=0)
         return False
 
     async def run_blocking(executor, function, *args, **kwargs):
@@ -208,11 +220,11 @@ def job_harness(monkeypatch):
 
     async def process(uid, item):
         processed.append(deepcopy(item))
-        return True
+        return worker.AttemptOutcome.COMPLETE
 
     def schedule(coroutine, *, name):
         if name == 'processing_backlog_continuation':
-            scheduled.append(name)
+            scheduled.append((name, job['token']))
             coroutine.close()
             return None
         return asyncio.create_task(coroutine)
@@ -220,9 +232,8 @@ def job_harness(monkeypatch):
     monkeypatch.setattr(worker.store, 'claim', claim)
     monkeypatch.setattr(worker.store, 'checkpoint', checkpoint)
     monkeypatch.setattr(worker.store, 'finish', finish)
-    # The store helper belongs to root's lane. This fake exercises worker
-    # composition; root separately verifies the actual transaction predicate.
-    monkeypatch.setattr(worker.store, 'pause_if_unreserved', pause, raising=False)
+    # This fake exercises worker composition. Root's lane separately verifies
+    # the actual finish transaction's reservation and pending-upgrade predicates.
     monkeypatch.setattr(worker, 'run_blocking', run_blocking)
     monkeypatch.setattr(worker, 'start_background_task', schedule)
     monkeypatch.setattr(worker, '_process', process)
@@ -230,10 +241,12 @@ def job_harness(monkeypatch):
     return SimpleNamespace(
         job=job,
         processed=processed,
-        pauses=pauses,
+        finishes=finishes,
         scheduled=scheduled,
         checkpoint=checkpoint,
         real_page=real_page,
+        real_process=real_process,
+        claim=claim,
     )
 
 
@@ -274,7 +287,7 @@ async def test_worker_merges_multiple_equal_timestamp_pages_without_drops_or_dou
     assert actual == sorted(expected, key=lambda item: item[1], reverse=True)
     assert len(set(actual)) == len(expected)
     assert harness.job['remaining'] == 10000 - sum(item['units'] for item in harness.processed)
-    assert harness.job['reserved'] == {} and harness.pauses == []
+    assert harness.job['reserved'] == {} and len(harness.finishes) == 1
     assert isinstance(harness.job['cursor_audio']['at'], datetime if audio_timestamp else float)
     assert isinstance(harness.job['cursor_text']['at'], float)
     assert len(harness.scheduled) >= 4
@@ -320,7 +333,7 @@ async def test_mixed_datetime_numeric_queues_sort_and_compare_without_changing_c
     assert isinstance(harness.job['cursor_audio']['at'], datetime)
     assert harness.job['cursor_text']['at'] == 100.0
     assert isinstance(harness.job['cursor_text']['at'], float)
-    assert harness.pauses == []
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-10')]
 
 
 @pytest.mark.parametrize('kind', ['audio', 'text'])
@@ -336,7 +349,7 @@ async def test_query_failure_returns_unreserved_choice_to_waiting(monkeypatch, j
     await worker.run('synthetic')
     assert harness.job['state'] == 'waiting_choice'
     assert harness.job['lease_until'] == 0 and harness.job['reserved'] == {}
-    assert harness.pauses == [('synthetic', 'choice', 'lease')]
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-10')]
     assert harness.processed == []
 
 
@@ -361,7 +374,7 @@ async def test_processing_exception_retries_same_reserved_identity_without_secon
         attempts.append(deepcopy(item))
         if len(attempts) == 1:
             raise RuntimeError('Application response lost')
-        return True
+        return worker.AttemptOutcome.COMPLETE
 
     monkeypatch.setattr(worker, '_process', process)
     await worker.run('synthetic')
@@ -407,7 +420,7 @@ async def test_query_failure_after_successful_reserved_retry_returns_to_choice(m
     assert harness.job['state'] == 'waiting_choice'
 
 
-async def test_exception_cleanup_cannot_pause_newer_token(monkeypatch, job_harness):
+async def test_exception_cleanup_cannot_finish_newer_token(monkeypatch, job_harness):
     harness = job_harness
 
     def page(*args):
@@ -418,4 +431,282 @@ async def test_exception_cleanup_cannot_pause_newer_token(monkeypatch, job_harne
     await worker.run('synthetic')
     assert harness.job['state'] == 'processing' and harness.job['token'] == 'new-choice'
     assert harness.job['lease'] == 'new-lease' and harness.job['lease_until'] > worker.time.time()
-    assert harness.pauses == [('synthetic', 'choice', 'lease')]
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-10')]
+    assert harness.scheduled == []
+
+
+def conversation_row(identity='capture'):
+    at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    return {
+        'id': identity,
+        'created_at': at,
+        'started_at': at,
+        'finished_at': at,
+        'structured': {},
+        'processing_deferred': True,
+    }
+
+
+@pytest.mark.parametrize('condition', ['missing', 'deleted', 'done', 'busy', 'deferred', 'complete'])
+def test_text_attempt_reports_known_completion_separately_from_busy_lease(monkeypatch, condition):
+    row = conversation_row()
+    if condition == 'missing':
+        row = None
+    elif condition == 'deleted':
+        row['deleted'] = True
+    elif condition == 'done':
+        row['processing_deferred'] = False
+    monkeypatch.setattr(worker.conversations_db, 'get_conversation', lambda *args: row)
+    claim = Mock(return_value=None if condition == 'busy' else 'item-lease')
+    remove, release = Mock(), Mock()
+    process = Mock(return_value=SimpleNamespace(processing_deferred=condition == 'deferred'))
+    monkeypatch.setattr(worker.store, 'claim_item', claim)
+    monkeypatch.setattr(worker.store, 'remove', remove)
+    monkeypatch.setattr(worker.store, 'release_item', release)
+    monkeypatch.setattr(worker, 'process_conversation', process)
+    result = worker._process_text('synthetic', 'capture')
+    if condition in {'missing', 'deleted', 'done'}:
+        assert result is worker.AttemptOutcome.COMPLETE
+        remove.assert_called_once_with('synthetic', 'capture')
+        claim.assert_not_called()
+        release.assert_not_called()
+        process.assert_not_called()
+    elif condition == 'busy':
+        assert result is worker.AttemptOutcome.RETRY
+        process.assert_not_called()
+        release.assert_not_called()
+    else:
+        assert result is (worker.AttemptOutcome.DEFERRED if condition == 'deferred' else worker.AttemptOutcome.COMPLETE)
+        remove.assert_not_called()
+        release.assert_called_once_with('synthetic', 'capture', 'item-lease')
+        assert process.call_args.kwargs['trigger'] is worker.ProcessingTrigger.BACKLOG_CHOICE
+
+
+@pytest.mark.parametrize(
+    'exists,state,recovered,expected',
+    [
+        (False, 'held', False, worker.AttemptOutcome.COMPLETE),
+        (True, 'purged', False, worker.AttemptOutcome.COMPLETE),
+        (True, 'held', True, worker.AttemptOutcome.COMPLETE),
+        (True, 'held', False, worker.AttemptOutcome.RETRY),
+    ],
+)
+async def test_audio_attempt_adapts_recovery_boolean_without_losing_unknown_attempts(
+    monkeypatch, job_harness, exists, state, recovered, expected
+):
+    snap = SimpleNamespace(exists=exists, to_dict=lambda: {'state': state})
+    holds = Mock()
+    holds.document.return_value.get.return_value = snap
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: holds)
+    recover = AsyncMock(return_value=recovered)
+    monkeypatch.setattr(worker.cap_hold_recovery, 'recover_selected', recover)
+    result = await job_harness.real_process('synthetic', {'kind': 'audio', 'id': 'capture'})
+    assert result is expected
+    if not exists or state == 'purged':
+        recover.assert_not_awaited()
+    else:
+        recover.assert_awaited_once_with('synthetic', snap)
+
+
+@pytest.mark.parametrize('include_older', [False, True])
+async def test_returned_deferred_releases_reservation_and_considers_older_fitting_text(
+    monkeypatch, job_harness, include_older
+):
+    harness = job_harness
+    rows = [('text', snapshot('new-deferred', started_at=20, queued_at=10, units=6))]
+    if include_older:
+        rows.append(('text', snapshot('older-fitting', started_at=15, queued_at=10, units=3)))
+    monkeypatch.setattr(worker, '_page', lambda uid, kind, cursor: rows if kind == 'text' else [])
+    monkeypatch.setattr(worker, '_process', harness.real_process)
+    monkeypatch.setattr(worker.conversations_db, 'get_conversation', lambda uid, identity: conversation_row(identity))
+    monkeypatch.setattr(worker.store, 'claim_item', lambda *args: 'item-lease')
+    release, remove = Mock(), Mock()
+    monkeypatch.setattr(worker.store, 'release_item', release)
+    monkeypatch.setattr(worker.store, 'remove', remove)
+    attempts = []
+
+    def process(uid, language, conversation, *, trigger):
+        attempts.append(conversation.id)
+        return SimpleNamespace(processing_deferred=conversation.id == 'new-deferred')
+
+    monkeypatch.setattr(worker, 'process_conversation', process)
+    await worker.run('synthetic')
+    expected = ['new-deferred', 'older-fitting'] if include_older else ['new-deferred']
+    assert attempts == expected
+    assert harness.job['state'] == 'waiting_choice' and harness.job['reserved'] == {}
+    assert harness.job['remaining'] == (1 if include_older else 4)
+    assert harness.job['cursor_text']['id'] == ('older-fitting' if include_older else 'new-deferred')
+    assert release.call_count == len(attempts)
+    remove.assert_not_called()
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-10')]
+    assert harness.scheduled == []
+
+
+@pytest.mark.parametrize('remaining', [0, 10])
+async def test_exhausted_actual_allowance_finishes_without_advancing_or_scanning_the_backlog(
+    monkeypatch, job_harness, remaining
+):
+    harness = job_harness
+    harness.job['remaining'] = remaining
+    rows = [
+        ('text', snapshot(f'capture-{index}', started_at=20 - index, queued_at=10, units=1))
+        for index in range(worker.PAGE)
+    ]
+    page = Mock(side_effect=lambda uid, kind, cursor: rows if kind == 'text' else [])
+    monkeypatch.setattr(worker, '_page', page)
+    allowance = Mock(return_value=SimpleNamespace(managed=False))
+    monkeypatch.setattr(worker.funded_processing, 'allowance', allowance)
+    await worker.run('synthetic')
+    assert harness.job['state'] == 'waiting_choice' and harness.job['remaining'] == remaining
+    assert harness.job.get('cursor_text') is None and harness.job['reserved'] == {}
+    assert allowance.call_count == 1 and page.call_count == 2
+    assert harness.processed == [] and harness.scheduled == []
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-10')]
+
+
+@pytest.mark.parametrize('failure', ['query', 'allowance'])
+async def test_unreserved_failure_consumes_pending_upgrade_and_schedules_new_token(monkeypatch, job_harness, failure):
+    harness = job_harness
+    harness.job['pending_upgrade'] = {'period': '2026-10', 'remaining': 100, 'cutoff': 200}
+    choose = Mock(side_effect=AssertionError('Worker created new consent'))
+    monkeypatch.setattr(worker, 'choose', choose)
+    if failure == 'query':
+        monkeypatch.setattr(worker, '_page', Mock(side_effect=RuntimeError('Query unavailable')))
+    else:
+        row = ('text', snapshot('capture', started_at=20, queued_at=10, units=3))
+        monkeypatch.setattr(worker, '_page', lambda uid, kind, cursor: [row] if kind == 'text' else [])
+        monkeypatch.setattr(
+            worker.funded_processing, 'allowance', Mock(side_effect=RuntimeError('Allowance unavailable'))
+        )
+    await worker.run('synthetic')
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-10')]
+    assert harness.job['state'] == 'processing' and harness.job['token'] == 'upgrade-choice'
+    assert harness.job['remaining'] == 100 and harness.job['pending_upgrade'] == {}
+    assert harness.job['lease_until'] == 0 and harness.job['reserved'] == {}
+    assert harness.scheduled == [('processing_backlog_continuation', 'upgrade-choice')]
+    monkeypatch.setattr(worker, '_page', lambda *args: [])
+    await worker.run('synthetic', continuation=True)
+    assert harness.finishes[-1] == ('synthetic', 'upgrade-choice', 'lease', '2026-10')
+    assert harness.job['state'] == 'waiting_choice'
+    choose.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', ['text', 'audio'])
+async def test_busy_text_or_unknown_audio_retry_retains_identity_and_debits_only_once(monkeypatch, job_harness, kind):
+    harness = job_harness
+    field = 'started_at' if kind == 'text' else 'listed_at'
+    row = (kind, snapshot('capture', **{field: 20, 'queued_at': 10, 'created_at': 10, 'units': 3}))
+    monkeypatch.setattr(worker, '_page', lambda uid, queue, cursor: [row] if queue == kind and not cursor else [])
+    monkeypatch.setattr(worker, '_process', harness.real_process)
+    if kind == 'text':
+        monkeypatch.setattr(worker.conversations_db, 'get_conversation', lambda *args: conversation_row())
+        monkeypatch.setattr(worker.store, 'claim_item', Mock(side_effect=[None, 'item-lease']))
+        monkeypatch.setattr(worker.store, 'release_item', Mock())
+        process = Mock(return_value=SimpleNamespace(processing_deferred=False))
+        monkeypatch.setattr(worker, 'process_conversation', process)
+    else:
+        holds = Mock()
+        holds.document.return_value.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'state': 'held'})
+        monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: holds)
+        monkeypatch.setattr(worker.cap_hold, 'remaining_seconds', lambda row: 3600)
+        monkeypatch.setattr(worker, 'recording_units_per_hour', lambda mode: 3)
+        process = AsyncMock(side_effect=[False, True])
+        monkeypatch.setattr(worker.cap_hold_recovery, 'recover_selected', process)
+    await worker.run('synthetic')
+    reserved = deepcopy(harness.job['reserved'])
+    assert reserved['id'] == 'capture' and reserved['kind'] == kind
+    assert harness.job['state'] == 'processing' and harness.job['remaining'] == 7
+    assert harness.job['lease_until'] == 0 and harness.finishes == []
+    await worker.run('synthetic', continuation=True)
+    assert harness.job['remaining'] == 7 and harness.job['reserved'] == {}
+    assert harness.job['state'] == 'waiting_choice' and harness.scheduled == []
+    assert process.call_count == (1 if kind == 'text' else 2)
+
+
+@pytest.mark.parametrize('query_failure', [False, True])
+async def test_finish_failure_is_logged_once_and_releases_lease(monkeypatch, job_harness, caplog, query_failure):
+    harness = job_harness
+    if query_failure:
+        monkeypatch.setattr(worker, '_page', Mock(side_effect=RuntimeError('Query unavailable')))
+    finish = Mock(side_effect=RuntimeError('Finish unavailable'))
+    monkeypatch.setattr(worker.store, 'finish', finish)
+    await worker.run('synthetic')
+    finish.assert_called_once_with('synthetic', 'choice', 'lease', '2026-10')
+    assert harness.job['lease_until'] == 0 and harness.scheduled == []
+    assert 'outcome=finish_deferred exception_type=RuntimeError' in caplog.text
+
+
+@pytest.mark.parametrize('raises', [False, True])
+async def test_pending_upgrade_waits_for_reserved_attempt_to_have_known_outcome(monkeypatch, job_harness, raises):
+    harness = job_harness
+    reserved = {'kind': 'text', 'id': 'already-debited', 'units': 3}
+    pending = {'period': '2026-10', 'remaining': 100, 'cutoff': 200}
+    harness.job.update(reserved=deepcopy(reserved), remaining=7, pending_upgrade=deepcopy(pending))
+    process = AsyncMock(return_value=worker.AttemptOutcome.RETRY)
+    if raises:
+        process.side_effect = RuntimeError('Uncertain application result')
+    monkeypatch.setattr(worker, '_process', process)
+    page = Mock(side_effect=AssertionError('Queried behind an unknown reservation'))
+    monkeypatch.setattr(worker, '_page', page)
+    await worker.run('synthetic')
+    assert harness.job['reserved'] == reserved and harness.job['remaining'] == 7
+    assert harness.job['pending_upgrade'] == pending and harness.job['token'] == 'choice'
+    assert harness.job['lease_until'] == 0 and harness.scheduled == []
+    assert len(harness.finishes) == int(raises)
+    page.assert_not_called()
+    process.side_effect = None
+    process.return_value = worker.AttemptOutcome.COMPLETE
+    monkeypatch.setattr(worker, '_page', lambda *args: [])
+    await worker.run('synthetic', continuation=True)
+    assert process.await_args_list[0].args == process.await_args_list[1].args == ('synthetic', reserved)
+    assert harness.job['reserved'] == {} and harness.job['pending_upgrade'] == {}
+    assert harness.job['token'] == 'upgrade-choice' and harness.job['remaining'] == 100
+    assert harness.scheduled == [('processing_backlog_continuation', 'upgrade-choice')]
+
+
+async def test_prior_month_job_cannot_create_consent_or_claim_a_lease(monkeypatch, job_harness):
+    harness = job_harness
+    harness.job['period'] = '2026-09'
+    harness.job['pending_upgrade'] = {'period': '2026-09', 'remaining': 100, 'cutoff': 200}
+    original = deepcopy(harness.job)
+    claim = Mock(side_effect=AssertionError('Old month claimed a lease'))
+    monkeypatch.setattr(worker.store, 'claim', claim)
+    await worker.run('synthetic')
+    claim.assert_not_called()
+    assert harness.job == original and harness.finishes == [] and harness.scheduled == []
+
+
+async def test_reserved_attempt_rechecks_period_after_claim_before_application(monkeypatch, job_harness):
+    harness = job_harness
+    harness.job.update(reserved={'kind': 'text', 'id': 'already-debited', 'units': 3}, remaining=7)
+    clock = {'period': '2026-10'}
+    monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: clock['period'])
+
+    def claim(*args):
+        lease = harness.claim(*args)
+        clock['period'] = '2026-11'
+        return lease
+
+    monkeypatch.setattr(worker.store, 'claim', claim)
+    await worker.run('synthetic')
+    assert harness.processed == [] and harness.finishes == [] and harness.scheduled == []
+    assert harness.job['reserved']['id'] == 'already-debited' and harness.job['remaining'] == 7
+    assert harness.job['lease_until'] == 0
+
+
+async def test_month_rollover_query_failure_does_not_continue_previous_month_upgrade(monkeypatch, job_harness):
+    harness = job_harness
+    harness.job['pending_upgrade'] = {'period': '2026-10', 'remaining': 100, 'cutoff': 200}
+    clock = {'period': '2026-10'}
+    monkeypatch.setattr(worker.funded_processing, 'period_id', lambda: clock['period'])
+
+    def page(*args):
+        clock['period'] = '2026-11'
+        raise RuntimeError('Month rolled during query')
+
+    monkeypatch.setattr(worker, '_page', page)
+    await worker.run('synthetic')
+    assert harness.finishes == [('synthetic', 'choice', 'lease', '2026-11')]
+    assert harness.job['state'] == 'waiting_choice' and harness.job['token'] == 'choice'
+    assert harness.job['remaining'] == 10 and harness.job['pending_upgrade'] == {}
+    assert harness.scheduled == []

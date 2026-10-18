@@ -105,13 +105,25 @@ def main():
         paused = store.start(uid, period='2026-10', remaining=20, cutoff=100, request_key='pause-proof')
         paused_token = paused['token']
         pause_owner = store.claim(uid, paused_token, '2026-10')
-        assert not store.pause_if_unreserved(uid, paused_token, 'stale-owner')
+        assert not store.finish(uid, paused_token, 'stale-owner', '2026-10')
         assert store.checkpoint(uid, paused_token, pause_owner, {'reserved': {'id': 'attempt'}})
-        assert not store.pause_if_unreserved(uid, paused_token, pause_owner)
+        assert not store.finish(uid, paused_token, pause_owner, '2026-10')
         assert store.read(uid)['state'] == 'processing'
         assert store.checkpoint(uid, paused_token, pause_owner, {'reserved': {}})
-        assert store.pause_if_unreserved(uid, paused_token, pause_owner)
+        assert not store.finish(uid, paused_token, pause_owner, '2026-10')
         assert store.read(uid)['state'] == 'waiting_choice'
+        # Unreserved failures use the same finish path, including queued intent.
+        failing = store.start(uid, period='2026-10', remaining=20, cutoff=100, request_key='error-with-upgrade')
+        failing_token = failing['token']
+        failing_owner = store.claim(uid, failing_token, '2026-10')
+        store.start(
+            uid, period='2026-10', remaining=300, cutoff=200, request_key='upgrade-during-page-failure', automatic=True
+        )
+        assert store.finish(uid, failing_token, failing_owner, '2026-10')
+        after_error = store.read(uid)
+        assert after_error['state'] == 'processing' and after_error['token'] != failing_token
+        assert after_error['remaining'] == 300 and not after_error['pending_upgrade']
+        assert not store.finish(uid, failing_token, failing_owner, '2026-10')
     print(
         'PASS: atomic totals/update/clear, concurrent consent, completed replay, month/stale-token fences, queued upgrade intent'
     )

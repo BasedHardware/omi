@@ -214,7 +214,7 @@ async def test_explicit_worker_selects_newest_first_and_leaves_unfitting_rows(mo
 
     async def process(uid, item):
         processed.append(item['id'])
-        return True
+        return worker.AttemptOutcome.COMPLETE
 
     monkeypatch.setattr(worker, '_process', process)
     await worker.run('synthetic')
@@ -486,3 +486,40 @@ async def test_reserved_attempt_does_not_dispatch_if_month_rolls_during_claim(mo
     monkeypatch.setattr(worker, '_process', process)
     await worker.run('synthetic')
     process.assert_not_called()
+
+
+async def test_worker_dispatch_carries_expiring_month_consent(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    month = ['2026-10']
+    monkeypatch.setattr(funded, 'enabled', lambda: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: month[0])
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
+    monkeypatch.setattr(worker.cap_hold, 'recovery_cooldown', lambda uid: True)
+    job = {
+        'state': 'processing',
+        'period': '2026-10',
+        'token': 'choice',
+        'cutoff': 100,
+        'remaining': 130,
+        'reserved': {},
+    }
+    monkeypatch.setattr(worker.store, 'read', lambda uid: dict(job))
+    monkeypatch.setattr(worker.store, 'claim', lambda *args: 'lease')
+    monkeypatch.setattr(worker.store, 'checkpoint', lambda uid, token, lease, updates: job.update(updates) or True)
+    monkeypatch.setattr(worker.store, 'finish', lambda *args: False)
+    row = SimpleNamespace(id='text', to_dict=lambda: {'started_at': 5, 'queued_at': 50, 'units': 3})
+    monkeypatch.setattr(worker, '_page', lambda uid, kind, cursor: [('text', row)] if kind == 'text' else [])
+
+    async def process(uid, item):
+        assert funded.processing_allowed(uid)
+        month[0] = '2026-11'
+        assert not funded.processing_allowed(uid)
+        return worker.AttemptOutcome.DEFERRED
+
+    process_mock = AsyncMock(side_effect=process)
+    monkeypatch.setattr(worker, '_process', process_mock)
+    await worker.run('synthetic')
+    process_mock.assert_called_once()
+    assert not job['reserved']
+    assert funded.processing_allowed('synthetic')  # New capture has no expired job grant.

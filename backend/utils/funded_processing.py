@@ -4,6 +4,8 @@ Warm checks read only the open hour/day buckets, never scan a month per LLM
 call. Each dispatch rechecks admission against current usage.
 """
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import wraps
 import os
@@ -14,6 +16,27 @@ from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from config.stt_cap_dispatch import enabled as legacy_enabled
 
 _UNSET = object()
+_backlog_grant: ContextVar[tuple[str, str] | None] = ContextVar('funded_backlog_grant', default=None)
+
+
+def consent_allows(uid: str) -> bool:
+    """A chosen backlog grant cannot authorize later dispatches after reset."""
+    if not enabled():
+        return True
+    grant = _backlog_grant.get()
+    return grant is None or grant == (uid, period_id())
+
+
+@contextmanager
+def backlog_consent(uid: str, period: str):
+    if not enabled():
+        yield
+        return
+    token = _backlog_grant.set((uid, period))
+    try:
+        yield
+    finally:
+        _backlog_grant.reset(token)
 
 
 def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, firestore_client: Any = None):
@@ -115,7 +138,7 @@ def monthly_usage(uid: str) -> dict:
 
 def processing_allowed(uid: str, *, firestore_client: Any = None) -> bool:
     kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
-    return not enabled() or allowance(uid, **kwargs).managed
+    return not enabled() or consent_allows(uid) and allowance(uid, **kwargs).managed
 
 
 def capacity(value: Any) -> tuple[float | None, float | None]:

@@ -31,6 +31,7 @@ def gate(monkeypatch):
     byok.get_byok_uid = Mock(return_value='user')
     funded = ModuleType('utils.funded_processing')
     funded.processing_allowed = Mock(return_value=False)
+    funded.consent_allows = Mock(return_value=True)
     usage = ModuleType('utils.llm.usage_tracker')
     usage.get_current_context = lambda: None
     with stub_modules({'utils.byok': byok, 'utils.funded_processing': funded, 'utils.llm.usage_tracker': usage}):

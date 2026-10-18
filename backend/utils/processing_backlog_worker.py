@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
+from enum import Enum
 import logging
 import time
 from typing import Any
@@ -20,6 +21,12 @@ from config.rate_card import recording_units_per_hour
 
 logger = logging.getLogger(__name__)
 PAGE = 10
+
+
+class AttemptOutcome(Enum):
+    COMPLETE = 'complete'
+    DEFERRED = 'deferred'
+    RETRY = 'retry'
 
 
 def _page(uid, kind, cursor):
@@ -63,34 +70,35 @@ def _candidate(kind, snap) -> dict[str, Any]:
     }
 
 
-def _process_text(uid, identity):
+def _process_text(uid, identity) -> AttemptOutcome:
     row = conversations_db.get_conversation(uid, identity)
     if row is None or row.get('deleted'):
         # Deleted captures never get recreated. Repair a stale sibling queue.
         store.remove(uid, identity)
-        return True
+        return AttemptOutcome.COMPLETE
     if not row.get('processing_deferred'):
         store.remove(uid, identity)
-        return True
+        return AttemptOutcome.COMPLETE
     lease = store.claim_item(uid, identity)
     if lease is None:
-        return False
+        return AttemptOutcome.RETRY
     try:
         result = process_conversation(
             uid, row.get('language') or 'en', Conversation(**row), trigger=ProcessingTrigger.BACKLOG_CHOICE
         )
-        return not result.processing_deferred
+        return AttemptOutcome.DEFERRED if result.processing_deferred else AttemptOutcome.COMPLETE
     finally:
         store.release_item(uid, identity, lease)
 
 
-async def _process(uid, item):
+async def _process(uid, item) -> AttemptOutcome:
     if item['kind'] == 'text':
         return await run_blocking(postprocess_executor, _process_text, uid, item['id'])
     snap = await run_blocking(db_executor, cap_hold.holds(uid).document(item['id']).get)
     if not snap.exists or (snap.to_dict() or {}).get('state') == 'purged':
-        return True
-    return await cap_hold_recovery.recover_selected(uid, snap)
+        return AttemptOutcome.COMPLETE
+    recovered = await cap_hold_recovery.recover_selected(uid, snap)
+    return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
 
 async def run(uid: str, *, continuation: bool = False):
@@ -112,7 +120,26 @@ async def run(uid: str, *, continuation: bool = False):
             job.update(updates)
         return ok
 
-    continuation = False
+    async def finish():
+        try:
+            # The transaction alone decides whether a durable reservation can
+            # finish, or an already-authorized upgrade needs a new-token run.
+            return await run_blocking(db_executor, store.finish, uid, token, lease, funded_processing.period_id())
+        except Exception as exc:
+            logger.warning('event=processing_backlog outcome=finish_deferred exception_type=%s', type(exc).__name__)
+            return False
+
+    async def attempt(item):
+        # Executors and spawned callbacks inherit this UID/month grant. Later
+        # model/STT dispatches must not silently adopt a reset allowance.
+        with funded_processing.backlog_consent(uid, job['period']):
+            outcome = await _process(uid, item)
+        if outcome in (AttemptOutcome.COMPLETE, AttemptOutcome.DEFERRED):
+            # A returned deferred result is known complete, unlike a busy lease
+            # or an ambiguous application failure. Its queue row stays waiting.
+            return await save({'reserved': {}})
+        return False
+
     fence_lost = asyncio.Event()
 
     async def renew():
@@ -122,18 +149,15 @@ async def run(uid: str, *, continuation: bool = False):
                 fence_lost.set()
                 return
 
-    heartbeat = start_background_task(renew(), name='processing_backlog_lease')
-    try:
+    async def work() -> bool:
         reserved = job.get('reserved') or {}
         # A reserved application attempt keeps its identity over crashes and
         # cooldowns. Never debit the user's chosen estimate twice.
         if reserved:
             if job['period'] != funded_processing.period_id():
-                return
-            if not await _process(uid, reserved):
-                return
-            if not await save({'reserved': {}}):
-                return
+                return False
+            if not await attempt(reserved):
+                return False
         pages = await run_blocking(db_executor, _page, uid, 'audio', job.get('cursor_audio'))
         pages += await run_blocking(db_executor, _page, uid, 'text', job.get('cursor_text'))
         candidates = sorted(
@@ -143,7 +167,10 @@ async def run(uid: str, *, continuation: bool = False):
         )[:PAGE]
         for item in candidates:
             if fence_lost.is_set() or not funded_processing.enabled() or job['period'] != funded_processing.period_id():
-                return
+                return False
+            current = await run_blocking(db_executor, funded_processing.allowance, uid)
+            if not current.managed:
+                return await finish()
             remaining = job.get('remaining')
             # Keep the original Firestore field type in the durable cursor.
             cursor = {'at': item['at'], 'id': item['id']}
@@ -154,42 +181,36 @@ async def run(uid: str, *, continuation: bool = False):
                 and item['units'] > remaining
             ):
                 if not await save(updates):
-                    return
+                    return False
                 continue
-            current = await run_blocking(db_executor, funded_processing.allowance, uid)
             actual_remaining, _ = funded_processing.capacity(current)
-            if not current.managed or actual_remaining is not None and item['units'] > actual_remaining:
+            if actual_remaining is not None and item['units'] > actual_remaining:
                 if not await save(updates):
-                    return
+                    return False
                 continue
             updates.update(reserved=item, remaining=None if remaining is None else max(0, remaining - item['units']))
             if not await save(updates):
-                return
-            if not await _process(uid, item):
-                return
-            if not await save({'reserved': {}}):
-                return
+                return False
+            if not await attempt(item):
+                return False
         if len(candidates) == PAGE:
-            continuation = True
-        else:
-            continuation = await run_blocking(
-                db_executor, store.finish, uid, token, lease, funded_processing.period_id()
-            )
+            return True
+        return await finish()
+
+    continuation = False
+    heartbeat = start_background_task(renew(), name='processing_backlog_lease')
+    try:
+        continuation = await work()
     except Exception as exc:
         logger.warning('event=processing_backlog outcome=deferred exception_type=%s', type(exc).__name__)
-        try:
-            # Read the durable reservation under the lease fence: a checkpoint
-            # may have committed even if its response was lost. Never clear or
-            # replace an attempt whose application/receipt may still be live.
-            await run_blocking(db_executor, store.pause_if_unreserved, uid, token, lease)
-        except Exception as pause_exc:
-            logger.warning(
-                'event=processing_backlog outcome=pause_deferred exception_type=%s', type(pause_exc).__name__
-            )
+        continuation = await finish()
     finally:
         heartbeat.cancel()
         await asyncio.gather(heartbeat, return_exceptions=True)
-        await save({'lease_until': 0})
+        try:
+            await save({'lease_until': 0})
+        except Exception as exc:
+            logger.warning('event=processing_backlog outcome=release_deferred exception_type=%s', type(exc).__name__)
     if continuation:
         start_background_task(run(uid, continuation=True), name='processing_backlog_continuation')
 

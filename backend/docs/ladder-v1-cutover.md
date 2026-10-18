@@ -201,6 +201,11 @@ Automatic intent carries the actual payment event creation time; even a first
 delivery in a later UTC month remains waiting for an explicit choice.
 An upgrade arriving during an active choice queues a same-month continuation; it
 never replaces the live worker lease or extends consent across a reset.
+The chosen UID/month also fences every later model and STT dispatch, including
+work already inside a conversation when midnight passes. Completed-but-deferred
+text attempts release their reservation; ambiguous/in-flight attempts retain it.
+Completion and unreserved errors share one transaction that either returns to
+choice or consumes an already accepted same-month upgrade into a fresh token.
 No retention/deletion policy changes.
 
 Subscription adds one deferred-summary document read to the existing one held

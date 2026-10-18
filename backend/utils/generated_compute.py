@@ -43,6 +43,10 @@ def generated_compute_allowed(
         return True
     if not uid or uid == 'unknown':
         return False
+    from utils import funded_processing
+
+    if not funded_processing.consent_allows(uid):
+        return False
     if allow_byok:
         from utils import byok
 
@@ -51,8 +55,6 @@ def generated_compute_allowed(
             if any(byok.get_byok_key(candidate) for candidate in providers):
                 return True
     # Billing/provider imports remain lazy so flag-off clients keep import purity.
-    from utils import funded_processing
-
     kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
     return funded_processing.processing_allowed(uid, **kwargs)
 

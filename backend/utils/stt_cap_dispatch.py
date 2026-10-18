@@ -66,6 +66,10 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
 def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown') -> bool:
     if not execution_admission_enabled():
         return True
+    from utils import funded_processing
+
+    if not funded_processing.consent_allows(uid):
+        return False
     allowance = funded_allowance(uid)
     if not allowance.managed:
         record_audio('sync', 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
