@@ -220,27 +220,41 @@ failures and strikes; it does not migrate or backfill those samples. The
 sequential 8% gate and healthy vote budgets stay unchanged; trial vote budgets
 are tightened to admitted outcomes only.
 
-Independent lifecycle oracle: the chain counts `opened` when handing off a
-connected managed leg (including same-provider replacement), transport release
-decrements `open`, and terminal settlement separately counts `settled`. Rejected
-connects that never hand off are excluded from all three. The per-pod/target
-difference must return to zero; allow the existing 30-second deferred hop
-settlement and scrape races, but **no nonzero gap persisting two minutes**. A
-missing settlement after transport release grows this gap even if acknowledgement
-errors stay zero. This detects lifecycle coverage, not wrong reason attribution;
-retain real-object tests and provider-reason/session-SLI inspection for that.
+Lifecycle accounting (2026-10-18 correction): `opened` counts handed-off
+managed legs, `open` counts transports not yet released, and `settled` counts
+terminal serving decisions. Transport release and settlement are independent.
+A settled-but-open leg contributes -1 to `opened-settled-open`; a released but
+unsettled leg contributes +1, and pooling can cancel them. The old absolute-gap
+abort is invalid as a serving-loss oracle. Run 5b and routing-on control both
+exhibited it; control included discrepancies already present for over eight hours.
+
+Retain the difference per pod/target as an **accounting HOLD/investigation**
+signal, recording both arms' carry-in baseline. It must not delete a canary or
+roll back the fleet by itself. Retain all real outcome, latency, readiness and
+telemetry-coverage safety gates. An unexplained accounting HOLD prevents automatic
+qualification and needs an explicit recorded operator decision, not a silent pass.
+The fleet rule with stable UID `omi-stt-leg-lifecycle-gap` now checks the valid
+exactly-once invariant `settled > opened`, with Grafana `for: 2m`; it no longer
+uses transport liveness to infer missing settlements.
 
 ```promql
-sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
-- sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
-- sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
+# Accounting diagnostic only; never a serving abort or missing-settlement proof.
+sum by (pod, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
+- sum by (pod, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
+- sum by (pod, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
 
-min_over_time((abs(
-  sum by (instance, target) (omi_stt_managed_legs_opened_total{job="backend-listen-metrics"})
-  - sum by (instance, target) (omi_stt_managed_legs_settled_total{job="backend-listen-metrics"})
-  - sum by (instance, target) (omi_stt_managed_legs_open{job="backend-listen-metrics"})
-))[2m:15s]) > 0
+# Duplicate-settlement invariant, evaluated per process/target (not fleet pooled).
+omi_stt_managed_legs_settled_total{job="backend-listen-metrics"}
+- omi_stt_managed_legs_opened_total{job="backend-listen-metrics"} > 0
 ```
+
+Complete omission detection needs direct low-cardinality released-AND-unsettled
+counts and oldest age, with claimed/pending ownership and the enforced
+recovery/teardown deadline plus scrape grace. The current counters cannot provide
+that state. Do not infer it from a longer gap subquery. A `[1m:15s]` subquery can
+contain only four samples spanning 45 seconds. Canary diagnostic timers must use
+actual elapsed time with complete scrapes, resetting on gaps, absent targets or
+counter resets; baseline old discrepancies separately from new incidents.
 
 Coverage, admitted votes and health evidence:
 
@@ -345,7 +359,8 @@ serving-owned disruption remain separate uninstrumented cohort gates.
 Extend dwell until the on arm reaches the exposure floor; do not substitute
 shadow proposals or window-allocation counts for actual router canary sessions.
 
-Abort to shadow/zero for a persistent lifecycle gap, any emission acknowledgement error or evidence exception; any
+HOLD for an unexplained lifecycle accounting diagnostic. Abort to shadow/zero for
+any emission acknowledgement error or evidence exception; any
 unavailable/all-degraded proposal; sustained Redis/write/cap errors; or a
 Parakeet/Soniox bench unexplained by actual provider failures. Abort for a >2
 percentage-point drop in transcript success from the pre-ramp baseline over

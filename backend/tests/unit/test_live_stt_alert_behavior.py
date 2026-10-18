@@ -110,3 +110,30 @@ def test_recovery_alert_no_series_stays_below_floor(export):
     # Grafana noDataState=OK is the deployed empty-vector policy.
     assert rule['noDataState'] == 'OK'
     assert _evaluate(rule, []) == (0, 0, False)
+
+
+@pytest.mark.parametrize('export', ['alerts/live-stt.json', 'alert-rules.json'])
+@pytest.mark.parametrize(
+    'opened,settled,transport_open,fires',
+    [
+        (29, 24, 4, False),  # Run 5b: positive arithmetic gap is not a serving-loss oracle.
+        (10, 10, 2, False),  # Settled while transport remains open is legitimate.
+        (10, 8, 0, False),  # Released transport with pending settlement needs investigation.
+        (0, 0, 0, False),
+        (10, 11, 0, True),  # Exactly-once settlement invariant really is violated.
+    ],
+)
+def test_lifecycle_alert_uses_settlement_invariant(export, opened, settled, transport_open, fires):
+    rule = ALERT_RULES_BY_EXPORT[export]['omi-stt-leg-lifecycle-gap']
+    models = {item['refId']: item['model'] for item in rule['data']}
+    # Evaluate the exported expression, rejecting unsupported query changes.
+    query = models['B']['expr']
+    assert query == (
+        'omi_stt_managed_legs_settled_total{job="backend-listen-metrics"}'
+        ' - omi_stt_managed_legs_opened_total{job="backend-listen-metrics"}'
+    )
+    assert models['C']['expression'] == '$A >= 0 && $B > 0'
+    assert (opened >= 0 and settled - opened > 0) is fires
+    assert rule['for'] == '2m'
+    assert rule['isPaused'] is False
+    assert 'direct instrumentation' in rule['annotations']['evaluated_good']

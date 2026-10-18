@@ -5700,3 +5700,10 @@ with a class/site-only `sync_finalize_exception` diagnostic. Deleted-target
 acknowledgement belongs only to the legacy post-persistence callback. The shared bridge helper keeps its string-or-superseded contract;
 synchronous and async batch callers retain their privacy/receipt fences. Roll back recovery with
 the kill switch on every sync-intake service; classification remains internal.
+
+Production routing-off rollout (2026-10-18): backend-listen restores static
+selection with `STT_ROUTING_MODE=off`; recovery and account quarantine remain
+enforced. Rollback and baseline outcome watches live in
+[the routing runbook](runbooks/live-stt-routing.md#production-routing-off-rollout-2026-10-18).
+Transport-open and settlement are independent: their arithmetic difference is
+an accounting diagnostic, not a serving-failure abort.

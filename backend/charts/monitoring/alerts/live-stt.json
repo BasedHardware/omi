@@ -3504,7 +3504,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live STT - managed leg lifecycle gap",
+    "title": "Live STT - managed leg duplicate settlement",
     "condition": "D",
     "data": [
       {
@@ -3540,7 +3540,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "abs(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_open{job=\"backend-listen-metrics\"}) / clamp_min(omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}, 1)",
+          "expr": "omi_stt_managed_legs_settled_total{job=\"backend-listen-metrics\"} - omi_stt_managed_legs_opened_total{job=\"backend-listen-metrics\"}",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -3560,7 +3560,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 0 && $B > 0.25",
+          "expression": "$A >= 0 && $B > 0",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -3610,22 +3610,22 @@
         }
       }
     ],
-    "updated": "2026-10-04T00:00:00Z",
+    "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "30m",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT - managed leg lifecycle gap",
-      "user_impact": "Managed transports lack a matching open or settlement; routing evidence is incomplete.",
-      "scope": "omi_stt_managed_legs_opened_total, omi_stt_managed_legs_settled_total and omi_stt_managed_legs_open require the configured chain; per instance and target, never pooled.",
+      "summary": "Live STT - managed leg duplicate settlement",
+      "user_impact": "Duplicate settlement accounting may corrupt routing evidence; inspect serving outcome metrics separately.",
+      "scope": "Per instance and target, settled must not exceed handed-off opened legs. Transport release and settlement are independent; opened-minus-settled-minus-open is diagnostic only.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
-      "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
+      "safe_next_action": "HOLD routing qualification and investigate duplicate settlement. Do not roll back serving solely for opened-minus-settled-minus-open; compare transcript, terminal-after-text and exhausted-chain outcomes with baseline.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "$A > 0 && $B > 0.25 for 30m, per instance and target. Supplied production triage of each rule's own expression, 2026-09-28..2026-10-12 at 1h steps: per-pod maximum B p50 1.1% / p90 16.7% / max 100% at pod start. A nonzero steady-state gap (p50 1.1%) is an accounting defect to investigate, not healthy; the sustained threshold filters pod-start transients.",
-      "evaluated_bad": "Managed legs opened on an instance/target with unexplained opened-minus-settled-minus-open ratio above 25%, sustained for 30m, fires.",
-      "evaluated_good": "No opened legs or per-instance/target gap at most 25% does not fire this alert. A nonzero steady-state gap remains an accounting defect to investigate, not healthy."
+      "threshold": "Settled minus opened >0 for 2m per instance and target. Grafana pending time supplies elapsed persistence; missing series are not proof of healthy accounting.",
+      "evaluated_bad": "More managed settlements than handed-off legs on the same instance/target, sustained for 2m.",
+      "evaluated_good": "Settled at most opened. This does not prove complete settlement: released-but-unsettled state and oldest age require direct instrumentation before omission alerts can qualify a rollout."
     },
     "labels": {
       "alert_identity": "omi-stt-leg-lifecycle-gap",
