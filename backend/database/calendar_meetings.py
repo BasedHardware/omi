@@ -1,23 +1,21 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
-from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
+from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]
 
 from ._client import db
 from database.document_ids import calendar_meeting_doc_id
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
+logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
 def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
-    """Wrap @transactional preserving the wrapped function's typed signature.
-
-    google-cloud-firestore's @transactional decorator surfaces as partially
-    unknown under strict Pyright (no stubs); this thin wrapper keeps the typed
-    call site while delegating runtime behavior to the SDK decorator.
-    """
+    """Wrap @transactional preserving the wrapped function's typed signature."""
     return transactional(func)
 
 
@@ -44,8 +42,6 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    # The natural key needs both fields — meeting_data['x'] raises KeyError
-    # on a payload missing either, before the doc-path is even built.
     try:
         calendar_source = meeting_data['calendar_source']
         calendar_event_id = meeting_data['calendar_event_id']
@@ -59,8 +55,6 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
     def upsert(write_transaction):
         _upsert_meeting_transaction(write_transaction, doc_ref, meeting_data, now)
 
-    # Concurrent calendar syncs for the same user contend on the transaction —
-    # a bare db.transaction() abandons on Aborted. Bounded equal-jitter retry.
     run_with_transaction_contention_retry(db.transaction, upsert, operation_name='calendar_meeting_create')
     return meeting_id
 
@@ -71,7 +65,6 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> b
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    # Update synced_at timestamp (always in UTC for consistent querying)
     meeting_data['synced_at'] = datetime.now(timezone.utc)
 
     doc_ref = _get_meetings_collection(uid).document(meeting_id)
@@ -80,8 +73,8 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> b
     try:
         doc_ref.update(meeting_data)
         return True
-    except Exception:
-        # Guard against TOCTOU race deletion between get() and update()
+    except NotFound as e:
+        logger.warning("Meeting %s not found during update (concurrent deletion): %s", meeting_id, e)
         return False
 
 
