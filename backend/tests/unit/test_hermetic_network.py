@@ -72,18 +72,22 @@ def test_localhost_redis_endpoint_is_refused():
         client.close()
 
 
-def test_redis_hostname_resolving_to_loopback_is_refused(monkeypatch):
-    # A hosts-file alias (or any configured REDIS_DB_HOST name) that resolves
-    # to loopback must be refused exactly like the literal address, on both
-    # the raw connect and the create_connection paths. The resolver is
-    # patched so the test needs no real DNS entry.
+def test_hosts_file_alias_to_loopback_is_refused(monkeypatch, tmp_path):
+    # A hosts-file name mapped to a loopback address is machine-local and
+    # must be refused exactly like the literal address, on both the raw
+    # connect and the create_connection paths. Classification is plain
+    # hosts-file I/O — never a DNS lookup.
     import testing.hermetic_network as hermetic_network
 
-    def resolver(host, port, *args, **kwargs):
-        assert host == 'unit-test-redis.alias'
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.9', port))]
-
-    monkeypatch.setattr(hermetic_network, '_UNGUARDED_GETADDRINFO', resolver)
+    hosts_file = tmp_path / 'hosts'
+    hosts_file.write_text(
+        '# unit-test hosts file\n'
+        '127.0.0.1\tlocalhost\n'
+        '::1\tlocalhost\n'
+        '127.0.0.9\tunit-test-redis.alias\n'
+        '::1\tunit-test-redis.alias.v6\n'
+    )
+    monkeypatch.setattr(hermetic_network, '_HOSTS_FILE_PATH', str(hosts_file))
 
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -92,46 +96,97 @@ def test_redis_hostname_resolving_to_loopback_is_refused(monkeypatch):
                 client.connect(('unit-test-redis.alias', 6379))
             with pytest.raises(ConnectionRefusedError, match='hermetic unit tests'):
                 socket.create_connection(('unit-test-redis.alias', 6379), timeout=5)
+            with pytest.raises(ConnectionRefusedError, match='hermetic unit tests'):
+                socket.create_connection(('unit-test-redis.alias.v6', 6379), timeout=5)
     finally:
         client.close()
 
 
-def test_redis_hostname_refusal_survives_composition_with_outbound_guard(monkeypatch):
-    # conftest composes the Redis guard beneath block_outbound_network, whose
-    # guarded getaddrinfo refuses every non-local name before it could be
-    # classified; endpoint resolution must still consult the real resolver
-    # there and refuse the alias as the Redis endpoint.
+def test_hosts_file_alias_refusal_survives_composition_with_outbound_guard(monkeypatch, tmp_path):
+    # conftest composes the Redis guard with block_outbound_network, whose
+    # hostname checks know nothing about the hosts file. The loopback alias
+    # must still be refused as the Redis endpoint (the Redis wrapper is
+    # installed last, so it sees the address first), while a hosts-file
+    # name mapped off loopback is not local and must flow to the outbound
+    # guard's refusal instead.
     import testing.hermetic_network as hermetic_network
 
+    hosts_file = tmp_path / 'hosts'
+    hosts_file.write_text('127.0.0.9\tunit-test-redis.alias\n' '10.0.0.9\tunit-test-redis.offloop\n')
+    monkeypatch.setattr(hermetic_network, '_HOSTS_FILE_PATH', str(hosts_file))
+
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        with hermetic_network.block_outbound_network(), hermetic_network.block_local_redis():
+            with pytest.raises(ConnectionRefusedError, match='hermetic unit tests'):
+                socket.create_connection(('unit-test-redis.alias', 6379), timeout=5)
+            with pytest.raises(BlockedNetworkError):
+                socket.create_connection(('unit-test-redis.offloop', 6379), timeout=5)
+    finally:
+        client.close()
+
+
+def test_remote_redis_hostname_is_never_resolved_by_the_guard(monkeypatch):
+    # The Redis guard must never resolve DNS itself: a unit session
+    # configured with a remote REDIS_DB_HOST would otherwise turn the
+    # guard into a real DNS client from inside the hermetic boundary.
+    # Patch every live ``socket`` resolver entry point, plus the captured
+    # resolver attribute the pre-fix guard used (``raising=False``: the
+    # fixed module no longer defines one, and this test must fail if a
+    # captured resolver is ever reintroduced and called); a remote-looking
+    # endpoint must flow untouched to the outbound guard (which blocks it)
+    # with zero resolver calls.
+    import testing.hermetic_network as hermetic_network
+
+    resolver_calls: list[str] = []
+
+    def refuse_to_resolve(entry_point):
+        def resolve(*args, **kwargs):
+            resolver_calls.append(entry_point)
+            raise AssertionError(f'{entry_point} ran inside the hermetic guards')
+
+        return resolve
+
+    monkeypatch.setattr(socket, 'getaddrinfo', refuse_to_resolve('getaddrinfo'))
+    monkeypatch.setattr(socket, 'gethostbyname', refuse_to_resolve('gethostbyname'))
+    monkeypatch.setattr(socket, 'gethostbyname_ex', refuse_to_resolve('gethostbyname_ex'))
     monkeypatch.setattr(
         hermetic_network,
         '_UNGUARDED_GETADDRINFO',
-        lambda host, port, *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.9', port))],
-    )
-
-    with hermetic_network.block_outbound_network(), hermetic_network.block_local_redis():
-        with pytest.raises(ConnectionRefusedError, match='hermetic unit tests'):
-            socket.create_connection(('unit-test-redis.alias', 6379), timeout=5)
-
-
-def test_redis_hostname_resolving_off_loopback_is_not_refused(monkeypatch):
-    # Negative control: a name that resolves off loopback is not the local
-    # Redis endpoint, so the Redis guard must let it flow to the chained
-    # outbound guard instead of refusing it (203.0.113.0/24 is TEST-NET-3;
-    # the outbound guard stops the connect before any packet leaves).
-    import testing.hermetic_network as hermetic_network
-
-    monkeypatch.setattr(
-        hermetic_network,
-        '_UNGUARDED_GETADDRINFO',
-        lambda host, port, *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('203.0.113.7', port))],
+        refuse_to_resolve('captured-getaddrinfo'),
+        raising=False,
     )
 
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         with hermetic_network.block_outbound_network(), hermetic_network.block_local_redis():
             with pytest.raises(BlockedNetworkError):
-                client.connect(('unit-test-redis.external', 6379))
+                client.connect(('unit-test-redis.remote.example', 6379))
+            with pytest.raises(BlockedNetworkError):
+                socket.create_connection(('unit-test-redis.remote.example', 6379), timeout=5)
+    finally:
+        client.close()
+    assert resolver_calls == []
+
+
+def test_localhost_name_forms_are_refused(monkeypatch, tmp_path):
+    # RFC 6761 loopback name forms — ``localhost.`` and any ``*.localhost``
+    # label, in any case, plus the ``::1`` literal — are machine-local
+    # without consulting DNS or the hosts file. The hosts file is pointed
+    # at an empty fixture so these refusals can only come from the
+    # name-form/literal classification itself.
+    import testing.hermetic_network as hermetic_network
+
+    empty_hosts_file = tmp_path / 'empty-hosts'
+    empty_hosts_file.write_text('')
+    monkeypatch.setattr(hermetic_network, '_HOSTS_FILE_PATH', str(empty_hosts_file))
+
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        with hermetic_network.block_local_redis():
+            for host in ('localhost.', 'LocalHost', 'Unit-Test.Redis.localhost.', '::1'):
+                with pytest.raises(ConnectionRefusedError, match='hermetic unit tests'):
+                    client.connect((host, 6379))
     finally:
         client.close()
 

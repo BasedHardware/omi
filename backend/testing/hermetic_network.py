@@ -14,17 +14,6 @@ class BlockedNetworkError(RuntimeError):
     """Raised when a hermetic test tries to reach a non-local endpoint."""
 
 
-# Captured at import time, before any guard can patch it: hostname checks
-# inside the Redis guard must consult the real resolver. ``block_outbound_
-# network`` refuses DNS for non-local names and the Redis guard runs beneath
-# it, so calling ``socket.getaddrinfo`` dynamically there would classify an
-# alias like ``redis.local`` as "unresolvable" instead of resolving it.
-# ``backend/tests/conftest.py`` imports this module while loading conftests,
-# before ``pytest_sessionstart`` installs the outbound guard, so the capture
-# is pristine. Tests patch this attribute to fake resolution.
-_UNGUARDED_GETADDRINFO = socket.getaddrinfo
-
-
 def is_local_address(host: object) -> bool:
     if host is None:
         return True
@@ -120,29 +109,64 @@ def _fake_redis_endpoint_allowed() -> bool:
     return os.getenv('OMI_HERMETIC_ALLOW_FAKE_REDIS', '').lower() not in {'', '0', 'false', 'no', 'off'}
 
 
-def _sockaddr_is_loopback(sockaddr: tuple) -> bool:
-    address = sockaddr[0] if sockaddr else None
-    if isinstance(address, bytes):
-        address = address.decode('idna')
-    if not isinstance(address, str):
-        return False
+# Read with plain file I/O (never the resolver) so the Redis guard can
+# classify hosts-file names offline; tests monkeypatch this attribute to
+# point at a fixture hosts file.
+_HOSTS_FILE_PATH = '/etc/hosts'
+
+_HOSTS_LOOPBACK_NAMES_KEY = 'hosts_loopback_names'
+
+
+def _read_hosts_file_loopback_names(path: str) -> frozenset[str]:
+    """Names the hosts file maps to a loopback address, or an empty set.
+
+    Plain file I/O only — the hermetic Redis guard must answer offline, so
+    no resolver and no subprocess. An unreadable or malformed file simply
+    contributes no names; those endpoints then flow to the outbound guard.
+    """
+    loopback_names: set[str] = set()
     try:
-        return ipaddress.ip_address(address).is_loopback
-    except ValueError:
-        return False
+        with open(path, 'r', encoding='utf-8', errors='replace') as hosts_file:
+            for raw_line in hosts_file:
+                fields = raw_line.split('#', 1)[0].split()
+                if not fields:
+                    continue
+                try:
+                    address = ipaddress.ip_address(fields[0])
+                except ValueError:
+                    continue
+                if not address.is_loopback:
+                    continue
+                for name in fields[1:]:
+                    normalized = name.rstrip('.').lower()
+                    if normalized:
+                        loopback_names.add(normalized)
+    except OSError:
+        pass
+    return frozenset(loopback_names)
 
 
-def _redis_endpoint_host_is_local(host: object, port: int) -> bool:
-    """True when ``host`` is loopback, is ``localhost``, or resolves to loopback.
+def _hosts_file_loopback_names(classification_cache: dict | None) -> frozenset[str]:
+    if classification_cache is None:
+        return _read_hosts_file_loopback_names(_HOSTS_FILE_PATH)
+    names = classification_cache.get(_HOSTS_LOOPBACK_NAMES_KEY)
+    if names is None:
+        names = _read_hosts_file_loopback_names(_HOSTS_FILE_PATH)
+        classification_cache[_HOSTS_LOOPBACK_NAMES_KEY] = names
+    return names
 
-    Literal addresses and the ``localhost`` name need no DNS. Any other
-    hostname is resolved through the unguarded resolver, so a name such as a
-    hosts-file ``redis.local`` pointing at 127.0.0.1 is refused exactly like
-    the literal address no matter which of ``connect``/``connect_ex``/
-    ``create_connection`` carried it, while a host that resolves off loopback
-    keeps flowing to the chained guards. Resolution failures count as "not
-    blocked": the original connect then surfaces its own natural error
-    instead of the guard inventing one.
+
+def _redis_endpoint_host_is_local(host: object, classification_cache: dict | None = None) -> bool:
+    """True when ``host`` is provably machine-local without any DNS lookup.
+
+    Local means a literal loopback IP (v4 or v6), a ``localhost`` name in
+    any case — including the ``localhost.`` and ``*.localhost`` forms — or
+    a name the hosts file maps to a loopback address. Anything else is not
+    classified here: the guard must never resolve DNS itself, or a unit
+    session configured with a remote ``REDIS_DB_HOST`` would turn the
+    guard into a real DNS client from inside the hermetic boundary. The
+    chained outbound guard already blocks non-local endpoints, so a
+    non-local hostname simply flows through untouched.
     """
     if isinstance(host, bytes):
         try:
@@ -151,32 +175,32 @@ def _redis_endpoint_host_is_local(host: object, port: int) -> bool:
             return False
     if not isinstance(host, str):
         return False
-    if is_local_address(host):
+    hostname = host.strip().strip('[]').lower().rstrip('.')
+    if hostname == '':
         return True
-    hostname = host.strip().strip('[]')
     try:
-        ipaddress.ip_address(hostname)
+        address = ipaddress.ip_address(hostname)
     except ValueError:
         pass
     else:
-        return False  # A literal non-loopback address needs no resolution.
-    try:
-        resolved = _UNGUARDED_GETADDRINFO(hostname, port, 0, socket.SOCK_STREAM)
-    except (OSError, RuntimeError, UnicodeError):
-        return False
-    return any(_sockaddr_is_loopback(result[4]) for result in resolved)
+        return address.is_loopback
+    if hostname == 'localhost' or hostname.endswith('.localhost'):
+        return True
+    return hostname in _hosts_file_loopback_names(classification_cache)
 
 
-def _is_blocked_redis_endpoint(address: object, resolution_cache: dict | None = None) -> bool:
-    """True for the ``database.redis_db`` endpoint when it is or resolves locally.
+def _is_blocked_redis_endpoint(address: object, classification_cache: dict | None = None) -> bool:
+    """True for the ``database.redis_db`` endpoint when its host is machine-local.
 
     ``_redis_connection_kwargs`` falls back to redis-py's ``localhost`` default
     when ``REDIS_DB_HOST`` is unset, so the endpoint a unit test would reach is
-    the configured port on the configured host: a loopback literal, the
-    ``localhost`` name, or any hostname that resolves to a loopback address.
-    Tests that deliberately host their own fake Redis listener (real socket
-    I/O against a stub peer) set ``OMI_HERMETIC_ALLOW_FAKE_REDIS`` to keep
-    that endpoint reachable.
+    the configured port on the configured host. The host is classified with a
+    strictly offline check — loopback literal, ``localhost`` name form, or a
+    hosts-file mapping to loopback — because this guard must never emit DNS
+    queries itself; any other hostname is left to the outbound guard, which
+    already blocks non-local network. Tests that deliberately host their own
+    fake Redis listener (real socket I/O against a stub peer) set
+    ``OMI_HERMETIC_ALLOW_FAKE_REDIS`` to keep that endpoint reachable.
     """
     if _fake_redis_endpoint_allowed():
         return False
@@ -186,11 +210,11 @@ def _is_blocked_redis_endpoint(address: object, resolution_cache: dict | None = 
     if port != _configured_redis_port():
         return False
     cache_key = (host, port)
-    if resolution_cache is not None and cache_key in resolution_cache:
-        return resolution_cache[cache_key]
-    blocked = _redis_endpoint_host_is_local(host, port)
-    if resolution_cache is not None:
-        resolution_cache[cache_key] = blocked
+    if classification_cache is not None and cache_key in classification_cache:
+        return classification_cache[cache_key]
+    blocked = _redis_endpoint_host_is_local(host, classification_cache)
+    if classification_cache is not None:
+        classification_cache[cache_key] = blocked
     return blocked
 
 
@@ -219,33 +243,35 @@ def block_local_redis() -> Iterator[None]:
     ``ECONNREFUSED``, byte-for-byte what a closed port yields — so redis-py
     maps it to ``redis.ConnectionError`` and every fail-open path behaves
     exactly as it already does on CI. The refused endpoint is the configured
-    port on the configured host after resolution, so a ``REDIS_DB_HOST`` alias
-    (or any hostname) that resolves to loopback cannot sidestep the literal
-    address check. A test that hosts its own fake Redis listener and needs
-    the socket I/O to happen can set ``OMI_HERMETIC_ALLOW_FAKE_REDIS`` for
-    its own duration.
+    port on the configured host, classified strictly offline (loopback
+    literal, ``localhost`` name form, or hosts-file mapping to loopback): the
+    guard never resolves DNS, so a remote-looking ``REDIS_DB_HOST`` is simply
+    not classified here and the chained outbound guard blocks it. A test
+    that hosts its own fake Redis listener and needs the socket I/O to
+    happen can set ``OMI_HERMETIC_ALLOW_FAKE_REDIS`` for its own duration.
     """
     original_connect = socket.socket.connect
     original_connect_ex = socket.socket.connect_ex
     original_create_connection = socket.create_connection
-    # Hostname classification resolves DNS; cache per endpoint so repeated
-    # connects (redis-py retries) pay for resolution at most once.
-    resolution_cache: dict = {}
+    # Offline classification reads the hosts file at most once and caches
+    # per-endpoint verdicts, so repeated connects (redis-py retries)
+    # recheck nothing.
+    classification_cache: dict = {}
 
     def redis_guarded_connect(sock: socket.socket, address: object):
-        if not _is_unix_socket(sock) and _is_blocked_redis_endpoint(address, resolution_cache):
+        if not _is_unix_socket(sock) and _is_blocked_redis_endpoint(address, classification_cache):
             _refuse_redis(address)
         return original_connect(sock, address)
 
     def redis_guarded_connect_ex(sock: socket.socket, address: object):
         # ``connect_ex`` reports failures as the errno instead of raising;
         # keep that contract so probing callers see a genuine refusal.
-        if not _is_unix_socket(sock) and _is_blocked_redis_endpoint(address, resolution_cache):
+        if not _is_unix_socket(sock) and _is_blocked_redis_endpoint(address, classification_cache):
             return _REDIS_REFUSED_ERRNO
         return original_connect_ex(sock, address)
 
     def redis_guarded_create_connection(address: object, *args, **kwargs):
-        if _is_blocked_redis_endpoint(address, resolution_cache):
+        if _is_blocked_redis_endpoint(address, classification_cache):
             _refuse_redis(address)
         return original_create_connection(address, *args, **kwargs)
 
