@@ -74,7 +74,7 @@ overlay:
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
         STT_ROUTING_MODE:
-          value: 'off'
+          value: 'on'
         STT_ROUTING_ON_PERCENT:
           value: '100'
         SONIOX_MONTHLY_CEILING_USD:
@@ -1445,6 +1445,10 @@ overlay:
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-hhibjajaja-uc.a.run.app
             category: service_auth
+          # Recovery must not wait behind legacy transcription retries.
+          BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
+            value: batch-quarantine-recovery
+            category: reliability
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'

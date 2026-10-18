@@ -390,7 +390,11 @@ actor ConversationFinalizationService {
     if let pinned = localProjectionHooks?.entitlement {
       entitlement = pinned
     } else {
-      entitlement = await SubscriptionEntitlementService.shared.decisionForManagedProactivity()
+      let subscription = await SubscriptionEntitlementService.shared.snapshot()
+      entitlement =
+        LocalProjectionFinalization.fundingUnavailable(
+          subscription: subscription, isByokActive: APIKeyService.isByokActive
+        ) ? .planGated : .allowManagedProactivity
     }
     let thermalState = localProjectionHooks?.thermalState ?? ProcessInfo.processInfo.thermalState
     let decision = LocalProjectionFinalization.decision(

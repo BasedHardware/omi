@@ -846,6 +846,34 @@ runs:
             --max-concurrent-dispatches=16
         fi
 
+    - name: Configure production batch quarantine recovery queue
+      if: ${{ inputs.runtime_env == 'prod' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Isolate accepted-work recovery from saturated legacy sync retries.
+        # Listing must succeed: permission/transport errors never imply absence.
+        queue=batch-quarantine-recovery
+        name="projects/${{ inputs.project_id }}/locations/${{ inputs.region }}/queues/$queue"
+        existing=$(gcloud tasks queues list \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --filter="name=$name" --format='value(name)')
+        operation=create
+        if [[ "$existing" == "$name" ]]; then
+          operation=update
+        elif [[ -n "$existing" ]]; then
+          echo 'Unexpected recovery queue inventory' >&2
+          exit 1
+        fi
+        gcloud tasks queues "$operation" "$queue" \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --max-concurrent-dispatches=4 \
+          --max-dispatches-per-second=4 \
+          --max-attempts=5 \
+          --min-backoff=5s --max-backoff=60s
+
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3

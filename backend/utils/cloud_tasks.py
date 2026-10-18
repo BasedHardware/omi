@@ -296,6 +296,30 @@ def enqueue_named_task(
         logger.info('task %s already enqueued, skipping duplicate', task_id)
 
 
+def named_task_exists(queue: str, task_id: str) -> bool:
+    """Probe scheduling custody only; never request a task's FULL payload view.
+
+    Only an authoritative NotFound permits replacing an exhausted wake. A
+    permission/transport error must preserve the old name and durable debt.
+    """
+    project, location = os.getenv('SYNC_TASKS_PROJECT', ''), os.getenv('SYNC_TASKS_LOCATION', '')
+    if not all((project, location, queue, task_id)):
+        raise RuntimeError('Cloud Tasks watchdog binding is incomplete')
+    client = _get_tasks_client()
+    try:
+        client.get_task(
+            request=tasks_v2.GetTaskRequest(
+                name=client.task_path(project, location, queue, task_id),
+                response_view=tasks_v2.Task.View.BASIC,
+            ),
+            retry=None,
+            timeout=3,
+        )
+        return True
+    except NotFound:
+        return False
+
+
 def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
     """Enqueue one named HTTP task for a sync job.
 

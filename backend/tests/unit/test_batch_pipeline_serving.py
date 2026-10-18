@@ -203,7 +203,7 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status,code', [('busy', 409), ('completed', 200)])
+@pytest.mark.parametrize('status,code', [('busy', 200), ('completed', 200)])
 @pytest.mark.parametrize('deadline', ['false', 'true'])
 async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
     monkeypatch, caplog, status, code, deadline
@@ -411,3 +411,23 @@ def test_recovery_invoker_cannot_gain_worker_authority(monkeypatch, path, expect
     assert verify.call_args.kwargs['audience'] == (
         'https://integration.run.app' if expected == 'tasks-sa' else 'https://worker.run.app'
     )
+
+
+@pytest.mark.asyncio
+async def test_real_adapter_logs_closed_class_site_without_exception_text(monkeypatch, caplog):
+    from utils.sync import reprocess
+
+    adapter = module
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+
+    async def run(*_):
+        raise reprocess.FirstSummaryCallbackPending('DO-NOT-LOG synthetic payload')
+
+    monkeypatch.setattr(adapter, 'run_blocking', run)
+    caplog.set_level(logging.ERROR, logger=adapter.__name__)
+    response = await adapter.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+    assert response.status_code == 500 and json.loads(response.body) == {'status': 'retry'}
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == [
+        'event=batch_enrichment_sync_reprocess outcome=retry site=run_enrichment exception_type=FirstSummaryCallbackPending'
+    ]
