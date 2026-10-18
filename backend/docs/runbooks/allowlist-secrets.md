@@ -61,7 +61,10 @@ gcloud secrets create OMI_MESSAGING_CHANNEL_POLICY --project=based-hardware --re
 ```
 
 Grant `roles/secretmanager.secretAccessor` on each secret to the existing ESO
-identity and the attached runtime service accounts that consume that key. The
+identity and the attached runtime service accounts that consume that key. Set
+`BACKEND_DEPLOYER_SA` to the production GitHub backend deploy principal. It also
+needs accessor on Cloud Run cohort secrets so preflight can validate payloads
+in memory; missing access blocks deployment. No key material belongs in this variable. The
 following lead-only script resolves Cloud Run identities rather than assuming
 that backfill shares sync's identity. The chart's normal ESO identity is
 `prod-omi-backend-eso-gsa@based-hardware.iam.gserviceaccount.com`; confirm the live
@@ -71,10 +74,14 @@ resolve the deployment inputs first.
 ```python
 # Run from repository root with the attended human credential tier.
 import json
+import os
 import subprocess
 import yaml
 
 project = 'based-hardware'
+# Exact service account used by the existing production GitHub backend deploy.
+# The lead resolves this from the configured deployment credential, not a guessed name.
+deployer = os.environ['BACKEND_DEPLOYER_SA']
 manifest = yaml.safe_load(open('backend/deploy/runtime_env.yaml'))['environments']['prod']
 chart = yaml.safe_load(open('backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml'))
 keys = {row['secretKey'] for row in chart['externalSecret']['secretKeys']
@@ -93,6 +100,7 @@ for name, config in manifest['cloud_run']['services'].items():
         identity = number + '-compute@developer.gserviceaccount.com'
     for key in keys & config['secrets'].keys():
         consumers[key].add(identity)
+        consumers[key].add(deployer)
 for key, identities in sorted(consumers.items()):
     for identity in sorted(identities):
         subprocess.run(['gcloud', 'secrets', 'add-iam-policy-binding', key,
@@ -112,8 +120,10 @@ removal-only `gcloud run services update`. Normal production images ship through
 the owning GitHub Actions workflow; this document does not authorize dispatch.
 
 1. Provision and verify all thirteen secrets and IAM first. The normal prebuild
-   Secret Manager existence check must pass; existence alone is not proof of
-   payload correctness or runtime IAM access.
+   Secret Manager existence and private payload checks must pass. The Cloud Run
+   preflight reads each distinct private version in memory, rejects empty parsed
+   CSV cohorts or invalid/empty policy JSON, and emits only failing env names.
+   This includes the lineage empty-value case that would otherwise widen admission.
 2. Deploy the complete backend stack (`deploy_targets=all`) at the reviewed SHA.
    Cloud Run deploy inputs use the existing merge strategy: unrelated retained
    env survives; secret names replace only declared allowlists. The renderer
@@ -126,8 +136,8 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
    Backfill's clone receives its own secret overlay, so inherited sync literals
    cannot reintroduce the migrated names.
 3. The stack deploys backend-secrets **before** backend-listen. Its script forces
-   an ExternalSecret refresh, waits, and checks target Secret keys. A refresh
-   timeout may fall back to checking current keys; missing new keys fails closed
+   an ExternalSecret refresh, waits, and checks target Secret keys and decoded private payloads without printing values. A refresh
+   timeout may fall back to checking current keys/payloads; missing or empty cohorts fail closed
    before listen upgrade. For this migration require an observed fresh Ready
    sync and all thirteen nonempty payloads, even if keys already existed.
 4. Helm replaces the env list: the prod listen/pusher values therefore contain
@@ -136,6 +146,12 @@ the owning GitHub Actions workflow; this document does not authorize dispatch.
    keys prevent the new pod from starting rather than admitting an empty cohort.
    Verify ExternalSecret readiness before the separate owning pusher deployment
    too. Keep the secret chart installed; do not roll it back independently.
+
+The legacy `sync_cloudrun_secrets_from_chart.sh` helper excludes all private
+cohorts; normal per-service manifest deploys own these bindings and their atomic
+type migration. Reviewed stage data stores public knobs only, with membership
+removed; the co-host gate validates required private sources separately. The
+flag registry includes Cloud Run service and job secret declarations.
 
 The dev composed manifest is semantically unchanged. Historical literal lineage
 manifests remain replayable; current secret manifests must agree by name/version

@@ -333,11 +333,12 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
 # authoritative final pass from stage B. Backend-listen must stay excluded. Validate
 # exact literals below as well as names, rather than exempting arbitrary values.
+PROD_PRIVATE_COHORT_NAMES = frozenset({'TRANSCRIPTION_SHADOW_UID_ALLOWLIST', 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'})
+
 PROD_FINAL_PASS_SHADOW_VALUES = {
     "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
     "TRANSCRIPTION_FINAL_PASS_DIARIZER": ("pyannote_shadow", None),
     "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
-    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
     "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
     "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("true", None),
     "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("true", None),
@@ -363,7 +364,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
     )
-    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
+    | PROD_PRIVATE_COHORT_NAMES,
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the
@@ -405,7 +407,6 @@ DEV_SHADOW_VALUES = {
 PROD_SHADOW_VALUES = {
     "TRANSCRIPTION_SHADOW_ENABLED": ("true", None),
     "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", None),
-    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
     "TRANSCRIPTION_SHADOW_PERCENT": ("0", None),
     "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", None),
 }
@@ -512,7 +513,7 @@ def _read_values(root: Path, service: str, env: str) -> tuple[dict[str, EnvEntry
 def _prod_scope_matches(name: str, entry: EnvEntry | None, expected: str) -> bool:
     if entry is None:
         return False
-    if name in {'TRANSCRIPTION_SHADOW_UID_ALLOWLIST', 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'}:
+    if name in PROD_PRIVATE_COHORT_NAMES:
         # Membership is private. Verify its exact source; the lead verifies payload equality.
         return entry.value is None and entry.secret_name == 'prod-omi-backend-secrets' and entry.secret_key == name
     return entry.value == expected
@@ -592,6 +593,11 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
         # Accept only a complete reviewed stage, never independently widened flags.
         prod_scope = {**PROD_SHADOW_VALUES, **PROD_FINAL_PASS_SHADOW_VALUES}
         if env == "prod":
+            for name in PROD_PRIVATE_COHORT_NAMES:
+                if not _prod_scope_matches(name, pusher_env.get(name), '') or name in listen_env:
+                    errors.append(
+                        f'[{env}] shadow scope {name} requires its private pusher secret and no listen binding'
+                    )
             stages = json.loads((root / "config/diarization-cohort-stages.json").read_text())
             selected = next(
                 (
@@ -606,12 +612,6 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
             else:
                 prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
         for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
-            if env == 'prod' and name.endswith('UID_ALLOWLIST'):
-                if not _prod_scope_matches(name, pusher_env.get(name), expected_pusher) or name in listen_env:
-                    errors.append(
-                        f'[{env}] shadow scope {name} requires its private pusher secret and no listen binding'
-                    )
-                continue
             actual_pusher = pusher_env[name].value if name in pusher_env else None
             actual_listen = listen_env[name].value if name in listen_env else None
             if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):

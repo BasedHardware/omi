@@ -73,6 +73,10 @@ def test_prepared_cohort_does_not_enable_integration_or_dev():
 )
 def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, authoritative, cap):
     values = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())[stage]
+    assert not any(key.endswith('UID_ALLOWLIST') for key in values)
+    owner = 'synthetic-owner'
+    for key in ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'):
+        monkeypatch.setenv(key, owner)
     for key, value in values.items():
         monkeypatch.setenv(key, value)
     assert values['TRANSCRIPTION_FINAL_PASS_PERCENT'] == values['TRANSCRIPTION_SHADOW_PERCENT'] == percent
@@ -85,9 +89,8 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
     assert values['TRANSCRIPTION_SHADOW_ENABLED'] == 'true'
     assert values['TRANSCRIPTION_SHADOW_KILL_SWITCH'] == 'false'
     assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == ('false' if stage == 'A' else 'true')
-    assert flags.sync_enabled_for(values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST']) == (stage != 'A')
-    assert values['TRANSCRIPTION_SHADOW_UID_ALLOWLIST'] == values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST']
-    assert flags.enabled_for(values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'])
+    assert flags.sync_enabled_for(owner) == (stage != 'A')
+    assert flags.enabled_for(owner)
     if percent == '0':
         assert not flags.enabled_for('synthetic-outside-cohort')
     else:

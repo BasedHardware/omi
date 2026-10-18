@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 from pathlib import Path
 import sys
 from typing import Any, Dict, List, cast
 
 import yaml
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+from scripts.private_cohort_secrets import PRIVATE_COHORT_ENV_NAMES, valid_private_cohort_payload  # noqa: E402
 
 
 def main() -> int:
@@ -24,6 +31,21 @@ def main() -> int:
     missing = sorted(expected - present)
     if missing:
         print(f'ERROR: Kubernetes Secret is missing expected key(s): {", ".join(missing)}', file=sys.stderr)
+        return 1
+    invalid = []
+    for name in sorted(expected & PRIVATE_COHORT_ENV_NAMES):
+        try:
+            payload = base64.b64decode(data[name], validate=True).decode('utf-8')
+        except (ValueError, TypeError, UnicodeError, binascii.Error):
+            invalid.append(name)
+            continue
+        if not valid_private_cohort_payload(name, payload):
+            invalid.append(name)
+    if invalid:
+        print(
+            f'ERROR: Kubernetes Secret has empty or invalid private cohort key(s): {", ".join(invalid)}',
+            file=sys.stderr,
+        )
         return 1
     print(f'Kubernetes Secret key presence OK: {len(expected)} expected key(s) present')
     return 0

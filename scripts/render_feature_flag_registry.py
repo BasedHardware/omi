@@ -104,6 +104,9 @@ def _manifest_envs(path: Path) -> dict[str, dict[str, str]]:
         env = body.get("env") if isinstance(body, dict) else None
         if isinstance(env, dict):
             hosts[label] = {name: _env_token(entry) for name, entry in env.items()}
+        secrets = body.get("secrets") if isinstance(body, dict) else None
+        if isinstance(secrets, dict):
+            hosts.setdefault(label, {}).update({name: "secret" for name in secrets})
 
     gke = shared.get("gke")
     if isinstance(gke, dict):

@@ -90,7 +90,7 @@ def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_f
     (
         ('ENABLED', 'true', 'false'),
         ('KILL_SWITCH', 'false', 'true'),
-        ('UID_ALLOWLIST', 'vi7SA9ckQCe4ccobWNxlbdcNdC23', 'other-user'),
+        ('UID_ALLOWLIST', None, 'other-user'),
         ('PERCENT', '0', '1'),
         ('DAILY_AUDIO_HOURS', '1', '2'),
     ),
@@ -281,10 +281,10 @@ def test_deploy_workflows_invoke_the_gate() -> None:
 def test_batch_cohort_rejects_scope_or_route_drift(gate, chart_fixture, name, value):
     path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
     stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
-    expected = stages['A'][name]
     if name.endswith('UID_ALLOWLIST'):
         replace_once(path, f'key: {name}\n', f'key: {value}\n')
     else:
+        expected = stages['A'][name]
         replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
 
@@ -321,10 +321,7 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
                 path, f'  - name: {key}\n    value: "{previous}"\n', f'  - name: {key}\n    value: "{expected}"\n'
             )
     expected = stages[stage][name]
-    if name.endswith('UID_ALLOWLIST'):
-        replace_once(path, f'key: {name}\n', f'key: {value}\n')
-    else:
-        replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert gate.validate_preflight(chart_fixture)
 
 

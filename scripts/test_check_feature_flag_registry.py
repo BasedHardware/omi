@@ -12,7 +12,7 @@ from pathlib import Path
 
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
-from render_feature_flag_registry import render, _parse_mapping
+from render_feature_flag_registry import render, _parse_mapping, _manifest_envs
 
 
 def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]:
@@ -248,6 +248,25 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("(chart)", cells[7])
         empty = next(line for line in output.splitlines() if line.startswith("| `EMPTY_ENABLED` |"))
         self.assertIn("''", empty)
+
+    def test_renderer_includes_service_and_job_secret_declarations(self) -> None:
+        self.write("backend/deploy/runtime_env/prod.overlay.yaml", """overlay:
+  cloud_run:
+    services:
+      backend-sync:
+        secrets:
+          EXAMPLE_ENABLED:
+            secret: PRIVATE_COHORT
+            version: latest
+    jobs:
+      worker:
+        secrets:
+          EMPTY_ENABLED:
+            secret: OTHER_PRIVATE_COHORT
+""")
+        declarations = _manifest_envs(self.root / "backend/deploy/runtime_env/prod.overlay.yaml")
+        self.assertEqual(declarations['cloud_run/backend-sync']['EXAMPLE_ENABLED'], 'secret')
+        self.assertEqual(declarations['job/worker']['EMPTY_ENABLED'], 'secret')
 
     def test_experiment_requires_prereg(self) -> None:
         self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment")]))

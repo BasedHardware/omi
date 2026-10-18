@@ -1167,7 +1167,7 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     config = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']
     env = config['env']
     stages = json.loads((REPOSITORY_ROOT / 'config/diarization-cohort-stages.json').read_text())
-    secret_names = {key for key in stages['A'] if key.endswith('UID_ALLOWLIST')}
+    secret_names = {'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST'}
     expected = {key: env[key]['value'] for key in stages['A'] if key not in secret_names}
     assert expected in [
         {key: value for key, value in stage.items() if key not in secret_names} for stage in stages.values()
@@ -1195,7 +1195,10 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
                         {
                             'env': [
                                 {'name': name, 'value': 'synthetic-owner' if name in secret_names else value}
-                                for name, value in stages['A'].items()
+                                for name, value in {
+                                    **stages['A'],
+                                    **{key: 'synthetic-owner' for key in secret_names},
+                                }.items()
                             ]
                         }
                     ]

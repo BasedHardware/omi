@@ -11,17 +11,17 @@ before deploying callers. The pyannote adapter appends `/v2/diarization`, yieldi
 
 ## Stages (data only)
 
-Exact complete env sets are in [`diarization-cohort-stages.json`](../../config/diarization-cohort-stages.json).
-All stages retain these values on backend, backend-sync, backend-sync-backfill and pusher:
+Exact public env sets are in [`diarization-cohort-stages.json`](../../config/diarization-cohort-stages.json).
+The two UID allowlists remain bound to same-name Secret Manager secrets during
+every ramp; membership is absent from stage data. See [private allowlists](runbooks/allowlist-secrets.md).
+All stages retain these public values on backend, backend-sync, backend-sync-backfill and pusher:
 
 ```text
 HOSTED_DIARIZATION_API_URL=http://172.16.160.20/diarizer-batch
 TRANSCRIPTION_FINAL_PASS_DIARIZER=pyannote_shadow
 TRANSCRIPTION_FINAL_PASS_BACKEND=pyannote
-TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
 TRANSCRIPTION_SHADOW_ENABLED=true
 TRANSCRIPTION_SHADOW_KILL_SWITCH=false
-TRANSCRIPTION_SHADOW_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
 ```
 
 Combine those constants with the following exact values (all strings):
