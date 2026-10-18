@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from redis.crc import key_slot
 
 from database import candidates, s5_candidates_cache, staged_promote_cache as cache, staged_tasks, workstreams
 from models.candidate import CandidateRecord
@@ -24,6 +25,16 @@ from utils.task_intelligence.staged_migration import proposal_from_legacy_staged
 NOW = datetime(2026, 10, 18, tzinfo=timezone.utc)
 EMPTY = b'{"promoted":false,"reason":"No staged tasks available","promoted_task":null}'
 FLAG = 'OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED'
+
+
+def test_coordinator_keys_share_cluster_slot_and_isolate_owners():
+    version = cache._version_key('owner').encode()
+    other_version = cache._version_key('other-owner').encode()
+
+    assert key_slot(version) == key_slot(version + b':writers')
+    assert version != other_version
+    assert key_slot(version) != key_slot(other_version)
+    assert cache.compatibility_version_key('owner') == 'fsr:s5:candidates:version:owner'
 
 
 class Clock:

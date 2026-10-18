@@ -23,7 +23,7 @@ pytestmark = pytest.mark.integration
 def local_redis():
     binary = shutil.which('redis-server')
     assert binary, 'local redis-server required'
-    with tempfile.TemporaryDirectory(prefix='staged-fence-', dir='/Volumes/Ephemeral/scratch') as directory:
+    with tempfile.TemporaryDirectory(prefix='staged-fence-') as directory:
         socket = directory + '/r.sock'
         process = subprocess.Popen(
             [binary, '--port', '0', '--unixsocket', socket, '--save', '', '--appendonly', 'no'],

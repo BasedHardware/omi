@@ -162,6 +162,7 @@ therefore leave a UID bypassed until an operator reviews/resets that cache state
 repair or production mutation is included here. Monitor `bypass` and invalidation faults alongside
 reads/request. The Lua commands require Redis scripting; a denied/unavailable EVAL fails open to
 the original read/mutation, without making the negative cache a request prerequisite.
+An operator must confirm that no mutations are in flight before resetting this cache state.
 
 All eight legacy staged mutation owners invalidate before mutation and in `finally`: create,
 delete, complete promotion, suppress terminal, batch scores, promote, clear and conversation-item

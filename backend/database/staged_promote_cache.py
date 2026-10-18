@@ -27,9 +27,9 @@ OPERATIONS = Counter(
 logger = logging.getLogger(__name__)
 BUSY = '!busy'
 
-# These scripts never lock a writer. Tokens make repeated completion fail safe and stop
-# one overlapping/late completion from releasing another writer's fence. Busy
-# and poisoned state deliberately has no expiry: uncertainty disables caching.
+# These scripts never lock a writer. Tokens prevent overlapping/late completion
+# from releasing another writer's fence. Busy and poisoned state deliberately
+# has no expiry: uncertainty disables caching.
 _READ_VERSION = """
 if redis.call('EXISTS', KEYS[2]) == 1 then return '!busy' end
 local version = redis.call('GET', KEYS[1])
@@ -66,7 +66,7 @@ def _redis():
 
 
 def _version_key(uid: str) -> str:
-    return 'staged-promote-empty:v1:version:' + hashlib.sha256(uid.encode()).hexdigest()
+    return 'staged-promote-empty:v1:version:{' + hashlib.sha256(uid.encode()).hexdigest() + '}'
 
 
 def compatibility_version_key(uid: str) -> str:
