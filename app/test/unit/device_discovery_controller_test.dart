@@ -324,7 +324,7 @@ void main() {
   });
 
   group('firmware warning', () {
-    const prefKey = 'firmware_warning_acknowledged_DeviceType.plaud';
+    final prefKey = _plaud.firmwareWarningAcknowledgedKey;
 
     testWidgets('the classic card persists the opt-out only when it was ticked', (tester) async {
       final provider = _FakeOnboarding();
