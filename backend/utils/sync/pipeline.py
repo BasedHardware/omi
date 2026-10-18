@@ -1075,8 +1075,23 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     """
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    context = PROCESS_CONTEXT.get()
+    if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
+        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if context is not None:
+            # The outbox transfers custody atomically before acknowledging this donor.
+            context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
+            return
+        if canonical:
+            conversation_id = canonical
+            conversation_data = conversations_db.get_conversation(uid, canonical)
     if not conversation_data or conversation_data.get('deleted'):
-        logger.warning(f'Conversation {conversation_id} not found for reprocessing')
+        if context is not None:
+            if conversation_data and conversation_data.get('deleted'):
+                context['discarded'] = True  # A real deletion is terminal, never regenerated.
+            else:
+                context['defer_reason'] = 'conversation_missing'
+        logger.info('event=sync_reprocess_callback outcome=unavailable')
         return
 
     if repair_fenced(conversation_data):
@@ -1092,6 +1107,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # Live finalization owns the open row. SYNC_UPDATE would mark it
         # completed while the socket is still adding speech, after which the
         # finalizer skips processing that later content.
+        if context is not None:
+            context['defer_reason'] = 'open_live_target'
         return
 
     # Intake already discarded a rule-settled fragment; skip the processing
