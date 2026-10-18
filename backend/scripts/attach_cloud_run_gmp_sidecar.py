@@ -54,6 +54,10 @@ SIDECAR_IMAGE = (
 )
 SIDECAR_NAME = 'collector'
 CONFIG_VOLUME_NAME = 'cloud-run-gmp-config'
+SYNC_SERVICES = frozenset({'backend-sync', 'backend-sync-backfill', 'backend-integration'})
+# Dev services.replace --dry-run accepts app=2 + collector=0.08 (total=2.08),
+# gen2 and cpu-throttling=false. 128Mi is the minimum accepted memory limit.
+SYNC_COLLECTOR_LIMITS = {'cpu': '0.08', 'memory': '128Mi'}
 
 ConfigDict = dict[str, Any]
 
@@ -473,7 +477,13 @@ def patch_service(
     collector: ConfigDict = {
         'image': SIDECAR_IMAGE,
         'name': SIDECAR_NAME,
-        'resources': {'limits': {'cpu': '1', 'memory': '512Mi'}},
+        'resources': {
+            'limits': (
+                dict(SYNC_COLLECTOR_LIMITS)
+                if metadata.get('name') in SYNC_SERVICES
+                else {'cpu': '1', 'memory': '512Mi'}
+            )
+        },
         'livenessProbe': {
             'httpGet': {'path': '/liveness', 'port': 13133},
             'timeoutSeconds': 30,
