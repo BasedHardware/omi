@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 
 class KnowledgeGraphApi {
@@ -26,18 +27,73 @@ class KnowledgeGraphApi {
     throw Exception(knowledgeGraphHttpUserMessage(action: action, statusCode: statusCode, body: body));
   }
 
-  static Future<Map<String, dynamic>> getKnowledgeGraph() async {
-    final response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/knowledge-graph',
-      headers: {},
-      body: '',
-      method: 'GET',
-      timeout: const Duration(seconds: 60),
-      retries: 0,
-    );
+  /// Read the revision-fenced canonical API, including its memory catalog and
+  /// cursor. Use the compatibility API only for older/legacy-only servers;
+  /// never merge graph records read under different canonical revisions.
+  /// No read, refresh, or Load More action mutates/rebuilds memory state.
+  static Future<Map<String, dynamic>> getKnowledgeGraph({
+    String? cursor,
+    @visibleForTesting Future<http.Response?> Function(String url)? apiCaller,
+    @visibleForTesting bool Function()? isCurrent,
+  }) async {
+    final session = apiCaller == null ? AuthService.instance.captureSessionSnapshot() : null;
+    final current = isCurrent ??
+        () => apiCaller != null || (session != null && AuthService.instance.isSessionSnapshotCurrent(session));
+    Future<http.Response?> read(String url) async {
+      if (!current()) throw const KnowledgeGraphSessionChanged();
+      final response = apiCaller != null
+          ? await apiCaller(url)
+          : await makeApiCall(
+              url: url,
+              headers: {},
+              body: '',
+              method: 'GET',
+              timeout: const Duration(seconds: 30),
+              retries: 0,
+              canSend: current,
+            );
+      if (!current()) throw const KnowledgeGraphSessionChanged();
+      return response;
+    }
 
-    if (response != null && response.statusCode == 200) {
-      return wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
+    final uri = Uri.parse('$_baseUrl/canonical').replace(queryParameters: {
+      'limit': '100',
+      if (cursor != null) 'cursor': cursor,
+    });
+    final response = await read(uri.toString());
+    if (response?.statusCode == 200) {
+      final page =
+          wire.GeneratedCanonicalKnowledgeGraphResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+      if (page.hasMore && (page.nextCursor == null || page.nextCursor!.isEmpty || page.nextCursor == cursor)) {
+        throw const FormatException('Invalid knowledge graph cursor');
+      }
+      return mergeKnowledgeGraphPages({
+        'nodes': [],
+        'edges': []
+      }, {
+        ...page.toJson(),
+        'canonical': true,
+        'truncated': page.hasMore,
+        '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}',
+      });
+    }
+    if (cursor != null && response?.statusCode == 400) {
+      throw const KnowledgeGraphCursorExpired();
+    }
+    // The existing compatibility route serves legacy-only accounts. An empty
+    // compatibility response during a canonical outage cannot prove emptiness.
+    if (cursor == null && (response?.statusCode == 404 || response?.statusCode == 503)) {
+      final compatibility = await read('$_baseUrl');
+      if (compatibility?.statusCode == 200) {
+        final legacy =
+            wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility!.body) as Map<String, dynamic>)
+                .toJson();
+        if (response?.statusCode == 404 ||
+            response?.headers['x-omi-knowledge-graph-state'] == 'unestablished' ||
+            (legacy['nodes'] as List).isNotEmpty) {
+          return {...legacy, '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'};
+        }
+      }
     }
     _throwHttpFailure(action: 'load', statusCode: response?.statusCode, body: response?.body);
   }
@@ -117,4 +173,48 @@ class KnowledgeGraphApi {
     // Return whatever we have at timeout
     return await getKnowledgeGraph();
   }
+}
+
+/// Merge only server-authored records. Catalog entries remain separate from
+/// graph entities: a memory's existence does not establish a relationship.
+Map<String, dynamic> mergeKnowledgeGraphPages(Map<String, dynamic> earlier, Map<String, dynamic> page) {
+  final owner = earlier['_owner_generation'];
+  if (owner != null && page['_owner_generation'] != owner) throw const KnowledgeGraphSessionChanged();
+  List<Map<String, dynamic>> records(String key) {
+    final byId = <String, Map<String, dynamic>>{};
+    for (final record in [...?earlier[key] as List?, ...?page[key] as List?]) {
+      final value = Map<String, dynamic>.from(record as Map);
+      final id = value['id'] as String?;
+      if (id != null && id.isNotEmpty) byId[id] = value;
+    }
+    return byId.values.toList();
+  }
+
+  final nodes = records('nodes');
+  final ids = nodes.map((node) => node['id']).toSet();
+  final edges =
+      records('edges').where((edge) => ids.contains(edge['source_id']) && ids.contains(edge['target_id'])).toList();
+  final sharedTruncated = earlier['shared_truncated'] ?? earlier['truncated'] ?? false;
+  return {
+    'canonical': page['canonical'] == true,
+    '_owner_generation': page['_owner_generation'],
+    'nodes': nodes,
+    'edges': edges,
+    'catalog_nodes': records('catalog_nodes'),
+    'has_more': page['has_more'] ?? false,
+    'next_cursor': page['next_cursor'],
+    'shared_truncated': sharedTruncated,
+    'truncated': sharedTruncated == true || page['has_more'] == true,
+    'node_count': nodes.length,
+    'edge_count': edges.length,
+  };
+}
+
+/// A graph revision changed between pages. Restart the read, never rebuild it.
+class KnowledgeGraphCursorExpired implements Exception {
+  const KnowledgeGraphCursorExpired();
+}
+
+class KnowledgeGraphSessionChanged implements Exception {
+  const KnowledgeGraphSessionChanged();
 }

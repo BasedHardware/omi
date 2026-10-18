@@ -140,4 +140,85 @@ void main() {
     expect(row, findsNothing);
     expect(find.byKey(const ValueKey('memories_mind_map_preview')), findsOneWidget);
   });
+
+  testWidgets('saved memories without assertions are readable and can load later graph pages', (tester) async {
+    await tester.pumpWidget(_app(MemoryGraphPage(
+      trackOpenEvent: false,
+      loadGraph: () async => {
+        'nodes': [],
+        'edges': [],
+        'catalog_nodes': [
+          {'id': 'memory:1', 'label': 'I enjoy hiking'}
+        ],
+        'has_more': true,
+        'next_cursor': 'signed-page-2',
+      },
+      loadMoreGraph: (cursor) async {
+        expect(cursor, 'signed-page-2');
+        return {
+          'nodes': [
+            {'id': 'hiking', 'label': 'Hiking', 'node_type': 'concept'}
+          ],
+          'edges': [],
+          'has_more': false
+        };
+      },
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('I enjoy hiking'), findsOneWidget);
+    expect(find.byKey(const ValueKey('mind_map_memory_catalog')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mind_map_load_more')));
+    await tester.pumpAndSettle();
+    final state = tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage));
+    expect(state.simulation.nodes.any((n) => n.id == 'hiking'), true);
+    expect(state.simulation.edges, isEmpty);
+    expect(find.byKey(const ValueKey('mind_map_load_more')), findsNothing);
+  });
+
+  testWidgets('failed refresh preserves readable catalog and offers retry', (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async {
+          if (++calls > 1) throw Exception('offline');
+          return {
+            'nodes': [],
+            'edges': [],
+            'catalog_nodes': [
+              {'id': 'memory:1', 'label': 'Saved memory'}
+            ]
+          };
+        })));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved memory'), findsOneWidget);
+    expect(calls, 2);
+    await tester.pump(const Duration(seconds: 9));
+  });
+
+  testWidgets('a late empty response cannot overwrite a newer graph or its labels', (tester) async {
+    final old = Completer<Map<String, dynamic>>();
+    var calls = 0;
+    await tester.pumpWidget(_app(MemoryGraphPage(
+        trackOpenEvent: false,
+        loadGraph: () async {
+          if (++calls == 1) return old.future;
+          return {
+            'nodes': [
+              {'id': 'hiking', 'label': calls == 2 ? 'Hiking' : 'Corrected hiking'}
+            ],
+            'edges': []
+          };
+        })));
+    final state = tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage));
+    state.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    old.complete({'nodes': [], 'edges': []});
+    await tester.pumpAndSettle();
+    expect(state.simulation.nodes.any((n) => n.label == 'Hiking'), true);
+    await tester.tap(find.byKey(const ValueKey('mind_map_refresh')));
+    await tester.pumpAndSettle();
+    expect(state.simulation.nodes.any((n) => n.label == 'Corrected hiking'), true);
+  });
 }
