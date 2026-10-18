@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePlanCost } from "../wall-finops";
+import { FINOPS_PLAN_COST_QUERY, parsePlanCost } from "../wall-finops";
 import {
   allInCost,
   estimateStatus,
@@ -52,6 +52,7 @@ describe("all-in cost", () => {
       vertexLlm: 100,
       openai: 250,
       anthropic: 20,
+      saasMeasured: false,
     });
     expect(STT_MONTHLY_USD).toBe(5_300);
     expect(d.stt).toBeCloseTo(sttDay);
@@ -103,6 +104,12 @@ describe("all-in cost", () => {
     expect(
       estimateStatus(new Date("2026-11-21T00:00Z")).every((e) => e.stale)
     ).toBe(true);
+    expect(
+      estimateStatus(new Date("2026-11-21T00:00Z"), { SaaS: true })
+    ).toEqual([
+      expect.objectContaining({ line: "STT", stale: true }),
+      expect.objectContaining({ line: "SaaS", stale: false }),
+    ]);
   });
 
   it("uses a measured STT line for its day and the constant elsewhere", () => {
@@ -115,6 +122,27 @@ describe("all-in cost", () => {
       sttMeasured: false,
     });
     expect(daily.find((d) => d.date === day(18))!.stt).toBeCloseTo(sttDay);
+  });
+
+  it("uses measured SaaS including zero and keeps the estimate on other days", () => {
+    const { daily } = allInCost(
+      days,
+      {},
+      {},
+      { [day(19)]: 0, [day(18)]: 17.25 }
+    );
+    expect(daily.find((d) => d.date === day(19))).toMatchObject({
+      saas: 0,
+      saasMeasured: true,
+    });
+    expect(daily.find((d) => d.date === day(18))).toMatchObject({
+      saas: 17.25,
+      saasMeasured: true,
+    });
+    expect(daily.find((d) => d.date === day(17))).toMatchObject({
+      saasMeasured: false,
+    });
+    expect(daily.find((d) => d.date === day(17))!.saas).toBeCloseTo(saasDay);
   });
 });
 
@@ -147,6 +175,10 @@ describe("FinOps plan cost reader", () => {
           { day: "2026-10-14", plan: "plus", usd: 1, users: 2, settled: true },
         ],
         stt: [{ day: "2026-10-13", usd: 143 }],
+        saas: [
+          { day: "2026-10-13", usd: 0 },
+          { day: "2026-10-12", usd: 8.5 },
+        ],
       })
     );
     expect(h).toEqual({
@@ -157,6 +189,15 @@ describe("FinOps plan cost reader", () => {
         },
       },
       sttMeasured: { "2026-10-13": 143 },
+      saasMeasured: { "2026-10-13": 0, "2026-10-12": 8.5 },
     });
+  });
+
+  it("reads only complete, fresh Mercury SaaS aggregates", () => {
+    expect(FINOPS_PLAN_COST_QUERY).toContain("inputs_complete = TRUE");
+    expect(FINOPS_PLAN_COST_QUERY).toContain(
+      "computed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)"
+    );
+    expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_saas_daily");
   });
 });

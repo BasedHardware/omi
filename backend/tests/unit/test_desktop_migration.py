@@ -18,6 +18,10 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Preload the real api_core retry chain before the google.auth stub below: the
+# shared firestore no-retry policy (database.firestore_retry) imports it.
+from google.api_core import retry as api_retry  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 # Paths

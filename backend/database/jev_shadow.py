@@ -12,6 +12,7 @@ from google.api_core import exceptions as google_api_exceptions
 from google.cloud import firestore
 
 from database import _client
+from database.firestore_retry import FIRESTORE_NO_RETRY
 
 RETENTION_DAYS = 60
 # Same plane the auth fence reads (database/account_deletion_marker.py); spelled
@@ -66,11 +67,11 @@ def write_jev_shadow(
         # Account deletion persists this marker before its recursive sweep.
         # Reading it in the same transaction fences a commit that would
         # otherwise land after the sweep has passed this subcollection.
-        if deletion_marker.get(transaction=transaction, retry=None, timeout=remaining).exists:
+        if deletion_marker.get(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=remaining).exists:
             return False
         # Read before any write. Replays, including a late commit, never replace
         # a score or extend retention for this deterministic measurement ID.
-        if ref.get(transaction=transaction, retry=None, timeout=remaining).exists:
+        if ref.get(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=remaining).exists:
             return True
         transaction.set(ref, payload)
         return True
@@ -94,6 +95,6 @@ def write_jev_shadow(
             left = deadline - time.monotonic()
             if left <= 0:
                 raise TimeoutError from None
-            if ref.get(retry=None, timeout=left).exists:
+            if ref.get(retry=FIRESTORE_NO_RETRY, timeout=left).exists:
                 return 'deduped'
         raise

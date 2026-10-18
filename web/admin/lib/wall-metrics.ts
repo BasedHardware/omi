@@ -24,6 +24,7 @@ import {
 } from "./wall-mcp";
 import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
+import { fetchPlanCostHistory, PlanCostHistory } from "./wall-finops";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
@@ -127,6 +128,7 @@ const bucket = (p: unknown): "macos" | "mobile" | "other" =>
 export interface WallSources {
   query: Query;
   shopify: typeof fetchShopifyWeek;
+  planCost?: (today: string) => Promise<PlanCostHistory>;
   stripe: () => Promise<{
     usd: number;
     byPlan?: Record<string, number>;
@@ -155,6 +157,7 @@ export interface WallSources {
 export const defaultWallSources: WallSources = {
   query: queryPosthog,
   shopify: fetchShopifyWeek,
+  planCost: fetchPlanCostHistory,
   stripe: async () => {
     const { getOptionalStripe } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
@@ -616,22 +619,44 @@ export async function computeWall(
     // Billing's cost/MAU denominator is a PostHog read: after the pool.
     posthog.then(
       guarded(["cost.net_day", "cost.per_mau_month"], "Billing", async () => {
-        const bill = await sources.billing();
+        const planCostSource = sources.planCost;
+        const [billResult, planCostResult] = await Promise.allSettled([
+          Promise.resolve().then(() => sources.billing()),
+          planCostSource
+            ? Promise.resolve().then(() => planCostSource(isoDay(now)))
+            : Promise.resolve(null),
+        ]);
+        if (billResult.status === "rejected") throw billResult.reason;
+        const bill = billResult.value;
+        const planCost =
+          planCostResult.status === "fulfilled" ? planCostResult.value : null;
         // Source failures (not empty data): the cache keeps the last good cost.
         if (!bill || bill.summary.costSource !== "billing")
           throw new WallSourceError("Settled billing aggregate unavailable");
         const cutoff = isoDay(shiftDay(end, -2));
         // All-in: GCP net of CUD minus one-time incidents, plus OpenAI/Anthropic
-        // invoices, the Soniox-console STT estimate and fixed SaaS (David 2026-10-16).
+        // invoices and measured vendor lines when complete and fresh.
         const cost = allInCost(
           bill.daily.filter((d) => d.date <= cutoff),
-          bill.summary.coverage
+          bill.summary.coverage,
+          planCost?.sttMeasured,
+          planCost?.saasMeasured
         );
         const daily = cost.daily;
         const last = daily.find((d) => d.date === cutoff);
         if (!last)
           throw new WallSourceError(`Billing data has not reached ${cutoff}`);
-        const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE}) + SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF})${
+        const sttLine = last.sttMeasured
+          ? `STT measured (Soniox): $${last.stt.toFixed(2)}/day`
+          : `STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE})`;
+        const saasLine = last.saasMeasured
+          ? `measured SaaS (Mercury): $${last.saas.toFixed(2)}/day`
+          : `SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF}; ${
+              planCostResult.status === "rejected"
+                ? "Mercury feed unavailable"
+                : "no complete fresh Mercury row"
+            })`;
+        const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + ${sttLine} + ${saasLine}${
           cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
         }`;
         const m = metrics["cost.net_day"];

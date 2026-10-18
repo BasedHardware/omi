@@ -71,6 +71,33 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
     assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
+def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, monkeypatch):
+    from config import summary_guarantee
+
+    prod_hosts = hosts(manifest['prod'])
+    for service in ('backend-sync', 'backend-sync-backfill'):
+        env = prod_hosts[service]
+        assert env['SYNC_DURABLE_REDRIVE_GUARD'] == {'value': 'true', 'category': 'rollout'}
+        assert env['SYNC_LEGACY_COMPLETION_CONVERGENCE'] == {'value': 'true', 'category': 'rollout'}
+    for service in ('backend', 'backend-integration', 'backend-listen'):
+        env = prod_hosts[service]
+        assert 'SYNC_DURABLE_REDRIVE_GUARD' not in env
+        assert 'SYNC_LEGACY_COMPLETION_CONVERGENCE' not in env
+
+    for service in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = prod_hosts[service]
+        assert env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'] == 'true'
+        assert env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'] == '0'
+        assert 'FIRST_SUMMARY_UID_ALLOWLIST' not in env
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'])
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'])
+        monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+        assert not summary_guarantee.enabled('any-user')
+        monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'canary-owner')
+        assert summary_guarantee.enabled('canary-owner')
+        assert not summary_guarantee.enabled('any-user')
+
+
 def test_quarantine_recovery_is_david_only_on_prod_integration(
     manifest,
     recovery_base_hosts,
@@ -141,6 +168,8 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
         ('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'authoritative_labels_enabled'),
         ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'empty_asr_recovery_enabled'),
         ('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'require_live_target_enabled'),
+        ('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'head_priority_enabled'),
+        ('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'async_projection_enabled'),
     ],
 )
 def test_record_controls_default_off_and_read_at_call_time(monkeypatch, name, reader):

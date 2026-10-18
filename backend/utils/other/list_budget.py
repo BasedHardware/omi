@@ -38,6 +38,8 @@ except ImportError:  # pragma: no cover - defensive, the dependency is pinned
         """Fallback when google-api-core is unavailable."""
 
 
+from database.firestore_retry import FIRESTORE_NO_RETRY
+
 # Response header set on the three list routes when the read was cut short by
 # the budget. Conversations and memories return bare arrays — the wire body
 # cannot grow an envelope without breaking released clients — so the header is
@@ -296,7 +298,7 @@ def budgeted_stream_list(query: Any, budget: Optional[ListReadBudget]) -> List[A
         return list(query.stream())
     timeout = budget.rpc_timeout()
     try:
-        iterator = query.stream(timeout=timeout, retry=None)
+        iterator = query.stream(timeout=timeout, retry=FIRESTORE_NO_RETRY)
     except TypeError:
         # Test fakes predating the budget seam do not accept a timeout kwarg;
         # the deadline still bites on the next charge/check.
@@ -338,7 +340,7 @@ def budgeted_get_all(client: Any, refs: Iterable[Any], budget: Optional[ListRead
         return list(client.get_all(ref_list))
     timeout = budget.rpc_timeout()
     try:
-        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=None))
+        snapshots = list(client.get_all(ref_list, timeout=timeout, retry=FIRESTORE_NO_RETRY))
     except TypeError:
         snapshots = list(client.get_all(ref_list))
     except _FirestoreDeadlineExceeded as exc:
@@ -361,7 +363,7 @@ def budgeted_document_get(reference: Any, budget: Optional[ListReadBudget]) -> A
         return reference.get()
     timeout = budget.rpc_timeout()
     try:
-        snapshot = reference.get(timeout=timeout, retry=None)
+        snapshot = reference.get(timeout=timeout, retry=FIRESTORE_NO_RETRY)
     except TypeError:
         snapshot = reference.get()
     except _FirestoreDeadlineExceeded as exc:
@@ -385,15 +387,17 @@ def budgeted_stream_iter(
     prefix. Deadline exceptions from the budget-derived RPC timeout become the
     typed exhaustion after the partial rows have been produced.
 
-    ``retry`` is forwarded to ``query.stream`` only when given. Firestore's
-    default query retry also retries ``DeadlineExceeded``, which restarts the
-    derived timeout; a bounded scan passes a retry that excludes it.
+    ``retry`` is forwarded to ``query.stream`` only when given; an omitted
+    retry means the shared no-retry policy (:data:`FIRESTORE_NO_RETRY`) for
+    budgeted streams, since Firestore's default query retry also retries
+    ``DeadlineExceeded`` and would restart the derived timeout. A bounded
+    scan may still pass an explicit retry that excludes it.
     """
     if budget is None:
         yield from query.stream()
         return
     timeout = budget.rpc_timeout()
-    stream_kwargs = {'timeout': timeout, 'retry': None}
+    stream_kwargs = {'timeout': timeout, 'retry': FIRESTORE_NO_RETRY}
     if retry is not _STREAM_RETRY_UNSET:
         stream_kwargs['retry'] = retry
     try:
