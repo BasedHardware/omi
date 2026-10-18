@@ -11088,6 +11088,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'Audio link stalled — transcribes when it recovers';
+
+  @override
+  String get captureIngressRecovering => 'Audio isn\'t reaching the app — recovery in progress';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'The app stopped receiving audio from your Omi. It is trying to restore the connection itself; if it keeps failing, disconnect and reconnect the device from device settings. Any audio saved on the device will sync later.';
+
+  @override
   String get captureStillRecording => 'Still recording';
 
   @override

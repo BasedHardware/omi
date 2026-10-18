@@ -11105,6 +11105,17 @@ class AppLocalizationsSv extends AppLocalizations {
       'Bluetooth-länken till din Omi har stannat, så ljudet når inte appen. Omi fortsätter spela in på enheten och synkar när länken återkommer. Försök igen återupprättar länken; om det fortsätter att misslyckas, kontrollera din enhet i Inställningar > Enhet.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Ljudlänken avbröts — transkriberingen fortsätter när den återställs';
+
+  @override
+  String get captureIngressRecovering => 'Ljudet når inte appen — återställning pågår';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Appen kan inte längre ta emot ljud från Omi-enheten. Den försöker återställa anslutningen; om det fortsätter att misslyckas, koppla från och anslut enheten igen från enhetsinställningarna. Ljud som sparats på enheten synkroniseras senare.';
+
+  @override
   String get captureStillRecording => 'Spelar fortfarande in';
 
   @override

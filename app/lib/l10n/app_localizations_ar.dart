@@ -11033,6 +11033,16 @@ class AppLocalizationsAr extends AppLocalizations {
       'تعطّل اتصال البلوتوث بجهاز Omi، لذا لا يصل الصوت إلى التطبيق. يواصل Omi التسجيل على الجهاز وسيتمت المزامنة بمجرد استعادة الاتصال. إعادة المحاولة تعيد إنشاء الاتصال؛ إذا استمر الفشل، تحقق من جهازك من الإعدادات > الجهاز.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'توقف الاتصال بالصوت — ستتم الكتابة عند استعادته';
+
+  @override
+  String get captureIngressRecovering => 'الصوت لا يصل إلى التطبيق — جرٍ الاستعادة';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'تعذّر على التطبيق استقبال الصوت من جهاز Omi بعد الآن. إنه يحاول استعادة الاتصال؛ إذا استمر الفشل، جرّب فصل الجهاز وإعادة توصيله من إعدادات الجهاز. أي صوت يُحفظ على الجهاز سيُزامَن لاحقاً.';
+
+  @override
   String get captureStillRecording => 'لا يزال التسجيل جاريًا';
 
   @override

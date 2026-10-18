@@ -11110,6 +11110,17 @@ class AppLocalizationsTr extends AppLocalizations {
       'Omi cihazınızdaki Bluetooth bağlantısı kesildi, bu nedenle ses uygulamaya ulaşmıyor. Omi cihazda kaydetmeye devam ediyor ve bağlantı geri geldiğinde senkronize olacak. Yeniden denemek bağlantıyı yeniden kurar; başarısız olmaya devam ederse Ayarlar > Cihaz bölümünden cihazınızı kontrol edin.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Ses bağlantısı kesildi — bağlantı geri geldiğinde yazıya döküm sürer';
+
+  @override
+  String get captureIngressRecovering => 'Ses uygulamaya ulaşmıyor — kurtarma sürüyor';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Uygulama artık Omi cihazından ses alamıyor. Bağlantıyı kurtarmaya çalışıyor; başarısız olmaya devam ederse, cihaz ayarlarından cihazın bağlantısını kesip yeniden bağlayın. Cihazda kayıtlı ses daha sonra eşitlenecek.';
+
+  @override
   String get captureStillRecording => 'Kayıt sürüyor';
 
   @override

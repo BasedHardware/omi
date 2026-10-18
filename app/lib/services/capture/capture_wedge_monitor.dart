@@ -483,6 +483,20 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Dismisses only the episode the reader dismissed — the visible prompt. A
+  /// telemetry-only episode for the same device (an upload-silence observation,
+  /// say) is a separate recovery operation: erasing it would silently cancel
+  /// its eventual resolved event and let later observations redeclare it as a
+  /// new incident. [dismissDeviceEpisode] remains the full reset for an
+  /// intentional disconnect.
+  void dismissVisibleEpisode(String deviceId) {
+    final state = _devices[deviceId];
+    if (state == null || state.episode == null) return;
+    state.rapidDropEnds.clear();
+    state.episode = null;
+    notifyListeners();
+  }
+
   void reset() {
     _devices.clear();
     _ingressEvents.clear();

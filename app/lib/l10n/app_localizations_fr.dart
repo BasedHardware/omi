@@ -11192,6 +11192,17 @@ class AppLocalizationsFr extends AppLocalizations {
       'La liaison Bluetooth avec votre Omi s\'est interrompue, l\'audio n\'atteint donc pas l\'application. Omi continue d\'enregistrer sur l\'appareil et se synchronisera dès que la liaison sera rétablie. Réessayer rétablit la liaison ; si cela échoue toujours, vérifiez votre appareil dans Réglages > Appareil.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Liaison audio interrompue — la transcription reprendra une fois rétablie';
+
+  @override
+  String get captureIngressRecovering => 'L\'audio n\'atteint pas l\'application — récupération en cours';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'L\'application ne peut plus recevoir l\'audio de l\'appareil Omi. Elle tente de rétablir la connexion ; si cela échoue toujours, déconnectez puis reconnectez l\'appareil depuis les réglages de l\'appareil. L\'audio enregistré sur l\'appareil sera synchronisé plus tard.';
+
+  @override
   String get captureStillRecording => 'Enregistrement en cours';
 
   @override

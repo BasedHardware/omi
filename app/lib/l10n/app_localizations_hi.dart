@@ -11080,6 +11080,16 @@ class AppLocalizationsHi extends AppLocalizations {
       'आपके Omi से ब्लूटूथ कनेक्शन रुक गया है, इसलिए ऑडियो ऐप तक नहीं पहुँच रहा है। Omi डिवाइस पर रिकॉर्डिंग जारी रखता है और कनेक्शन लौटते ही सिंक हो जाएगा। फिर से कोशिश करने पर कनेक्शन दोबारा जुड़ता है; अगर यह बार-बार विफल रहे, तो सेटिंग > डिवाइस में अपना डिवाइस जाँचें।';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'ऑडियो लिंक रुक गया — कनेक्शन लौटने पर ट्रांसक्रिप्ट होगा';
+
+  @override
+  String get captureIngressRecovering => 'ऑडियो ऐप तक नहीं पहुँच रहा — पुनर्प्राप्ति जारी है';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'ऐप अब Omi डिवाइस से ऑडियो नहीं ले पा रही है। यह कनेक्शन बहाल करने की कोशिश कर रही है; अगर यह बार-बार विफल रहे, तो डिवाइस सेटिंग से डिवाइस को डिस्कनेक्ट करके फिर से कनेक्ट करें। डिवाइस पर सहेजा गया ऑडियो बाद में सिंक होगा।';
+
+  @override
   String get captureStillRecording => 'अभी भी रिकॉर्ड हो रहा है';
 
   @override

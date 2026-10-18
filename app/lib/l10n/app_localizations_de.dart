@@ -11189,6 +11189,17 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Bluetooth-Verbindung zu deinem Omi ist ins Stocken geraten, deshalb erreicht das Audio die App nicht. Omi nimmt auf dem Gerät weiter auf und synchronisiert, sobald die Verbindung wiederhergestellt ist. Erneut versuchen stellt die Verbindung wieder her; wenn es weiter fehlschlägt, prüfe dein Gerät unter Einstellungen > Gerät.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Audioverbindung unterbrochen — transkribiert, sobald sie wiederhergestellt ist';
+
+  @override
+  String get captureIngressRecovering => 'Audio erreicht die App nicht — Wiederherstellung läuft';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Die App kann keinen Ton mehr vom Omi-Gerät empfangen. Sie versucht, die Verbindung wiederherzustellen; wenn es weiter fehlschlägt, trenne das Gerät in den Geräteeinstellungen und verbinde es erneut. Auf dem Gerät gespeicherter Ton wird später synchronisiert.';
+
+  @override
   String get captureStillRecording => 'Nimmt weiter auf';
 
   @override

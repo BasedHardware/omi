@@ -20181,6 +20181,24 @@ abstract class AppLocalizations {
   /// **'The Bluetooth link to your Omi stalled, so audio isn\'t reaching the app. Omi keeps recording on the device and will sync once the link recovers. Retrying reconnects the link; if it keeps failing, check your device in Settings > Device.'**
   String get captureWedgeBleExplanation;
 
+  /// Capture recovery banner, second line for a BLE-health wedge: the link stalled and transcripts resume once it recovers. Does not promise the audio was saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio link stalled — transcribes when it recovers'**
+  String get captureLinkStalledTranscribesLater;
+
+  /// Capture recovery banner title for an ingress_recovery_failed episode: the app lost audio ingress and the app is itself retrying recovery. Not a retry affordance.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio isn\'t reaching the app — recovery in progress'**
+  String get captureIngressRecovering;
+
+  /// Details sheet body for an ingress_recovery_failed capture episode: the app lost the audio link, is running its own recovery, and the manual fallback is disconnect/reconnect from device settings.
+  ///
+  /// In en, this message translates to:
+  /// **'The app stopped receiving audio from your Omi. It is trying to restore the connection itself; if it keeps failing, disconnect and reconnect the device from device settings. Any audio saved on the device will sync later.'**
+  String get captureIngressRecoveryExplanation;
+
   /// Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped.
   ///
   /// In en, this message translates to:

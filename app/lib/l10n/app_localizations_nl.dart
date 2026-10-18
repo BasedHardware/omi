@@ -11129,6 +11129,17 @@ class AppLocalizationsNl extends AppLocalizations {
       'De Bluetooth-verbinding met je Omi is vastgelopen, dus audio komt de app niet meer binnen. Omi blijft opnemen op het apparaat en synchroniseert zodra de verbinding herstelt. Opnieuw proberen herstelt de verbinding; als het blijft mislukken, controleer je apparaat onder Instellingen > Apparaat.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Audioverbinding liep vast — transcriptie gaat door zodra deze herstelt';
+
+  @override
+  String get captureIngressRecovering => 'Audio bereikt de app niet — herstel is bezig';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'De app kan geen audio meer ontvangen van het Omi-apparaat. Er wordt geprobeerd de verbinding te herstellen; als het blijft mislukken, koppel het apparaat los en opnieuw in de apparaatinstellingen. Audio die op het apparaat is opgeslagen, wordt later gesynchroniseerd.';
+
+  @override
   String get captureStillRecording => 'Neemt nog op';
 
   @override

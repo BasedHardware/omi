@@ -11099,6 +11099,16 @@ class AppLocalizationsBn extends AppLocalizations {
       'আপনার Omi-এর সঙ্গে Bluetooth সংযোগ বিচ্ছিন্ন হয়ে গেছে, তাই অডিও অ্যাপে পৌঁছাচ্ছে না। Omi ডিভাইসে রেকর্ড করা চালিয়ে যাচ্ছে এবং সংযোগ ফিরলে সিঙ্ক হবে। আবার চেষ্টা করলে সংযোগ পুনরায় স্থাপিত হয়; বারবার ব্যর্থ হলে সেটিংস > ডিভাইস থেকে আপনার ডিভাইস পরীক্ষা করুন।';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'অডিও সংযোগ বিচ্ছিন্ন হয়েছে — সংযোগ ফিরলে লেখা হবে';
+
+  @override
+  String get captureIngressRecovering => 'অডিও অ্যাপে পৌঁছাচ্ছে না — পুনরুদ্ধার চলছে';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'অ্যাপটি আর Omi ডিভাইস থেকে অডিও আনতে পারছে না। এটি সংযোগ পুনরুদ্ধার করার চেষ্টা করছে; বারবার ব্যর্থ হলে ডিভাইস সেটিংস থেকে ডিভাইসটি বিচ্ছিন্ন করে আবার সংযুক্ত করুন। ডিভাইসে সংরক্ষিত অডিও পরে সিঙ্ক হবে।';
+
+  @override
   String get captureStillRecording => 'এখনও রেকর্ড হচ্ছে';
 
   @override

@@ -10936,6 +10936,16 @@ class AppLocalizationsKo extends AppLocalizations {
       'Omi와의 블루투스 연결이 중단되어 오디오가 앱에 도달하지 못합니다. Omi는 기기에서 계속 녹음하며 연결이 복구되면 동기화됩니다. 다시 시도하면 연결이 다시 설정됩니다. 계속 실패하면 설정 > 기기에서 기기를 확인하세요.';
 
   @override
+  String get captureLinkStalledTranscribesLater => '오디오 연결이 중단되었습니다 — 복구되면 전사가 계속됩니다';
+
+  @override
+  String get captureIngressRecovering => '오디오가 앱에 도달하지 못합니다 — 복구가 진행 중입니다';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      '앱이 더 이상 Omi 기기에서 오디오를 받지 못합니다. 연결 복구를 시도하고 있습니다. 계속 실패하면 기기 설정에서 기기 연결을 해제한 후 다시 연결하세요. 기기에 저장된 오디오는 나중에 동기화됩니다.';
+
+  @override
   String get captureStillRecording => '녹음 계속 중';
 
   @override

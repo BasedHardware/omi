@@ -658,9 +658,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// produce. A transcription outage is stated once, by the recovery banner
   /// (and the LocalSttRecoveryNotice, whose buttons are the point of it): an
   /// out-of-credits plan, a terminal STT failure and a local STT failure all
-  /// keep the neutral listening line here instead of repeating the outage. An
-  /// offline device is waiting on the network, and `interrupted` means the
-  /// transcription socket dropped and is reconnecting.
+  /// get the truthful unavailable line here instead of copy that promises a
+  /// transcript while none can appear (#14473). An offline device is waiting
+  /// on the network, and `interrupted` means the transcription socket dropped
+  /// and is reconnecting.
   String _liveCaptureEmptyStateText(
     CaptureProvider provider, {
     required ConnectivityProvider connectivity,
@@ -669,10 +670,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool transcriptionInterrupted,
   }) {
     if (!provider.pendantCaptureVerified) return '';
-    if (provider.localSttFailure != null || provider.terminalTranscriptionFailure != null) {
-      return context.l10n.listeningTranscriptWillAppear;
+    if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (provider.terminalTranscriptionFailure != null) {
+      return context.l10n.transcriptionUnavailableRecordingContinues;
     }
-    if (usage.isOutOfCredits) return context.l10n.listeningTranscriptWillAppear;
     if (!connectivity.isConnected) return context.l10n.recordingOfflineTranscriptWillCatchUp;
     if (transcriptionInterrupted) return context.l10n.transcriptionPausedReconnecting;
     if (!photoChannelActive) return context.l10n.listeningTranscriptWillAppear;

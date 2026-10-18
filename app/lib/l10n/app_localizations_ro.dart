@@ -11152,6 +11152,16 @@ class AppLocalizationsRo extends AppLocalizations {
       'Legătura Bluetooth cu Omi-ul tău s-a blocat, deci audioul nu mai ajunge în aplicație. Omi continuă să înregistreze pe dispozitiv și se va sincroniza când legătura revine. Reîncercarea reconectează legătura; dacă continuă să eșueze, verifică dispozitivul în Setări > Dispozitiv.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'Legătura audio s-a oprit — transcrierea continuă la revenirea ei';
+
+  @override
+  String get captureIngressRecovering => 'Audio nu ajunge la aplicație — recuperarea este în curs';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Aplicația nu mai poate primi audio de la dispozitivul Omi. Încearcă să recupereze conexiunea; dacă continuă să eșueze, deconectează și reconectează dispozitivul din setările dispozitivului. Audio salvat pe dispozitiv se va sincroniza mai târziu.';
+
+  @override
   String get captureStillRecording => 'Înregistrarea continuă';
 
   @override

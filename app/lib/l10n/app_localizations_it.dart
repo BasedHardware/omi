@@ -11160,6 +11160,17 @@ class AppLocalizationsIt extends AppLocalizations {
       'Il collegamento Bluetooth con il tuo Omi si è interrotto, quindi l\'audio non arriva all\'app. Omi continua a registrare sul dispositivo e si sincronizzerà non appena il collegamento si ripristina. Riprova riconnette il collegamento; se continua a non funzionare, controlla il dispositivo in Impostazioni > Dispositivo.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Collegamento audio interrotto — la trascrizione riprende quando si ristabilisce';
+
+  @override
+  String get captureIngressRecovering => 'L\'audio non raggiunge l\'app — ripristino in corso';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'L\'app non riesce più a ricevere audio dal dispositivo Omi. Sta cercando di ripristinare la connessione; se continua a non riuscirci, scollega e ricollega il dispositivo dalle impostazioni del dispositivo. L\'audio salvato sul dispositivo verrà sincronizzato in seguito.';
+
+  @override
   String get captureStillRecording => 'Registrazione in corso';
 
   @override

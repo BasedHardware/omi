@@ -11145,6 +11145,17 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az Omi eszközzel létesített Bluetooth-kapcsolat megakadt, így a hang nem jut el az alkalmazásba. Az Omi tovább rögzít az eszközön, és a kapcsolat helyreállása után szinkronizál. Az újrapróbálás újra létrehozza a kapcsolatot; ha továbbra is sikertelen, ellenőrizze az eszközt a Beállítások > Eszköz alatt.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'A hangkapcsolat megszakadt — a leirat a helyreállás után folytatódik';
+
+  @override
+  String get captureIngressRecovering => 'A hang nem ér el az appba — a helyreállítás folyamatban van';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Az app már nem tud hangot fogadni az Omi eszköztől. Megpróbálja helyreállítani a kapcsolatot; ha továbbra is sikertelen, válaszd le és csatlakoztasd újra az eszközt az eszközbeállításokban. Az eszközön mentett hang később szinkronizálódik.';
+
+  @override
   String get captureStillRecording => 'A felvétel folytatódik';
 
   @override

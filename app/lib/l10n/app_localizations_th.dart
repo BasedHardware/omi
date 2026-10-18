@@ -11038,6 +11038,16 @@ class AppLocalizationsTh extends AppLocalizations {
       'การเชื่อมต่อบลูทูธกับ Omi ของคุณหยุดชะงัก จึงทำให้เสียงไม่ถึงแอป Omi ยังคงบันทึกบนอุปกรณ์ต่อไปและจะซิงก์เมื่อการเชื่อมต่อกลับมา การลองใหม่จะเชื่อมต่อให้อีกครั้ง หากยังล้มเหลวอยู่ให้ตรวจสอบอุปกรณ์ของคุณใน การตั้งค่า > อุปกรณ์';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'ลิงก์เสียงหยุดชะงัก — จะถอดเสียงต่อเมื่อกลับมาเชื่อมต่อแล้ว';
+
+  @override
+  String get captureIngressRecovering => 'เสียงไม่ถึงแอป — กำลังกู้คืนอยู่';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'แอปไม่สามารถรับเสียงจากอุปกรณ์ Omi ได้อีกต่อไป กำลังพยายามกู้คืนการเชื่อมต่ออยู่ หากยังคงล้มเหลว ให้ยกเลิกการเชื่อมต่อและเชื่อมต่ออุปกรณ์ใหม่จากการตั้งค่าอุปกรณ์ เสียงที่บันทึกไว้ในอุปกรณ์จะซิงก์ในภายหลัง';
+
+  @override
   String get captureStillRecording => 'ยังบันทึกอยู่';
 
   @override

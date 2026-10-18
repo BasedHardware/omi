@@ -11135,6 +11135,17 @@ class AppLocalizationsPl extends AppLocalizations {
       'Połączenie Bluetooth z urządzeniem Omi się zawiesiło, więc dźwięk nie dociera do aplikacji. Omi nadal nagrywa na urządzeniu i zsynchronizuje się, gdy połączenie wróci. Ponowienie próby ponownie nawiązuje połączenie; jeśli nadal się nie udaje, sprawdź urządzenie w Ustawienia > Urządzenie.';
 
   @override
+  String get captureLinkStalledTranscribesLater =>
+      'Połączenie audio przerwane — transkrypcja wznowi się po jego odzyskaniu';
+
+  @override
+  String get captureIngressRecovering => 'Dźwięk nie dociera do aplikacji — trwa przywracanie';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Aplikacja nie może już odbierać dźwięku z urządzenia Omi. Próbuje przywrócić połączenie; jeśli nadal się nie udaje, odłącz i ponownie podłącz urządzenie w ustawieniach urządzenia. Dźwięk zapisany na urządzeniu zostanie zsynchronizowany później.';
+
+  @override
   String get captureStillRecording => 'Nagrywanie trwa';
 
   @override

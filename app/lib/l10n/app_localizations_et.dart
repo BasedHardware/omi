@@ -11092,6 +11092,16 @@ class AppLocalizationsEt extends AppLocalizations {
       'Bluetooth-ühendus sinu Omiga on seiskunud, seega ei jõua heli rakendusse. Omi jätkab salvestamist seadmes ja sünkroonib, kui ühendus taastub. Uuesti proovimine ühendab lingi uuesti; kui see ikka ebaõnnestub, kontrolli seadet jaotises Seaded > Seade.';
 
   @override
+  String get captureLinkStalledTranscribesLater => 'Heliühendus seiskus — transkriptsioon jätkub pärast taastamist';
+
+  @override
+  String get captureIngressRecovering => 'Heli ei jõua rakendusse — taastamine on käimas';
+
+  @override
+  String get captureIngressRecoveryExplanation =>
+      'Rakendus ei saa enam Omi seadmelt heli kätte. See proovib ühendust taastada; kui see jätkuvalt ebaõnnestub, ühenda seade seadete kaudu lahti ja uuesti tagasi. Seadmesse salvestatud heli sünkroniseeritakse hiljem.';
+
+  @override
   String get captureStillRecording => 'Salvestamine jätkub';
 
   @override
