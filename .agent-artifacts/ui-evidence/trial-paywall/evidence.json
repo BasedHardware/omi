@@ -11,7 +11,7 @@
     {
       "file": "002-mobile-ios-trial-paywall-carousel.png",
       "platform": "mobile-ios",
-      "description": "Second carousel card (Best-in-class transcription) after paging the carousel",
+      "description": "Fourth carousel card (Ask questions across conversations) with width-adaptive bubbles after the FittedBox layout fix",
       "captured_by": "agent",
       "source": "visual-audit"
     },
