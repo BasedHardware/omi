@@ -4,6 +4,7 @@ The requested job remains the client handle even when a redrive completed the
 same content under a new handle. Unknown/failed/held work is never ACKed.
 """
 
+import logging
 import os
 from typing import Any
 
@@ -11,12 +12,33 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
 from utils.sync.stage import collection_name
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 
 def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
+    try:
+        return _get_completed_legacy_status(job_id, uid, job)
+    except BatchPrivacyBlocked as error:
+        # A denied proof is not a failed read. Decline durable completion and
+        # let the route resume its pre-reconciliation status/cleanup rules.
+        # Never turn a privacy denial into a synthetic ACK.
+        logger.warning('event=sync_status_reconciliation outcome=privacy_blocked fence_reason=%s', error.reason.value)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='durable_completion',
+            to_mode='redis_status',
+            reason='policy',
+            outcome='degraded',
+        )
+        return None
+
+
+def _get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | None) -> dict[str, Any] | None:
     # No Firestore client or lookup on the dark path, including TTL misses.
     if os.getenv('SYNC_DURABLE_STATUS_RECONCILIATION', 'false').strip().lower() != 'true':
         return None
