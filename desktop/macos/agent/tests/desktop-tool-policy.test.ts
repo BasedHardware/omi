@@ -209,6 +209,19 @@ describe("desktop tool policy", () => {
     expect(granted.decision).toBe("allow");
   });
 
+  it("allows get_commitments as an ordinary local read without dispatch", () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: "get_commitments",
+      selectedBundles: ["desktop.context.local_read"],
+    });
+
+    expect(result.decision).toBe("allow");
+    expect(result.requiredBundles).toEqual(["desktop.context.local_read"]);
+    expect(result.descriptor.approvalPolicy).toBe("allow");
+    expect(result.descriptor.readOnly).toBe(true);
+    expect(result.descriptor.destructive).toBe(false);
+  });
+
   it("allows the JIT knowledge-ledger read tools without dispatch", () => {
     for (const toolName of ["search_knowledge", "read_playbook", "search_historical_facts", "get_entity_timeline_tool"]) {
       const result = evaluateDesktopToolPolicy({

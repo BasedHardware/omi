@@ -715,6 +715,7 @@ def get_action_items(
     offset: int = 0,
     budget: Optional[ListReadBudget] = None,
     extra_fields: tuple[str, ...] = (),
+    scan_report: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
@@ -734,6 +735,9 @@ def get_action_items(
     under its per-RPC timeout — so the aggregate read cannot outlive the
     request (#11831). Budget exhaustion stops at a bucket boundary and the
     route reports ``truncated``/``has_more`` honestly.
+    A caller that passes ``scan_report`` gets ``hit_limit`` (a filtered stream used
+    its whole document allowance, so soft-deleted rows may have hidden older live
+    ones) and ``docs_scanned`` written into it; the returned rows are unchanged.
     """
     offset = max(0, int(offset or 0))
     if limit is None or limit <= 0:
@@ -743,6 +747,7 @@ def get_action_items(
 
     need = min(offset + effective_limit, _ACTION_ITEMS_LIST_HARD_MAX)
     total_docs = 0
+    hit_limit = False
 
     def _base_query() -> Any:
         user_ref = db.collection('users').document(uid)
@@ -761,16 +766,16 @@ def get_action_items(
         return budget is not None and budget.truncated
 
     def _fetch_filtered(completed_filter: Optional[bool], row_budget: int) -> List[Dict[str, Any]]:
-        nonlocal total_docs
+        nonlocal total_docs, hit_limit
         if row_budget <= 0 or _out_of_budget():
             return []
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        items, docs = _stream_action_items_bounded(
-            q, max_docs=_list_scan_budget(row_budget), budget=budget, extra_fields=extra_fields
-        )
+        max_docs = _list_scan_budget(row_budget)
+        items, docs = _stream_action_items_bounded(q, max_docs=max_docs, budget=budget, extra_fields=extra_fields)
         total_docs += docs
+        hit_limit = hit_limit or docs >= max_docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
 
@@ -806,6 +811,9 @@ def get_action_items(
         FirestoreReadMode.BOUNDED,
         total_docs,
     )
+    if scan_report is not None:
+        scan_report['hit_limit'] = hit_limit
+        scan_report['docs_scanned'] = total_docs
 
     if offset > 0:
         action_items = action_items[offset:]

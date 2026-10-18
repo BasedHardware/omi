@@ -69,6 +69,114 @@ extension APIClient {
     }
   }
 
+  /// `GET /v1/tools/commitments`: the person's open commitments to other people, grouped by
+  /// person. Missing collections decode as empty so an error envelope still decodes.
+  struct CommitmentsToolResponse: Decodable, Sendable {
+    let toolName: String
+    let resultText: String
+    let isError: Bool
+    let sources: [ToolSource]?
+    /// The start of the window the server actually checked (after its 90-day clamp).
+    let since: String?
+    let groups: [CommitmentGroup]
+    let unattributed: [Commitment]
+    let totals: CommitmentTotals
+    let truncated: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case toolName = "tool_name"
+      case resultText = "result_text"
+      case isError = "is_error"
+      case sources, since, groups, unattributed, totals, truncated
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      toolName = try container.decodeIfPresent(String.self, forKey: .toolName) ?? "get_commitments"
+      resultText = try container.decodeIfPresent(String.self, forKey: .resultText) ?? ""
+      isError = try container.decodeIfPresent(Bool.self, forKey: .isError) ?? false
+      sources = try container.decodeIfPresent([ToolSource].self, forKey: .sources)
+      since = try container.decodeIfPresent(String.self, forKey: .since)
+      groups = try container.decodeIfPresent([CommitmentGroup].self, forKey: .groups) ?? []
+      unattributed = try container.decodeIfPresent([Commitment].self, forKey: .unattributed) ?? []
+      totals = try container.decodeIfPresent(CommitmentTotals.self, forKey: .totals) ?? CommitmentTotals()
+      truncated = try container.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+    }
+  }
+
+  struct CommitmentGroup: Decodable, Sendable {
+    let names: [String]
+    let basis: String
+    let likely: Bool?
+    /// The person filter matched only part of this name, so the model checks with the user.
+    let partialMatch: Bool?
+    let openCount: Int
+    let commitments: [Commitment]
+
+    enum CodingKeys: String, CodingKey {
+      case names, basis, likely, commitments
+      case openCount = "open_count"
+      case partialMatch = "partial_match"
+    }
+  }
+
+  struct Commitment: Decodable, Sendable {
+    struct Attribution: Decodable, Sendable {
+      let names: [String]
+      let basis: String
+      /// True when the person was inferred rather than heard on their own line.
+      let likely: Bool?
+    }
+
+    let taskID: String
+    let description: String
+    let dueAt: String?
+    let dueCertainty: String?
+    let createdAt: String?
+    let conversationID: String
+    let conversationTitle: String?
+    let excerpt: String?
+    let context: String?
+    let attribution: Attribution
+    let partialMatch: Bool?
+
+    enum CodingKeys: String, CodingKey {
+      case description, excerpt, context, attribution
+      case taskID = "task_id"
+      case dueAt = "due_at"
+      case dueCertainty = "due_certainty"
+      case createdAt = "created_at"
+      case conversationID = "conversation_id"
+      case conversationTitle = "conversation_title"
+      case partialMatch = "partial_match"
+    }
+  }
+
+  struct CommitmentTotals: Decodable, Sendable {
+    var people = 0
+    var commitments = 0
+    var unattributed = 0
+    var excludedUnknownOwner = 0
+    var notChecked = 0
+
+    enum CodingKeys: String, CodingKey {
+      case people, commitments, unattributed
+      case excludedUnknownOwner = "excluded_unknown_owner"
+      case notChecked = "not_checked"
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      people = try container.decodeIfPresent(Int.self, forKey: .people) ?? 0
+      commitments = try container.decodeIfPresent(Int.self, forKey: .commitments) ?? 0
+      unattributed = try container.decodeIfPresent(Int.self, forKey: .unattributed) ?? 0
+      excludedUnknownOwner = try container.decodeIfPresent(Int.self, forKey: .excludedUnknownOwner) ?? 0
+      notChecked = try container.decodeIfPresent(Int.self, forKey: .notChecked) ?? 0
+    }
+  }
+
   struct SearchRequest: Encodable {
     let query: String
     let startDate: String?
@@ -144,6 +252,13 @@ extension APIClient {
     var allowed = CharacterSet.urlQueryAllowed
     allowed.remove(charactersIn: "+")
     return date.addingPercentEncoding(withAllowedCharacters: allowed) ?? date
+  }
+
+  /// Percent-encode a free-text query value (a name may hold `&`, `=`, `#` or `+`).
+  private func encodeQueryValue(_ value: String) -> String {
+    var allowed = CharacterSet.urlQueryAllowed
+    allowed.remove(charactersIn: "+&=#?/")
+    return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
   }
 
   func toolGetConversations(
@@ -256,6 +371,24 @@ extension APIClient {
     if let ed = endDate { params += "&end_date=\(encodeQueryDate(ed))" }
     if let dsd = dueStartDate { params += "&due_start_date=\(encodeQueryDate(dsd))" }
     if let ded = dueEndDate { params += "&due_end_date=\(encodeQueryDate(ded))" }
+    return try await get(
+      params,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Read-only. The owner is the authenticated account; there is no owner parameter.
+  func toolGetCommitments(
+    since: String? = nil,
+    person: String? = nil,
+    limitPeople: Int = 10,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> CommitmentsToolResponse {
+    var params = "v1/tools/commitments?limit_people=\(limitPeople)"
+    if let since { params += "&since=\(encodeQueryValue(since))" }
+    if let person { params += "&person=\(encodeQueryValue(person))" }
     return try await get(
       params,
       customBaseURL: nil,
