@@ -467,7 +467,9 @@ class HeldAudioUsageSection extends StatelessWidget {
                 : null);
         if (!active ||
             (processing == null && (held == null || held.seconds <= 0)) ||
-            (processing != null && !processing.isVisible)) return const SizedBox.shrink();
+            (processing != null && !processing.isVisible)) {
+          return const SizedBox.shrink();
+        }
         final l10n = context.l10n;
         final duration = OmiDuration.compact(held?.seconds ?? 0, l10n);
         final paidPlan = paid ??
