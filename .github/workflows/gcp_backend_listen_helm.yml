@@ -412,6 +412,23 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
+      # GKE creates standalone NEGs from the Service annotation but does not
+      # attach every newly appearing zone to this manually managed LB backend.
+      - name: Reconcile prod listen NEG zones on the LB backend
+        if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        env:
+          RECONCILE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          RECONCILE_NAMESPACE: ${{ vars.ENV }}-omi-backend
+          RECONCILE_SERVICE: ${{ vars.ENV }}-omi-backend-listen
+          RECONCILE_BACKEND_SERVICE: custom-domains-api-omi-me-backend-listen-49a4-be
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/ops/reconcile_listen_neg_zones.py \
+            --project "$RECONCILE_PROJECT" \
+            --namespace "$RECONCILE_NAMESPACE" \
+            --service "$RECONCILE_SERVICE" \
+            --backend-service "$RECONCILE_BACKEND_SERVICE"
+
       - name: Show pod status
         if: always()
         run: |
