@@ -1,3 +1,4 @@
+# LIFECYCLE: permanent
 """Bounded cohort cache and application wiring, shared by all serving hosts."""
 
 from __future__ import annotations
