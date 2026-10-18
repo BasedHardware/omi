@@ -70,6 +70,11 @@ class ConnectivityService {
     // startup cannot be lost or overwritten by that older snapshot.
     _connectivitySubscription = (_interfaceChanges ?? _connectivity.onConnectivityChanged).listen(
       (result) => unawaited(_handleConnectivityChange(result)),
+      onError: (Object error) {
+        // Stream data errors are asynchronous, so the snapshot's catch below
+        // cannot consume them. A sensor failure is not proof of being offline.
+        Logger.debug('Network interface stream failed: ${error.runtimeType}');
+      },
     );
     // Own the polling cadence and each probe's generation. The checker's
     // status-change-only stream cannot identify the interface it tested or

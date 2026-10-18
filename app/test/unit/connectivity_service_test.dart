@@ -159,6 +159,17 @@ void main() {
     expect(probes, hasLength(1));
   });
 
+  test('interface stream errors do not escape an observed snapshot failure', () async {
+    final snapshot = Completer<List<ConnectivityResult>>();
+    read = () => snapshot.future;
+    final initialized = service.init();
+    interfaces.addError(StateError('fixture event channel unavailable'));
+    snapshot.completeError(StateError('fixture snapshot unavailable'));
+    await expectLater(initialized, throwsStateError);
+    expect(interfaces.hasListener, isFalse);
+    expect(internet.hasListener, isFalse);
+  });
+
   test('disposed service ignores pending checks', () async {
     final initialized = service.init();
     await settle();
