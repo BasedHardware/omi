@@ -1514,8 +1514,14 @@ def _user_subscription_response(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
-    # Read from the true plan, before the client remap below.
-    trial_eligible = subscription.plan == PlanType.basic and not users_db.get_stripe_customer_id(uid)
+    # Read from the true plan, before the client remap below. Fail closed: when the Stripe customer
+    # lookup is unavailable the client must not promise a trial the checkout may refuse.
+    trial_eligible = False
+    if subscription.plan == PlanType.basic:
+        try:
+            trial_eligible = not users_db.get_stripe_customer_id(uid)
+        except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
+            trial_eligible = False
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
