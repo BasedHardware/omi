@@ -16,8 +16,10 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
+from uuid import UUID
 
 from rich.console import Console
 from rich.table import Table
@@ -168,8 +170,12 @@ def _stringify(v: Any) -> str:
         return ""
     if isinstance(v, bool):
         return "✓" if v else "✗"
-    if isinstance(v, (datetime,)):
+    if isinstance(v, (datetime, date)):
         return v.isoformat()
+    if isinstance(v, (Path, UUID)):
+        return str(v)
+    if isinstance(v, (set, frozenset)):
+        return ", ".join(sorted(_stringify(x) for x in v))
     if isinstance(v, (list, tuple)):
         return ", ".join(_stringify(x) for x in v)
     if isinstance(v, Mapping):
@@ -178,8 +184,12 @@ def _stringify(v: Any) -> str:
 
 
 def _json_default(v: Any) -> Any:
-    if isinstance(v, datetime):
+    if isinstance(v, (datetime, date)):
         return v.isoformat()
+    if isinstance(v, (Path, UUID)):
+        return str(v)
+    if isinstance(v, (set, frozenset)):
+        return sorted(_stringify(x) for x in v)
     if hasattr(v, "model_dump"):  # pydantic v2
         return v.model_dump()
     if hasattr(v, "dict"):  # pydantic v1 fallback

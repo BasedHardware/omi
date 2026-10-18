@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -60,6 +62,51 @@ def test_json_mode_serializes_datetime() -> None:
         sys.stdout = original
     parsed = json.loads(buffer.getvalue())
     assert parsed["created_at"].startswith("2026-04-26T12:00:00")
+
+
+def test_json_mode_serializes_date_path_uuid_and_set(capsys) -> None:
+    renderer = Renderer(json_mode=True)
+    renderer.emit(
+        {
+            "day": date(2026, 4, 26),
+            "path": Path("/tmp/omi/report.csv"),
+            "id": UUID("12345678-1234-5678-1234-567812345678"),
+            "tags": {"beta", "alpha"},
+        }
+    )
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["day"] == "2026-04-26"
+    assert parsed["path"] == "/tmp/omi/report.csv"
+    assert parsed["id"] == "12345678-1234-5678-1234-567812345678"
+    assert parsed["tags"] == ["alpha", "beta"]
+
+
+def test_json_mode_serializes_nested_containers(capsys) -> None:
+    renderer = Renderer(json_mode=True)
+    renderer.emit({"outer": {"day": date(2026, 4, 26), "tags": frozenset({"x", "y"})}})
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["outer"]["day"] == "2026-04-26"
+    assert parsed["outer"]["tags"] == ["x", "y"]
+
+
+def test_pretty_mode_renders_date_path_uuid_and_set_cells(capsys) -> None:
+    Renderer(no_color=True).emit(
+        [
+            {
+                "day": date(2026, 4, 26),
+                "path": Path("/tmp/omi/report.csv"),
+                "id": UUID("12345678-1234-5678-1234-567812345678"),
+                "tags": {"beta", "alpha"},
+                "meta": {"saved": date(2026, 4, 26), "ref": UUID("12345678-1234-5678-1234-567812345678")},
+            }
+        ]
+    )
+    output = capsys.readouterr().out
+    assert "2026-04-26" in output
+    assert "/tmp/omi/report.csv" in output
+    assert "12345678-1234-5678-1234-567812345678" in output
+    assert "alpha, beta" in output
+    assert '"saved": "2026-04-26"' in output
 
 
 @pytest.mark.parametrize(
