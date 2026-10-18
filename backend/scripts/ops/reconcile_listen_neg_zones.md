@@ -24,6 +24,8 @@ The production deploy identity needs this Compute permission set:
 - `compute.networkEndpointGroups.get` and
   `compute.networkEndpointGroups.list` at project scope, plus
   `compute.networkEndpointGroups.use` on each target zonal NEG.
+- `compute.globalOperations.get` at project scope: synchronous
+  `add-backend` polls the global operation it creates.
 
 A permission denial must fail the deploy; grant the permissions through the
 deployment IAM process rather than adding them here.

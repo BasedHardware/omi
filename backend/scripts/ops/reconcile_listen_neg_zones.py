@@ -20,6 +20,7 @@ RECONCILE_PERMISSIONS = (
     "compute.networkEndpointGroups.get",
     "compute.networkEndpointGroups.list",
     "compute.networkEndpointGroups.use",
+    "compute.globalOperations.get",
 )
 _DENIED_PERMISSION_RE = re.compile(r"\b(?:required|permission)\s+['\"]?(compute\.[A-Za-z0-9.]+)['\"]?", re.IGNORECASE)
 _DENIED_RESOURCE_RE = re.compile(

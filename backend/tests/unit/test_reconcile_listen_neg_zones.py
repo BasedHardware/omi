@@ -181,6 +181,7 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
             "compute.networkEndpointGroups.get",
             "compute.networkEndpointGroups.list",
             "compute.networkEndpointGroups.use",
+            "compute.globalOperations.get",
         ):
             self.assertIn(permission, result.stderr)
         self.assertNotIn("raw-resource-id", result.stderr)
