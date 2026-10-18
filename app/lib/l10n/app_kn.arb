@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "ಹಿಂದಿನ ಆಡಿಯೊವನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ",
     "onTheWayTitle": "ದಾರಿಯಲ್ಲಿದೆ",
     "onTheWayAlmostReady": "ಬಹುತೇಕ ಸಿದ್ಧ",
+    "onTheWayRecordingCount": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
+    "onTheWaySummary": "{totals} ದಾರಿಯಲ್ಲಿದೆ",
+    "onTheWayUploadingCount": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ: {count}",
+    "onTheWayAlmostReadyCount": "ಬಹುತೇಕ ಸಿದ್ಧ: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{ಗಮನ ಅಗತ್ಯ: 1} other{ಗಮನ ಅಗತ್ಯ: {count}}}",
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "ಸಾರಾಂಶ ಮಿತಿ ತಲುಪಿದೆ",
     "summaryLimitBody": "ಕಳೆದ ಒಂದು ಗಂಟೆಯಲ್ಲಿ ನೀವು ಹಲವು ಸಾರಾಂಶಗಳನ್ನು ಮರುರಚಿಸಿದ್ದೀರಿ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "summaryFailedTitle": "ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
-    "summaryFailedBody": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ."
+    "summaryFailedBody": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ.",
+    "playbackPartialAudioSaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ಒಟ್ಟು {total}"
 }

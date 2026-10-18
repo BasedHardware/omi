@@ -25,9 +25,6 @@ def enabled(uid: str | None = None, *, include_admitted_context: bool = True) ->
         return False
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
-    # Preserve the existing explicit enable-all contract at zero only.
-    if percent == 0:
-        return not owners
     return in_percent_cohort(uid, percent)
 
 

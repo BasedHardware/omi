@@ -1,5 +1,5 @@
 # Only backend-sync, backend-sync-backfill and backend-integration use this
-# config and its separate secret. Backend/listen retain their existing config.
+# revision-local config env. Backend/listen retain their existing scrape profile.
 apiVersion: monitoring.googleapis.com/v1beta
 kind: RunMonitoring
 metadata:

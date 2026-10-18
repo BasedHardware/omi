@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "Obrađujemo raniji zvuk",
     "onTheWayTitle": "Na putu",
     "onTheWayAlmostReady": "Gotovo spremno",
+    "onTheWayRecordingCount": "{count, plural, =1{1 snimka} other{Snimaka: {count}}}",
+    "onTheWaySummary": "{totals} na putu",
+    "onTheWayUploadingCount": "Slanje: {count}",
+    "onTheWayAlmostReadyCount": "Gotovo spremno: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 zahtijeva pažnju} other{Zahtijeva pažnju: {count}}}",
     "activityEmpty": "Još nema aktivnosti",
     "activityNewSemantics": "Aktivnost, nove stavke",
     "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "Dosegnuto je ograničenje sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena više ste puta ponovno generirali sažetke. Pokušajte ponovno kasnije.",
     "summaryFailedTitle": "Sažimanje nije uspjelo",
-    "summaryFailedBody": "Došlo je do pogreške pri sažimanju ovog razgovora."
+    "summaryFailedBody": "Došlo je do pogreške pri sažimanju ovog razgovora.",
+    "playbackPartialAudioSaved": "Spremljeno {saved} od {total} zvuka"
 }

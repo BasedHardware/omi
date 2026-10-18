@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "आधीचा ऑडिओ प्रक्रिया होत आहे",
     "onTheWayTitle": "मार्गावर",
     "onTheWayAlmostReady": "जवळजवळ तयार",
+    "onTheWayRecordingCount": "{count, plural, =1{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
+    "onTheWaySummary": "{totals} मार्गावर",
+    "onTheWayUploadingCount": "अपलोड होत आहे: {count}",
+    "onTheWayAlmostReadyCount": "जवळजवळ तयार: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 कडे लक्ष देणे आवश्यक} other{{count} कडे लक्ष देणे आवश्यक}}",
     "activityEmpty": "अद्याप कोणतीही क्रिया नाही",
     "activityNewSemantics": "क्रिया, नवीन आयटम",
     "activityLoadFailed": "तुमची सर्व क्रिया लोड करता आली नाही",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "सारांश मर्यादा गाठली",
     "summaryLimitBody": "तुम्ही गेल्या तासात अनेक सारांश पुन्हा तयार केले आहेत. नंतर पुन्हा प्रयत्न करा.",
     "summaryFailedTitle": "सारांश करता आला नाही",
-    "summaryFailedBody": "हे संभाषण सारांशित करताना काहीतरी चूक झाली."
+    "summaryFailedBody": "हे संभाषण सारांशित करताना काहीतरी चूक झाली.",
+    "playbackPartialAudioSaved": "{saved} ऑडिओ जतन केला, एकूण {total}"
 }

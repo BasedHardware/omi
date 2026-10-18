@@ -785,6 +785,39 @@ def test_canonical_statuses_skips_override_when_item_has_valid_status(service_mo
     assert db.get_all_calls == [["users/uid-test/memory_items/live"]]
 
 
+def test_canonical_statuses_reads_override_only_for_missing_items(service_mod):
+    """Live and tombstoned item docs suppress without a historical_overrides read.
+
+    A missing canonical row still consults the override once. That single
+    lookup is the suppression triad; it is not repeated for rows that already
+    have a status.
+    """
+
+    db = _BatchStatusDb(
+        {
+            "users/uid-test/memory_items/live": {"status": "active"},
+            "users/uid-test/memory_items/dead": {"status": "tombstoned"},
+            "users/uid-test/memory_historical_overrides/live": {"status": "tombstoned"},
+            "users/uid-test/memory_historical_overrides/dead": {"status": "active"},
+        }
+    )
+    service = service_mod.MemoryService(db_client=db)
+
+    statuses = service.canonical_statuses("uid-test", ["live", "dead", "ghost"])
+
+    assert statuses["live"] == service_mod.MemoryItemStatus.active
+    assert statuses["dead"] == service_mod.MemoryItemStatus.tombstoned
+    assert "ghost" not in statuses
+    assert db.get_all_calls == [
+        [
+            "users/uid-test/memory_items/live",
+            "users/uid-test/memory_items/dead",
+            "users/uid-test/memory_items/ghost",
+        ],
+        ["users/uid-test/memory_historical_overrides/ghost"],
+    ]
+
+
 def test_canonical_statuses_override_only_tombstone_is_suppressed_not_503(service_mod):
     db = _BatchStatusDb({"users/uid-test/memory_historical_overrides/gone": {"status": "tombstoned"}})
     service = service_mod.MemoryService(db_client=db)

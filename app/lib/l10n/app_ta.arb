@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "முந்தைய ஆடியோ செயலாக்கப்படுகிறது",
     "onTheWayTitle": "வழியில்",
     "onTheWayAlmostReady": "கிட்டத்தட்ட தயார்",
+    "onTheWayRecordingCount": "{count, plural, =1{1 பதிவு} other{{count} பதிவுகள்}}",
+    "onTheWaySummary": "{totals} வழியில்",
+    "onTheWayUploadingCount": "பதிவேற்றப்படுகிறது: {count}",
+    "onTheWayAlmostReadyCount": "கிட்டத்தட்ட தயார்: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 பதிவுக்குக் கவனம் தேவை} other{{count} பதிவுகளுக்குக் கவனம் தேவை}}",
     "activityEmpty": "இதுவரை எந்தச் செயல்பாடும் இல்லை",
     "activityNewSemantics": "செயல்பாடு, புதிய உருப்படிகள்",
     "activityLoadFailed": "உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "சுருக்க வரம்பை அடைந்துவிட்டீர்கள்",
     "summaryLimitBody": "கடந்த ஒரு மணிநேரத்தில் பல சுருக்கங்களை மீண்டும் உருவாக்கியுள்ளீர்கள். பிறகு மீண்டும் முயலவும்.",
     "summaryFailedTitle": "சுருக்க முடியவில்லை",
-    "summaryFailedBody": "இந்த உரையாடலைச் சுருக்கும்போது ஏதோ தவறு நடந்தது."
+    "summaryFailedBody": "இந்த உரையாடலைச் சுருக்கும்போது ஏதோ தவறு நடந்தது.",
+    "playbackPartialAudioSaved": "{saved} ஆடியோ சேமிக்கப்பட்டது, மொத்தம் {total}"
 }

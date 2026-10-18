@@ -1,9 +1,22 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_connections.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+
+class _TestEnv implements EnvFields {
+  @override
+  String? get apiBaseUrl => 'https://api.omi.me/';
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
 
 McpApiKey key(String id, String name) => McpApiKey.fromJson({
       'id': id,
@@ -19,6 +32,40 @@ McpApiKeyCreated created(String id, String name) => McpApiKeyCreated.fromJson({
       'key_prefix': 'omi_mcp_se',
       'created_at': '2026-10-16T12:00:00Z',
     });
+
+Future<List<Map<String, dynamic>>> _captureCreateKeyRequests(Future<void> Function() action) async {
+  final previousOverrides = HttpOverrides.current;
+  HttpOverrides.global = null;
+  PlatformManager.initializeForLocalHarness();
+  Env.init(_TestEnv());
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  final bodies = <Map<String, dynamic>>[];
+  server.listen((request) async {
+    final raw = await utf8.decoder.bind(request).join();
+    bodies.add(jsonDecode(raw) as Map<String, dynamic>);
+    request.response
+      ..statusCode = 200
+      ..headers.contentType = ContentType.json
+      ..write(jsonEncode({
+        'id': 'k-ro',
+        'name': 'Muse (Omi app)',
+        'key': 'omi_mcp_0123456789abcdef0123456789abcdef',
+        'key_prefix': 'omi_mcp_0123...cdef',
+        'created_at': '2026-10-18T12:00:00Z',
+        'scopes': ['memories.read', 'conversations.read', 'action_items.read', 'goals.read'],
+      }));
+    await request.response.close();
+  });
+  Env.overrideApiBaseUrl('http://127.0.0.1:${server.port}/');
+  try {
+    await action();
+    return bodies;
+  } finally {
+    Env.clearApiBaseUrlOverrideForTesting();
+    HttpOverrides.global = previousOverrides;
+    await server.close(force: true);
+  }
+}
 
 void main() {
   group('AgentConnections.from', () {
@@ -122,8 +169,33 @@ void main() {
       await service.disconnectChatGpt(const AgentConnections(chatGptGrantIds: ['g1', 'g5'], agentKeys: {}));
       expect(revoked, ['g1', 'g5']);
     });
+
+    test('Copy Prompt createMcpApiKey sends explicit read-only scopes without writes or screen/people scopes',
+        () async {
+      final service = AgentConnectService(
+        apiBase: 'https://api.example.test/',
+        share: (secret) async => const ZkrShare(id: 'x', agentLink: 'https://zkr.scalingforever.com/a/x#v1.K.T'),
+      );
+      final bodies = await _captureCreateKeyRequests(() => service.preparePrompt(ComputerAgent.muse));
+
+      expect(bodies, hasLength(1));
+      expect(bodies.single, {
+        'name': 'Muse (Omi app)',
+        'scopes': ['memories.read', 'conversations.read', 'action_items.read', 'goals.read'],
+      });
+      final sentScopes = (bodies.single['scopes'] as List).cast<String>();
+      expect(sentScopes, isNot(contains('memories.write')));
+      expect(sentScopes, isNot(contains('action_items.write')));
+      expect(sentScopes, isNot(contains('screen_activity.read')));
+      expect(sentScopes, isNot(contains('people.read')));
+      expect(sentScopes, isNot(contains('people.rename')));
+    });
   });
 
+  _registerPromptAndGrantTests();
+}
+
+void _registerPromptAndGrantTests() {
   group('prompts', () {
     test('hostedMcpUrl trims trailing slashes', () {
       expect(hostedMcpUrl('https://api.omi.me/'), 'https://api.omi.me/v1/mcp');

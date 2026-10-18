@@ -48,6 +48,7 @@ from utils.conversations.render import populate_speaker_names, populate_folder_n
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     ApiKeyAuth,
+    get_api_key_auth,
     check_conversation_transcript_read_limit,
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
@@ -68,6 +69,10 @@ from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
+from utils import external_list_reads as external_lists
+from utils.mcp_server.handlers.conversations import conversation_cards_page_core
+from utils.mcp_server.errors import ToolExecutionError
+from utils.mcp_server.helpers import conversation_participants
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.projection_payload import (
@@ -108,7 +113,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=external_lists.ExternalListCacheRoute)
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
@@ -363,8 +368,7 @@ def get_memories(
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
+    offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     category_list = []
     if categories:
         try:
@@ -373,7 +377,6 @@ def get_memories(
             logger.error(f"Invalid category in developer memories: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-    budget = list_read_budget_for_request(request, route='developer-memories')
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -393,6 +396,10 @@ def get_memories(
     allowed = {category.value for category in category_list} if category_list else None
     if offset + limit > 5000:
         raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
+    budget = list_read_budget_for_request(request, route='developer-memories', owner_uid=uid, context=auth_context)
+    cached = external_lists.cached_external_list(request, response, auth_context, locals())
+    if cached is not None:
+        return cached
     read_limit = min(limit + 1, 5000 - offset)
     memories = read_developer_memories(
         service,
@@ -812,6 +819,7 @@ class BatchActionItemsResponse(BaseModel):
 )
 def get_action_items(
     uid: str = Depends(get_uid_with_action_items_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
@@ -833,9 +841,11 @@ def get_action_items(
     """
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
-    budget = list_read_budget_for_request(request, route='developer-action-items')
+    offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
+    budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
+    cached = external_lists.cached_external_list(request, response, auth, locals())
+    if cached is not None:
+        return cached
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -847,25 +857,7 @@ def get_action_items(
         budget=budget,
     )
 
-    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
-    # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
-    # already applied to GET /v1/dev/user/memories.
-    valid_action_items = []
-    for item in action_items:
-        if not isinstance(item, dict) or not item.get('id'):
-            logger.warning('Skipping malformed action item in Developer API action-item list')
-            continue
-        if item.get('is_locked', False):
-            continue
-        try:
-            valid_action_items.append(ActionItemResponse.model_validate(item))
-        except ValidationError as e:
-            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
-            )
-            continue
+    valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     finish_list_budget(response, budget)
     return valid_action_items
 
@@ -1560,8 +1552,7 @@ def get_conversations(
 
         # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
         # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
-        offset = max(0, offset)
-        limit = max(1, min(limit, 200))
+        offset, limit = external_lists.clamp_list_page(offset, limit, 200)
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
         except ValueError as e:
@@ -1569,9 +1560,13 @@ def get_conversations(
             logger.error(f"Invalid category in developer conversations: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-        from utils.mcp_server.handlers.conversations import conversation_cards_page_core
-        from utils.mcp_server.errors import ToolExecutionError
-        from utils.mcp_server.helpers import conversation_participants
+        budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
+        cached = external_lists.cached_external_list(request, response, auth, locals())
+        if cached is not None:
+            status = 200
+            returned_count = len(json.loads(bytes(cached.body)))
+            return cached
+        budget_kwargs = {'budget': budget} if budget is not None else {}
 
         next_cursor = None
         if not include_transcript and folder_id is None and starred is None:
@@ -1586,6 +1581,7 @@ def get_conversations(
                     categories=[c.value for c in category_list],
                     cursor_kind="developer_conversations",
                     extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                    **budget_kwargs,
                 )
             except ToolExecutionError as exc:
                 raise HTTPException(status_code=exc.http_status or 400, detail=exc.message) from exc
@@ -1606,14 +1602,18 @@ def get_conversations(
                 categories=[c.value for c in category_list],
                 folder_id=folder_id,
                 starred=starred,
+                **budget_kwargs,
             )
             has_more = len(conversations) > limit
             conversations = conversations[:limit]
+        if budget is not None:
+            finish_list_budget(response, budget)
+            has_more = has_more or budget.truncated
         pagination_headers(
             response,
             limit=limit,
             has_more=has_more,
-            next_offset=offset + len(conversations) if next_cursor is None else None,
+            next_offset=offset + len(conversations) if next_cursor is None and conversations else None,
             next_cursor=next_cursor,
         )
 

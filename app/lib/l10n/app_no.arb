@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "Tar igjen tidligere lyd",
     "onTheWayTitle": "På vei",
     "onTheWayAlmostReady": "Nesten klar",
+    "onTheWayRecordingCount": "{count, plural, =1{1 opptak} other{{count} opptak}}",
+    "onTheWaySummary": "{totals} på vei",
+    "onTheWayUploadingCount": "{count} lastes opp",
+    "onTheWayAlmostReadyCount": "{count} nesten klar",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 krever oppmerksomhet} other{{count} krever oppmerksomhet}}",
     "activityEmpty": "Ingen aktivitet ennå",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "Grensen for oppsummeringer er nådd",
     "summaryLimitBody": "Du har generert flere oppsummeringer på nytt den siste timen. Prøv igjen senere.",
     "summaryFailedTitle": "Kunne ikke oppsummere",
-    "summaryFailedBody": "Noe gikk galt under oppsummeringen av denne samtalen."
+    "summaryFailedBody": "Noe gikk galt under oppsummeringen av denne samtalen.",
+    "playbackPartialAudioSaved": "{saved} av {total} lyd lagret"
 }

@@ -13590,6 +13590,43 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onTheWayAlmostReady => 'Presque prêt';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements',
+      one: '1 enregistrement',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals en route';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count en cours d\'envoi';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Presque prêts : $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count à vérifier',
+      one: '1 à vérifier',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Aucune activité pour l\'instant';
 
   @override
@@ -13887,4 +13924,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Un problème est survenu lors du résumé de cette conversation.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved sur $total d\'audio enregistré';
+  }
 }

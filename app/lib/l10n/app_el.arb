@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "Επεξεργασία προηγούμενου ήχου",
     "onTheWayTitle": "Καθ' οδόν",
     "onTheWayAlmostReady": "Σχεδόν έτοιμο",
+    "onTheWayRecordingCount": "{count, plural, =1{1 ηχογράφηση} other{{count} ηχογραφήσεις}}",
+    "onTheWaySummary": "{totals} καθ' οδόν",
+    "onTheWayUploadingCount": "Μεταφόρτωση: {count}",
+    "onTheWayAlmostReadyCount": "Σχεδόν έτοιμες: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 χρειάζεται προσοχή} other{{count} χρειάζονται προσοχή}}",
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "Συμπληρώθηκε το όριο συνόψεων",
     "summaryLimitBody": "Δημιουργήσατε ξανά αρκετές συνόψεις την τελευταία ώρα. Δοκιμάστε ξανά αργότερα.",
     "summaryFailedTitle": "Δεν ήταν δυνατή η σύνοψη",
-    "summaryFailedBody": "Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας."
+    "summaryFailedBody": "Παρουσιάστηκε πρόβλημα κατά τη σύνοψη αυτής της συνομιλίας.",
+    "playbackPartialAudioSaved": "Αποθηκεύτηκαν {saved} από {total} ήχου"
 }

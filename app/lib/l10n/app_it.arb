@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "Recupero dell'audio precedente",
     "onTheWayTitle": "In arrivo",
     "onTheWayAlmostReady": "Quasi pronto",
+    "onTheWayRecordingCount": "{count, plural, =1{1 registrazione} other{{count} registrazioni}}",
+    "onTheWaySummary": "{totals} in arrivo",
+    "onTheWayUploadingCount": "{count} in caricamento",
+    "onTheWayAlmostReadyCount": "Quasi pronte: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 richiede attenzione} other{{count} richiedono attenzione}}",
     "activityEmpty": "Ancora nessuna attività",
     "activityNewSemantics": "Attività, nuovi elementi",
     "activityLoadFailed": "Impossibile caricare tutta la tua attività",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "Limite di riassunti raggiunto",
     "summaryLimitBody": "Hai rigenerato diversi riassunti nell'ultima ora. Riprova più tardi.",
     "summaryFailedTitle": "Impossibile riassumere",
-    "summaryFailedBody": "Si è verificato un problema durante il riassunto di questa conversazione."
+    "summaryFailedBody": "Si è verificato un problema durante il riassunto di questa conversazione.",
+    "playbackPartialAudioSaved": "Salvati {saved} di {total} di audio"
 }

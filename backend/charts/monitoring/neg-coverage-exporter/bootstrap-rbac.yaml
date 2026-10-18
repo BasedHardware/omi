@@ -1,0 +1,48 @@
+# Apply once with a cluster-admin kubeconfig before the first exporter deploy.
+# This is intentionally outside the Helm chart: the listen deploy identity can
+# create namespaced workload resources but cannot create Kubernetes RBAC.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: neg-coverage-exporter-pods
+  namespace: prod-omi-backend
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: neg-coverage-exporter-pods
+  namespace: prod-omi-backend
+subjects:
+  - kind: ServiceAccount
+    name: neg-coverage-exporter
+    namespace: prod-omi-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: neg-coverage-exporter-pods
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: neg-coverage-exporter-nodes
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: neg-coverage-exporter-nodes
+subjects:
+  - kind: ServiceAccount
+    name: neg-coverage-exporter
+    namespace: prod-omi-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: neg-coverage-exporter-nodes

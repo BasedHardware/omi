@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "Varasema heli töötlemine",
     "onTheWayTitle": "Teel",
     "onTheWayAlmostReady": "Peaaegu valmis",
+    "onTheWayRecordingCount": "{count, plural, =1{1 salvestis} other{{count} salvestist}}",
+    "onTheWaySummary": "{totals} teel",
+    "onTheWayUploadingCount": "Üleslaadimisel: {count}",
+    "onTheWayAlmostReadyCount": "Peaaegu valmis: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 vajab tähelepanu} other{{count} vajab tähelepanu}}",
     "activityEmpty": "Tegevusi veel pole",
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "Kokkuvõtete limiit on täis",
     "summaryLimitBody": "Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.",
     "summaryFailedTitle": "Kokkuvõtet ei õnnestunud teha",
-    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti."
+    "summaryFailedBody": "Selle vestluse kokkuvõtte tegemisel läks midagi valesti.",
+    "playbackPartialAudioSaved": "Salvestatud {saved} / {total} helist"
 }

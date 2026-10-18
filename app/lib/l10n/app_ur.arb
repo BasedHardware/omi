@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "پچھلی آڈیو پر کارروائی ہو رہی ہے",
     "onTheWayTitle": "راستے میں",
     "onTheWayAlmostReady": "تقریباً تیار",
+    "onTheWayRecordingCount": "{count, plural, =1{1 ریکارڈنگ} other{{count} ریکارڈنگز}}",
+    "onTheWaySummary": "{totals} راستے میں",
+    "onTheWayUploadingCount": "اپ لوڈ ہو رہی ہیں: {count}",
+    "onTheWayAlmostReadyCount": "تقریباً تیار: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 پر توجہ درکار ہے} other{{count} پر توجہ درکار ہے}}",
     "activityEmpty": "ابھی تک کوئی سرگرمی نہیں",
     "activityNewSemantics": "سرگرمی، نئے آئٹمز",
     "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "خلاصے کی حد پوری ہو گئی",
     "summaryLimitBody": "آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔",
     "summaryFailedTitle": "خلاصہ نہیں ہو سکا",
-    "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔"
+    "summaryFailedBody": "اس گفتگو کا خلاصہ کرتے وقت کچھ غلط ہو گیا۔",
+    "playbackPartialAudioSaved": "{saved} آڈیو محفوظ ہوا، کل {total}"
 }

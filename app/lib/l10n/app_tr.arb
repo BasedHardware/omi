@@ -4168,6 +4168,11 @@
     "homePendingCatchingUp": "Önceki ses işleniyor",
     "onTheWayTitle": "Yolda",
     "onTheWayAlmostReady": "Neredeyse hazır",
+    "onTheWayRecordingCount": "{count, plural, =1{1 kayıt} other{{count} kayıt}}",
+    "onTheWaySummary": "{totals} yolda",
+    "onTheWayUploadingCount": "{count} yükleniyor",
+    "onTheWayAlmostReadyCount": "{count} neredeyse hazır",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 ilgi bekliyor} other{{count} ilgi bekliyor}}",
     "activityEmpty": "Henüz etkinlik yok",
     "activityNewSemantics": "Etkinlik, yeni öğeler",
     "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
@@ -4256,5 +4261,6 @@
     "summaryLimitTitle": "Özet sınırına ulaşıldı",
     "summaryLimitBody": "Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.",
     "summaryFailedTitle": "Özetlenemedi",
-    "summaryFailedBody": "Bu konuşma özetlenirken bir sorun oluştu."
+    "summaryFailedBody": "Bu konuşma özetlenirken bir sorun oluştu.",
+    "playbackPartialAudioSaved": "Sesin {saved} kadarı kaydedildi (toplam {total})"
 }

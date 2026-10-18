@@ -13589,6 +13589,43 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onTheWayAlmostReady => 'Halos handa na';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals paparating';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count ina-upload';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count halos handa na';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ang kailangang asikasuhin',
+      one: '1 ang kailangang asikasuhin',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Wala pang aktibidad';
 
   @override
@@ -13886,4 +13923,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Nagkaproblema habang ini-summarize ang usapang ito.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '$saved sa $total ng audio ang na-save';
+  }
 }

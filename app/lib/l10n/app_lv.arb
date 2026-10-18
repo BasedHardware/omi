@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "Apstrādājam iepriekšējo audio",
     "onTheWayTitle": "Ceļā",
     "onTheWayAlmostReady": "Gandrīz gatavs",
+    "onTheWayRecordingCount": "{count, plural, =1{1 ieraksts} other{Ieraksti: {count}}}",
+    "onTheWaySummary": "{totals} ceļā",
+    "onTheWayUploadingCount": "Augšupielādē: {count}",
+    "onTheWayAlmostReadyCount": "Gandrīz gatavi: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 nepieciešama uzmanība} other{Nepieciešama uzmanība: {count}}}",
     "activityEmpty": "Vēl nav aktivitātes",
     "activityNewSemantics": "Aktivitāte, jauni vienumi",
     "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "Sasniegts kopsavilkumu limits",
     "summaryLimitBody": "Pēdējās stundas laikā jūs vairākkārt atkārtoti ģenerējāt kopsavilkumus. Mēģiniet vēlāk vēlreiz.",
     "summaryFailedTitle": "Neizdevās apkopot",
-    "summaryFailedBody": "Apkopojot šo sarunu, radās kļūda."
+    "summaryFailedBody": "Apkopojot šo sarunu, radās kļūda.",
+    "playbackPartialAudioSaved": "Saglabāts {saved} no {total} audio"
 }

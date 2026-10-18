@@ -19,6 +19,7 @@ from tests.unit.test_process_conversation_free_tier_branch import (
 @pytest.fixture
 def writer(monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     old = {
         'id': 'c',
         'status': 'completed',

@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "మునుపటి ఆడియో ప్రాసెస్ అవుతోంది",
     "onTheWayTitle": "మార్గంలో ఉంది",
     "onTheWayAlmostReady": "దాదాపు సిద్ధం",
+    "onTheWayRecordingCount": "{count, plural, =1{1 రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}",
+    "onTheWaySummary": "{totals} మార్గంలో ఉంది",
+    "onTheWayUploadingCount": "అప్‌లోడ్ అవుతోంది: {count}",
+    "onTheWayAlmostReadyCount": "దాదాపు సిద్ధం: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 రికార్డింగ్‌కు శ్రద్ధ అవసరం} other{{count} రికార్డింగ్‌లకు శ్రద్ధ అవసరం}}",
     "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
     "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
     "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "సారాంశ పరిమితిని చేరుకున్నారు",
     "summaryLimitBody": "గత గంటలో మీరు అనేక సారాంశాలను మళ్లీ రూపొందించారు. తర్వాత మళ్లీ ప్రయత్నించండి.",
     "summaryFailedTitle": "సారాంశం చేయలేకపోయాము",
-    "summaryFailedBody": "ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది."
+    "summaryFailedBody": "ఈ సంభాషణను సారాంశం చేస్తున్నప్పుడు ఏదో తప్పు జరిగింది.",
+    "playbackPartialAudioSaved": "{saved} ఆడియో సేవ్ చేయబడింది, మొత్తం {total}"
 }

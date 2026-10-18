@@ -13508,6 +13508,43 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onTheWayAlmostReady => 'Beveik paruošta';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Įrašų: $count',
+      one: '1 įrašas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals pakeliui';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Įkeliama: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Beveik paruošta: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Reikia dėmesio: $count',
+      one: '1 reikia dėmesio',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Veiklos dar nėra';
 
   @override
@@ -13804,4 +13841,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Apibendrinant šį pokalbį kažkas nutiko.';
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return 'Išsaugota $saved iš $total garso';
+  }
 }

@@ -1219,6 +1219,7 @@ def _load_sync_router_for_fast_path():
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.sync_empty_recovery',
         'database.sync_backfill_sequencer',
         'database.firestore_read_metrics',
         'firebase_admin',

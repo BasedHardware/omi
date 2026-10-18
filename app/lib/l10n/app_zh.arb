@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "正在处理之前的音频",
     "onTheWayTitle": "处理中",
     "onTheWayAlmostReady": "即将完成",
+    "onTheWayRecordingCount": "{count, plural, =1{1 条录音} other{{count} 条录音}}",
+    "onTheWaySummary": "处理中：{totals}",
+    "onTheWayUploadingCount": "{count} 条正在上传",
+    "onTheWayAlmostReadyCount": "{count} 条即将完成",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 条需要关注} other{{count} 条需要关注}}",
     "activityEmpty": "暂无活动",
     "activityNewSemantics": "活动，有新内容",
     "activityLoadFailed": "无法加载全部活动",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "已达到摘要次数上限",
     "summaryLimitBody": "你在过去一小时内多次重新生成了摘要。请稍后再试。",
     "summaryFailedTitle": "无法生成摘要",
-    "summaryFailedBody": "总结此对话时出了点问题。"
+    "summaryFailedBody": "总结此对话时出了点问题。",
+    "playbackPartialAudioSaved": "已保存 {saved} / {total} 的音频"
 }

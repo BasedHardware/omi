@@ -14,6 +14,11 @@ REPO = BACKEND.parent
 _RENDERER = runpy.run_path(str(BACKEND / 'scripts/render_backend_runtime_env.py'), run_name='identity_test_renderer')
 RUNTIME_SA = 'backend-runtime@based-hardware.iam.gserviceaccount.com'
 PINNED_PROD_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+# The runtime env manifest is ~4.8k lines; the pure-Python SafeLoader spends
+# ~0.23s CPU per parse, which contention on a loaded CI runner pushed to the
+# 1.0s fast-unit ceiling (run 39109878665, shard 4). CSafeLoader keeps the
+# exact same safe schema for a fraction of the cost. Guarded without libyaml.
+_MANIFEST_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 
 
 def test_identity_flags_pin_the_account_and_drop_key_refs_in_the_same_deploy():
@@ -93,7 +98,7 @@ def test_workflow_validation_requires_the_key_removal_flag():
 
 
 def test_repo_prod_manifest_pins_every_backend_service():
-    manifest = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    manifest = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'), Loader=_MANIFEST_LOADER)
     services = manifest['environments']['prod']['cloud_run']['services']
 
     for service in PINNED_PROD_SERVICES:

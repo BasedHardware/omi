@@ -23,6 +23,7 @@ from utils.batch_pipeline.recovery_disposition import (
     MultilingualEmpty,
     terminal_empty_payload,
     padded_empty,
+    padded_skipped,
 )
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.fallback import record_fallback
@@ -105,6 +106,7 @@ def redrive_one(
         if (
             terminal_empty_disposition_enabled()
             and isinstance(error, MultilingualEmpty)
+            and not padded_skipped(job)
             and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)
         ):
             payload = terminal_empty_payload(error.duration, error.spans)

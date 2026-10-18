@@ -11556,6 +11556,11 @@
     "homePendingCatchingUp": "Обрађујемо ранији звук",
     "onTheWayTitle": "На путу",
     "onTheWayAlmostReady": "Скоро спремно",
+    "onTheWayRecordingCount": "{count, plural, =1{1 снимак} other{Снимака: {count}}}",
+    "onTheWaySummary": "{totals} на путу",
+    "onTheWayUploadingCount": "Отпрема се: {count}",
+    "onTheWayAlmostReadyCount": "Скоро спремно: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 захтева пажњу} other{Захтева пажњу: {count}}}",
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
@@ -11644,5 +11649,6 @@
     "summaryLimitTitle": "Достигнуто је ограничење сажетака",
     "summaryLimitBody": "У последњих сат времена сте више пута поново генерисали сажетке. Покушајте поново касније.",
     "summaryFailedTitle": "Сажимање није успело",
-    "summaryFailedBody": "Дошло је до грешке приликом сажимања овог разговора."
+    "summaryFailedBody": "Дошло је до грешке приликом сажимања овог разговора.",
+    "playbackPartialAudioSaved": "Сачувано {saved} од {total} аудија"
 }

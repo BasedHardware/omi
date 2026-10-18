@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "पहले का ऑडियो प्रोसेस हो रहा है",
     "onTheWayTitle": "रास्ते में",
     "onTheWayAlmostReady": "लगभग तैयार",
+    "onTheWayRecordingCount": "{count, plural, =1{1 रिकॉर्डिंग} other{{count} रिकॉर्डिंग}}",
+    "onTheWaySummary": "{totals} रास्ते में",
+    "onTheWayUploadingCount": "अपलोड हो रही: {count}",
+    "onTheWayAlmostReadyCount": "लगभग तैयार: {count}",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 पर ध्यान देना ज़रूरी है} other{{count} पर ध्यान देना ज़रूरी है}}",
     "activityEmpty": "अभी तक कोई गतिविधि नहीं",
     "activityNewSemantics": "गतिविधि, नए आइटम",
     "activityLoadFailed": "आपकी पूरी गतिविधि लोड नहीं हो सकी",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "सारांश की सीमा पूरी हो गई",
     "summaryLimitBody": "आपने पिछले एक घंटे में कई सारांश दोबारा बनाए हैं। बाद में फिर से कोशिश करें।",
     "summaryFailedTitle": "सारांश नहीं बन सका",
-    "summaryFailedBody": "इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।"
+    "summaryFailedBody": "इस बातचीत का सारांश बनाते समय कुछ गलत हो गया।",
+    "playbackPartialAudioSaved": "{saved} ऑडियो सहेजा गया, कुल {total}"
 }

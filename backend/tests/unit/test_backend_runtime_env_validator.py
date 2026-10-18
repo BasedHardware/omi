@@ -79,6 +79,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_RECOVERY_ALL_ADMITTED", "value": "false"},
         {"name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_HEAD_PRIORITY_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED", "value": "false"},
         {"name": "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED", "value": "false"},
@@ -120,6 +122,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
+        {"name": "SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED", "value": "false"},
         {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
@@ -297,6 +300,7 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "SYNC_ASSIGNMENT_RECOVERY_ENABLED", "value": "true"},\n'
+        '        {"name": "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED", "value": "true"},\n'
         '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
     )
 

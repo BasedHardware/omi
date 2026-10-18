@@ -4133,6 +4133,11 @@
     "homePendingCatchingUp": "Mengejar audio terdahulu",
     "onTheWayTitle": "Dalam perjalanan",
     "onTheWayAlmostReady": "Hampir siap",
+    "onTheWayRecordingCount": "{count, plural, =1{1 rakaman} other{{count} rakaman}}",
+    "onTheWaySummary": "{totals} dalam perjalanan",
+    "onTheWayUploadingCount": "{count} sedang dimuat naik",
+    "onTheWayAlmostReadyCount": "{count} hampir siap",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 memerlukan perhatian} other{{count} memerlukan perhatian}}",
     "activityEmpty": "Belum ada aktiviti",
     "activityNewSemantics": "Aktiviti, item baharu",
     "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
@@ -4221,5 +4226,6 @@
     "summaryLimitTitle": "Had ringkasan dicapai",
     "summaryLimitBody": "Anda telah menjana semula beberapa ringkasan dalam sejam yang lalu. Cuba lagi nanti.",
     "summaryFailedTitle": "Tidak dapat meringkaskan",
-    "summaryFailedBody": "Sesuatu tidak kena semasa meringkaskan perbualan ini."
+    "summaryFailedBody": "Sesuatu tidak kena semasa meringkaskan perbualan ini.",
+    "playbackPartialAudioSaved": "{saved} daripada {total} audio disimpan"
 }

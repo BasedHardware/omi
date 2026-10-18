@@ -4229,6 +4229,11 @@
     "homePendingCatchingUp": "Korábbi hang feldolgozása",
     "onTheWayTitle": "Úton",
     "onTheWayAlmostReady": "Majdnem kész",
+    "onTheWayRecordingCount": "{count, plural, =1{1 felvétel} other{{count} felvétel}}",
+    "onTheWaySummary": "{totals} úton",
+    "onTheWayUploadingCount": "{count} feltöltés alatt",
+    "onTheWayAlmostReadyCount": "{count} majdnem kész",
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 figyelmet igényel} other{{count} figyelmet igényel}}",
     "activityEmpty": "Még nincs tevékenység",
     "activityNewSemantics": "Tevékenység, új elemek",
     "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
@@ -4317,5 +4322,6 @@
     "summaryLimitTitle": "Elérted az összefoglalók korlátját",
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",
     "summaryFailedTitle": "Nem sikerült összefoglalni",
-    "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben."
+    "summaryFailedBody": "Hiba történt a beszélgetés összefoglalása közben.",
+    "playbackPartialAudioSaved": "{saved} / {total} hang elmentve"
 }

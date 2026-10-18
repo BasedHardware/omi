@@ -167,14 +167,48 @@ words whose midpoint is in synthetic padding are excluded. Original VAD speech
 accounting, diarization input, privacy checks and persistence are unchanged.
 `event=batch_asr_recovery` contains only segment ID, original closed empty reason,
 sample count, original ASR count, recovered word count, original window count,
-minimum/maximum window sample lengths, speech sample count and recovered/empty
-outcome. It and the shared
+minimum/maximum window sample lengths, speech sample count and
+`recovered|empty|skipped_oversize` outcome. It and the shared
 fallback metric emit outside exception handlers; observability failure never
 discards healthy results. A retry exception is labeled `stage=asr_recovery` and
 fatal CUDA still fences the entire chain. Remaining empties never become silence
 or bypass accepted content claims. The scheduler's attempt ceiling and the
 separate default-off, owner-allowlisted legacy path are documented in
 [serving settings](../docs/batch-pipeline-serving.md).
+
+`BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` ships **true** (Helm
+`worker.workerValidationDispositionEnabled`). A closed `BatchValidationError`
+ends this GPU chain on the first attempt. `ValidationFailureWork` carries only
+its stage and reason; the scheduler retains them in `worker_failure`, removes
+the ordered pending span and creates the existing held recovery obligation.
+This is terminal for GPU retries, not a success or permission to delete audio.
+The old lease cannot publish a late result. Empty-ASR handoffs also preserve
+`empty_asr` versus `no_owned_words` along with their padded-retry evidence.
+Unclassified provider/transport faults retain exponential backoff and the
+existing bounded attempt policy; fatal CUDA retains the restart protocol.
+
+If Pyannote rejects a frame wholly beyond EOF, the worker first checks the
+canonical real buffer with independent strict local VAD, including its partial
+final window. A valid empty strict-VAD result commits a truthful `silence`
+payload through ordinary persistence and projection. This fixes tiny captures
+(observed: 320 samples / 20ms) without treating invalid VAD as silence. Positive,
+malformed, unavailable or noncanonical evidence takes the held recovery route.
+The worker never calls an external provider for this silence check. Rollback:
+set the worker validation disposition flag to `false`, restoring bounded GPU
+retries; existing held intents and receipts remain authoritative.
+
+Quarantine events are cumulative transitions, not current debt. For read-only
+Firestore aggregation, count `batch_pipeline_prod_jobs` with `state ==
+quarantined` AND `quarantine_reason == worker_failed`, then partition by
+`recovery_state`, `worker_failure.stage/reason` and `recovery.failure.stage/reason`.
+Use `count()` only. A `quarantined_at >= cutoff` count includes jobs subsequently
+recovered, committed or terminally disposed; never label it "held". Legacy jobs
+without `worker_failure` need an aggregate join to content-free worker logs;
+absence of a code is not evidence of corrupt audio. An `abandoned_running`
+recovery is an uncertain paid intent: do not automatically reset it or classify
+it as silence. Reconcile its durable result or obtain a separately authorized,
+idempotent recovery decision.
+
 For qualification run a synthetic one-hour unit with the intended model batch
 size and retain the GPU model/VRAM, exact image digest/config and receipt.
 Set the chart **host RAM** limit from the larger measured process/container peak

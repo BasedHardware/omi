@@ -16260,6 +16260,52 @@
     "@onTheWayAlmostReady": {
         "description": "Section header: recordings being transcribed or summarized"
     },
+    "onTheWayRecordingCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
+    "@onTheWayRecordingCount": {
+        "description": "On the Way: how many recordings, in the summary line and a day header (e.g. '11 recordings')",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "onTheWaySummary": "{totals} on the way",
+    "@onTheWaySummary": {
+        "description": "On the Way summary line at the top. totals is the recording count and total length, e.g. '45 recordings · 8h 54m'",
+        "placeholders": {
+            "totals": {
+                "type": "String",
+                "example": "45 recordings · 8h 54m"
+            }
+        }
+    },
+    "onTheWayUploadingCount": "{count} uploading",
+    "@onTheWayUploadingCount": {
+        "description": "On the Way summary and day header: how many recordings are still syncing to Omi",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "onTheWayAlmostReadyCount": "{count} almost ready",
+    "@onTheWayAlmostReadyCount": {
+        "description": "On the Way summary and day header: how many recordings are being turned into conversations",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 needs attention} other{{count} need attention}}",
+    "@onTheWayNeedsAttentionCount": {
+        "description": "On the Way summary and day header, in warning colour: how many recordings Omi refused or could not sync",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "activityEmpty": "No activity yet",
     "@activityEmpty": {
         "description": "Empty state of the Activity page"
@@ -16675,5 +16721,17 @@
     "summaryFailedBody": "Something went wrong while summarizing this conversation.",
     "@summaryFailedBody": {
         "description": "Body when summarizing the conversation failed for an unknown reason."
+    },
+    "playbackPartialAudioSaved": "{saved} of {total} audio saved",
+    "@playbackPartialAudioSaved": {
+        "description": "Conversation player label replacing remaining time when the stored audio covers much less than the conversation, e.g. \"0:03 of 5:49 audio saved\"",
+        "placeholders": {
+            "saved": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
     }
 }
