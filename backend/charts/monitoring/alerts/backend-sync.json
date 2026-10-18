@@ -357,7 +357,7 @@
         },
         "datasourceUid": "beuxmaq8oxhq8e",
         "model": {
-          "aliasBy": "{{metric.label.state}}",
+          "aliasBy": "Instances",
           "datasource": {
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
@@ -370,7 +370,7 @@
           "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_MAX",
+            "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
               "resource.label.service_name",
               "=",
@@ -380,9 +380,7 @@
               "=",
               "run.googleapis.com/container/instance_count"
             ],
-            "groupBys": [
-              "metric.label.state"
-            ],
+            "groupBys": [],
             "perSeriesAligner": "ALIGN_MEAN",
             "preprocessor": "none",
             "projectName": "based-hardware",
@@ -445,7 +443,7 @@
             {
               "evaluator": {
                 "params": [
-                  48
+                  72
                 ],
                 "type": "gte"
               },
@@ -484,7 +482,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "36",
-      "threshold": ">=48 instances for 30m (max_instances - 2). Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 18.8 / p90 34 / max 49.5; .github/actions/deploy-backend-stack/action.yml sets backend-sync --max-instances=50.",
+      "threshold": ">=72 total instances for 30m (90% of service-level maxScale=80; source: Cloud Run backend-sync metadata.annotations[\"run.googleapis.com/maxScale\"], read with gcloud run services describe). Re-read after each deploy/restore.",
       "summary": "Omi API alert: Backend-sync instance count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi API production service path.",

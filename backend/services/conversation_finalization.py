@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Any
 
@@ -30,8 +31,10 @@ from utils.metrics import (
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+    LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
+    register_listen_finalization_summary_metrics,
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import (
@@ -455,3 +458,5 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):
         LISTEN_FINALIZATION_JOB_STATUS.labels(status=status).set(float(summary[status]))
+    LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS.set(time.time())
+    register_listen_finalization_summary_metrics()

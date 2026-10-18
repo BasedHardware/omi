@@ -13,6 +13,7 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.errors import validate_worker_failure
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -385,7 +386,10 @@ class Scheduler:
         quarantine: bool = False,
         padded_retry_empty: bool = False,
         padded_retry: str | None = None,
+        worker_failure: dict | None = None,
     ) -> bool:
+        if worker_failure is not None:
+            validate_worker_failure(worker_failure)
         if padded_retry is None and padded_retry_empty:
             padded_retry = 'empty'
         elif padded_retry == 'empty' and not padded_retry_empty:
@@ -397,7 +401,7 @@ class Scheduler:
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            if quarantine or job['attempt'] >= self.max_attempts:
+            if quarantine or worker_failure is not None or job['attempt'] >= self.max_attempts:
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.
                 owner = tx.get('owners', job['owner_key'])
@@ -414,6 +418,8 @@ class Scheduler:
                 )
                 if quarantine and padded_retry in {'empty', 'skipped_oversize'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
+                if worker_failure is not None:
+                    job['worker_failure'] = dict(worker_failure)
                 job.pop('retry_started_at', None)
                 tx.put('owners', job['owner_key'], owner)
             else:
@@ -437,7 +443,12 @@ class Scheduler:
                     pass
             if state == 'quarantined':
                 try:
-                    logger.error('event=batch_quarantined reason=worker_failed attempt=%d recovery=held', attempt)
+                    logger.error(
+                        'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
+                        attempt,
+                        worker_failure['stage'] if worker_failure else 'unknown',
+                        worker_failure['reason'] if worker_failure else 'unclassified',
+                    )
                     logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
                 except Exception:
                     pass
