@@ -289,7 +289,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       }
     }
     if (!mounted) return;
-    if (_shouldOfferTelegram(provider)) {
+    if (shouldOfferTelegramInvite(provider)) {
       await routeToPage(
         context,
         OnboardingChatOnTelegramStep(onContinue: () {
@@ -300,14 +300,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
     await _finishOnboarding();
   }
-
-  /// Mirror the chat-apps Integrations entry's `showEntry` gate, and additionally require that
-  /// Telegram has a usable endpoint and is not already linked, so the invite only appears when
-  /// connecting Telegram would actually work.
-  bool _shouldOfferTelegram(MessagingChannelsProvider provider) =>
-      provider.showEntry &&
-      provider.config.endpoint(ChatChannel.telegram) != null &&
-      provider.linkFor(ChatChannel.telegram) == null;
 
   /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
   /// control, and never when subscription UI is hidden (the router checks that).
