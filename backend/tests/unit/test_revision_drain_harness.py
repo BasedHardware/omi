@@ -23,10 +23,13 @@ from tests.unit.fixtures.revision_drain import (
     TASK,
 )
 from routers import batch_pipeline as routes
-from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401 -- shared fixture
+from tests.unit import test_batch_pipeline_quarantine_recovery as recovery_tests
 from utils.batch_pipeline import quarantine_recovery as module
 from utils.batch_pipeline.serving import Serving
 from utils.executors import run_blocking, start_background_task, submit_with_context, sync_executor
+
+row = recovery_tests.row
+setup = recovery_tests.setup  # shared pytest fixture, bound by name for injection
 
 
 def _synthetic_app(release: threading.Event) -> FastAPI:
