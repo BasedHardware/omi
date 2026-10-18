@@ -98,6 +98,32 @@ def test_transfer_preserves_active_canonical_lease_and_publication_owner(custody
     assert reprocess.run(target.id, original['task_token'], in_flight, now=120) == 'processed'
 
 
+@pytest.mark.parametrize('canonical_accept', [-120, -60])
+def test_transfer_never_extends_existing_deadline_including_zero(custody, canonical_accept):
+    client, uid, _, _ = custody
+    donor, token = admit(custody, 'donor')
+    reprocess.mark(uid, 'canonical', 'en', now=canonical_accept)
+    assert reprocess.run(donor, token, redirect, now=120) == 'redirected'
+    row = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'canonical')).get().to_dict()
+    assert row['summary_deadline_at'] == row['due_at'] == canonical_accept + 120
+    assert row['first_pending_at'] == canonical_accept
+
+
+def test_transfer_keeps_committed_canonical_summary_receipt(custody):
+    client, uid, _, _ = custody
+    reprocess.mark(uid, 'canonical', 'en', now=0)
+    target = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'canonical'))
+    token = target.get().to_dict()['task_token']
+    reprocess.run(target.id, token, lambda *_: {'structured': {'overview': 'Synthetic committed summary'}}, now=120)
+    assert target.get().to_dict()['summary_seen']
+    donor, token = admit(custody, 'donor', now=121)
+    assert reprocess.run(donor, token, redirect, now=241) == 'redirected'
+    row = target.get().to_dict()
+    assert row['summary_seen'] and row['conversation_id'] == 'canonical'
+    assert not row['dormant']  # Trailing content update is still owed.
+    assert row['summary_deadline_at'] <= 241
+
+
 def test_real_transaction_conflict_retries_without_duplicate_transfer(custody, monkeypatch):
     client, uid, _, _ = custody
     donors = [admit(custody, 'donor-' + str(i), now=i) for i in range(2)]

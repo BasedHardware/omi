@@ -64,6 +64,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         ):
             raise reprocess.FirstSummaryCallbackPending('canonical custody binding changed')
         pending = dict(previous)
+        prior_due = previous.get('due_at')
         pending.update(
             document_id=target_id,
             uid=donor['uid'],
@@ -71,15 +72,16 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             language=previous.get('language') or donor['language'],
             version=previous.get('version', 0) + 1,
             first_pending_at=min(previous.get('first_pending_at', float('inf')), donor['first_pending_at']),
-            due_at=min(previous.get('due_at') or float('inf'), donor['due_at']),
+            due_at=min(float('inf') if prior_due is None else prior_due, donor['due_at']),
             summary_lane=previous.get('summary_lane') or donor.get('summary_lane'),
             effects_only=False,
             summary_repair=False,
             summary_expected_revision=None,
         )
         if donor.get('summary_deadline_at') is not None:
+            prior_deadline = previous.get('summary_deadline_at')
             pending['summary_deadline_at'] = min(
-                previous.get('summary_deadline_at') or float('inf'), donor['summary_deadline_at']
+                float('inf') if prior_deadline is None else prior_deadline, donor['summary_deadline_at']
             )
             pending['due_at'] = min(pending['due_at'], pending['summary_deadline_at'])
         # A canonical empty-output budget remains terminal. Redirects cannot
@@ -87,7 +89,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         if previous.get('summary_blocked_reason') == reprocess.EMPTY_BLOCKED_REASON:
             pending.update(dormant=True, due_at=None)
         else:
-            pending.update(dormant=False, summary_seen=False)
+            pending.update(dormant=False, summary_seen=bool(previous.get('summary_seen')))
         if not reprocess.valid_dispatch_binding(pending.get('dispatch')):
             pending['dispatch'] = donor.get('dispatch')
         if (
