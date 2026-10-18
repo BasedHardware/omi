@@ -15,7 +15,7 @@ import typer
 from rich.markup import escape
 
 from omi_cli import config as cfg
-from omi_cli.errors import UsageError
+from omi_cli.errors import CliError, UsageError
 from omi_cli.json_input import load_json_input
 from omi_cli.local_client import existing_path
 
@@ -460,7 +460,14 @@ def _add_exact_screen_fallback(
         "ORDER BY timestamp DESC "
         f"LIMIT {limit}"
     )
-    fallback = _normalize_sql_result(client.call_tool("execute_sql", {"query": sql}))
+    try:
+        raw_fallback = client.call_tool("execute_sql", {"query": sql})
+    except CliError as exc:
+        fallback: Any = {"error": exc.message}
+        if exc.detail:
+            fallback["detail"] = exc.detail
+    else:
+        fallback = _normalize_sql_result(raw_fallback)
     next_payload["exact_fallback"] = {
         "query": sql,
         "source": "app_window_ocr_sql",
