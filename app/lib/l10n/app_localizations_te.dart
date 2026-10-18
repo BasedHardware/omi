@@ -9369,6 +9369,16 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$durationకి వెళ్లండి';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+మరో $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
 
   @override

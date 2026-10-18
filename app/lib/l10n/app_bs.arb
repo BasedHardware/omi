@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "Upoznajte svoj Omi",
     "deviceOnboardingIntroSubtitle": "Isprobajte transkripciju uživo, postavljanje pitanja i prečicu dvostrukim dodirom.",
     "deviceOnboardingIntroDuration": "Oko 1 minute",
+    "quoteJumpToTime": "Idi na {duration}",
+    "quoteMoreTimestamps": "+ još {count}",
     "jumpToLatestMessage": "Idi na najnoviju poruku",
     "latest": "Najnovije",
     "flashFirmware": "Instaliraj firmver",

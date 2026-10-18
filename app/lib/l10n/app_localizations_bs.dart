@@ -9344,6 +9344,16 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Oko 1 minute';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Idi na $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+ još $count';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Idi na najnoviju poruku';
 
   @override

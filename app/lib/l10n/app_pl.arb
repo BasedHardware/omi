@@ -3042,6 +3042,8 @@
     "deviceOnboardingIntroTitle": "Poznaj swoje Omi",
     "deviceOnboardingIntroSubtitle": "Wypróbuj transkrypcję na żywo, zadawanie pytań i skrót podwójnego dotknięcia.",
     "deviceOnboardingIntroDuration": "Około 1 minuty",
+    "quoteJumpToTime": "Przejdź do {duration}",
+    "quoteMoreTimestamps": "+{count} więcej",
     "jumpToLatestMessage": "Przejdź do najnowszej wiadomości",
     "latest": "Najnowsza",
     "flashFirmware": "Wgraj oprogramowanie układowe",

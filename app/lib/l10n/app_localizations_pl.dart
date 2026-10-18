@@ -9347,6 +9347,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Około 1 minuty';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Przejdź do $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count więcej';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';
 
   @override

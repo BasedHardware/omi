@@ -10421,6 +10421,8 @@
     "deviceOnboardingIntroTitle": "הכירו את ה-Omi שלכם",
     "deviceOnboardingIntroSubtitle": "נסו תמלול חי, שאלה אחת וקיצור הדרך של הקשה כפולה.",
     "deviceOnboardingIntroDuration": "כדקה אחת",
+    "quoteJumpToTime": "מעבר אל {duration}",
+    "quoteMoreTimestamps": "+{count} נוספים",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
     "latest": "האחרון",
     "flashFirmware": "צריבת קושחה",

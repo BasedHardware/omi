@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Lär känna din Omi",
     "deviceOnboardingIntroSubtitle": "Testa liveinspelning, att ställa en fråga och genvägen med dubbeltryck.",
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
+    "quoteJumpToTime": "Gå till {duration}",
+    "quoteMoreTimestamps": "+{count} till",
     "jumpToLatestMessage": "Hoppa till senaste meddelandet",
     "latest": "Senaste",
     "flashFirmware": "Installera firmware",

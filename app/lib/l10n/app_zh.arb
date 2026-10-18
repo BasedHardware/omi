@@ -3010,6 +3010,8 @@
     "deviceOnboardingIntroTitle": "了解你的 Omi",
     "deviceOnboardingIntroSubtitle": "试试实时转录、提问和双击快捷方式。",
     "deviceOnboardingIntroDuration": "大约 1 分钟",
+    "quoteJumpToTime": "跳转到{duration}",
+    "quoteMoreTimestamps": "+另外{count}个",
     "jumpToLatestMessage": "跳转到最新消息",
     "latest": "最新",
     "flashFirmware": "刷写固件",

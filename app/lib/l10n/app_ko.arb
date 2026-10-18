@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Omi 알아보기",
     "deviceOnboardingIntroSubtitle": "실시간 받아쓰기, 질문하기, 두 번 탭 단축키를 체험해 보세요.",
     "deviceOnboardingIntroDuration": "약 1분",
+    "quoteJumpToTime": "{duration}(으)로 이동",
+    "quoteMoreTimestamps": "+{count}개 더",
     "jumpToLatestMessage": "최신 메시지로 이동",
     "latest": "최신",
     "flashFirmware": "펌웨어 플래시",

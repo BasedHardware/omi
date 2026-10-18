@@ -9312,6 +9312,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Prejsť na $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count ďalších';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Prejsť na najnovšiu správu';
 
   @override

@@ -9185,6 +9185,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '약 1분';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '$duration(으)로 이동';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count개 더';
+  }
+
+  @override
   String get jumpToLatestMessage => '최신 메시지로 이동';
 
   @override

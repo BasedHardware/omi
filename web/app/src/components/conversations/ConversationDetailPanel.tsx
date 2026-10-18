@@ -249,9 +249,7 @@ export function SummaryTab({
                   <NoteSections
                     sections={sections}
                     onOpenSource={onOpenSource}
-                    transcriptIDs={transcriptSegments.flatMap((segment) =>
-                      segment.id ? [segment.id] : [],
-                    )}
+                    transcriptSegments={transcriptSegments}
                   />
                 ) : (
                   <OverviewMarkdown
@@ -323,9 +321,7 @@ export function SummaryTab({
             <NoteSections
               sections={sections}
               onOpenSource={onOpenSource}
-              transcriptIDs={transcriptSegments.flatMap((segment) =>
-                segment.id ? [segment.id] : [],
-              )}
+              transcriptSegments={transcriptSegments}
             />
           ) : (
             <OverviewMarkdown overview={summary.content} transcriptIDs={transcriptIDs} />

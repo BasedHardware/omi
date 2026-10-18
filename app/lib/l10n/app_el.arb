@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Γνωρίστε το Omi σας",
     "deviceOnboardingIntroSubtitle": "Δοκιμάστε τη ζωντανή μεταγραφή, την ερώτηση και τη συντόμευση με διπλό πάτημα.",
     "deviceOnboardingIntroDuration": "Περίπου 1 λεπτό",
+    "quoteJumpToTime": "Μετάβαση σε {duration}",
+    "quoteMoreTimestamps": "+{count} ακόμη",
     "jumpToLatestMessage": "Μετάβαση στο πιο πρόσφατο μήνυμα",
     "latest": "Πρόσφατο",
     "flashFirmware": "Εγκατάσταση firmware",

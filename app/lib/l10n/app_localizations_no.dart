@@ -9320,6 +9320,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Cirka 1 minutt';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Gå til $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count til';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Gå til nyeste melding';
 
   @override

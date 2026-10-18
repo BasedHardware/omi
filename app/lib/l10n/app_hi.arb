@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "अपने Omi को जानें",
     "deviceOnboardingIntroSubtitle": "लाइव ट्रांसक्रिप्शन, सवाल पूछने और डबल-टैप शॉर्टकट को आज़माएँ।",
     "deviceOnboardingIntroDuration": "लगभग 1 मिनट",
+    "quoteJumpToTime": "{duration} पर जाएँ",
+    "quoteMoreTimestamps": "+{count} और",
     "jumpToLatestMessage": "नवीनतम संदेश पर जाएं",
     "latest": "नवीनतम",
     "flashFirmware": "फ़र्मवेयर फ़्लैश करें",

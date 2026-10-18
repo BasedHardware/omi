@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Tutvu oma Omiga",
     "deviceOnboardingIntroSubtitle": "Proovi reaalajas transkriptsiooni, küsimuse esitamist ja topeltpuudutuse otseteed.",
     "deviceOnboardingIntroDuration": "Umbes 1 minut",
+    "quoteJumpToTime": "Mine ajale {duration}",
+    "quoteMoreTimestamps": "+ veel {count}",
     "jumpToLatestMessage": "Hüppa uusima sõnumi juurde",
     "latest": "Uusim",
     "flashFirmware": "Installi püsivara",

@@ -1,13 +1,85 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { NoteSections } from '../NoteSections';
+import { formatQuoteTimestamp } from '../QuoteTimestamps';
 
 describe('NoteSections', () => {
+  it.each([
+    [0, '0:00'],
+    [42.9, '0:42'],
+    [312, '5:12'],
+    [3599, '59:59'],
+    [3600, '1:00:00'],
+    [3912, '1:05:12'],
+  ])('formats %s seconds as %s', (start, expected) =>
+    expect(formatQuoteTimestamp(Number(start))).toBe(expected),
+  );
+
+  it('expands each row independently, including side notes, and opens the chosen source', () => {
+    const onOpenSource = vi.fn();
+    const starts = [42, 312, 460, 3912, 3600];
+    const sourceIDs = starts.map((_, i) => `s${i}`);
+    render(
+      <NoteSections
+        transcriptSegments={starts.map((start, i) => ({ id: sourceIDs[i], start }))}
+        onOpenSource={onOpenSource}
+        sections={[
+          { heading: 'Main', body_markdown: 'Main body', source_segment_ids: sourceIDs },
+          {
+            heading: 'Side notes',
+            kind: 'side_notes',
+            body_markdown: 'Aside body',
+            source_segment_ids: sourceIDs,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getAllByText('0:42')).toHaveLength(2);
+    expect(screen.getAllByText('5:12')).toHaveLength(2);
+    expect(screen.getAllByText('7:40')).toHaveLength(2);
+    expect(screen.queryByText('1:05:12')).toBeNull();
+    const aside = within(screen.getByRole('complementary'));
+    fireEvent.click(aside.getByRole('button', { name: '+2 more' }));
+    expect(screen.getAllByRole('button', { name: '+2 more' })).toHaveLength(1);
+    expect(aside.getByText('1:00:00')).toBeInTheDocument();
+    fireEvent.click(
+      aside.getByRole('button', { name: 'Jump to 1 hour 5 minutes 12 seconds' }),
+    );
+    expect(onOpenSource).toHaveBeenCalledExactlyOnceWith('s3');
+  });
+
+  it('hides rows without resolvable, finite starts or a seek callback', () => {
+    const sections = [
+      { body_markdown: 'Body', source_segment_ids: ['missing', 'bad', 'negative'] },
+    ];
+    const { rerender } = render(
+      <NoteSections
+        sections={sections}
+        transcriptSegments={[
+          { id: 'bad', start: NaN },
+          { id: 'negative', start: -1 },
+        ]}
+        onOpenSource={vi.fn()}
+      />,
+    );
+    expect(screen.queryByLabelText('Transcript sources')).toBeNull();
+    rerender(
+      <NoteSections
+        sections={sections}
+        transcriptSegments={[{ id: 'missing', start: 42 }]}
+      />,
+    );
+    expect(screen.queryByLabelText('Transcript sources')).toBeNull();
+  });
+
   it('opens only deduplicated typed sources resolving in this transcript', () => {
     const onOpenSource = vi.fn();
     const { rerender } = render(
       <NoteSections
-        transcriptIDs={['s1', 's2']}
+        transcriptSegments={[
+          { id: 's1', start: 312 },
+          { id: 's2', start: 42 },
+        ]}
         onOpenSource={onOpenSource}
         sections={[
           {
@@ -18,13 +90,14 @@ describe('NoteSections', () => {
         ]}
       />,
     );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'View transcript source 1 of 1' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to 5 minutes 12 seconds' }));
     expect(onOpenSource).toHaveBeenCalledWith('s1');
     rerender(
       <NoteSections
-        transcriptIDs={['s1', 's2']}
+        transcriptSegments={[
+          { id: 's1', start: 312 },
+          { id: 's2', start: 42 },
+        ]}
         onOpenSource={onOpenSource}
         sections={[
           {
@@ -123,7 +196,7 @@ describe('NoteSections', () => {
     render(
       <NoteSections
         sections={[{ heading: 'Decision', body_markdown: 'Approved. [s01234 0]' }]}
-        transcriptIDs={['s01234']}
+        transcriptSegments={[{ id: 's01234', start: 0 }]}
       />,
     );
     expect(screen.getByText('Approved.')).toBeInTheDocument();

@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "Знайомство з Omi",
     "deviceOnboardingIntroSubtitle": "Спробуйте живу транскрипцію, запитання та швидку дію подвійним дотиком.",
     "deviceOnboardingIntroDuration": "Близько 1 хвилини",
+    "quoteJumpToTime": "Перейти до {duration}",
+    "quoteMoreTimestamps": "+ ще {count}",
     "jumpToLatestMessage": "Перейти до останнього повідомлення",
     "latest": "Останнє",
     "flashFirmware": "Встановити прошивку",

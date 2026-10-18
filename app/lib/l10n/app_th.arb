@@ -3007,6 +3007,8 @@
     "deviceOnboardingIntroTitle": "ทำความรู้จักกับ Omi ของคุณ",
     "deviceOnboardingIntroSubtitle": "ลองการถอดเสียงสด การถามคำถาม และทางลัดแตะสองครั้ง",
     "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
+    "quoteJumpToTime": "ข้ามไปที่ {duration}",
+    "quoteMoreTimestamps": "+อีก {count}",
     "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
     "latest": "ล่าสุด",
     "flashFirmware": "แฟลชเฟิร์มแวร์",

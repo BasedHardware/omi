@@ -9172,6 +9172,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '大约 1 分钟';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '跳转到$duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+另外$count个';
+  }
+
+  @override
   String get jumpToLatestMessage => '跳转到最新消息';
 
   @override

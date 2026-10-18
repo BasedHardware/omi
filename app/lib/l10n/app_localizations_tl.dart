@@ -9405,6 +9405,16 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return 'Pumunta sa $duration';
+  }
+
+  @override
+  String quoteMoreTimestamps(int count) {
+    return '+$count pa';
+  }
+
+  @override
   String get jumpToLatestMessage => 'Tumalon sa pinakabagong mensahe';
 
   @override

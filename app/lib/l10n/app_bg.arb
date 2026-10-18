@@ -2998,6 +2998,8 @@
     "deviceOnboardingIntroTitle": "Опознайте своя Omi",
     "deviceOnboardingIntroSubtitle": "Опитайте живата транскрипция, задаването на въпрос и пряк път с двойно докосване.",
     "deviceOnboardingIntroDuration": "Около 1 минута",
+    "quoteJumpToTime": "Към {duration}",
+    "quoteMoreTimestamps": "+ още {count}",
     "jumpToLatestMessage": "Отиди до последното съобщение",
     "latest": "Последно",
     "flashFirmware": "Инсталирай фърмуера",
