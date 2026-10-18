@@ -98,3 +98,16 @@ def test_write_support_audit_trace_and_lookup():
     assert payload_trace["action"] == "trace"
     assert payload_trace["window_from"] == t0
     assert payload_trace["window_to"] == t1
+
+
+def test_write_support_audit_exception_raises():
+    mock_client = MagicMock()
+    mock_client.collection.side_effect = Exception("Outage")
+    with pytest.raises(Exception, match="Outage"):
+        support_db.write_support_audit(
+            actor_uid="admin-1",
+            action="lookup",
+            target_uid="user-2",
+            email="test@example.com",
+            firestore_client=mock_client,
+        )

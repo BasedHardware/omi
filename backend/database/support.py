@@ -69,3 +69,4 @@ def write_support_audit(
         client.collection('support_audit_log').document().set(row)
     except Exception as e:
         logger.warning("Failed to persist support audit for actor %s target %s: %s", clean_actor, clean_target, e)
+        raise
