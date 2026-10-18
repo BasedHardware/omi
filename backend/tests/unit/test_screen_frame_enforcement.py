@@ -393,3 +393,108 @@ def test_url_expires_at_is_the_earliest_true_signature_expiry(monkeypatch):
     frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
 
     assert frame_set.strip[0].url_expires_at == _t(1200)
+
+
+class TestCapturedAtTimestampResilience:
+    def test_apply_cap_and_roles_tolerates_iso_string_timestamps(self):
+        existing = [
+            {"id": "f0", "captured_at": "2026-01-01T00:00:00Z", "banner_suitability": 0.1},
+            {"id": "f1", "captured_at": "2026-01-01T00:01:00+00:00", "banner_suitability": 0.2},
+        ]
+        new_docs = [
+            {"id": "f2", "captured_at": datetime(2026, 1, 1, 0, 2, tzinfo=timezone.utc), "banner_suitability": 0.5},
+        ]
+        survivors, evicted = _apply_cap_and_roles(existing, new_docs, max_persisted=2)
+        assert len(survivors) == 2
+        assert len(evicted) == 1
+        assert evicted[0]["id"] == "f0"
+        assert survivors[0]["id"] == "f1"
+        assert survivors[1]["id"] == "f2"
+
+    def test_apply_cap_and_roles_tolerates_naive_datetime_timestamps(self):
+        existing = [
+            {"id": "f0", "captured_at": datetime(2026, 1, 1, 0, 0), "banner_suitability": 0.1},
+        ]
+        new_docs = [
+            {"id": "f1", "captured_at": datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc), "banner_suitability": 0.2},
+        ]
+        survivors, evicted = _apply_cap_and_roles(existing, new_docs, max_persisted=5)
+        assert len(survivors) == 2
+        assert len(evicted) == 0
+        assert [s["id"] for s in survivors] == ["f0", "f1"]
+
+    def test_apply_cap_and_roles_tolerates_missing_and_corrupt_timestamps(self):
+        existing = [
+            {"id": "f_missing", "banner_suitability": 0.1},
+            {"id": "f_corrupt", "captured_at": "not-a-date", "banner_suitability": 0.2},
+        ]
+        new_docs = [
+            {
+                "id": "f_valid",
+                "captured_at": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+                "banner_suitability": 0.5,
+            },
+        ]
+        survivors, evicted = _apply_cap_and_roles(existing, new_docs, max_persisted=5)
+        assert len(survivors) == 3
+        assert len(evicted) == 0
+        assert survivors[-1]["id"] == "f_valid"
+
+    def test_to_api_frame_coerces_iso_string_and_naive_timestamps(self, monkeypatch):
+        monkeypatch.setattr(enforcement_mod.storage, "get_screen_frame_signed_url", lambda *_: ("c", _t(3600)))
+        monkeypatch.setattr(
+            enforcement_mod.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: ("t", _t(3600))
+        )
+
+        doc_iso = {
+            "id": "f_iso",
+            "captured_at": "2026-01-01T05:30:00Z",
+            "role": "strip",
+            "rank": 0,
+            "ground": _GROUND.model_dump(),
+        }
+        api_frame = enforcement_mod._to_api_frame(UID, CONVERSATION_ID, doc_iso)
+        assert api_frame.captured_at == datetime(2026, 1, 1, 5, 30, tzinfo=timezone.utc)
+
+        doc_naive = {
+            "id": "f_naive",
+            "captured_at": datetime(2026, 1, 1, 5, 30),
+            "role": "strip",
+            "rank": 0,
+            "ground": _GROUND.model_dump(),
+        }
+        api_frame_naive = enforcement_mod._to_api_frame(UID, CONVERSATION_ID, doc_naive)
+        assert api_frame_naive.captured_at.tzinfo == timezone.utc
+
+    def test_build_frame_set_response_sorts_mixed_naive_and_aware_frames(self, monkeypatch):
+        docs = [
+            {
+                "id": "f1",
+                "captured_at": datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc),
+                "role": "strip",
+                "rank": 1,
+                "ground": _GROUND.model_dump(),
+            },
+            {
+                "id": "f2",
+                "captured_at": datetime(2026, 1, 1, 11, 0),
+                "role": "strip",
+                "rank": 0,
+                "ground": _GROUND.model_dump(),
+            },
+        ]
+        fake_db = MagicMock()
+        fake_db.get_conversation_screen_frames.return_value = docs
+        fake_db.get_conversation_screen_frames_revision.return_value = 1
+        fake_db.get_conversation_screen_frames_adjudicated_at.return_value = None
+        fake_db.get_conversation_screen_frames_selection_fingerprint.return_value = None
+        monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_db)
+        monkeypatch.setattr(enforcement_mod.storage, "get_screen_frame_signed_url", lambda *_: ("c", _t(3600)))
+        monkeypatch.setattr(
+            enforcement_mod.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: ("t", _t(3600))
+        )
+
+        frame_set = enforcement_mod.build_frame_set_response(UID, CONVERSATION_ID)
+        assert len(frame_set.strip) == 2
+        assert frame_set.strip[0].id == "f2"
+        assert frame_set.strip[1].id == "f1"
