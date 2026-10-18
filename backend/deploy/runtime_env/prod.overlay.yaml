@@ -776,6 +776,9 @@ overlay:
           SYNC_ASSIGNMENT_RECOVERY_ENABLED:
             value: 'true'
             category: rollout
+          SYNC_DURABLE_STATUS_RECONCILIATION:
+            value: 'true'
+            category: rollout
           SYNC_TASKS_OIDC_AUDIENCE:
             env_var: SYNC_TASKS_HANDLER_URL
             default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run

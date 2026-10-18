@@ -13486,6 +13486,43 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onTheWayAlmostReady => 'Takmer hotovo';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nahrávok: $count',
+      one: '1 nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals na ceste';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Nahráva sa: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Takmer hotovo: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vyžaduje pozornosť: $count',
+      one: '1 si vyžaduje pozornosť',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Zatiaľ žiadna aktivita';
 
   @override
