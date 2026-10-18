@@ -3771,8 +3771,10 @@ environments:
             SYNC_BACKFILL_TASKS_QUEUE:
               value: sync-backfill
               category: reliability
+            SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
             SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_LEGACY_COMPLETION_CONVERGENCE: {value: 'true', category: rollout}
             SYNC_TASKS_MAX_ATTEMPTS:
               value: '5'
               category: reliability
@@ -4122,8 +4124,10 @@ environments:
             SYNC_BACKFILL_TASKS_QUEUE:
               value: sync-backfill
               category: reliability
+            SYNC_DURABLE_REDRIVE_GUARD: {value: 'true', category: rollout}
             SYNC_JOB_COMPLETED_TTL_SECONDS: {value: '21600', category: rollout}
             SYNC_JOB_METRIC_ONCE_TTL_SECONDS: {value: '3600', category: rollout}
+            SYNC_LEGACY_COMPLETION_CONVERGENCE: {value: 'true', category: rollout}
             SYNC_TASKS_MAX_ATTEMPTS:
               value: '5'
               category: reliability
