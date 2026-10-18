@@ -66,16 +66,16 @@ export function QuoteTimestamps({
           </button>
         </span>
       ))}
-      {!expanded && sources.length > 3 && (
+      {sources.length > 3 && (
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true">·</span>
           <button
             type="button"
             className={linkClass}
-            aria-expanded={false}
-            onClick={() => setExpanded(true)}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
           >
-            +{sources.length - 3} more
+            {expanded ? 'Show less' : `+${sources.length - 3} more`}
           </button>
         </span>
       )}

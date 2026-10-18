@@ -119,6 +119,53 @@ void main() {
     expect(find.byKey(const ValueKey('quote-times-more')), findsNothing);
   });
 
+  testWidgets('an absent transcript ID cannot resolve an empty source ID', (tester) async {
+    final segment = TranscriptSegment.fromJson({
+      'text': 'Missing identity',
+      'is_user': false,
+      'start': 42.0,
+      'end': 43.0,
+    });
+    expect(segment.id, '');
+    final conversation = _conversationWithSections(transcriptSegments: [segment]);
+    conversation.structured.sections = [
+      const Section(heading: 'Missing', bodyMarkdown: 'Body', sourceSegmentIds: ['']),
+    ];
+    await _pumpSummary(tester, conversation, onOpenSource: (_) => fail('No source should open'));
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    expect(find.text('0:42'), findsNothing);
+    expect(find.byKey(const ValueKey('quote-time-')), findsNothing);
+    expect(find.byKey(const ValueKey('quote-times-more')), findsNothing);
+  });
+
+  testWidgets('hour timestamps speak singular hours and seconds precisely', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final conversation = _conversationWithSections(transcriptSegments: [
+        for (final start in [3600.0, 3601.0])
+          TranscriptSegment(
+              id: '$start',
+              text: 'Evidence',
+              speaker: null,
+              isUser: false,
+              personId: null,
+              start: start,
+              end: start + 1,
+              translations: []),
+      ]);
+      conversation.structured.sections = [
+        const Section(heading: 'Hour', bodyMarkdown: 'Body', sourceSegmentIds: ['3600.0', '3601.0']),
+      ];
+      await _pumpSummary(tester, conversation, onOpenSource: (_) {});
+      expect(find.text('1:00:00'), findsOneWidget);
+      expect(find.text('1:00:01'), findsOneWidget);
+      expect(find.bySemanticsLabel('Jump to 1 hour, 0 mins, 0 secs'), findsOneWidget);
+      expect(find.bySemanticsLabel('Jump to 1 hour, 0 mins, 1 sec'), findsOneWidget);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('typed section timestamps navigate and highlight through the existing transcript controller',
       (tester) async {
     final conversation = _conversationWithSections(transcriptSegments: [

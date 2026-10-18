@@ -51,6 +51,28 @@ final class ConversationQuoteTimestampsTests: XCTestCase {
     XCTAssertEqual(opened, ["s3"])
   }
 
+  func testSectionWithEmptySourceIDRendersNoTimestampButtons() {
+    for (id, backendId) in [("", "server"), ("local", ""), ("", "")] {
+      let segment = TranscriptSegment(
+        id: id, backendId: backendId, text: "Evidence", speaker: nil,
+        isUser: false, personId: nil, start: 42, end: 43)
+      XCTAssertTrue(ConversationSummarySelection.resolvableSourceIDs([""], segments: [segment]).isEmpty)
+      XCTAssertTrue(ConversationQuoteTimestamp.resolve([""], segments: [segment]).isEmpty)
+      let host = NSHostingView(
+        rootView: ConversationSummarySections(
+          sections: [SummarySection(heading: "Missing", bodyMarkdown: "Body", sourceSegmentIDs: [""])],
+          transcriptSegments: [segment],
+          onOpenSources: { _ in XCTFail("No source should open") }
+        ).frame(width: 560, alignment: .leading))
+      let window = mount(host)
+      defer {
+        window.orderOut(nil)
+        window.contentView = nil
+      }
+      XCTAssertTrue(buttonViews(host).isEmpty)
+    }
+  }
+
   func testEmptyAndSingleSourceRows() {
     for sources in [[], [ConversationQuoteTimestamp(id: "only", start: 42)]] {
       let host = NSHostingView(

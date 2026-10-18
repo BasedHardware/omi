@@ -26,9 +26,16 @@ class _ConversationQuoteTimestampsState extends State<ConversationQuoteTimestamp
   String _spokenTime(double start) {
     final l10n = context.l10n;
     final total = start.floor();
+    final hours = total ~/ 3600;
+    final minutes = (total % 3600) ~/ 60;
+    final seconds = total % 60;
     final duration = total < 3600
         ? OmiDuration.long(total, l10n)
-        : '${l10n.timeHoursAndMins(total ~/ 3600, (total % 3600) ~/ 60)}, ${l10n.timeSecsPlural(total % 60)}';
+        : [
+            hours == 1 ? l10n.timeHourSingular(hours) : l10n.timeHoursPlural(hours),
+            minutes == 1 ? l10n.timeMinSingular(minutes) : l10n.timeMinsPlural(minutes),
+            seconds == 1 ? l10n.timeSecsSingular(seconds) : l10n.timeSecsPlural(seconds),
+          ].join(', ');
     return l10n.quoteJumpToTime(duration);
   }
 
@@ -37,7 +44,7 @@ class _ConversationQuoteTimestampsState extends State<ConversationQuoteTimestamp
     final segments = {for (final segment in widget.transcriptSegments) segment.id: segment};
     final sources = widget.sourceIDs.toSet().where((id) {
       final start = segments[id]?.start;
-      return start != null && start.isFinite && start >= 0;
+      return id.isNotEmpty && start != null && start.isFinite && start >= 0;
     }).toList();
     if (sources.isEmpty) return const SizedBox.shrink();
     final visible = _expanded ? sources : sources.take(3).toList();

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NoteSections } from '../NoteSections';
 import { formatQuoteTimestamp } from '../QuoteTimestamps';
 
@@ -46,6 +47,33 @@ describe('NoteSections', () => {
       aside.getByRole('button', { name: 'Jump to 1 hour 5 minutes 12 seconds' }),
     );
     expect(onOpenSource).toHaveBeenCalledExactlyOnceWith('s3');
+  });
+
+  it('keeps keyboard focus on the toggle when expanding and collapsing', async () => {
+    const user = userEvent.setup();
+    const sourceIDs = ['s0', 's1', 's2', 's3'];
+    render(
+      <NoteSections
+        sections={[{ body_markdown: 'Body', source_segment_ids: sourceIDs }]}
+        transcriptSegments={sourceIDs.map((id, i) => ({ id, start: i + 42 }))}
+        onOpenSource={vi.fn()}
+      />,
+    );
+    for (let i = 0; i < 4; i++) await user.tab();
+    const toggle = screen.getByRole('button', { name: '+1 more' });
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('0:45')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show less' })).toBe(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveFocus();
+    expect(document.body).not.toHaveFocus();
+    await user.keyboard(' ');
+    expect(screen.queryByText('0:45')).toBeNull();
+    expect(toggle).toHaveAccessibleName('+1 more');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
   });
 
   it('hides rows without resolvable, finite starts or a seek callback', () => {
