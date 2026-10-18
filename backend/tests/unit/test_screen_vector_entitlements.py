@@ -248,7 +248,7 @@ async def test_no_ladder_configuration_preserves_legacy_without_any_stripe_crede
     state.provider.side_effect = AssertionError('legacy-only configuration called Stripe')
     await desktop_proxy._enforce_managed_plan_gate('synthetic', 'models/gemini-embedding-001:embedContent', '1')
     assert await subscription.grants_cloud_screen_vectors('synthetic') is True
-    refreshed = authority.refresh_subscription('synthetic', state.stored, force_refresh=True)
+    refreshed = authority.refresh_subscription('synthetic', state.stored)
     assert refreshed == state.stored
     state.provider.assert_not_called()
 
@@ -271,3 +271,31 @@ def test_restricted_key_preferred_and_identity_cache_is_credential_scoped(state,
     assert state.sdk_read('sub_fixture') == billed(LEGACY)
     constructor.assert_called_once_with('restricted-fixture-key', max_network_retries=0, http_client='http')
     authority._stripe_client.cache_clear()
+
+
+@pytest.mark.parametrize('price', [LEGACY, 'price_unmapped_legacy'])
+def test_explicit_legacy_subscription_refresh_keeps_current_price_fresh(state, monkeypatch, price):
+    for binding in LADDER_V1_PRICE_BINDINGS.values():
+        monkeypatch.delenv(binding['env_var'], raising=False)
+    state.billed = billed(price)
+    refreshed = authority.refresh_subscription('synthetic', state.stored, force_refresh=True)
+    assert refreshed['current_price_id'] == price
+    assert state.stored['current_price_id'] is None
+    assert (
+        authority.resolve_subscription('synthetic', refreshed, already_fresh=True)['capabilities'][
+            'cloud_screen_vectors'
+        ]
+        is True
+    )
+    state.provider.assert_called_once_with('sub_fixture')
+
+
+def test_fresh_but_unmapped_mixed_price_is_not_a_legacy_grant(state):
+    state.billed = billed('price_unmapped_billed')
+    refreshed = authority.refresh_subscription('synthetic', state.stored, force_refresh=True)
+    assert refreshed['current_price_id'] == 'price_unmapped_billed'
+    with pytest.raises(authority.ScreenVectorAuthorityUnavailable):
+        authority.resolve_subscription('synthetic', refreshed, already_fresh=True)
+    with pytest.raises(authority.ScreenVectorAuthorityUnavailable):
+        authority.resolve_subscription('synthetic', state.stored)
+    state.provider.assert_called_once_with('sub_fixture')

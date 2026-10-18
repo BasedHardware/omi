@@ -2,7 +2,7 @@
 
 With mixed ladder configuration, Stripe-backed records require billed identity
 even when their stored price is a known legacy price. Legacy-only configuration
-and non-Stripe records retain catalog grandfathering without a provider read. Async
+hot paths and non-Stripe records retain catalog grandfathering without a provider read. Async
 callers sequence DB and Stripe executors; synchronous HTTP handlers may call
 refresh_subscription directly. No executor waits or account writes occur here.
 """
@@ -120,18 +120,14 @@ def _billed_price(uid: str, subscription: Any, *, force_refresh: bool) -> str:
                 if len(items) != 1:
                     raise ScreenVectorAuthorityUnavailable('Ambiguous subscription price')
                 price = items[0]['price']['id']
-                if not isinstance(price, str):
+                if not isinstance(price, str) or not price:
                     raise ScreenVectorAuthorityUnavailable('Missing subscription price')
-                # An unknown billed price must not fall back to a stored legacy plan.
-                resolve_price_entitlements(price)
             except Exception as error:
                 _store_price(key, None)
                 raise ScreenVectorAuthorityUnavailable('Billed identity unavailable') from error
             _store_price(key, price)
         if price is None:
             raise ScreenVectorAuthorityUnavailable('Billed identity unavailable')
-        # Re-evaluate catalog bindings even on a hit; cached data is identity, not policy.
-        resolve_price_entitlements(price)
         return price
 
 
@@ -140,8 +136,9 @@ def refresh_subscription(uid: str, subscription: Any, *, force_refresh: bool = F
     if not _field(subscription, 'stripe_subscription_id'):
         return subscription
     # With no ladder identity in service, every paid price retains legacy policy.
-    # Current operation must not start requiring a new desktop credential.
-    if not configured_ladder_prices() and not LADDER_V1_STRIPE_PRICES:
+    # Hot paths must not require a new desktop credential. Explicit GET refresh
+    # retains its existing provider read so current-price UI/allowance stay fresh.
+    if not force_refresh and not configured_ladder_prices() and not LADDER_V1_STRIPE_PRICES:
         return subscription
     price = _billed_price(uid, subscription, force_refresh=force_refresh)
     if isinstance(subscription, Mapping):
@@ -151,6 +148,13 @@ def refresh_subscription(uid: str, subscription: Any, *, force_refresh: bool = F
 
 def resolve_subscription(uid: str, subscription: Any, *, already_fresh: bool = False) -> dict[str, Any]:
     snapshot = subscription if already_fresh else refresh_subscription(uid, subscription)
+    if _field(snapshot, 'stripe_subscription_id') and (configured_ladder_prices() or LADDER_V1_STRIPE_PRICES):
+        # Identity is cached, policy is not. Mixed-mode unknown prices cannot
+        # inherit a stored legacy grant, even for an already-fresh GET snapshot.
+        try:
+            resolve_price_entitlements(_field(snapshot, 'current_price_id'))
+        except Exception as error:
+            raise ScreenVectorAuthorityUnavailable('Billed price policy unavailable') from error
     return resolve_subscription_entitlements(snapshot or {'plan': 'basic'})
 
 

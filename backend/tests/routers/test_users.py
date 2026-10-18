@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
-from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
+from config.plan_catalog import LADDER_V1_PRICE_BINDINGS, RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
 from routers import users as users_router
 from services.users import data_export
 from utils import byok, subscription as subscription_utils
@@ -779,6 +779,7 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer(re
     real_subscription_authority.assert_called_once_with('uid1', provision=False)
 
 
+@pytest.mark.parametrize('ladder_configured', [False, True])
 @pytest.mark.parametrize('identity_version', [None, '1'])
 @pytest.mark.parametrize('stored_price', [None, 'price_stale_firestore'])
 @pytest.mark.parametrize(
@@ -792,7 +793,7 @@ def test_subscription_snapshot_carries_the_one_transcription_allowance_answer(re
     ],
 )
 def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(
-    monkeypatch, identity_version, stored_price, real_plan, refreshed_price, expected_capability
+    monkeypatch, ladder_configured, identity_version, stored_price, real_plan, refreshed_price, expected_capability
 ):
     """The ordinary branch reads the valid subscription and the monthly usage once; the resolver
     gets exactly those, so the snapshot and the allowance cannot come from different reads."""
@@ -803,7 +804,15 @@ def test_subscription_snapshot_reuses_its_own_reads_for_the_allowance(
         ('PRO', 'price_ci_ladder_pro'),
         ('ARCHITECT', 'price_ci_ladder_architect'),
     ]:
-        monkeypatch.setenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', price)
+        if ladder_configured:
+            monkeypatch.setenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', price)
+        else:
+            monkeypatch.delenv(f'LADDER_V1_{tier}_MONTH_PRICE_ID', raising=False)
+    if not ladder_configured:
+        for binding in LADDER_V1_PRICE_BINDINGS.values():
+            monkeypatch.delenv(binding['env_var'], raising=False)
+    if not ladder_configured and expected_capability is not None:
+        expected_capability = True  # Existing paid catalog mode stays legacy.
     seen: list[dict] = []
     subscription = users_router.Subscription(
         plan=users_router.PlanType(real_plan),

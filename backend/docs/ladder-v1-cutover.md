@@ -49,7 +49,9 @@ still returns 503 when its required entitlement authority is unavailable.
 
 All three screen-vector consumers use `utils/screen_vector_entitlements.py`.
 With no configured or catalog-recognized ladder prices, policy is legacy-only:
-even Stripe-backed legacy records need no billed-identity lookup or new credential.
+embedding and vector-persistence hot paths need no billed-identity lookup or new
+credential. Explicit subscription refresh retains its existing Stripe price read,
+including unknown legacy price IDs, before remapping the response.
 Once ladder prices are configured, a recognized stored legacy price is not proof
 of current billed identity: the shared authority retrieves that exact subscription
 and requires a single known catalog price and matching subscription ID (and UID
