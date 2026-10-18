@@ -176,6 +176,42 @@ async def test_decoded_rule_discard_completes_and_verifies_without_rewriting_blo
 
 
 @pytest.mark.asyncio
+async def test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention(pipeline, monkeypatch, capsys):
+    text = 'Call mom before five.'
+
+    async def no_merge(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', no_merge)
+    _seed(
+        pipeline,
+        transcript=[{'id': 'seg-short', 'text': text, 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': True}],
+    )
+    monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *_: (text, text, {}))
+
+    response, counters = await _run_and_verify(pipeline)
+    row, job = pipeline.store.rows[CONVERSATION_PATH], pipeline.store.rows[JOB_PATH]
+
+    assert response == {'status': 'done'}
+    assert row['status'] == job['status'] == 'completed'
+    assert row['discarded'] is False
+    assert row['structured']['title'] == text
+    assert row['structured']['overview'] == ''
+    assert row['terminal_no_derived_effects'] is True
+    assert not any('processing_attention_items' in path for path in pipeline.store.rows)
+    assert counters == {'verified': 1, 'refused': 0, 'errors': 0, 'skipped': 0}
+    pipeline.paid_notes.assert_not_called()
+    event = next(json.loads(line) for line in capsys.readouterr().out.splitlines() if 'kept_minimum' in line)
+    assert event == {
+        'event': 'selfheal_guard',
+        'outcome': 'kept_minimum',
+        'reason': 'content_below_floor',
+        'transcript_words': 4,
+        'content_floor_words': 12,
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'corruption', ['encrypted_garbage', 'non_list_json', 'invalid_utf8', 'standard_garbage', 'plaintext_payload']
 )
