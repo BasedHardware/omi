@@ -4,6 +4,7 @@ Handles AI-powered goal suggestions, advice generation, and progress extraction.
 """
 
 import json
+import math
 import re
 import traceback
 from datetime import datetime, timezone, timedelta
@@ -107,6 +108,55 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     }
 
 
+def _safe_float(val: Any, default: float) -> float:
+    if val is None or val == "":
+        return default
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (TypeError, ValueError):
+        return default
+
+
+def _sanitize_goal_suggestion(suggestion: Any) -> Dict[str, Any]:
+    if not isinstance(suggestion, dict):
+        return {
+            'suggested_title': 'Make progress every day',
+            'suggested_type': 'scale',
+            'suggested_target': 10.0,
+            'suggested_min': 0.0,
+            'suggested_max': 10.0,
+            'reasoning': 'Start with a simple daily progress goal!',
+        }
+
+    title = str(suggestion.get('suggested_title') or '').strip() or 'Make progress every day'
+
+    raw_type = str(suggestion.get('suggested_type') or 'scale').lower().strip()
+    goal_type = raw_type if raw_type in {'scale', 'numeric', 'boolean'} else 'scale'
+
+    target = _safe_float(suggestion.get('suggested_target'), 10.0)
+    min_val = _safe_float(suggestion.get('suggested_min'), 0.0)
+    max_val = _safe_float(suggestion.get('suggested_max'), max(target, 10.0))
+
+    if min_val > max_val:
+        min_val, max_val = max_val, min_val
+    elif min_val == max_val:
+        max_val = min_val + 10.0
+
+    reasoning = str(suggestion.get('reasoning') or '').strip() or 'Start with a simple daily progress goal!'
+
+    return {
+        'suggested_title': title,
+        'suggested_type': goal_type,
+        'suggested_target': target,
+        'suggested_min': min_val,
+        'suggested_max': max_val,
+        'reasoning': reasoning,
+    }
+
+
 def suggest_goal(uid: str) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     try:
@@ -115,14 +165,14 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
 
         if not memories:
             # Default suggestion when no memories
-            return {
+            return _sanitize_goal_suggestion({
                 'suggested_title': 'Learn something new every day',
                 'suggested_type': 'scale',
-                'suggested_target': 10,
-                'suggested_min': 0,
-                'suggested_max': 10,
+                'suggested_target': 10.0,
+                'suggested_min': 0.0,
+                'suggested_max': 10.0,
                 'reasoning': 'Start tracking your daily learning progress!',
-            }
+            })
 
         # Prepare memory context for AI — exclude locked memories
         memory_texts = [
@@ -158,32 +208,32 @@ Make the goal specific, measurable, and relevant to their interests."""
         # Find JSON in response
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
         if json_match:
-            suggestion = json.loads(json_match.group())
-            # Ensure min/max are present, default if not
-            suggestion['suggested_min'] = suggestion.get('suggested_min', 0)
-            suggestion['suggested_max'] = suggestion.get('suggested_max', suggestion.get('suggested_target', 10))
-            return suggestion
+            try:
+                suggestion = json.loads(json_match.group())
+                return _sanitize_goal_suggestion(suggestion)
+            except Exception:
+                pass
 
         # Fallback if parsing fails
-        return {
+        return _sanitize_goal_suggestion({
             'suggested_title': 'Track your daily progress',
             'suggested_type': 'scale',
-            'suggested_target': 10,
-            'suggested_min': 0,
-            'suggested_max': 10,
+            'suggested_target': 10.0,
+            'suggested_min': 0.0,
+            'suggested_max': 10.0,
             'reasoning': 'A simple goal to get you started!',
-        }
+        })
 
     except Exception as e:
         logger.error(f"Error generating goal suggestion: {e}")
-        return {
+        return _sanitize_goal_suggestion({
             'suggested_title': 'Make progress every day',
             'suggested_type': 'scale',
-            'suggested_target': 10,
-            'suggested_min': 0,
-            'suggested_max': 10,
+            'suggested_target': 10.0,
+            'suggested_min': 0.0,
+            'suggested_max': 10.0,
             'reasoning': 'Start with a simple daily progress goal!',
-        }
+        })
 
 
 def get_goal_advice(uid: str, goal_id: str) -> str:
@@ -197,14 +247,42 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         if not goal or not goal.get('is_active'):
             raise ValueError("Goal not found")
 
-        goal_title = goal.get('title', 'Unknown')
-        current_value = goal.get('current_value', 0)
-        target_value = goal.get('target_value', 10)
+        goal_title = str(goal.get('title') or 'Unknown')
 
-        # Calculate progress
-        progress_pct = 0
-        if target_value > 0:
-            progress_pct = (current_value / target_value) * 100
+        # Safely parse numeric current and target values if present
+        raw_current = goal.get('current_value')
+        raw_target = goal.get('target_value')
+
+        current_val: Optional[float] = None
+        if raw_current is not None:
+            try:
+                cv = float(raw_current)
+                if not (math.isnan(cv) or math.isinf(cv)):
+                    current_val = cv
+            except (TypeError, ValueError):
+                current_val = None
+
+        target_val: Optional[float] = None
+        if raw_target is not None:
+            try:
+                tv = float(raw_target)
+                if not (math.isnan(tv) or math.isinf(tv)):
+                    target_val = tv
+            except (TypeError, ValueError):
+                target_val = None
+
+        # Build progress description safely supporting numeric and qualitative goals
+        if current_val is not None and target_val is not None and target_val > 0:
+            progress_pct = (current_val / target_val) * 100
+            progress_line = f"PROGRESS: {current_val:,.0f} / {target_val:,.0f} ({progress_pct:.1f}%)"
+        elif current_val is not None and target_val is not None:
+            progress_line = f"PROGRESS: {current_val:,.0f} / {target_val:,.0f}"
+        elif current_val is not None:
+            progress_line = f"PROGRESS: {current_val:,.0f} (no numeric target set)"
+        elif target_val is not None:
+            progress_line = f"PROGRESS: Target {target_val:,.0f} (current progress not tracked numerically)"
+        else:
+            progress_line = "PROGRESS: Qualitative goal (no numeric metric set)"
 
         # Get rich context using hybrid retrieval
         context = _get_goal_context(uid, goal_title)
@@ -213,7 +291,7 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         prompt = f"""You are a strategic advisor. Based on the user's goal and their context, give ONE specific actionable step they should take THIS WEEK.
 
 GOAL: "{goal_title}"
-PROGRESS: {current_value:,.0f} / {target_value:,.0f} ({progress_pct:.1f}%)
+{progress_line}
 
 RECENT CONVERSATIONS (what they've been discussing/working on):
 {context['conversation_context'][:1500] if context['conversation_context'] else 'No recent conversations'}
@@ -239,6 +317,8 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 
         return advice
 
+    except ValueError:
+        return 'Focus on the next small step toward your goal.'
     except Exception as e:
         logger.error(f"[GOAL-ADVICE] Error: {e}")
         traceback.print_exc()
@@ -269,11 +349,13 @@ def extract_and_update_goal_progress(
             if not goal_id:
                 continue
             goal_title = goal.get('title', '')
-            current_value = goal.get('current_value', 0)
-            target_value = goal.get('target_value', 10)
+            current_value = goal.get('current_value')
+            target_value = goal.get('target_value')
             goal_type = goal.get('goal_type', 'numeric')
+            curr_str = f"{current_value}" if current_value is not None else "not set"
+            target_str = f"{target_value}" if target_value is not None else "not set"
             goals_list.append(
-                f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
+                f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {curr_str}/{target_str}'
             )
             goals_by_id[cast(str, goal_id)] = goal
 
@@ -326,8 +408,13 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 # Validate: reject NaN, inf, and negative values
                 if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
                     continue
-                old_value = goal.get('current_value', 0)
-                if new_value != old_value:
+                old_value = goal.get('current_value')
+                if old_value is not None:
+                    try:
+                        old_value = float(old_value)
+                    except (TypeError, ValueError):
+                        old_value = None
+                if old_value is None or new_value != old_value:
                     if idempotency_key_prefix is None:
                         goals_db.update_goal_progress(uid, goal_id, new_value)
                     else:
