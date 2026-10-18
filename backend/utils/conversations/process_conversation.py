@@ -75,9 +75,12 @@ from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
+    RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
     recovery_minimum_terminal_enabled,
     recovery_rule_discard,
+    recovery_transcript_below_content_floor,
+    recovery_transcript_word_count,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -366,6 +369,7 @@ def _get_structured(
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
     recovery_transcript_decoded: bool = True,
+    recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
 ) -> Tuple[Structured, bool]:
     try:
@@ -530,6 +534,34 @@ def _get_structured(
                         RelevanceDecision('discard', 'rule', ordinary.reason, ProcessingTrigger.SERVER_RECOVERY)
                     )
                 return Structured(), True
+            stored_structured = getattr(main_conv, 'structured', None)
+            stored_title = getattr(stored_structured, 'title', '') or ''
+            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
+            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
+                not stored_title.strip() or stored_title_provenance == 'server_minimum'
+            )
+            if (
+                recovery_transcript_decoded
+                and stored_content_is_replaceable
+                and not getattr(main_conv, 'user_title', None)
+                and not is_release_probe_uid(uid)
+                and not user_kept
+                and not getattr(main_conv, 'photos', None)
+                and recovery_transcript_below_content_floor(main_conv)
+            ):
+                if relevance_observer is not None:
+                    relevance_observer(
+                        RelevanceDecision('keep', 'rule', 'content_below_floor', ProcessingTrigger.SERVER_RECOVERY)
+                    )
+                if recovery_minimum_fallback_observer is not None:
+                    recovery_minimum_fallback_observer()
+                return (
+                    build_deterministic_minimum_structured(
+                        main_conv,
+                        tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+                    ),
+                    False,
+                )
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
@@ -3097,6 +3129,12 @@ def process_conversation(
     bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
+    recovery_minimum_fallback = False
+
+    def _mark_recovery_minimum_fallback() -> None:
+        nonlocal recovery_minimum_fallback
+        recovery_minimum_fallback = True
+
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -3107,8 +3145,23 @@ def process_conversation(
         user_kept=user_kept,
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
+        recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
     )
+    if recovery_minimum_fallback:
+        sys.stdout.write(
+            json.dumps(
+                {
+                    'event': 'selfheal_guard',
+                    'outcome': 'kept_minimum',
+                    'reason': 'content_below_floor',
+                    'transcript_words': recovery_transcript_word_count(conversation),
+                    'content_floor_words': RECOVERY_QUIET_MINIMUM_MAX_WORDS,
+                }
+            )
+            + '\n'
+        )
+        sys.stdout.flush()
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -3125,6 +3178,7 @@ def process_conversation(
         trigger is ProcessingTrigger.SERVER_RECOVERY
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
+        and not recovery_minimum_fallback
     ):
         sys.stdout.write(
             json.dumps(
@@ -3174,6 +3228,8 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
+    if recovery_minimum_fallback:
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
         # minimum's local_pending); the object the caller returns must agree,
@@ -3188,7 +3244,14 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    report_persistence(persisted, completed=conversation)
+    if recovery_minimum_fallback:
+        report_persistence(
+            persisted,
+            completed=conversation,
+            derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS,
+        )
+    else:
+        report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
             'processing result fenced before canonical completion side effects uid=%s conversation=%s',
