@@ -19,6 +19,9 @@ are bound to an authenticated session and backend; page merges reject a differen
 session or backend. An expired cursor discards the invalidated revision before
 restarting, including when that restart fails. A newer refresh supersedes earlier requests. Failed refreshes retain
 same-session content and offer retry; a changed session or rejected authorization clears it.
+Recovery follows only a successful empty or owner-only compatibility read. A
+failed compatibility read does not trigger another expensive graph request;
+each compatibility or canonical read keeps the zero-retry policy.
 
 For older servers or accounts without available canonical state, the existing
 compatibility graph remains readable. An unavailable canonical read plus an

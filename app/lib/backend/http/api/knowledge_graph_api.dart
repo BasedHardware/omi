@@ -69,16 +69,22 @@ class KnowledgeGraphApi {
     Map<String, dynamic>? legacy;
     if (cursor == null) {
       final compatibility = await read(baseUrl);
-      if (compatibility?.statusCode == 200) {
-        legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility!.body) as Map<String, dynamic>)
-            .toJson();
-        if ((legacy['nodes'] as List).any((node) => !memoryGraphIsUserNode(node as Map, ownerLabels))) {
-          return {
-            ...legacy,
-            '_backend_origin': baseUrl,
-            '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
-          };
-        }
+      if (compatibility?.statusCode == 401 || compatibility?.statusCode == 403) {
+        throw const KnowledgeGraphSessionChanged();
+      }
+      // Recover a successfully read empty view, not a failed expensive read.
+      // A gateway failure must not fan out into another graph request.
+      if (compatibility == null || compatibility.statusCode != 200) {
+        _throwHttpFailure(action: 'load', statusCode: compatibility?.statusCode, body: compatibility?.body);
+      }
+      legacy = wire.GeneratedKnowledgeGraphResponse.fromJson(jsonDecode(compatibility.body) as Map<String, dynamic>)
+          .toJson();
+      if ((legacy['nodes'] as List).any((node) => !memoryGraphIsUserNode(node as Map, ownerLabels))) {
+        return {
+          ...legacy,
+          '_backend_origin': baseUrl,
+          '_owner_generation': session == null ? null : '${session.ownerUid}:${session.generation}'
+        };
       }
     }
     final uri = Uri.parse(canonicalUrl).replace(queryParameters: {

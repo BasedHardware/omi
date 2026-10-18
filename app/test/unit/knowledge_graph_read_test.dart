@@ -55,6 +55,20 @@ void main() {
     expect((result['nodes'] as List).map((n) => n['label']), ['Old', 'shared']);
   });
 
+  for (final status in [null, 401, 403, 504]) {
+    test('failed compatibility read $status does not issue a canonical recovery request', () async {
+      final urls = <String>[];
+      await expectLater(
+        KnowledgeGraphApi.getKnowledgeGraph(apiCaller: (url) async {
+          urls.add(url);
+          return status == null ? null : http.Response('{}', status);
+        }),
+        status == 401 || status == 403 ? throwsA(isA<KnowledgeGraphSessionChanged>()) : throwsException,
+      );
+      expect(urls, ['https://api.test/v1/knowledge-graph']);
+    });
+  }
+
   test('Load More uses only the signed cursor read and safely encodes it', () async {
     final urls = <String>[];
     final result = await KnowledgeGraphApi.getKnowledgeGraph(
