@@ -542,3 +542,43 @@ def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, mon
     assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
     assert 'outcome=skipped_budget' in events[0]
     assert 'lane=' in events[0] and 'duration_seconds=' in events[0]
+
+
+@pytest.mark.parametrize('result', ['silence', 'speech', 'empty', 'inspection_error'])
+def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monkeypatch, result):
+    module, store = pipeline
+    monkeypatch.setenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'true')
+    module.get_prerecorded_service = lambda language: ('parakeet', None, 'parakeet')
+    module.prerecorded = MagicMock(return_value=([], 'multi'))
+    recovered = ([{'text': 'Synthetic speech', 'timestamp': [0, 3]}], 'vi', 3.0, [{'start': 0, 'end': 3}])
+    if result == 'silence':
+        recovered = ([], '', 3.0, [])
+    recovery = MagicMock(return_value=recovered)
+    if result == 'empty':
+        recovery.side_effect = module.TranscriptionFailure(
+            module.TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate'
+        )
+    elif result == 'inspection_error':
+        recovery.side_effect = RuntimeError('inspection failed')
+    monkeypatch.setattr(module.empty_recovery, 'recover', recovery)
+    module.postprocess_words = lambda words, *a: (
+        [module.TranscriptSegment(text='Synthetic speech', start=0, end=3, is_user=False)] if words else []
+    )
+    errors, outcome = [], {}
+    success = module.process_segment(
+        '1700000000.wav',
+        'synthetic-owner',
+        {'new_memories': set(), 'updated_memories': set()},
+        threading.Lock(),
+        errors,
+        deferred_outcome=outcome,
+    )
+    assert module.prerecorded.call_count == 2
+    recovery.assert_called_once()
+    assert success == (result == 'speech')
+    assert len(conversations(store)) == int(result == 'speech')
+    if result in ('empty', 'inspection_error'):
+        assert errors and outcome['retryable'] and outcome['outcome'].value != 'expected_silence'
+    else:
+        assert not errors
+        assert outcome['outcome'].value == ('success' if result == 'speech' else 'expected_silence')
