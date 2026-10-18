@@ -13574,6 +13574,43 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onTheWayAlmostReady => 'Σχεδόν έτοιμο';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις',
+      one: '1 ηχογράφηση',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '$totals καθ\' οδόν';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return 'Μεταφόρτωση: $count';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return 'Σχεδόν έτοιμες: $count';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count χρειάζονται προσοχή',
+      one: '1 χρειάζεται προσοχή',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
 
   @override

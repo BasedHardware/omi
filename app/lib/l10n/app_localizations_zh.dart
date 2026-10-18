@@ -13283,6 +13283,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onTheWayAlmostReady => '即将完成';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+      one: '1 条录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String onTheWaySummary(String totals) {
+    return '处理中：$totals';
+  }
+
+  @override
+  String onTheWayUploadingCount(int count) {
+    return '$count 条正在上传';
+  }
+
+  @override
+  String onTheWayAlmostReadyCount(int count) {
+    return '$count 条即将完成';
+  }
+
+  @override
+  String onTheWayNeedsAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条需要关注',
+      one: '1 条需要关注',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => '暂无活动';
 
   @override
