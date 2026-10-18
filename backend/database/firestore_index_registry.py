@@ -789,6 +789,14 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('source'), _asc('status'), _asc('created_at'), _asc('__name__')),
     ),
+    # Held-audio page: newest held manifests for one user. The exact total is a
+    # separate summary document, so this query stays bounded.
+    FirestoreIndexRequirement(
+        'stt_cap_holds_state_asc_listed_at_desc',
+        'stt_cap_holds',
+        'COLLECTION',
+        (_asc('state'), _desc('listed_at'), _desc('__name__')),
+    ),
 )
 
 

@@ -13154,22 +13154,22 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => 'Priporočeno';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => 'Oglejte si vse načrte';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => 'Ogled paketov';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => 'Vaš načrt';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => 'Ne zdaj';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13851,6 +13851,407 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get summaryFailedBody => 'Pri povzemanju tega pogovora je prišlo do napake.';
+
+  @override
+  String get noContentToDisplay => 'Ni vsebine za prikaz';
+
+  @override
+  String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
+
+  @override
+  String get onDeviceAtCapTitle => 'Dosegli ste omejitev tega meseca';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi še vedno snema. Izberite, kako bo prepisan preostanek meseca.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Vaša poraba se ponastavi $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Prepiši na tem telefonu';
+
+  @override
+  String get onDeviceIncluded => 'Vključeno';
+
+  @override
+  String get onDeviceOptionChargingBody => 'Deluje, medtem ko se telefon polni.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Nadgradite na Pro za ločevanje govorcev in večjo natančnost';
+
+  @override
+  String get onDeviceAtCapFooter => 'Nič se ne izgubi. To lahko spremenite v Nastavitve › Transkripcija.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Korak $step od $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi enkrat prenese govorni model. Nato se posnetki spremenijo v besedilo kar tukaj, ne da bi se šteli v porabo.';
+
+  @override
+  String get onDeviceSpeechModel => 'Govorni model';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Prenašanje prek Wi-Fi · $percent %';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Prenašanje · $percent %';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Še približno $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Čakanje na Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Prenos ni bil dokončan';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Ni preneseno';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Nameščeno · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Na tem telefonu še ni na voljo';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Med prenosom lahko še naprej snemate. Nič ne čaka na to.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Zvok ostane na vašem telefonu, dokler ni prepisan.';
+
+  @override
+  String get onDeviceWifiOnly => 'Prenašaj samo prek Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Prenesi govorni model';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kdaj prepisovati';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kdaj naj Omi prepisuje?';
+
+  @override
+  String get onDeviceScheduleBody => 'To lahko kadar koli spremenite.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Med polnjenjem';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Prepisi se pokažejo, ko telefon priključite, običajno čez noč.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterija: skoraj nič';
+
+  @override
+  String get onDeviceScheduleHours => 'Vsakih nekaj ur';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Na bateriji dohiteva v kratkih sunkih, zato prepisi redko zamujajo več kot nekaj ur.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterija: približno $percent % na dan';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Med pogovorom';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Redno prepisuje, ko je Omi odprt.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterija: približno $percent % na uro pogovora';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration čaka na prepis';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Pripravljeni bodo, ko telefon priključite na polnilnik. Snemanje poteka normalno.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi dohiteva vsakih nekaj ur. Snemanje poteka normalno.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Čakanje na polnilnik, ker je baterija skoraj prazna. Snemanje poteka normalno.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Prepiši zdaj';
+
+  @override
+  String get onDeviceUsesBattery => 'Porablja baterijo';
+
+  @override
+  String get onDeviceTranscribing => 'Prepisovanje…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Čakanje na polnilnik';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Čaka na prepis';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Shranjeno, čaka na nastavitev';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Prepisano na tem iPhonu';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Prepisano na tem telefonu';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Prepisano in povzeto na tem iPhonu';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Povzel Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Zakaj je bilo to narejeno na vašem telefonu';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => 'Dosegli ste omejitev tega meseca, zato je Omi to prepisal na vašem telefonu.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Odločili ste se za prepis na tem telefonu, da prihranite porabo.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Tudi povzetek je bil napisan na tem iPhonu.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Vse hranite na tem telefonu, zato povzetka ni.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Zakaj je ta povzetek napisal Omi Cloud';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Ta iPhone ne zmore sam povzemati (za to potrebujete iPhone 15 Pro ali novejšega). Prepis je bil narejen na vašem telefonu, v Omi pa je bilo za povzetek poslano samo njegovo besedilo. To se ne šteje v porabo.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Ta telefon ne zmore sam povzemati. Prepis je bil narejen na vašem telefonu, v Omi pa je bilo za povzetek poslano samo njegovo besedilo. To se ne šteje v porabo.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Ponovi z Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Nadgradite na Pro za ločevanje govorcev in večjo natančnost';
+
+  @override
+  String get onDeviceKeepEverything => 'Vse obdrži na tem telefonu';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Samo prepisi, brez povzetkov';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Ko dosežete omejitev';
+
+  @override
+  String get onDeviceWhen => 'Kdaj';
+
+  @override
+  String get onDeviceSummaries => 'Povzetki';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Na tem iPhonu';
+
+  @override
+  String get onDeviceSummariesCloud => 'Prek Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Vedno prepisuj na tem telefonu';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Prihrani porabo. Brez oznak govorcev.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Na tem telefonu';
+
+  @override
+  String get onDeviceAudioWaiting => 'Zvok, ki čaka na telefonu';
+
+  @override
+  String get onDeviceRemoveModel => 'Odstrani govorni model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Odstranim govorni model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Posnetki bodo na tem telefonu počakali, dokler ga ne prenesete znova ali se poraba ne ponastavi.';
+
+  @override
+  String get onDeviceRemove => 'Odstrani';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokončajte nastavitev za ogled prepisov';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Dosegli ste omejitev tega meseca. Omi še vedno snema in shranjuje zvok na vašem telefonu. Prenesite govorni model in bo ujel zaostanek.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Prenos $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ta telefon še ne more zagnati govornega modela. Zvok ostane shranjen, dokler se poraba ne ponastavi ali ne nadgradite.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Ko dosežete omejitev, prepisujte na tem telefonu';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% porabljeno · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% porabljeno · ostane približno $hours ur snemanja · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => 'Pridobite več uporabe';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return 'Priprava govora · $percent %';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return 'Dosegli ste omejitev za ta mesec. Vaši posnetki so shranjeni in bodo prepisani po ponastavitvi omejitve $date.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return 'Novi posnetki bodo prepisani na tem telefonu. Čakajoči posnetki bodo prepisani po ponastavitvi omejitve $date.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return 'Posnetek, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · Čaka na prepis';
+  }
+
+  @override
+  String get heldAudioLiveTitle => 'Prepis v oblaku je zaustavljen';
+
+  @override
+  String get heldAudioLiveBody => 'Dosegli ste omejitev za ta mesec. Omi še naprej snema.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '$minutes min posneto po omejitvi';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return 'Prepis po ponastavitvi omejitve $date';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration čaka';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return 'Prepisano po ponastavitvi omejitve $date';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration čaka na prepis';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'in še $count',
+      one: 'in še 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => 'Prepisujemo vaše čakajoče posnetke';
+
+  @override
+  String get processingPaused => 'Obdelava je začasno ustavljena. Dosegli ste omejitev za ta mesec.';
+
+  @override
+  String get processingStored =>
+      'Vaši posnetki in prepisi so shranjeni. Čakajoči posnetki bodo čakali, dokler ne izberete obdelave.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration čaka · Obdelava zdaj porabi približno $percent% mesečne kvote';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return 'Približno $hours ur obdelave · $percent% kvote tega meseca.';
+  }
+
+  @override
+  String get processingNewestFirst =>
+      'Najprej bomo obdelali najnovejše posnetke do razpoložljive kvote. Ostali bodo še naprej čakali.';
+
+  @override
+  String get processingAction => 'Obdelaj čakajoče posnetke';
+
+  @override
+  String get processingProgress => 'Obdelovanje vaših čakajočih posnetkov…';
+
+  @override
+  String get processingDeferred => 'Čaka na obdelavo';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pogovorov čaka',
+      one: '1 pogovor čaka',
+    );
+    return '$_temp0';
+  }
 
   @override
   String playbackPartialAudioSaved(String saved, String total) {

@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1040,7 +1041,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// has no summary for the request, which an older backend sends when another writer held the
   /// claim — or anything else.
   Future<bool> reprocessConversation({String? appId}) async {
-    if (loadingReprocessConversation || _savingSpeaker) return false;
+    if (conversation.id.startsWith('ondevice-') || loadingReprocessConversation || _savingSpeaker) return false;
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = null;
     final target = conversation;
@@ -1200,6 +1201,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
     if (openedId == null) return false;
+    if (openedId.startsWith('ondevice-')) {
+      detailLoad = ConversationDetailLoad.idle;
+      notifyListeners();
+      return false;
+    }
     final generation = ++_refreshGeneration;
     if (trackLoad) {
       detailLoad = ConversationDetailLoad.loading;
@@ -1208,6 +1214,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     ServerConversation? updatedConversation;
     try {
       updatedConversation = await _fetchConversation(openedId);
+      if (updatedConversation != null) {
+        updatedConversation = OnDeviceTranscriptionController.instance.displayConversation(updatedConversation);
+      }
     } catch (e) {
       Logger.debug('Error refreshing conversation: $e');
     }

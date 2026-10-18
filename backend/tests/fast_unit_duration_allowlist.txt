@@ -459,6 +459,18 @@ tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traf
 tests/unit/test_dream_replay.py::test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo
 # 2026-10-17: parses runtime and fixture manifests to reject a false live-bucket validation claim (0.7-1.1s CPU under runner load). Assertions still run.
 tests/unit/test_frame_request_bucket_contract.py::test_runtime_manifest_alone_cannot_claim_live_bucket_validation
+# 2026-10-18: the enabled non-BYOK admission call pays the funded-processing import
+# in its call phase. 0.33s CPU inside the loaded pre-push (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_compute_admission_import_purity.py::test_enabled_non_byok_call_uses_real_budget_owner_without_importing_byok
+# 2026-10-18: lane-metering shadow merge imports usage_units in the call phase.
+# 0.32-0.36s CPU on the saturated pre-push host (local fail limit 0.30s).
+# Assertions still run.
+tests/unit/test_ladder_v1_cutover.py::test_live_batch_and_on_device_are_disjoint
+# 2026-10-18: authenticated backlog process pays the conversation import in the
+# call phase. 0.27s in a quiet 40-file run, 0.33s twice inside loaded pre-push
+# (local fail limit 0.30s). Assertions still run.
+tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requires_replay_key_and_preserves_backend_estimate
 # 2026-10-18: runs the hermetic finalization worker and self-heal verifier end to end
 # to prove short real speech persists as a quiet terminal minimum without attention.
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.

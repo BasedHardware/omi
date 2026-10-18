@@ -214,9 +214,16 @@ async def enrichment_response(payload: dict):
         status = await run_blocking(executor, run_enrichment, document_id, token)
         if status == 'busy':
             logger.info('event=batch_enrichment_sync_reprocess outcome=busy')
-            return JSONResponse(status_code=409, content={'status': status})
+            # The leased outbox and task watchdog retain custody after this ACK.
+            return JSONResponse(status_code=200, content={'status': status})
         return JSONResponse(status_code=200, content={'status': status})
     except (ValueError, TypeError):
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-    except Exception:
+    except Exception as error:
+        from config.sync_telemetry import bounded_exception_class
+
+        logger.error(
+            'event=batch_enrichment_sync_reprocess outcome=retry site=run_enrichment exception_type=%s',
+            bounded_exception_class(error),
+        )
         return JSONResponse(status_code=500, content={'status': 'retry'})

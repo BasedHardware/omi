@@ -153,6 +153,8 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
       killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil), record: { _, _ in })
     let result = try await ScreenHistorySearchRoute.search(
       runtime: runtime,
+      policy: ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .disabled, killSwitches: runtime.killSwitches),
       local: { _ in
         XCTFail("disabled route called local search")
         return "local"
@@ -166,6 +168,8 @@ final class LocalEmbeddingFoundationTests: XCTestCase {
       killSwitches: LocalEmbeddingKillSwitches(isDisabled: true, forcedEngineRaw: nil), record: { _, _ in })
     let dependencies = ChatToolExecutor.SemanticSearchDependencies(
       runtime: runtime,
+      policy: ScreenEmbeddingPolicy(
+        plan: .operator, status: .active, localRoute: .disabled, killSwitches: runtime.killSwitches),
       legacySearch: { query, start, end, app, topK in
         XCTAssertEqual(query, "budget")
         XCTAssertEqual(app, "Editor")

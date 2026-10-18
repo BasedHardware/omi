@@ -283,17 +283,19 @@ def test_projection_selection_and_cold_read_counts_unchanged(serving, storage, m
         selected.assert_not_called()
 
 
-def test_real_legacy_create_invalidates_cached_empty(serving):
+def test_real_legacy_create_invalidates_cached_empty(serving, storage):
     client, store, selected, _ = serving
     assert client.post(STAGED_PROMOTE_ROUTE).content == EMPTY
+    storage[0].seconds += 1800
     created = staged_tasks.create_staged_task('owner', 'New historical task')
     assert client.post(STAGED_PROMOTE_ROUTE).json()['promoted'] is True
     selected.assert_called_once_with(created['id'], uid='owner')
 
 
-def test_real_candidate_create_invalidates_cached_empty(serving, monkeypatch):
+def test_real_candidate_create_invalidates_cached_empty(serving, storage, monkeypatch):
     client, store, selected, _ = serving
     assert client.post(STAGED_PROMOTE_ROUTE).content == EMPTY
+    storage[0].seconds += 1800
     strict = StrictFirestore()
     strict.rows = store.rows
     with monkeypatch.context() as patch:
@@ -349,7 +351,7 @@ def test_auth_failure_measured_before_control_or_cache(serving, storage):
     assert counter._value.get() == before + 1
 
 
-def test_ttl_is_90_seconds_and_fill_cannot_extend_projection_start(storage):
+def test_ttl_is_one_hour_and_fill_cannot_extend_projection_start(storage):
     clock, redis = storage
     calls = []
 
@@ -360,10 +362,10 @@ def test_ttl_is_90_seconds_and_fill_cannot_extend_projection_start(storage):
 
     cache.load_projection('u', 7, loader)
     marker = next(key for key, value in redis.data.items() if value == '1')
-    assert redis.expiry[marker] == 1090000  # Started at 1000, not fill time 1010.
-    clock.seconds = 1089
+    assert redis.expiry[marker] == 4600000  # Started at 1000, not fill time 1010.
+    clock.seconds = 4599
     assert cache.load_projection('u', 7, loader) == [] and len(calls) == 1
-    clock.seconds = 1090
+    clock.seconds = 4600
     cache.load_projection('u', 7, loader)
     assert len(calls) == 2
 
@@ -372,7 +374,7 @@ def test_already_expired_fill_is_skipped(storage):
     clock, redis = storage
 
     def slow():
-        clock.seconds += 90
+        clock.seconds += cache.TTL_SECONDS
         return []
 
     cache.load_projection('u', 7, slow)
@@ -511,3 +513,34 @@ def test_writers_invalidate_flag_off_revision_entries(storage, monkeypatch):
     monkeypatch.delenv(FLAG)
     pending = [{'id': 'newly-written'}]
     assert cache.load_projection('u', 7, lambda: pending) == pending
+
+
+def test_long_ttl_kill_switch_restores_90_seconds(storage, monkeypatch):
+    clock, _ = storage
+    monkeypatch.setenv('OMI_STAGED_PROMOTE_LONG_TTL_ENABLED', 'false')
+    origin = Mock(return_value=[])
+    cache.load_projection('u', 7, origin)
+    clock.seconds += 89
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 1
+    clock.seconds += 1
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 2
+
+
+def test_long_ttl_kill_switch_bypasses_an_existing_one_hour_marker(storage, monkeypatch):
+    clock, redis = storage
+    origin = Mock(return_value=[])
+    cache.load_projection('u', 7, origin)
+    hour_marker = next(key for key, value in redis.data.items() if value == '1')
+    clock.seconds += 10
+    monkeypatch.setenv('OMI_STAGED_PROMOTE_LONG_TTL_ENABLED', 'false')
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 2
+    assert redis.get(hour_marker) == '1'  # Still present, but never read with the lever off.
+    clock.seconds += 89
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 2
+    clock.seconds += 1
+    cache.load_projection('u', 7, origin)
+    assert origin.call_count == 3

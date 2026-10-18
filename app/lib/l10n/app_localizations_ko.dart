@@ -12943,22 +12943,22 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => '추천';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => '모든 플랜 보기';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => '요금제 보기';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => '내 플랜';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => '나중에';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -13635,6 +13635,397 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get summaryFailedBody => '이 대화를 요약하는 중 문제가 발생했습니다.';
+
+  @override
+  String get noContentToDisplay => '표시할 콘텐츠가 없습니다';
+
+  @override
+  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
+
+  @override
+  String get onDeviceAtCapTitle => '이번 달 한도에 도달했어요';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi는 계속 녹음 중이에요. 이번 달 남은 기간의 변환 방식을 선택하세요.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return '사용량은 $date에 초기화돼요.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => '이 휴대폰에서 변환';
+
+  @override
+  String get onDeviceIncluded => '포함';
+
+  @override
+  String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행돼요.';
+
+  @override
+  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+
+  @override
+  String get onDeviceAtCapFooter => '어느 쪽을 선택해도 잃는 건 없어요. 설정 › 음성 변환에서 변경할 수 있어요.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return '$step/$total단계';
+  }
+
+  @override
+  String get onDeviceSetupBody => 'Omi가 음성 모델을 한 번만 다운로드해요. 그 후에는 사용량에 포함되지 않고 이 기기에서 바로 녹음을 텍스트로 변환해요.';
+
+  @override
+  String get onDeviceSpeechModel => '음성 모델';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '${size}MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fi로 다운로드 중 · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return '다운로드 중 · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return '약 $time 남음';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi 연결 대기 중';
+
+  @override
+  String get onDeviceDownloadFailed => '다운로드가 완료되지 않았어요';
+
+  @override
+  String get onDeviceModelNotDownloaded => '다운로드되지 않음';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return '설치됨 · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => '이 휴대폰에서는 아직 사용할 수 없어요';
+
+  @override
+  String get onDeviceSetupKeepRecording => '다운로드 중에도 계속 녹음하세요. 기다릴 필요가 없어요.';
+
+  @override
+  String get onDeviceSetupAudioStays => '오디오는 변환될 때까지 휴대폰에 보관돼요.';
+
+  @override
+  String get onDeviceWifiOnly => 'Wi-Fi에서만 다운로드';
+
+  @override
+  String get onDeviceDownloadModel => '음성 모델 다운로드';
+
+  @override
+  String get onDeviceScheduleTitle => '변환 시점';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi가 언제 변환할까요?';
+
+  @override
+  String get onDeviceScheduleBody => '언제든지 변경할 수 있어요.';
+
+  @override
+  String get onDeviceScheduleCharging => '충전 중';
+
+  @override
+  String get onDeviceScheduleChargingBody => '충전기를 연결하면 텍스트가 표시돼요. 보통 밤사이에 처리돼요.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => '배터리: 거의 사용 안 함';
+
+  @override
+  String get onDeviceScheduleHours => '몇 시간마다';
+
+  @override
+  String get onDeviceScheduleHoursBody => '배터리로 짧게 나눠 처리하므로 변환이 몇 시간 이상 밀리는 경우는 드물어요.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return '배터리: 하루 약 $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => '말하는 동안';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi가 열려 있는 동안 주기적으로 전사합니다.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return '배터리: 대화 1시간당 약 $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration 분량이 변환 대기 중';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => '휴대폰을 충전기에 연결하면 준비돼요. 녹음은 평소처럼 계속돼요.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi가 몇 시간마다 밀린 분량을 처리해요. 녹음은 평소처럼 계속돼요.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => '배터리가 부족해 충전기 연결을 기다리고 있어요. 녹음은 평소처럼 계속돼요.';
+
+  @override
+  String get onDeviceTranscribeNow => '지금 변환';
+
+  @override
+  String get onDeviceUsesBattery => '배터리 사용';
+
+  @override
+  String get onDeviceTranscribing => '변환 중…';
+
+  @override
+  String get onDeviceWaitingForCharger => '충전 대기 중';
+
+  @override
+  String get onDeviceWaitingToTranscribe => '변환 대기 중';
+
+  @override
+  String get onDeviceWaitingForSetup => '저장됨, 설정 대기 중';
+
+  @override
+  String get onDeviceTranscribedOnIphone => '이 iPhone에서 변환됨';
+
+  @override
+  String get onDeviceTranscribedOnPhone => '이 휴대폰에서 변환됨';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => '이 iPhone에서 변환 및 요약됨';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud에서 요약됨';
+
+  @override
+  String get onDeviceWhyPhoneTitle => '휴대폰에서 처리된 이유';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => '이번 달 한도에 도달해서 Omi가 휴대폰에서 이 내용을 변환했어요.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => '사용량을 아끼려고 이 휴대폰에서 변환하도록 선택했어요.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => '요약도 이 iPhone에서 작성됐어요.';
+
+  @override
+  String get onDeviceWhyNoSummary => '모든 것을 이 휴대폰에만 보관하도록 설정해서 요약이 없어요.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Omi Cloud가 이 요약을 작성한 이유';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      '이 iPhone은 자체적으로 요약할 수 없어요(iPhone 15 Pro 이상 필요). 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 사용량에 포함되지 않아요.';
+
+  @override
+  String get onDeviceWhyCloudPhone => '이 휴대폰은 자체적으로 요약할 수 없어요. 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 사용량에 포함되지 않아요.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
+
+  @override
+  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+
+  @override
+  String get onDeviceKeepEverything => '모두 이 휴대폰에 보관';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => '텍스트만, 요약 없음';
+
+  @override
+  String get onDeviceAfterLiveHours => '한도에 도달하면';
+
+  @override
+  String get onDeviceWhen => '시점';
+
+  @override
+  String get onDeviceSummaries => '요약';
+
+  @override
+  String get onDeviceSummariesOnIphone => '이 iPhone에서';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud에서';
+
+  @override
+  String get onDeviceSaveLiveHours => '항상 이 휴대폰에서 변환';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => '사용량을 아껴요. 화자 표시는 없어요.';
+
+  @override
+  String get onDeviceOnThisPhone => '이 휴대폰';
+
+  @override
+  String get onDeviceAudioWaiting => '휴대폰에서 대기 중인 오디오';
+
+  @override
+  String get onDeviceRemoveModel => '음성 모델 삭제';
+
+  @override
+  String get onDeviceRemoveModelTitle => '음성 모델을 삭제할까요?';
+
+  @override
+  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 사용량이 초기화될 때까지 녹음은 이 휴대폰에서 기다려요.';
+
+  @override
+  String get onDeviceRemove => '삭제';
+
+  @override
+  String get onDeviceFinishSetupTitle => '설정을 완료하고 텍스트를 확인하세요';
+
+  @override
+  String get onDeviceFinishSetupBody => '이번 달 한도에 도달했어요. Omi는 계속 휴대폰에 오디오를 녹음하고 저장하고 있어요. 음성 모델을 다운로드하면 밀린 부분을 따라잡아요.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size 다운로드';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 사용량이 초기화되거나 업그레이드할 때까지 오디오는 저장돼 있어요.';
+
+  @override
+  String get onDeviceEntrySubtitle => '한도에 도달하면 이 휴대폰에서 변환';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '$percent% 사용 · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '$percent% 사용 · 녹음이 약 $hours시간 남음 · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => '사용량을 더 받기';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return '음성을 준비하는 중 · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return '이번 달 한도에 도달했습니다. 녹음은 저장되어 있으며 한도가 $date에 초기화된 뒤 받아적습니다.';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return '새 녹음은 이 휴대폰에서 받아적습니다. 대기 중인 녹음은 한도가 $date에 초기화된 뒤 받아적습니다.';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return '녹음, $time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · 받아쓰기 대기';
+  }
+
+  @override
+  String get heldAudioLiveTitle => '클라우드 받아쓰기가 일시중지됨';
+
+  @override
+  String get heldAudioLiveBody => '이번 달 한도에 도달했습니다. Omi는 계속 녹음합니다.';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '한도 이후 $minutes분 녹음됨';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '한도가 $date에 초기화된 뒤 받아쓰기';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration 대기 중';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '한도가 $date에 초기화된 뒤 받아쓰기';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration 분량이 변환 대기 중';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '외 $count개',
+      one: '외 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => '대기 중인 녹음을 텍스트로 변환하고 있어요';
+
+  @override
+  String get processingPaused => '처리가 일시 중지되었습니다. 이번 달 한도에 도달했습니다.';
+
+  @override
+  String get processingStored => '녹음과 전사 내용이 저장되었습니다. 대기 중인 녹음은 처리를 선택할 때까지 대기합니다.';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration 대기 중 · 지금 처리하면 이번 달 할당량의 약 $percent%를 사용합니다';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return '약 $hours시간의 처리 · 이번 달 할당량의 $percent%.';
+  }
+
+  @override
+  String get processingNewestFirst => '남은 할당량에 맞춰 최신 녹음부터 처리합니다. 나머지는 대기 상태로 남습니다.';
+
+  @override
+  String get processingAction => '대기 중인 녹음 처리';
+
+  @override
+  String get processingProgress => '대기 중인 녹음을 처리하는 중…';
+
+  @override
+  String get processingDeferred => '처리 대기 중';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대기 중인 대화 $count개',
+      one: '대기 중인 대화 1개',
+    );
+    return '$_temp0';
+  }
 
   @override
   String playbackPartialAudioSaved(String saved, String total) {

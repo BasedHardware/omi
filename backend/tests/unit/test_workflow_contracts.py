@@ -1466,6 +1466,11 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m' in listen
     assert 'TARGET_REVISION: ${{ github.event.inputs.helm_revision }}' in listen
     assert 'BACKEND_LISTEN_ROLLBACK_REVISION' not in listen
+    # A listen rollback must not roll back or uninstall the NEG coverage
+    # exporter; it is a separate monitoring release (2026-10-18 rollback
+    # 39161774715 uninstalled its only revision).
+    assert 'uninstall' not in listen
+    assert 'RELEASE=prod-omi-neg-coverage-exporter' not in listen
     assert 'BACKEND_LISTEN_SOURCE_SHA=$RUNNING_TAG' not in listen
     gate_condition = "if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}"
     assert listen.count(gate_condition) == 2

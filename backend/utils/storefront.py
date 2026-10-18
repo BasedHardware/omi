@@ -5,7 +5,10 @@ from pathlib import Path
 import json
 from typing import Any, Callable, Literal
 
+from config import ladder_v1 as ladder_policy
 from models.storefront import (
+    StorefrontCapChoice,
+    ChatAtCap,
     StorefrontCurrent,
     StorefrontPrice,
     StorefrontResponse,
@@ -14,6 +17,10 @@ from models.storefront import (
 )
 from models.users import Subscription
 from utils.storefront_copy import (
+    copy_for,
+    chat_at_cap,
+    format_date,
+    format_money,
     blocked_line,
     bullets,
     cta_label,
@@ -351,6 +358,16 @@ def build_storefront(
             )
             want_switch = is_current and current_interval == 'month' and not resubscribe_only and 'year' in offered
             prices = _prices_for(rows, offered=offered, locale=locale, switch_yearly=want_switch)
+            if want_switch and subscription.current_period_end:
+                for item in prices:
+                    if item.interval == 'year' and item.cta_label:
+                        item.confirm_lines = [
+                            line.format(
+                                date=format_date(subscription.current_period_end, locale),
+                                amount=format_money(item.amount_minor, item.currency),
+                            )
+                            for line in copy_for(locale)['prices']['confirm_yearly_lines']
+                        ]
             if resubscribe_this and current_price_id:
                 prices = [item for item in prices if item.price_id == current_price_id]
             switch = want_switch and any(item.cta_label for item in prices)
@@ -453,7 +470,27 @@ def build_storefront(
         locale=locale,
         currency=current_currency,
     )
+    at_cap = None
+    chat_pause = None
+    if (
+        ladder_policy.enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
+        and not legacy
+        and usage.kind == 'usage_budget'
+        and usage.percent is not None
+        and usage.percent >= 100
+        and usage.period_id is not None
+    ):
+        from datetime import datetime, timezone
+
+        # usage period_id is the charged calendar month; reset is its next month.
+        year, month = map(int, usage.period_id.split('-'))
+        reset_at = int(datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=timezone.utc).timestamp())
+        chat_pause = ChatAtCap(**chat_at_cap(current_plan, reset_at, locale))
+        at_cap = dict(copy_for(locale)['at_cap'])
+        at_cap['body'] = at_cap['body'].format(date=format_date(reset_at, locale))
     return StorefrontResponse(
+        chat_at_cap=chat_pause,
+        at_cap=StorefrontCapChoice(**at_cap) if at_cap is not None else None,
         catalog_revision=catalog_revision,
         header=header(
             legacy=legacy,

@@ -420,23 +420,6 @@ jobs:
           echo "Image after rollback: $AFTER"
           helm -n "$NS" history "$RELEASE" --max 10
 
-      - name: Roll back or remove NEG coverage exporter Helm release
-        if: ${{ github.event.inputs.mode == 'rollback' && github.event.inputs.environment == 'prod' }}
-        run: |
-          set -euo pipefail
-          RELEASE=prod-omi-neg-coverage-exporter
-          NS=prod-omi-monitoring
-          if helm -n "$NS" status "$RELEASE" >/dev/null 2>&1; then
-            REVISION_COUNT="$(helm -n "$NS" history "$RELEASE" --output json | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
-            if (( REVISION_COUNT > 1 )); then
-              helm -n "$NS" rollback "$RELEASE" --wait --timeout 5m
-            else
-              helm -n "$NS" uninstall "$RELEASE" --wait --timeout 5m
-            fi
-          else
-            echo "No NEG coverage exporter Helm release to roll back."
-          fi
-
       - name: Verify rollout
         run: |
           # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
