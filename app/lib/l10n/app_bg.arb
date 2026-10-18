@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди.",
     "home": "Начало",
     "failedToUpdateBaselineStatus": "Не можа да се актуализира този спомен. Опитайте отново.",
-    "memoryAllowUse": "Разреши използване",
-    "memoryDontUse": "Не използвай",
     "unstarConversation": "Премахни звездата от разговора",
     "moreOptions": "Още опции",
     "filterByDate": "Филтриране по дата",

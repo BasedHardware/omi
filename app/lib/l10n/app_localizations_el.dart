@@ -2008,12 +2008,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
-  String get memoryAllowUse => 'Να επιτρέπεται η χρήση';
-
-  @override
-  String get memoryDontUse => 'Να μην χρησιμοποιείται';
-
-  @override
   String get undo => 'Αναίρεση';
 
   @override

@@ -1991,12 +1991,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
-  String get memoryAllowUse => 'Povolit použití';
-
-  @override
-  String get memoryDontUse => 'Nepoužívat';
-
-  @override
   String get undo => 'Vrátit zpět';
 
   @override

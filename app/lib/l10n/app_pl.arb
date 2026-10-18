@@ -3210,8 +3210,6 @@
     "speechProfileEnrollmentPrompt": "Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.",
     "home": "Główna",
     "failedToUpdateBaselineStatus": "Nie udało się zaktualizować tego wspomnienia. Spróbuj ponownie.",
-    "memoryAllowUse": "Zezwól na użycie",
-    "memoryDontUse": "Nie używaj",
     "unstarConversation": "Usuń gwiazdkę z rozmowy",
     "moreOptions": "Więcej opcji",
     "filterByDate": "Filtruj według daty",

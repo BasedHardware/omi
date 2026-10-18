@@ -2009,12 +2009,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get memoryHistory => 'Verlauf';
 
   @override
-  String get memoryAllowUse => 'Verwendung erlauben';
-
-  @override
-  String get memoryDontUse => 'Nicht verwenden';
-
-  @override
   String get undo => 'Rückgängig';
 
   @override

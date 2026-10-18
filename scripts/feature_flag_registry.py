@@ -136,7 +136,7 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                 if kind == "posthog":
                     if entry.get("posthog") != {"row": "delete"}:
                         errors.append(f"{label}: retired posthog rows require posthog row: delete")
-                elif kind in {"hardcoded", "env"}:
+                elif kind in {"hardcoded", "env", "server_capability"}:
                     if "posthog" in entry:
                         errors.append(f"{label}: retired hardcoded/env entries must omit posthog")
                 else:

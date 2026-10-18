@@ -1994,12 +1994,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryHistory => 'Geschiedenis';
 
   @override
-  String get memoryAllowUse => 'Gebruik toestaan';
-
-  @override
-  String get memoryDontUse => 'Niet gebruiken';
-
-  @override
   String get undo => 'Ongedaan maken';
 
   @override

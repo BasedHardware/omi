@@ -1988,12 +1988,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistory => 'Istorija';
 
   @override
-  String get memoryAllowUse => 'Leisti naudoti';
-
-  @override
-  String get memoryDontUse => 'Nenaudoti';
-
-  @override
   String get undo => 'Atšaukti';
 
   @override

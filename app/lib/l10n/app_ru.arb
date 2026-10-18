@@ -3210,8 +3210,6 @@
     "speechProfileEnrollmentPrompt": "Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.",
     "home": "Главная",
     "failedToUpdateBaselineStatus": "Не удалось обновить это воспоминание. Попробуйте еще раз.",
-    "memoryAllowUse": "Разрешить использование",
-    "memoryDontUse": "Не использовать",
     "unstarConversation": "Убрать звезду с разговора",
     "moreOptions": "Дополнительные параметры",
     "filterByDate": "Фильтровать по дате",

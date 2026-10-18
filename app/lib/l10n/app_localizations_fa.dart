@@ -1987,12 +1987,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryHistory => 'تاریخچه';
 
   @override
-  String get memoryAllowUse => 'اجازه استفاده';
-
-  @override
-  String get memoryDontUse => 'استفاده نکن';
-
-  @override
   String get undo => 'بازگشت';
 
   @override

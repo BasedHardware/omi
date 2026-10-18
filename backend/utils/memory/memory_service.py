@@ -101,7 +101,6 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_visibility,
     update_canonical_memory_product_fields,
     update_canonical_memory_review,
-    is_direct_user_write_authority,
     write_canonical_external_memory,
 )
 from utils.memory.product_memory_read_service import (
@@ -131,15 +130,7 @@ from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system import ensure_canonical_apply_control_state
-from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout_sync
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
-from utils.memory.belief_model import (
-    belief_model_enabled,
-    memory_use_suppressed,
-    normalize_temporal_read_view,
-    public_belief_overlay_json,
-    temporal_view_allows_record,
-)
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
     UniversalListCursorError,
@@ -548,7 +539,6 @@ class CanonicalMemoryBackend:
             include_archive=include_archive,
             now=now,
             budget=budget,
-            view=view,
             as_of=as_of,
         )
 
@@ -581,8 +571,6 @@ class CanonicalMemoryBackend:
             "now": now,
             "budget": budget,
         }
-        if view != 'released':
-            read_kwargs["view"] = view
         if as_of is not None:
             read_kwargs["as_of"] = as_of
         return [truncate_locked_memory_preview(memory) for memory in read_canonical_memories(uid, **read_kwargs)]
@@ -598,7 +586,6 @@ class CanonicalMemoryBackend:
         include_archive: bool,
         now: Optional[datetime],
         budget: Optional[ListReadBudget],
-        view: str,
         as_of: Optional[datetime],
     ) -> List[MemoryDB]:
         """Fill one offset window from bounded canonical keyset pages.
@@ -633,10 +620,6 @@ class CanonicalMemoryBackend:
                     "now": now,
                     "budget": budget,
                 }
-                # Released callers and test fakes keep the historical kwarg set.
-                # Temporal arguments are added only when this read opted in.
-                if view != "released":
-                    scan_kwargs["view"] = view
                 if as_of is not None:
                     scan_kwargs["as_of"] = as_of
                 try:
@@ -698,8 +681,6 @@ class CanonicalMemoryBackend:
         }
         if ledger_kinds is not None:
             search_kwargs["ledger_kinds"] = ledger_kinds
-        if view != 'released':
-            search_kwargs["view"] = view
         if as_of is not None:
             search_kwargs["as_of"] = as_of
         # Empty ledger queries return without provider IO and are not probe
@@ -2589,8 +2570,6 @@ class MemoryService:
                 "now": now,
                 "budget": budget,
             }
-            if view != 'released':
-                read_kwargs["view"] = view
             if as_of is not None:
                 read_kwargs["as_of"] = as_of
             reader = self._canonical.read_authoritative if authoritative else self._canonical.read
@@ -2665,8 +2644,6 @@ class MemoryService:
                 "now": now,
                 "budget": budget,
             }
-            if view != 'released':
-                canonical_kwargs["view"] = view
             if as_of is not None:
                 canonical_kwargs["as_of"] = as_of
             canonical = self._canonical_read(uid, authoritative=authoritative, **canonical_kwargs)
@@ -2958,8 +2935,7 @@ class MemoryService:
         bounded Firestore keyset scan — never a full-set reload.
         """
         bounded_limit = max(1, min(int(limit or 100), HistoricalMemoryAdapter.MAX_PAGE_SIZE))
-        requested_view = normalize_temporal_read_view(view)
-        temporal_view = requested_view if belief_model_enabled() else 'released'
+        temporal_view = 'released'
         # ``as_of`` is an explicit traversal anchor.  ``now`` remains the
         # evaluation clock for callers that do not opt into a stable snapshot;
         # it is intentionally not smuggled into a cursor clients cannot echo.
@@ -3107,12 +3083,7 @@ class MemoryService:
                     )
                     if take_canonical:
                         assert canonical_memory is not None
-                        accepted = temporal_view == 'released' or temporal_view_allows_record(
-                            canonical_memory,
-                            view=temporal_view,
-                            now=temporal_clock,
-                            include_archive=include_archive,
-                        )
+                        accepted = True
                         if accepted:
                             page.append(canonical_memory)
                         canonical.consume()
@@ -3120,12 +3091,7 @@ class MemoryService:
                             canonical_kept += 1
                         continue
                     assert historical_memory is not None
-                    accepted = temporal_view == 'released' or temporal_view_allows_record(
-                        historical_memory,
-                        view=temporal_view,
-                        now=temporal_clock,
-                        include_archive=include_archive,
-                    )
+                    accepted = True
                     if accepted:
                         page.append(historical_memory)
                     historical.consume()
@@ -3260,9 +3226,6 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
     ) -> List[MemorySearchMatch]:
-        requested_view = normalize_temporal_read_view(view)
-        temporal_view = requested_view if belief_model_enabled() else 'released'
-        temporal_clock = as_of or datetime.now(timezone.utc)
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
         # Callers that already over-fetch (e.g. timeframe-scoped chat) pass candidate_limit.
@@ -3276,11 +3239,6 @@ class MemoryService:
                 "device_scope_request": device_scope_request,
                 "item_filter": canonical_item_filter,
             }
-            if temporal_view != 'released':
-                # The canonical adapter owns candidate retrieval.  Passing the
-                # same bounded view/anchor through lets it retain stale rows
-                # for history instead of losing them to released filtering.
-                canonical_kwargs.update(view=temporal_view, as_of=as_of)
             if ledger_kinds is not None:
                 canonical_kwargs["ledger_kinds"] = ledger_kinds
             canonical = self._canonical.search(
@@ -3322,15 +3280,6 @@ class MemoryService:
                 return False
             # Search is an automated evidence consumer, including explicit
             # dated recall. Owner history inspection uses list/history routes.
-            if belief_model_enabled() and memory_use_suppressed(memory):
-                return False
-            if temporal_view != 'released' and not temporal_view_allows_record(
-                memory,
-                view=temporal_view,
-                now=temporal_clock,
-                include_archive=False,
-            ):
-                return False
             return True
 
         results = [match for match in by_id.values() if _result_allowed(match.memory)]
@@ -3537,10 +3486,6 @@ class MemoryService:
         """
         bounded_limit = max(1, min(int(limit or 100), 500))
         bounded_offset = max(0, int(offset or 0))
-        requested_view = normalize_temporal_read_view(view)
-        temporal_view = requested_view if belief_model_enabled() else 'released'
-        assessment_now = now or datetime.now(timezone.utc)
-        temporal_clock = as_of or assessment_now
         if (
             policy.consumer
             in {
@@ -3552,106 +3497,6 @@ class MemoryService:
         ):
             return self._default_product_search_response(uid, query, [], limit=bounded_limit, offset=bounded_offset)
 
-        # Temporal product reads use the bounded cursor stream.  The released
-        # compatibility path below intentionally keeps its legacy ``read``
-        # call shape, but a beta history/useful-now query must never materialize
-        # an entire account just to answer a text search.  Continue through a
-        # finite number of existing mixed-list pages and disclose an incomplete
-        # candidate window to callers.
-        if temporal_view != 'released':
-            query_tokens = {
-                token.lower() for token in (query or '').replace('.', ' ').replace(',', ' ').split() if len(token) > 2
-            }
-            page_size = 500
-            max_pages = 10
-            target_end = bounded_offset + bounded_limit
-            temporal_rows: List[MemoryDB] = []
-            cursor: Optional[str] = None
-            pages_scanned = 0
-            scan_truncated = False
-            while len(temporal_rows) < target_end and pages_scanned < max_pages:
-                pages_scanned += 1
-                page = self.read_page(
-                    uid,
-                    limit=page_size,
-                    cursor=cursor,
-                    include_pending_processing=False,
-                    include_archive=False,
-                    now=assessment_now,
-                    view=temporal_view,
-                    as_of=as_of,
-                )
-                for memory in page.memories:
-                    # ``read_page`` owns identity/source/privacy fences.  The
-                    # model-facing product seam also vetoes explicit use
-                    # suppression and owner rejection before text matching.
-                    if memory.is_locked or memory.user_review is False:
-                        continue
-                    if belief_model_enabled() and memory_use_suppressed(memory):
-                        continue
-                    if memory.memory_tier == MemoryTier.archive:
-                        continue
-                    if not temporal_view_allows_record(
-                        memory,
-                        view=temporal_view,
-                        now=temporal_clock,
-                        include_archive=False,
-                    ):
-                        continue
-                    content = memory.content or ''
-                    if query_tokens and not any(token in content.lower() for token in query_tokens):
-                        continue
-                    temporal_rows.append(memory)
-                    if len(temporal_rows) >= target_end:
-                        break
-                if page.truncated:
-                    scan_truncated = True
-                    cursor = None
-                    break
-                cursor = page.next_cursor
-                if not cursor:
-                    break
-            if cursor and pages_scanned >= max_pages and len(temporal_rows) < target_end:
-                scan_truncated = True
-
-            items: List[Dict[str, Any]] = []
-            for memory in temporal_rows:
-                tier = memory.memory_tier or MemoryTier.long_term
-                ledger_status = getattr(memory, 'ledger_status', None)
-                lifecycle_status = getattr(ledger_status, 'value', None) or 'active'
-                items.append(
-                    {
-                        'memory_id': memory.id,
-                        'memory_layer': 'product_memory',
-                        'tier': tier.value,
-                        'content': memory.content or '',
-                        'lifecycle_status': lifecycle_status,
-                        'processing_state': 'processed',
-                        'confidence': None,
-                        'visibility': memory.visibility,
-                        'visibility_source': 'universal_memory_service',
-                        'source': memory.evidence[0].source_id if memory.evidence else None,
-                        'date': (memory.updated_at or memory.created_at).isoformat(),
-                        'evidence': [evidence.model_dump(mode='json') for evidence in memory.evidence],
-                        'agent_use': 'default_access_memory',
-                        'access_reason': 'default_memory_allowed',
-                        'superseded_by': memory.superseded_by,
-                        **public_belief_overlay_json(memory, now=temporal_clock),
-                    }
-                )
-            selected = items[bounded_offset : bounded_offset + bounded_limit]
-            result = self._default_product_search_response(
-                uid,
-                query,
-                selected,
-                limit=bounded_limit,
-                offset=bounded_offset,
-                total_count=len(items),
-            )
-            result['truncated'] = scan_truncated
-            result['has_more'] = bool(scan_truncated or cursor or len(items) > target_end)
-            return result
-
         # Read one bounded merged window. Calling ``read`` once avoids the
         # previous page-by-page prefix reread, which grew to O(N²) Firestore
         # reads as the compatibility offset advanced.
@@ -3660,12 +3505,9 @@ class MemoryService:
             "offset": 0,
             "include_pending_processing": False,
             # Preserve the released adapter's historical ``now=None`` call
-            # shape. Temporal views need an assessment clock before filtering;
-            # released reads retain the caller's original clock semantics.
-            "now": assessment_now if temporal_view != 'released' or now is not None else now,
+            # shape; current reads retain the caller's original clock semantics.
+            "now": now,
         }
-        if temporal_view != 'released':
-            read_kwargs["view"] = temporal_view
         if as_of is not None:
             read_kwargs["as_of"] = as_of
         # Search keeps the authoritative collection read. List reads are the
@@ -3680,13 +3522,6 @@ class MemoryService:
             # archive_requires_explicit_query: this default product search never
             # admits Archive, regardless of physical origin.
             if memory.is_locked:
-                continue
-            if temporal_view != 'released' and not temporal_view_allows_record(
-                memory,
-                view=temporal_view,
-                now=temporal_clock,
-                include_archive=policy.archive_capability,
-            ):
                 continue
             if memory.memory_tier == MemoryTier.archive:
                 continue
@@ -3715,7 +3550,6 @@ class MemoryService:
                     "agent_use": "default_access_memory",
                     "access_reason": "default_memory_allowed",
                     "superseded_by": None,
-                    **public_belief_overlay_json(memory, now=assessment_now),
                 }
             )
 
@@ -3917,74 +3751,6 @@ class MemoryService:
         if item is None:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
         return memory_item_to_memorydb(item)
-
-    def _direct_user_ledger_admitted(self, uid: str, authority: object | None) -> bool:
-        """Require route authority, fresh JIT ingress, and stable ledger mode."""
-        if not is_direct_user_write_authority(authority):
-            return False
-        decision = resolve_jit_rollout_sync(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-            force_refresh=True,
-        )
-        if not decision.permits_work:
-            return False
-        control = ensure_canonical_apply_control_state(uid, db_client=self.db_client)
-        return control.writer_mode == WriterMode.ledger
-
-    def _write_direct_user_fact(
-        self,
-        uid: str,
-        memory_db: MemoryDB,
-        *,
-        consumer: str,
-        authority: object,
-    ) -> MemoryDB:
-        """Persist one explicitly typed memory through the ledger fact seam."""
-        provenance = self._direct_user_fact_provenance(memory_db, consumer=consumer)
-        memory_id = save_fact(
-            uid,
-            memory_db.content,
-            provenance=provenance,
-            write_reason=LedgerWriteReason.direct_user_statement,
-            subject_scope=memory_db.subject_scope or MemorySubjectScope.primary_user,
-            subject_entity_id=memory_db.subject_entity_id,
-            predicate=memory_db.predicate,
-            arguments=memory_db.arguments,
-            valid_from=memory_db.valid_at,
-            visibility=cast(Literal["private", "public", "shared"], memory_db.visibility or "private"),
-            db_client=self.db_client,
-            _direct_user_authority=authority,
-        )
-        item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
-        if item is None:
-            raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
-        return memory_item_to_memorydb(item)
-
-    @staticmethod
-    def _direct_user_fact_provenance(memory_db: MemoryDB, *, consumer: str) -> LedgerProvenance:
-        return LedgerProvenance(
-            source_id=f"{consumer}:{memory_db.id}",
-            source_type="explicit_user_statement",
-            source_version="v3_memory_create.v1",
-            action_id=f"{consumer}:memory:{memory_db.id}",
-            artifact_ref={"memory_id": memory_db.id},
-        )
-
-    def _validate_direct_user_fact(self, memory_db: MemoryDB, *, consumer: str) -> None:
-        """Run the same semantic model validation as save_fact without I/O."""
-        LedgerWrite(
-            kind=MemoryKind.fact,
-            content=memory_db.content,
-            provenance=self._direct_user_fact_provenance(memory_db, consumer=consumer),
-            write_reason=LedgerWriteReason.direct_user_statement,
-            subject_scope=memory_db.subject_scope or MemorySubjectScope.primary_user,
-            subject_entity_id=memory_db.subject_entity_id,
-            predicate=memory_db.predicate,
-            arguments=memory_db.arguments,
-            valid_from=memory_db.valid_at,
-            visibility=cast(Literal["private", "public", "shared"], memory_db.visibility or "private"),
-        )
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
@@ -4607,20 +4373,10 @@ class MemoryService:
         operation: str,
         upsert_vector: bool = True,
         require_canonical_promotion: bool = True,
-        direct_user_authority: object | None = None,
     ) -> MemoryDB:
         del memory_system, operation, upsert_vector, require_canonical_promotion
         try:
-            if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
-                assert direct_user_authority is not None
-                result = self._write_direct_user_fact(
-                    uid,
-                    memory_db,
-                    consumer=consumer,
-                    authority=direct_user_authority,
-                )
-            else:
-                result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+            result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
         except EvidenceIdentityConflict as exc:
             raise _evidence_identity_conflict_http() from exc
         self._invalidate_prompt_cache(uid)
@@ -4636,34 +4392,9 @@ class MemoryService:
         operation: str,
         upsert_vectors: bool = True,
         require_canonical_promotion: bool = True,
-        direct_user_authority: object | None = None,
     ) -> List[MemoryDB]:
         del memory_system, operation, upsert_vectors, require_canonical_promotion
         self.ensure_canonical_mutation_ready(uid)
-        if direct_user_authority is not None and any(memory.manually_added for memory in memory_dbs):
-            if self._direct_user_ledger_admitted(uid, direct_user_authority):
-                assert direct_user_authority is not None
-                if not all(memory.manually_added for memory in memory_dbs):
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Mixed explicit-user and external memory batch is not admitted in ledger mode",
-                    )
-                for memory in memory_dbs:
-                    self._validate_direct_user_fact(memory, consumer=consumer)
-                try:
-                    results = [
-                        self._write_direct_user_fact(
-                            uid,
-                            memory,
-                            consumer=consumer,
-                            authority=direct_user_authority,
-                        )
-                        for memory in memory_dbs
-                    ]
-                except EvidenceIdentityConflict as exc:
-                    raise _evidence_identity_conflict_http() from exc
-                self._invalidate_prompt_cache(uid)
-                return results
         payloads = [
             required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
             for memory in memory_dbs

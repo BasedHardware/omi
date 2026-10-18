@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。",
     "home": "首页",
     "failedToUpdateBaselineStatus": "无法更新此回忆。请重试。",
-    "memoryAllowUse": "允许使用",
-    "memoryDontUse": "不使用",
     "unstarConversation": "取消星标对话",
     "moreOptions": "更多选项",
     "filterByDate": "按日期筛选",

@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.",
     "home": "Hem",
     "failedToUpdateBaselineStatus": "Det gick inte att uppdatera minnet. Försök igen.",
-    "memoryAllowUse": "Tillåt användning",
-    "memoryDontUse": "Använd inte",
     "unstarConversation": "Ta bort stjärna från konversation",
     "moreOptions": "Fler alternativ",
     "filterByDate": "Filtrera efter datum",

@@ -60,7 +60,6 @@ QUEUE_AGE_SAMPLERS: Dict[str, Dict[str, Any]] = {
         'collection_group': True,
     },
     'daily_summary_hour_groups': {'ephemeral': True},
-    'daily_memory_sweep': {'ephemeral': True},
     'conversation_finalization_jobs': {'summary': True},
 }
 

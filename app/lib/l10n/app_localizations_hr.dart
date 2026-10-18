@@ -1991,12 +1991,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryHistory => 'Povijest';
 
   @override
-  String get memoryAllowUse => 'Dopusti korištenje';
-
-  @override
-  String get memoryDontUse => 'Nemoj koristiti';
-
-  @override
   String get undo => 'Vrati Unazad';
 
   @override

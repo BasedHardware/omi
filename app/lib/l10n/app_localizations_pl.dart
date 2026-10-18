@@ -1992,12 +1992,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
-  String get memoryAllowUse => 'Zezwól na użycie';
-
-  @override
-  String get memoryDontUse => 'Nie używaj';
-
-  @override
   String get undo => 'Cofnij';
 
   @override

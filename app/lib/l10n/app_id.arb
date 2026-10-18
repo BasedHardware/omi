@@ -3210,8 +3210,6 @@
     "speechProfileEnrollmentPrompt": "Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.",
     "home": "Beranda",
     "failedToUpdateBaselineStatus": "Kenangan ini tidak dapat diperbarui. Coba lagi.",
-    "memoryAllowUse": "Izinkan penggunaan",
-    "memoryDontUse": "Jangan gunakan",
     "unstarConversation": "Hapus bintang percakapan",
     "moreOptions": "Opsi lainnya",
     "filterByDate": "Filter berdasarkan tanggal",

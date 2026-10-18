@@ -185,34 +185,6 @@ def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     }
 
 
-def test_jit_projection_declares_optional_plugin_sdk_fallback(contracts_module):
-    projection = _contract(contracts_module, 'jit-qa-typesense-projection-runner')
-
-    # The static import walk sees the optional SDK symbols inside the
-    # ModuleNotFoundError-protected branch of models.structured.  The image
-    # intentionally relies on that backend-owned fallback, so the exclusion
-    # must be scoped to this SDK prefix rather than weakening all dependency
-    # probes.
-    # Walk only the defining module here; the full projection entrypoint graph
-    # is covered by the registry/source-closure checks and is too expensive for
-    # the per-test fast-unit CPU budget.
-    unfiltered = replace(
-        projection,
-        entrypoints=('models.structured',),
-        dependency_probe_exclusions=frozenset(),
-    )
-    dependencies = contracts_module.third_party_dependency_modules(unfiltered)
-    assert 'omi_plugin_sdk.models.ActionItem' in dependencies
-    filtered = replace(unfiltered, dependency_probe_exclusions=projection.dependency_probe_exclusions)
-    filtered_dependencies = contracts_module.third_party_dependency_modules(filtered)
-    assert not any(
-        dependency == 'omi_plugin_sdk' or dependency.startswith('omi_plugin_sdk.')
-        for dependency in filtered_dependencies
-    )
-    assert 'pydantic' in filtered_dependencies
-    assert projection.dependency_probe_exclusions == frozenset({'omi_plugin_sdk'})
-
-
 def test_structured_model_fallback_imports_without_plugin_sdk(tmp_path):
     models_root = tmp_path / 'models'
     models_root.mkdir()

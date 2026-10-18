@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "เพื่อให้ Omi รู้ว่าเสียงไหนเป็นของคุณ — พูดเรื่องอะไรก็ได้ประมาณ 5 วินาที",
     "home": "หน้าหลัก",
     "failedToUpdateBaselineStatus": "ไม่สามารถอัปเดตความทรงจำนี้ได้ ลองอีกครั้ง",
-    "memoryAllowUse": "อนุญาตให้ใช้",
-    "memoryDontUse": "ไม่ต้องใช้",
     "unstarConversation": "เอาดาวออกจากบทสนทนา",
     "moreOptions": "ตัวเลือกเพิ่มเติม",
     "filterByDate": "กรองตามวันที่",

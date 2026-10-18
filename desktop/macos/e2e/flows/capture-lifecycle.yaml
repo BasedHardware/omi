@@ -31,6 +31,9 @@ covers:
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingScreenEvidencePass.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingEvidenceAuthorization.swift
+  # Capture lifecycle exercises ScreenActivitySyncService, which shares this
+  # rollout policy with the negative-feedback remediation feature.
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/BetaDogfoodRollout.swift
   - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift

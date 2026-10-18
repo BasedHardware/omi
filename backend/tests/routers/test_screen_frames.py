@@ -71,11 +71,8 @@ def _request(**overrides) -> ScreenFrameAdjudicationRequest:
 
 @pytest.fixture(autouse=True)
 def _stub_admission_dependencies(monkeypatch):
-    # Egress is default-off in production and the gate sits above everything else in
-    # the handler, so without this every test here would assert against a 409 from
-    # the gate rather than the behaviour it means to pin. TestEgressDisabled below
-    # is where the off state is covered.
-    monkeypatch.setenv("SCREEN_FRAME_EGRESS_ENABLED", "true")
+    # The privacy judge is the user-visible policy gate. Storage and signer
+    # configuration are a hard precondition before adjudication can begin.
     monkeypatch.setenv("BUCKET_SCREEN_FRAMES", "test-screen-frames")
     monkeypatch.setenv("SCREEN_FRAME_SIGNING_SECRET", "test-secret")
 
@@ -99,23 +96,9 @@ def _stub_admission_dependencies(monkeypatch):
 
 
 class TestEgressDisabled:
-    """The gate that makes merging this safe before the bucket exists.
+    """Missing infrastructure blocks adjudication before the privacy judge."""
 
-    The judge is the first step that sends screen bytes to Gemini and it runs two
-    stages before any bucket or signer check, so these assert on what did NOT
-    happen: no judging, and no adjudication stamp.
-    """
-
-    def test_returns_409_when_flag_not_set(self, _stub_admission_dependencies, monkeypatch):
-        monkeypatch.delenv("SCREEN_FRAME_EGRESS_ENABLED", raising=False)
-
-        with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
-
-        assert exc_info.value.status_code == 409
-        assert exc_info.value.detail["code"] == "screen_frame_egress_unavailable"
-
-    def test_returns_409_when_flag_set_but_bucket_missing(self, _stub_admission_dependencies, monkeypatch):
+    def test_returns_409_when_bucket_missing(self, _stub_admission_dependencies, monkeypatch):
         monkeypatch.delenv("BUCKET_SCREEN_FRAMES", raising=False)
 
         with pytest.raises(HTTPException) as exc_info:
@@ -126,15 +109,20 @@ class TestEgressDisabled:
     def test_returns_409_when_no_signer_is_configured(self, _stub_admission_dependencies, monkeypatch):
         monkeypatch.delenv("SCREEN_FRAME_SIGNING_SECRET", raising=False)
         monkeypatch.delenv("SCREEN_FRAME_KMS_KEY", raising=False)
+        judged = MagicMock()
+        monkeypatch.setattr(screen_frames_mod, "judge_canonical", judged)
 
         with pytest.raises(HTTPException) as exc_info:
             screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
 
         assert exc_info.value.status_code == 409
+        judged.assert_not_called()
 
-    def test_nothing_is_judged_and_nothing_is_stamped_when_disabled(self, _stub_admission_dependencies, monkeypatch):
+    def test_nothing_is_judged_and_nothing_is_stamped_without_infrastructure(
+        self, _stub_admission_dependencies, monkeypatch
+    ):
         fake_conversations_db, _fake_users_db, _fake_redis_db = _stub_admission_dependencies
-        monkeypatch.delenv("SCREEN_FRAME_EGRESS_ENABLED", raising=False)
+        monkeypatch.delenv("BUCKET_SCREEN_FRAMES", raising=False)
         judged = MagicMock()
         monkeypatch.setattr(screen_frames_mod, "judge_canonical", judged)
 

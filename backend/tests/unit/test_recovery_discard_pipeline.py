@@ -396,9 +396,6 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
         return Structured(title='Synthetic meeting', overview='Synthetic meeting notes'), False
 
     monkeypatch.setattr(pc, '_get_structured', keep)
-    monkeypatch.setattr(
-        pc, 'resolve_authorized_first_open_plan', lambda **kwargs: SimpleNamespace(defer_derived_work=False)
-    )
     monkeypatch.setattr(pc, 'trigger_conversation_apps', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, '_extract_memories', lambda *args: None)
     monkeypatch.setattr(pc, 'submit_with_context', lambda *args, **kwargs: None)

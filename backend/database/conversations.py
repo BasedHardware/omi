@@ -75,19 +75,6 @@ from config.repeat_work import playback_on_demand
 from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
-from .first_open_obligations import (
-    FIRST_OPEN_EFFECTS,
-    claim_authorized_first_open_work,
-    claim_first_open_work,
-    commit_first_open_app_result,
-    commit_first_open_app_usage,
-    commit_first_open_conversation_patch,
-    commit_first_open_folder_count,
-    complete_first_open_effect,
-    finish_first_open_work,
-    first_open_effect_is_authorized,
-    initialize_first_open_work,
-)
 from config.translation import resolve_ondemand_config
 from config.sync_lineage import sync_lineage_resolve_active_for
 from database.translation_admission import TranslationReservation, reservation_is_current

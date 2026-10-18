@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.",
     "home": "హోమ్",
     "failedToUpdateBaselineStatus": "ఈ జ్ఞాపకాన్ని అప్‌డేట్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
-    "memoryAllowUse": "ఉపయోగాన్ని అనుమతించు",
-    "memoryDontUse": "ఉపయోగించవద్దు",
     "unstarConversation": "సంభాషణ నక్షత్రాన్ని తీసివేయండి",
     "moreOptions": "మరిన్ని ఎంపికలు",
     "filterByDate": "తేదీ ప్రకారం ఫిల్టర్ చేయండి",

@@ -239,11 +239,10 @@ def test_every_cloud_run_job_pins_a_task_timeout(env):
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
-def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
+def test_retired_daily_sweep_runtime_is_absent(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
     maintenance = jobs['memory-maintenance-job']
-    daily = jobs['daily-memory-sweep-job']
-    daily_names = {
+    retired_names = {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
         'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
@@ -258,16 +257,8 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
-    assert daily_names.isdisjoint(maintenance.get('env', {}))
-    assert maintenance.get('secrets', {}).get('POSTHOG_PROJECT_API_KEY') == {
-        'secret': 'POSTHOG_PROJECT_API_KEY',
-        'version': 'latest',
-    }
-    assert {
-        'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
-        'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
-    } <= set(daily.get('env', {}))
-    assert 'POSTHOG_PROJECT_API_KEY' in daily.get('secrets', {})
+    assert retired_names.isdisjoint(maintenance.get('env', {}))
+    assert 'daily-memory-sweep-job' not in jobs
 
 
 def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
@@ -282,7 +273,7 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
     approved_allowlists = {'AUDIO_ARCHIVE_UID_ALLOWLIST'}
     if isinstance(node, dict):
         for key, value in node.items():
-            if key in approved_allowlists or key == 'knowledge-ledger-drain-job':
+            if key in approved_allowlists:
                 continue
             if _contains_uid_outside_approved_allowlists(value, uid):
                 return True
@@ -293,10 +284,8 @@ def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    # The dev-only ledger drain has an explicit operational fence for the two
-    # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists. Only explicitly reviewed operational
-    # allowlists remain approved.
+    # Product/runtime surfaces must contain no first-user or capture admission
+    # lists. Only explicitly reviewed operational allowlists remain approved.
     assert not _contains_uid_outside_approved_allowlists(
         _MANIFEST['environments']['dev'],
         'vi7SA9ckQCe4ccobWNxlbdcNdC23',

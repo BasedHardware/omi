@@ -2006,12 +2006,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryHistory => 'Előzmények';
 
   @override
-  String get memoryAllowUse => 'Használat engedélyezése';
-
-  @override
-  String get memoryDontUse => 'Ne használd';
-
-  @override
   String get undo => 'Visszavonás';
 
   @override

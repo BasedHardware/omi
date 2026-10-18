@@ -45,15 +45,10 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
-    SmartMergeWallclockGapMode,
     smart_merge_flatten_enabled,
     smart_merge_mode,
-    smart_merge_uid_allowed,
-    smart_merge_wallclock_gap_mode,
 )
 from config.jev_decisions import JEV_MODEL
-from config.desktop_pendant_call_link import call_link_mode, capture_windows, desktop_meeting, without_capture_metadata
-from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -96,7 +91,6 @@ from utils.metrics import (
     record_conversation_smart_merge,
     record_conversation_smart_merge_audit,
     record_conversation_smart_merge_refresh,
-    record_conversation_smart_merge_wallclock_shadow,
     record_smart_merge_flatten,
 )
 from utils.observability.fallback import record_fallback
@@ -318,241 +312,10 @@ def _normalize_p_same(p_same: Any) -> Optional[float]:
     return p_same
 
 
-def _wallclock_shadow_emit(
-    would: str,
-    reason: str,
-    p_same: Optional[float],
-    gap_wall: Optional[float],
-    gap_legacy: Optional[float],
-    uid: str,
-    conversation_id: str,
-    survivor_id: str,
-) -> None:
-    record_conversation_smart_merge_wallclock_shadow(would, reason)
-    logger.info(
-        'event=smart_merge_wallclock_shadow would=%s reason=%s p_same=%s gap_wall_s=%s gap_legacy_s=%s uid=%s conversation=%s candidate=%s',
-        would,
-        reason,
-        p_same,
-        gap_wall,
-        gap_legacy,
-        uid,
-        conversation_id,
-        survivor_id,
-    )
-
-
-def _wallclock_shadow(
-    uid: str,
-    conversation_id: str,
-    survivor: Mapping[str, Any],
-    survivor_segments: Sequence[Mapping[str, Any]],
-    new_row: Mapping[str, Any],
-    new_segments: Sequence[Mapping[str, Any]],
-    rows: Sequence[Mapping[str, Any]],
-    survivor_id: str,
-    legacy_gap: Optional[float],
-    load_last_fragment_row: Any,
-) -> None:
-    """What the corrected wall-clock policy would do for a pair the legacy gate
-    skipped. Legacy stays authoritative: this only observes — one extra Jev
-    question at most, one bounded log line and counter, never a write."""
-    corrected: Optional[PairCheck] = None
-    last_fragment_row: Optional[Mapping[str, Any]] = None
-    try:
-        last_fragment_row = load_last_fragment_row()
-        corrected = check_pair(
-            survivor,
-            survivor_segments,
-            new_row,
-            new_segments,
-            wallclock_gap=True,
-            last_fragment_row=last_fragment_row,
-        )
-        if not corrected.same_recording:
-            return
-        if corrected.reason is not None:
-            _wallclock_shadow_emit(
-                'skip', corrected.reason, None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
-            )
-            return
-        built = _pair_state(
-            uid,
-            new_row,
-            new_segments,
-            survivor,
-            survivor_segments,
-            rows,
-            survivor_id,
-            same_recording=True,
-            last_fragment_row=last_fragment_row,
-        )
-        p_same = _normalize_p_same(_ask(built[0])) if built is not None else None
-    except Exception:
-        if corrected is not None and corrected.same_recording and corrected.reason is None:
-            _wallclock_shadow_emit(
-                'skip', 'jev_unavailable', None, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id
-            )
-        return
-    if p_same is None:
-        would, reason = 'skip', 'jev_unavailable'
-    elif p_same >= MERGE_THRESHOLD:
-        would, reason = 'merge', 'jev_same'
-    else:
-        would, reason = 'kept', 'jev_different'
-    _wallclock_shadow_emit(would, reason, p_same, corrected.gap_seconds, legacy_gap, uid, conversation_id, survivor_id)
-
-
-def _continue_call_group(
-    uid: str,
-    new_row: Mapping[str, Any],
-    predecessor: Mapping[str, Any],
-    context: Sequence[Mapping[str, Any]],
-    *,
-    mode: SmartMergeMode,
-) -> None:
-    """Join a Jev-confirmed continuation; never absorb a grouped transcript.
-
-    Relax only automatic capture metadata, after verifying every member. All
-    other eligibility checks run unchanged, and stored transcript fingerprints,
-    windows and group revision fence the decision in the join transaction.
-    """
-    link_mode = call_link_mode(uid)
-    if link_mode == 'off':
-        return
-    predecessor_id, new_id = str(predecessor['id']), str(new_row['id'])
-    snapshots = {}
-    fingerprints = {}
-    for cid in (predecessor_id, new_id):
-        row, fingerprint = conversations_db.get_conversation_for_capture_check(uid, cid)
-        if not row:
-            return
-        snapshots[cid] = dict(row, id=cid)
-        fingerprints[cid] = fingerprint
-    previous, new = snapshots[predecessor_id], snapshots[new_id]
-    expected_windows = capture_windows(previous, new)
-    if expected_windows is None:
-        return
-    group = previous.get('capture_group') or {}
-    members = {m['id'] for m in group.get('members', [])}
-    if not group.get('id') or predecessor_id not in members or new_id in members:
-        return
-    for cid in sorted(members - {predecessor_id}):
-        row = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-        if not row:
-            return
-        snapshots[cid] = dict(row, id=cid)
-    desktops = [cid for cid in members if desktop_meeting(snapshots[cid])]
-    if len(desktops) != 1 or any(snapshots[cid].get('source') != 'omi' for cid in members - set(desktops)):
-        return
-    desktop_id = desktops[0]
-
-    def guard(row: Mapping[str, Any]) -> bool:
-        cid = str(row.get('id'))
-        # Only verified original group members may ignore automatic pointers.
-        pointer = (row.get('external_data') or {}).get('duplicate_capture_of')
-        if cid in members and pointer and pointer not in members:
-            return False
-        checked = without_capture_metadata(row) if cid in members else row
-        # Fence the metadata that informed the pre-Jev policy as well as text.
-        policy_fields = (
-            'source',
-            'client_device_id',
-            'is_locked',
-            'uses_custom_stt',
-            'created_at',
-            'relevance_decision',
-            'smart_merge',
-            'sync_content_revision',
-            'sync_merged_from',
-        )
-        if cid in (predecessor_id, new_id) and any(row.get(key) != snapshots[cid].get(key) for key in policy_fields):
-            return False
-        return (
-            not user_managed(checked)
-            and not row.get('deleted')
-            and not row.get('discarded')
-            and row.get('status') == 'completed'
-        )
-
-    def join_guard(current_rows: Mapping[str, Any], transaction: Any, client: Any) -> bool:
-        return all(
-            guard(dict(row or {}, id=cid)) for cid, row in current_rows.items()
-        ) and not smart_merge_db.has_intervening_discarded(
-            uid, current_rows[predecessor_id], current_rows[new_id], transaction=transaction, firestore_client=client
-        )
-
-    if not all(guard(row) for row in snapshots.values()):
-        return
-    previous_plain = without_capture_metadata(previous)
-    previous_segments, new_segments = _segments(previous), _segments(new)
-    if new_conversation_skip(new, new_segments, capture_end=True) is not None:
-        return
-    if smart_merge_db.has_intervening_discarded(uid, previous, new):
-        return
-    wall_mode = smart_merge_wallclock_gap_mode()
-    check = check_pair(
-        previous_plain, previous_segments, new, new_segments, wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON
-    )
-    if check.reason is not None:
-        if wall_mode is SmartMergeWallclockGapMode.SHADOW:
-            _wallclock_shadow(
-                uid,
-                new_id,
-                previous_plain,
-                previous_segments,
-                new,
-                new_segments,
-                context,
-                predecessor_id,
-                check.gap_seconds,
-                lambda: None,
-            )
-        return
-    built = _pair_state(
-        uid,
-        new,
-        new_segments,
-        previous_plain,
-        previous_segments,
-        context,
-        predecessor_id,
-        same_recording=check.same_recording,
-        last_fragment_row=None,
-    )
-    p_same = _normalize_p_same(_ask(built[0])) if built else None
-    same = p_same is not None and p_same >= MERGE_THRESHOLD
-    decision, reason = 'keep', 'jev_unavailable' if p_same is None else 'jev_different'
-    if same:
-        decision, reason = 'would_link', 'jev_same'
-        if link_mode == 'on' and mode is SmartMergeMode.MERGE:
-            joined = capture_groups_db.join_capture_group(
-                uid,
-                predecessor_id,
-                new_id,
-                {'method': 'desktop_pendant_call_continuation'},
-                expected_windows=expected_windows,
-                expected_fingerprints=fingerprints,
-                call_primary_id=desktop_id,
-                continuation_from=predecessor_id,
-                expected_group_revision=group.get('revision'),
-                join_guard=join_guard,
-            )
-            decision, reason = ('linked', 'jev_same') if joined else ('keep', 'conflict')
-    logger.info(
-        'event=desktop_pendant_call_link role=omi overlap_seconds=0.0 overlap_ratio=0.000 candidate_count=1 decision=%s reason=%s',
-        decision,
-        reason,
-    )
-
-
 def _decide(
     uid: str, conversation_id: str, *, mode: SmartMergeMode, trigger: ProcessingTrigger, owner: str
 ) -> Optional[_MergePlan]:
     """Ask (or reuse) the decision; a plan only in merge mode at or above the threshold."""
-    if not smart_merge_uid_allowed(uid):
-        _skip(mode, SkipReason.UID_NOT_ALLOWED, uid, conversation_id)
-        return None
     new_row = conversations_db.get_conversation(uid, conversation_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not new_row:
         return None
@@ -571,19 +334,6 @@ def _decide(
     survivor_meta = next((row for row in rows if partition(row) == partition(new_row)), None)
     if survivor_meta is None:
         _skip(mode, SkipReason.NO_PREDECESSOR, uid, conversation_id)
-        return None
-    if survivor_meta.get('capture_group') and call_link_mode(uid) != 'off':
-        try:
-            _continue_call_group(uid, new_row, survivor_meta, rows, mode=mode)
-        except Exception:
-            record_fallback(
-                component='conversation_finalization',
-                from_mode='duplicate_capture_check',
-                to_mode='separate_captures',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
         return None
     reason = predecessor_status_skip(survivor_meta)
     if reason is not None:
@@ -611,8 +361,7 @@ def _decide(
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None
-    wall_mode = smart_merge_wallclock_gap_mode()
-    newest = newest_wallclock_fragment(survivor) if wall_mode is not SmartMergeWallclockGapMode.OFF else None
+    newest = newest_wallclock_fragment(survivor)
     last_fragment_id = (
         newest.id if newest is not None and newest.id != survivor_id and valid_fragment_id(newest.id) else None
     )
@@ -626,29 +375,15 @@ def _decide(
     last_fragment_row: Optional[Mapping[str, Any]] = None
     check = check_pair(survivor, survivor_segments, new_row, new_segments)
     if check.reason is not None:
-        if wall_mode is SmartMergeWallclockGapMode.ON:
-            last_fragment_row = _last_fragment_row()
-            check = check_pair(
-                survivor,
-                survivor_segments,
-                new_row,
-                new_segments,
-                wallclock_gap=True,
-                last_fragment_row=last_fragment_row,
-            )
-        elif wall_mode is SmartMergeWallclockGapMode.SHADOW:
-            _wallclock_shadow(
-                uid,
-                conversation_id,
-                survivor,
-                survivor_segments,
-                new_row,
-                new_segments,
-                rows,
-                survivor_id,
-                check.gap_seconds,
-                _last_fragment_row,
-            )
+        last_fragment_row = _last_fragment_row()
+        check = check_pair(
+            survivor,
+            survivor_segments,
+            new_row,
+            new_segments,
+            wallclock_gap=True,
+            last_fragment_row=last_fragment_row,
+        )
     if check.reason is not None:
         _skip(mode, check.reason, uid, conversation_id, check.gap_seconds)
         return None
@@ -715,11 +450,7 @@ def _decide(
             gap_seconds=check.gap_seconds,
             p_same=None if reuse else p_same,
         )
-        gap_path = (
-            f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
-            if wall_mode is SmartMergeWallclockGapMode.ON
-            else ''
-        )
+        gap_path = f" gap_path={'wallclock' if check.same_recording else 'legacy'}"
         logger.info(
             'event=smart_merge mode=%s decision=%s reason=%s p_same=%s gap_s=%s uid=%s conversation=%s candidate=%s%s',
             mode.value,
@@ -744,11 +475,9 @@ def _decide(
         expected_survivor_sync_revision=survivor.get('sync_content_revision'),
         expected_donor_sync_revision=new_row.get('sync_content_revision'),
         same_recording=check.same_recording,
-        last_fragment_id=last_fragment_id if wall_mode is SmartMergeWallclockGapMode.ON else None,
-        wallclock_gap=wall_mode is SmartMergeWallclockGapMode.ON,
-        admission_path=(
-            ('wallclock' if check.same_recording else 'legacy') if wall_mode is SmartMergeWallclockGapMode.ON else None
-        ),
+        last_fragment_id=last_fragment_id,
+        wallclock_gap=True,
+        admission_path='wallclock' if check.same_recording else 'legacy',
     )
 
 

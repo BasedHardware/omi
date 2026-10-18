@@ -1999,12 +1999,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get memoryHistory => 'Cronologia';
 
   @override
-  String get memoryAllowUse => 'Consenti l\'uso';
-
-  @override
-  String get memoryDontUse => 'Non usare';
-
-  @override
   String get undo => 'Annulla';
 
   @override

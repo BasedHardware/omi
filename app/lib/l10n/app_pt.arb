@@ -3210,8 +3210,6 @@
     "speechProfileEnrollmentPrompt": "Para que o Omi saiba qual é a sua voz — fale sobre qualquer coisa por cerca de 5 segundos.",
     "home": "Início",
     "failedToUpdateBaselineStatus": "Não foi possível atualizar esta memória. Tente novamente.",
-    "memoryAllowUse": "Permitir uso",
-    "memoryDontUse": "Não usar",
     "unstarConversation": "Remover estrela da conversa",
     "moreOptions": "Mais opções",
     "filterByDate": "Filtrar por data",

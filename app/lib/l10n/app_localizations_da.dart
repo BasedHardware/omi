@@ -1975,12 +1975,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
-  String get memoryAllowUse => 'Tillad brug';
-
-  @override
-  String get memoryDontUse => 'Brug ikke';
-
-  @override
   String get undo => 'Fortryd';
 
   @override

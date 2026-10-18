@@ -1991,12 +1991,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
-  String get memoryAllowUse => 'Salli käyttö';
-
-  @override
-  String get memoryDontUse => 'Älä käytä';
-
-  @override
   String get undo => 'Kumoa';
 
   @override

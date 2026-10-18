@@ -33,16 +33,12 @@ from routers import (
     desktop_task_gate,
     metrics,
     retired_desktop_proactivity,
-    jit_ledger_snapshot,
-    jit_rollout,
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
-    memory_use,
 )
 from utils.http_client import close_all_clients
 from utils.llm.vertex_reservation_state import reservation_state
-from utils.jit_rollout import close_posthog_control_plane
 from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
@@ -108,7 +104,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await shutdown_managed_spend_ledger()
         await reservation_state.aclose()
         await close_all_clients()
-        close_posthog_control_plane()
         close_free_tier_control_plane()
         stop_metrics_sidecar_server()
 
@@ -144,7 +139,6 @@ def _build_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=[
             "X-Omi-Memory-As-Of",
-            "X-Omi-Memory-Belief-Enabled",
             "X-Omi-Memory-Canonical-Lifecycle-Exposed",
             "X-Omi-Memory-Default-Delete-Supported",
             "X-Omi-Memory-Device-Scope-Supported",
@@ -166,15 +160,11 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_task_gate.router)
     app.include_router(retired_desktop_proactivity.router)
     app.include_router(desktop_experiments.router)
-    app.include_router(jit_ledger_snapshot.router)
-    app.include_router(jit_rollout.router)
     app.include_router(desktop_realtime.router)
     app.include_router(desktop_screen_crisp.router)
     app.include_router(desktop_tts_updates.router)
-    app.include_router(memory_use.router)
     app.include_router(desktop_deprecated.router)
     app.include_router(metrics.router)
-    jit_rollout.validate_jit_rollout_contract(app)
     return app
 
 

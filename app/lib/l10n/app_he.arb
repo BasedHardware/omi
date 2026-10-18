@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.",
     "home": "בית",
     "failedToUpdateBaselineStatus": "לא ניתן לעדכן את הזיכרון הזה. נסה שוב.",
-    "memoryAllowUse": "אפשר שימוש",
-    "memoryDontUse": "אל תשתמש",
     "unstarConversation": "הסרת כוכב מהשיחה",
     "moreOptions": "אפשרויות נוספות",
     "filterByDate": "סינון לפי תאריך",

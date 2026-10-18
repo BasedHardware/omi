@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
     "home": "Home",
     "failedToUpdateBaselineStatus": "Hindi ma-update ang alaalang ito. Subukan ulit.",
-    "memoryAllowUse": "Payagan ang paggamit",
-    "memoryDontUse": "Huwag gamitin",
     "unstarConversation": "Alisin ang bituin sa pag-uusap",
     "moreOptions": "Higit pang mga opsyon",
     "filterByDate": "I-filter ayon sa petsa",

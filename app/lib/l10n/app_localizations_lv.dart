@@ -1996,12 +1996,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistory => 'Vēsture';
 
   @override
-  String get memoryAllowUse => 'Atļaut lietošanu';
-
-  @override
-  String get memoryDontUse => 'Nelietot';
-
-  @override
   String get undo => 'Atsaukt';
 
   @override

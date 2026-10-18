@@ -10598,8 +10598,6 @@
     "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.",
     "home": "خانه",
     "failedToUpdateBaselineStatus": "این یادداشت به‌روز نشد. دوباره امتحان کنید.",
-    "memoryAllowUse": "اجازه استفاده",
-    "memoryDontUse": "استفاده نکن",
     "unstarConversation": "برداشتن ستاره از گفتگو",
     "moreOptions": "گزینه‌های بیشتر",
     "filterByDate": "فیلتر بر اساس تاریخ",

@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.",
     "home": "Domov",
     "failedToUpdateBaselineStatus": "Túto spomienku sa nepodarilo aktualizovať. Skúste to znova.",
-    "memoryAllowUse": "Povoliť použitie",
-    "memoryDontUse": "Nepoužívať",
     "unstarConversation": "Odstrániť hviezdu z konverzácie",
     "moreOptions": "Ďalšie možnosti",
     "filterByDate": "Filtrovať podľa dátumu",

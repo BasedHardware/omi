@@ -1995,12 +1995,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryHistory => 'Sejarah';
 
   @override
-  String get memoryAllowUse => 'Benarkan penggunaan';
-
-  @override
-  String get memoryDontUse => 'Jangan guna';
-
-  @override
   String get undo => 'Buat Asal';
 
   @override

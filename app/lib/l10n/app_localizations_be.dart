@@ -1993,12 +1993,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get memoryHistory => 'Гісторыя';
 
   @override
-  String get memoryAllowUse => 'Дазволіць выкарыстанне';
-
-  @override
-  String get memoryDontUse => 'Не выкарыстоўваць';
-
-  @override
   String get undo => 'Адмяніць';
 
   @override

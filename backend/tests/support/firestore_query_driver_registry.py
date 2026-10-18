@@ -1038,20 +1038,6 @@ _add(
     )
 )
 
-for _fn in (
-    'list_entity_timeline_conversations',
-    'list_entity_timeline_meetings',
-    'list_entity_timeline_screen_activity',
-):
-    _add(
-        DriverEntry(
-            f'database.entity_timeline_sources.{_fn}',
-            base={'uid': UID},
-            domains={'start_date': [None, T0], 'end_date': [None, T1]},
-            neutrals={'limit': _LIMIT},
-        )
-    )
-
 _add(DriverEntry('database.fair_use.get_fair_use_events', base={'uid': UID}, neutrals={'limit': _LIMIT}))
 _add(
     DriverEntry(
@@ -1065,12 +1051,6 @@ _add(
     )
 )
 _add(DriverEntry('database.feedback.list_report_dates', neutrals={'limit': _LIMIT}))
-_add(
-    DriverEntry(
-        'database.first_open_obligations.commit_first_open_folder_count',
-        base={'uid': UID, 'conversation_id': 'conv-1', 'token': 'token-1', 'folder_id': 'folder-1'},
-    )
-)
 _add(
     DriverEntry(
         'database.focus_sessions.get_focus_sessions',

@@ -1996,12 +1996,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get memoryHistory => 'История';
 
   @override
-  String get memoryAllowUse => 'Разреши използване';
-
-  @override
-  String get memoryDontUse => 'Не използвай';
-
-  @override
   String get undo => 'Отмени';
 
   @override

@@ -389,10 +389,8 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
         # Production ships default-off and turns this on deliberately; the harness is
         # the one place the feature must be on, since running it is the whole point.
-        "SCREEN_FRAME_EGRESS_ENABLED": "true",
         "SCREEN_FRAME_SIGNING_SECRET": LOCAL_SCREEN_FRAME_SIGNING_SECRET,
-        # Same reasoning as SCREEN_FRAME_EGRESS_ENABLED. The free tier replaces
-        # managed summarization with an on-device projection; with this off the
+        # The free tier replaces managed summarization with an on-device projection; with this off the
         # harness always processes normally and the local path is unreachable,
         # so the one thing the harness exists to exercise never runs.
         #

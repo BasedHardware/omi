@@ -1996,12 +1996,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistory => 'História';
 
   @override
-  String get memoryAllowUse => 'Povoliť použitie';
-
-  @override
-  String get memoryDontUse => 'Nepoužívať';
-
-  @override
   String get undo => 'Vrátiť späť';
 
   @override

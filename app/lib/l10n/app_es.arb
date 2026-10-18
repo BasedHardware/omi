@@ -3175,8 +3175,6 @@
     "speechProfileEnrollmentPrompt": "Para que Omi sepa cuál es tu voz — habla de cualquier cosa durante unos 5 segundos.",
     "home": "Inicio",
     "failedToUpdateBaselineStatus": "No se pudo actualizar este recuerdo. Inténtalo de nuevo.",
-    "memoryAllowUse": "Permitir uso",
-    "memoryDontUse": "No usar",
     "unstarConversation": "Quitar estrella de la conversación",
     "moreOptions": "Más opciones",
     "filterByDate": "Filtrar por fecha",

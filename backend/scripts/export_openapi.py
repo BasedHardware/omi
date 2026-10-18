@@ -84,7 +84,6 @@ APP_CLIENT_PREFIXES = (
     '/v1/goals',
     '/v1/import',
     '/v1/integrations',
-    '/v1/jit',
     '/v1/knowledge-graph',
     '/v1/mcp',
     '/v1/memories',

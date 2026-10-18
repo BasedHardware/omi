@@ -56,7 +56,7 @@ RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
     """The onboarding-provenance marker consumed by the daily memory sweep
-    (utils/memory/daily_memory_sweep.py) must reflect the runtime's own
+    (the conversation processor) must reflect the runtime's own
     onboarding-admission decision (``host.onboarding_session_id``), not
     ``OnboardingHandler.session_id``: the handler mints its own fallback id
     whenever none is supplied (utils/onboarding.py), so a Settings speech-

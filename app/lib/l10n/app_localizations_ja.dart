@@ -1955,12 +1955,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryHistory => '履歴';
 
   @override
-  String get memoryAllowUse => '使用を許可';
-
-  @override
-  String get memoryDontUse => '使用しない';
-
-  @override
   String get undo => '元に戻す';
 
   @override
