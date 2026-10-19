@@ -372,3 +372,13 @@ def test_paid_spillover_settings_stay_recorded_after_flip(monkeypatch):
     monkeypatch.setenv('STT_PAID_SPILLOVER_BUDGET_ENABLED', 'false')
     monkeypatch.setenv('STT_PAID_SPILLOVER_SONIOX_PER_MINUTE', '0')
     assert paid_admission.enabled() and paid_admission.limit('soniox') == 17
+
+
+def test_invalid_spillover_cap_only_affects_its_provider():
+    from utils.stt import paid_admission
+
+    policy = resolve_listen_policy('owner', flags={'STT_PAID_SPILLOVER_SONIOX_PER_MINUTE': 'bad'})
+    current_listen_policy.set(policy)
+    assert paid_admission.limit('deepgram') == 30
+    with pytest.raises(ValueError):
+        paid_admission.limit('soniox')

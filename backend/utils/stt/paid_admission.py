@@ -42,12 +42,12 @@ def enabled() -> bool:
 
 
 def limit(provider: str) -> int:
-    configured = {
-        'soniox': listen_value('paid_spillover_soniox_per_minute', 'STT_PAID_SPILLOVER_SONIOX_PER_MINUTE', '30'),
-        'modulate': listen_value('paid_spillover_modulate_per_minute', 'STT_PAID_SPILLOVER_MODULATE_PER_MINUTE', '30'),
-        'deepgram': listen_value('paid_spillover_deepgram_per_minute', 'STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE', '30'),
-    }
-    cap = int(configured[provider])
+    field, key = {
+        'soniox': ('paid_spillover_soniox_per_minute', 'STT_PAID_SPILLOVER_SONIOX_PER_MINUTE'),
+        'modulate': ('paid_spillover_modulate_per_minute', 'STT_PAID_SPILLOVER_MODULATE_PER_MINUTE'),
+        'deepgram': ('paid_spillover_deepgram_per_minute', 'STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE'),
+    }[provider]
+    cap = int(listen_value(field, key, '30'))
     if not 0 <= cap <= 10000:
         raise ValueError('Paid spillover cap must be between 0 and 10000')
     return cap
