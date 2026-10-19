@@ -195,7 +195,11 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
         'SYNC_TASKS_QUEUE': 'sync-backfill-fresh',
         'SYNC_BACKFILL_TASKS_QUEUE': 'sync-backfill-fresh',
     }
-    assert services['backend-integration'].env == {'SYNC_TASKS_QUEUE': 'sync-jobs-fresh'}
+    assert services['backend-integration'].env == {
+        'SYNC_TASKS_QUEUE': 'sync-jobs-fresh',
+        # C4: the enrichment-maintenance tick on backend-integration owns summary-debt repair.
+        'SUMMARY_DEBT_REPAIR_ENABLED': 'true',
+    }
     queues = {q.name: q for q in spec.queues}
     recovery = queues['batch-quarantine-recovery'].fields
     assert (recovery['max_concurrent_dispatches'], recovery['max_dispatches_per_second']) == (16, 8.0)
@@ -209,7 +213,8 @@ def test_staging_mirrors_prod_except_names():
     for svc in prod.services:
         twin = staging_services[f'{svc.name}-staging']
         assert set(twin.env) == set(svc.env)
-        assert all(twin.env[k] == f'staging-{v}' for k, v in svc.env.items())
+        # Queue names carry the staging- prefix; every other ops value is identical.
+        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in svc.env.items())
         assert type(twin.max_instances) is type(svc.max_instances)
         assert twin.min_instances == svc.min_instances
     staging_queues = {q.name: q for q in staging.queues}
@@ -570,3 +575,66 @@ def test_train_takes_backfill_queues_from_the_ops_file(tmp_path, project, expect
     assert result.returncode == 0, result.stderr
     values = dict(line.split('=', 1) for line in output.read_text().splitlines())
     assert (values['backfill_queue'], values['worker_queue']) == expected
+
+
+def test_prod_train_leaves_the_backfill_queue_to_the_ops_file(tmp_path):
+    """One owner for the live backfill queue: the config-train, never the train's reconcile."""
+
+    import os
+    import subprocess
+
+    action = yaml.safe_load((ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text())
+    # C10 (lane 10): the lifecycle no longer reconciles any backfill queue; only the
+    # update-only sync-jobs attempt cap remains.
+    step = next(s for s in action['runs']['steps'] if s.get('name') == 'Reconcile sync-jobs attempt contract')
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text('#!/bin/sh\necho "$@" >> "$CALLS"\n')
+    gcloud.chmod(0o755)
+    calls = tmp_path / 'calls'
+    script = (
+        step['run'].replace('${{ inputs.project_id }}', 'based-hardware').replace('${{ inputs.region }}', 'us-central1')
+    )
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'CALLS': str(calls),
+            'BACKFILL_MAX_CONCURRENT_DISPATCHES': '90',
+            'BACKFILL_ENV': 'SYNC_BACKFILL_TASKS_QUEUE=sync-backfill-fresh',
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert 'sync-backfill' not in (
+        calls.read_text() if calls.exists() else ''
+    ), 'a prod train must not create or update the ops-owned backfill queue'
+
+
+@pytest.fixture(scope='module')
+def prod_manifest_services():
+    # Parsed in fixture setup: the 4.5k-line manifest exceeds the fast-unit call-phase budget.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    manifest = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(), Loader=loader)
+    return manifest['environments']['prod']['cloud_run']['services']
+
+
+def test_manifest_queue_values_agree_with_the_ops_file(prod_manifest_services):
+    """Until trains apply ops env directly, a prod key both files declare must carry the same value.
+
+    A disagreement means the next train and the next config-train write different queues.
+    """
+
+    services = prod_manifest_services
+    checked = 0
+    for svc in ops_train.load_ops('prod').services:
+        env = services.get(svc.name, {}).get('env', {})
+        for key, value in svc.env.items():
+            declared = env.get(key)
+            if isinstance(declared, dict) and 'value' in declared:
+                assert (
+                    str(declared['value']) == value
+                ), f'{svc.name}.{key}: manifest {declared["value"]!r} != ops {value!r}'
+                checked += 1
+    assert checked >= 5  # the five queue re-points (#22460) are declared in both today

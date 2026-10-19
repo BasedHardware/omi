@@ -1,20 +1,6 @@
 {
   "entries": [
     {
-      "path": "routers/sync.py",
-      "function": "_run_sync_job_attempt",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe (#22184): best-effort owner prefetch into a local cache; holds no task slot, job lock, ledger claim or conversation authority, so losing it only costs a cache miss"
-    },
-    {
-      "path": "routers/sync.py",
-      "function": "run_sync_job",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe: UID-sequencer lease heartbeat; stop.set() and awaited in finally before the response, so it never outlives the request"
-    },
-    {
       "path": "services/users/account_deletion.py",
       "function": "enqueue_deletion_wipe",
       "kind": "submit_with_context",

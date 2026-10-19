@@ -102,7 +102,7 @@ def _scheduler_backend_paths() -> set[str]:
     return paths
 
 
-@pytest.mark.parametrize('path', sorted(_task_edge_routes() | {'/v2/sync-backfill-sequencer/sweep'}))
+@pytest.mark.parametrize('path', sorted(_task_edge_routes()))
 def test_every_task_and_scheduler_target_is_served_by_workers(path):
     owners = _module_for_path(path)
     assert owners, f'no router defines {path}'

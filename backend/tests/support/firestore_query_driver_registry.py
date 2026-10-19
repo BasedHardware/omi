@@ -150,12 +150,11 @@ BODY_DIGEST = {
     'database.proactivity.cohort_query': 'b14c1c6f3a2f47db38dd468da1bf6b51054d27e6418d813a614cc5b9e1a7a698',
     'database.proactivity.feed_query': '9426ea3253186857c638371d1bcebb7007b92a9430aaad1db5e49e96465ddb84',
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
-    'database.action_items._harvest_legacy_docs': 'dbd3731b503ea8c2f6b9d98bf7cc4a6ffd85bf530ea09660539fb6569ae98114',
+    'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
-    'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
     # Re-reviewed: public size guard rename and correction-parent rejection add
     # no query. The terminal streams still belong to the two driven callees.
@@ -307,6 +306,7 @@ _add(
             'end_date': [None, T1],
             'due_start_date': [None, T0],
             'due_end_date': [None, T1],
+            'probe_filtered_legacy': [False, True],
         },
         neutrals={'limit': _LIMIT_OPT, 'offset': _OFFSET, 'budget': _BUDGET, 'extra_fields': _EXTRA_FIELDS},
     )
@@ -2124,189 +2124,6 @@ _add(
 
 _add(
     CoveredByEntry(
-        'database.sync_backfill_sequencer._first_pending',
-        covered_by=(
-            'database.sync_backfill_sequencer.claim_next',
-            'database.sync_backfill_sequencer.has_pending',
-            'database.sync_backfill_sequencer.pending_head',
-        ),
-        reason='configured pending probe observed inside the listed claim, inspection and presence consumers',
-    )
-)
-_add(
-    CoveredByEntry(
-        'database.sync_backfill_sequencer._pending_for_uid',
-        covered_by=(
-            'database.sync_backfill_sequencer.claim_next',
-            'database.sync_backfill_sequencer.waiting_sample',
-        ),
-        reason='returns a base query object; the terminal streams execute inside '
-        'claim_next/waiting_sample, so it never appears as a caller',
-        expect_observed=False,
-        body_digest=BODY_DIGEST['database.sync_backfill_sequencer._pending_for_uid'],
-    )
-)
-
-
-def _seed_sync_retirement(client, combo, trial):
-    client.documents['sync_backfill_pending/shape-job'] = {'uid': UID, 'job_id': 'shape-job', 'payload': {}}
-    if combo['epoch'] is not None:
-        client.documents[f'sync_backfill_sequencer/{UID}'] = {
-            'active_job_id': 'shape-job',
-            'active_epoch': 1,
-            'active_state': 'dispatching',
-            'active_payload': {},
-        }
-
-
-_SYNC_PROD = (
-    _stub('database.sync_backfill_sequencer.production_stage', True),
-    _stub('database.sync_redrive.enabled', False),
-)
-
-
-def _sync_order_trial(client, combo, trial):
-    client.backfill_newest_first = bool(trial % 2)
-
-
-def _sync_order_patch(client):
-    return unittest.mock.patch(
-        'database.sync_backfill_sequencer.newest_first', side_effect=lambda uid: client.backfill_newest_first
-    )
-
-
-def _seed_sync_preparation(client, combo, trial):
-    _sync_order_trial(client, combo, trial)
-    client.documents[f'sync_backfill_sequencer/{UID}'] = {
-        'active_job_id': 'shape-job',
-        'active_epoch': 1,
-        'active_state': 'running',
-    }
-
-
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.preparation_candidates',
-        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1},
-        trials=2,
-        setup=_seed_sync_preparation,
-        patchers=(
-            *_SYNC_PROD,
-            _sync_order_patch,
-            _stub('database.sync_backfill_sequencer.preparation_width', 4),
-            _stub('database.sync_backfill_sequencer.backlog_threshold', 8),
-        ),
-    )
-)
-
-
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.claim_next',
-        base={'uid': UID},
-        domains={'now': [None, T0], 'expected_job_id': [None, 'expected-job']},
-        trials=2,
-        setup=_sync_order_trial,
-        patchers=(*_SYNC_PROD, _sync_order_patch),
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.due_owners',
-        domains={'now': [None, T0]},
-        neutrals={'limit': _LIMIT},
-        patchers=_SYNC_PROD,
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.due_pending',
-        domains={'now': [None, T0]},
-        neutrals={'limit': _LIMIT},
-        patchers=_SYNC_PROD,
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.repair_owner',
-        base={'uid': UID},
-        domains={'now': [None, T0], 'dry_run': [False, True]},
-        neutrals={'repair_window': (1800, 'staggering controls scheduling, not query filters')},
-        patchers=_SYNC_PROD,
-    )
-)
-_add(
-    CoveredByEntry(
-        'database.sync_backfill_sequencer._has_pending',
-        covered_by=(
-            'database.sync_backfill_sequencer.repair_owner',
-            'database.sync_backfill_sequencer.finish_job',
-            'database.sync_backfill_sequencer.retire_expired',
-            'database.sync_backfill_sequencer.defer_owner',
-        ),
-        reason='bounded presence/successor probes run within the fenced owning transactions',
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.finish_job',
-        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
-        domains={'now': [None, T0]},
-        setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
-        patchers=_SYNC_PROD,
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.finish_expired_job',
-        base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'budget_chain_exhausted'},
-        domains={'now': [None, T0]},
-        setup=_seed(
-            f'sync_backfill_sequencer/{UID}',
-            {'active_job_id': 'shape-job', 'active_epoch': 1, 'lease_expires_at': T0},
-        ),
-        patchers=_SYNC_PROD,
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.retire_expired',
-        base={'uid': UID, 'job_id': 'shape-job'},
-        domains={'now': [None, T0], 'epoch': [None, 1], 'allow_active_owner': [False, True]},
-        setup=_seed_sync_retirement,
-        patchers=_SYNC_PROD,
-    )
-)
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.defer_owner',
-        base={'uid': UID, 'seconds': 120},
-        domains={'now': [None, T0]},
-        setup=_seed(f'sync_backfill_sequencer/{UID}', {'epoch': 1}),
-        patchers=_SYNC_PROD,
-    )
-)
-for _sync_probe in ('pending_head', 'has_pending'):
-    _add(
-        DriverEntry(
-            f'database.sync_backfill_sequencer.{_sync_probe}',
-            base={'uid': UID},
-            trials=2,
-            setup=_sync_order_trial,
-            patchers=(*_SYNC_PROD, _sync_order_patch),
-        )
-    )
-_add(
-    DriverEntry(
-        'database.sync_backfill_sequencer.waiting_sample',
-        base={'uid': UID},
-        domains={'now': [None, T0]},
-        patchers=_SYNC_PROD,
-    )
-)
-
-_add(
-    CoveredByEntry(
         'database.task_recommendations._cleanup_expired_snapshot_receipts',
         covered_by=(
             'database.task_recommendations.get_context_snapshot',
@@ -3180,6 +2997,30 @@ _add(
         },
     )
 )
+
+
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+_provider_stt_outbox = FirestoreProviderSttOutbox(
+    privacy_blocked=lambda row_id: False,
+    create_wake=lambda row: None,
+    collection='batch_pipeline_prod_provider_stt_outbox',
+)
+for _method in ('claim', 'sweep'):
+    _add(
+        DriverEntry(
+            f'database.outbox_provider_stt.FirestoreProviderSttOutbox.{_method}',
+            base={'self': _provider_stt_outbox},
+            neutrals={
+                'now': (T0.timestamp(), 'operand clock only; due/lease checks run per row after the query'),
+                **(
+                    {'n': (4, 'claim count; bounds the page only'), 'lease_seconds': (1800, 'lease length only')}
+                    if _method == 'claim'
+                    else {'limit': _LIMIT}
+                ),
+            },
+        )
+    )
 
 
 _add(

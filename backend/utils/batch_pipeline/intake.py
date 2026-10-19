@@ -21,7 +21,10 @@ from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import resolve_route
+from database.outbox import OutboxKind, outbox_for
+from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
+from utils.sync import legacy_dark
+from utils.sync.legacy_dark import LegacySyncMode
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
@@ -129,8 +132,13 @@ async def accept_upload(
     byok_enabled: bool = False,
     intake_context: dict | None = None,
     record_router=None,
+    decode=None,
 ) -> JSONResponse | None:
-    """None preserves a prior legacy receipt; batch outcomes never fall through."""
+    """None preserves a prior legacy receipt; batch outcomes never fall through.
+
+    ``decode(max_seconds)`` replaces WAL decoding of ``paths`` for server-held audio
+    (the cap-hold adapter); it must yield the same ``AudioUnit`` shape.
+    """
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
@@ -159,19 +167,25 @@ async def accept_upload(
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:
                     return start_response(status)
+        mode = await run_blocking(db_executor, legacy_dark.current_mode)
+        adopt = None
         if previous:
-            # Existing legacy ownership includes capped/retryable/missing-Redis
-            # recovery. Its original claimant remains the sole authority.
-            return None
-        if byok_enabled:
-            return JSONResponse(
-                status_code=503,
-                headers={'Retry-After': '30'},
-                content={
-                    'code': 'sync_batch_byok_unavailable',
-                    'detail': 'Retain local audio until private processing is available',
-                },
-            )
+            if mode is LegacySyncMode.ON:
+                # Existing legacy ownership includes capped/retryable/missing-Redis
+                # recovery. Its original claimant remains the sole authority.
+                return None
+            # Contract (h) invariant 4: legacy-owned content is acknowledged, never
+            # re-admitted; only a row legacy can no longer finish is adopted, by a
+            # ledger CAS inside the admission transaction.
+            decision = legacy_dark.fence_decision(previous, mode, batch_adopts_stranded=True)
+            if decision.ownership is legacy_dark.LegacyOwnership.CAPPED:
+                # A repeat-failure pause keeps its purpose until it expires.
+                decision = legacy_dark.fence_decision(previous, mode)
+            if decision.action is not legacy_dark.FenceAction.ADMIT_BATCH:
+                return legacy_dark.fence_response(decision, total_files=len(paths), lane=lane)
+            adopt = stranded_adopter(previous)
+        # BYOK uploads are admitted like every other upload (David, 10-19); the
+        # stage never needs request-scoped keys and enrichment runs on Omi's keys.
         seed = WorkItem(
             hashlib.sha256(f'{content_id}:0'.encode()).hexdigest(),
             uid,
@@ -203,12 +217,30 @@ async def accept_upload(
                 loaded_conversation=target,
             )
         if target.get('record_lane_owner') == 'legacy_final_pass_v1':
-            return None
+            if mode is LegacySyncMode.ON:
+                return None
+            # The in-flight legacy final pass owns this recording (h, invariant 4).
+            return legacy_dark.fence_response(
+                legacy_dark.FenceDecision(
+                    legacy_dark.FenceAction.ACK,
+                    legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
+                    legacy_dark.LegacyOwnership.ACTIVE,
+                ),
+                total_files=len(paths),
+                lane=lane,
+            )
         language = normalized_stt_language(target.get('language') or user.get('language'))
         route = resolve_route(language, byok=byok_enabled)
+        # C8: with legacy draining or dark, a language Parakeet cannot serve goes
+        # to the batch provider-STT stage instead of the legacy fallback.
+        provider = mode is not LegacySyncMode.ON and route.stt_route == 'provider'
         # legacy_sync 'on' keeps today's fallback exactly, including unknown and
-        # 'multi' languages; the C8 provider route replaces it in draining/dark.
-        if live_record_enabled_for(uid) and (route.stt_route == 'provider' or language in {'', 'multi'}):
+        # 'multi' languages.
+        if (
+            mode is LegacySyncMode.ON
+            and live_record_enabled_for(uid)
+            and (route.stt_route == 'provider' or language in {'', 'multi'})
+        ):
             # Keep the supported existing provider route. Never silently send
             # an unsupported language to the record worker's fixed Parakeet.
             record_fallback(
@@ -216,7 +248,8 @@ async def accept_upload(
             )
             return None
         record_origin = bool(
-            target
+            not provider
+            and target
             and source == 'desktop'
             and live_record_enabled_for(uid)
             and not target.get('uses_custom_stt')
@@ -228,7 +261,11 @@ async def accept_upload(
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
-        iterator = decode_units(paths, max_seconds=config.max_unit_seconds)
+        iterator = (
+            decode(config.max_unit_seconds)
+            if decode is not None
+            else decode_units(paths, max_seconds=config.max_unit_seconds)
+        )
         items = []
         while unit := await run_blocking(sync_executor, _next_unit, iterator):
             if len(items) >= 128:
@@ -262,7 +299,8 @@ async def accept_upload(
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
-            items.append(replace(item, audio_uri=uri))
+            # Provider units are funded by the provider stage, not GPU compute admission.
+            items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
         binding = ProjectionBinding(
             owner_id=uid,
             job_id=public_job_id,
@@ -279,6 +317,8 @@ async def accept_upload(
             language=target.get('language'),
             record_origin=record_origin,
         )
+        wakes: dict[str, str] = {}
+        outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
         outcome = await run_blocking(
             db_executor,
             admit,
@@ -298,7 +338,19 @@ async def accept_upload(
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
             },
+            enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
+            adopt=adopt,
         )
+        for row_id, wake_token in wakes.items():
+            try:
+                await run_blocking(db_executor, outbox.wake, row_id, wake_token)  # type: ignore[union-attr]
+            except Exception as error:
+                # The row is durable; the outbox sweep re-wakes it (contract (b), invariant 4).
+                logger.warning(
+                    'event=batch_provider_stt action=wake outcome=deferred exception_type=%s', type(error).__name__
+                )
+        if adopt is not None and outcome['outcome'] == 'batch' and outcome.get('job_id') == public_job_id:
+            legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.LEGACY_STRANDED_ADOPTED)
         if outcome['outcome'] == 'batch':
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
@@ -320,6 +372,20 @@ async def accept_upload(
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
+
+
+def stranded_adopter(observed: dict):
+    """admit() ``adopt`` hook: take over only the legacy row we classified, still stranded, unchanged."""
+    fields = ('dispatch_protocol', 'status', 'job_id', 'updated_at', 'repeat_failure_pause_until')
+    expected = tuple(observed.get(name) for name in fields)
+
+    def adopt(existing: dict) -> bool:
+        return (
+            tuple(existing.get(name) for name in fields) == expected
+            and legacy_dark.classify_ledger_row(existing) is legacy_dark.LegacyOwnership.STRANDED
+        )
+
+    return adopt
 
 
 def privacy_blocked_response() -> JSONResponse:
