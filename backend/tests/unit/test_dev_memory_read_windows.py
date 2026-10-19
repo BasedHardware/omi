@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from google.api_core.exceptions import ServiceUnavailable
 
 from database import memories
 from models.memories import MemoryDB
@@ -182,8 +183,6 @@ def test_budget_exhaustion_preserves_truncation_without_4xx(monkeypatch):
 
 
 def test_provider_retry_drops_retained_prefix_and_sees_new_history(monkeypatch):
-    from google.api_core.exceptions import ServiceUnavailable
-
     class RetryStore(Store):
         failed = False
 
