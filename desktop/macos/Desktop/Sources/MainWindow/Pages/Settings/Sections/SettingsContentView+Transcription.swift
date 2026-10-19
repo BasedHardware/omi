@@ -254,6 +254,13 @@ extension SettingsContentView {
           Text("Press Enter or click + to add • Click × to remove")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
+
+          if let vocabularySaveError {
+            Text(vocabularySaveError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("vocabulary-save-error")
+          }
         }
       }
 
