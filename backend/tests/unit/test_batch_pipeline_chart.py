@@ -166,7 +166,8 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     deployment = manifests['Deployment']
     assert deployment['spec']['progressDeadlineSeconds'] == 1800
     pod = deployment['spec']['template']['spec']
-    assert deployment['spec']['replicas'] == 1
+    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
+    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     assert pod['nodeSelector'] == {
         'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
