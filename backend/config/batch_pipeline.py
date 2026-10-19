@@ -197,3 +197,22 @@ def recovery_tasks_enabled() -> bool:
 def projection_pagination_enabled() -> bool:
     """Ship-on fair discovery; false restores the legacy oldest-page scan."""
     return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'
+
+
+DEFAULT_PUBLISH_CONCURRENCY = 4
+MAX_PUBLISH_CONCURRENCY = 16
+
+
+def publish_concurrency() -> int:
+    """Ship-on bounded post-flight publication; 1 is the kill switch.
+
+    Bounds concurrent fenced transitions and cross-owner ordered drains after
+    one GPU flight. ``1`` restores serial transitions with one drain after each
+    accepted transition. Malformed values fall back to that serial path.
+    """
+    raw = os.getenv('BATCH_PIPELINE_PUBLISH_CONCURRENCY', str(DEFAULT_PUBLISH_CONCURRENCY)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 1
+    return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
