@@ -9,7 +9,8 @@ from database import conversations, action_items, users, candidates
 from utils.entity_pages import _facts, resolve_entity  # pyright: ignore[reportPrivateUsage]
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
-from models.product_memory import MemoryAccessPolicy, MemoryTier, ProcessingState, is_default_access_eligible
+from models.product_memory import MemoryAccessPolicy, MemoryTier, MemoryItemStatus
+from models.memory_evidence import SourceState
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.task_intelligence_control import get_task_workflow_control
 from utils.agent_capabilities.errors import AgentRecordUnavailable
@@ -128,29 +129,30 @@ def read_record(uid, ref, *, control_cache=None, diagnostics=None, require_avail
 def _read_memory_record(uid, key, *, require_available=False):
     """Owner-visible memory, with explicit temporary unavailability for Review.
 
-    Ordinary retrieval still omits hidden and locked rows. Review must distinguish
-    those reversible conditions from absent evidence before settling an answer.
+    Review releases by default. Only the explicit terminal exclusions return None;
+    ordinary retrieval continues to omit all unavailable rows.
     Store faults stay exceptions for every caller.
     """
     try:
-        canonical = read_canonical_memory_item(uid, key)
+        canonical = (
+            read_canonical_memory_item(uid, key, include_inactive=True)
+            if require_available
+            else read_canonical_memory_item(uid, key)
+        )
         if canonical:
-            # Review cannot use archive evidence, and explicit rejection is terminal.
+            # This is the complete terminal allowlist for canonical memory evidence.
             if require_available and (
-                canonical.tier == MemoryTier.archive or (canonical.promotion or {}).get('user_review') is False
+                canonical.status in {MemoryItemStatus.hidden, MemoryItemStatus.tombstoned}
+                or canonical.source_state in {SourceState.tombstoned, SourceState.purged}
+                or canonical.tier == MemoryTier.archive
+                or (canonical.promotion or {}).get('user_review') is False
             ):
                 return None
             policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
             now = datetime.now(timezone.utc)
             if not filter_canonical_default_visible_items([canonical], policy=policy, now=now):
-                # Only known processing delays are retryable; being filtered alone
-                # does not establish temporary unavailability. Locks are handled below.
                 if require_available:
-                    access = is_default_access_eligible(canonical, policy, now=now)
-                    if access.reason == 'processing_blocked' or (
-                        access.allowed and canonical.processing_state == ProcessingState.pending
-                    ):
-                        raise AgentRecordUnavailable('Dream memory processing unavailable')
+                    raise AgentRecordUnavailable('Dream memory temporarily unavailable')
                 return None
         row = memory_item_to_memorydb(canonical) if canonical else MemoryService().fetch(uid, key)
     except HTTPException as exc:
@@ -159,7 +161,11 @@ def _read_memory_record(uid, key, *, require_available=False):
         if not unavailable_is_transient(exc):
             return None
         raise
-    if row.user_review is False or row.visibility != 'private' or row.invalid_at is not None:
+    if row.user_review is False:
+        return None
+    if row.visibility != 'private' or row.invalid_at is not None:
+        if require_available:
+            raise AgentRecordUnavailable('Dream memory temporarily unavailable')
         return None
     if row.is_locked:
         if require_available:

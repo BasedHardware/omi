@@ -55,17 +55,19 @@ Task resolution delegates to `utils.task_intelligence.candidate_service`; option
 user description/due/project edits occur inside its existing accept transaction,
 including account generation and task-link checks.
 
-A retryable pre-application conflict (lease loss, a transactional fence race,
-a paywalled or locked memory, a discarded or locked conversation, or vocabulary
-capacity) releases its reserved attention slot and leaves the proposal pending.
-Review evidence reads distinguish temporary invisibility from missing or changed
-evidence, so the same answer can succeed after access or capacity recovers. A `ReviewStale` conflict instead atomically
-refunds the slot and resolves the matching proposal evidence version, returning
-409 once; later GETs omit it. This includes missing entities, incompatible entity
-types, stale item-kind shapes, and permanently invalid Dream evidence. An
-incorrect request payload does not retire a valid question. If both identity
-references already resolve to the same entity, Yes succeeds with `applied=false`;
-No retires the stale question. Not sure retains its evidence-scoped suppression.
+Release is the default for a pre-application conflict: refund the reserved
+attention slot and leave the proposal pending. Settling is restricted to the
+explicit terminal allowlist: deleted, tombstoned or hidden evidence; a tombstoned
+or purged memory source; archived memory; explicit `user_review=false`; collapsed
+entity identities, incompatible entity types or invalid item shapes. `ReviewStale` atomically
+resolves only the matching proposal evidence version and refunds its slot.
+
+Chat removal with undo, restricted sensitivity, public/shared visibility, a set
+`valid_to`, processing delays, supersession, paywall/locks, vocabulary capacity,
+lease/fence races and generic snapshot mismatches all release. An incorrect
+request payload does not retire a valid question. If both identity references
+already resolve to the same entity, Yes succeeds with `applied=false`; No retires
+the stale question. Not sure retains its evidence-scoped suppression.
 Existing stuck proposals settle on the next answer after deployment; GET itself
 does not mutate them or require a migration. New evidence enqueued during an
 answer remains pending. An interrupted

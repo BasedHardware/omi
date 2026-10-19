@@ -263,7 +263,7 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
 
             generation = get_task_workflow_control(uid).account_generation
             if generation != state['source']['account_generation']:
-                raise store.ReviewStale('Candidate generation changed')
+                raise store.ReviewConflict('Candidate generation changed')
             payload = answer.task
             if payload is None:
                 raise store.ReviewConflict('Task answer required')
@@ -308,7 +308,10 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
                     predicate='vocabulary',
                 )
                 applied = True
-    except (store.ReviewStale, store.ReviewNotFound) as exc:
+    except store.ReviewNotFound as exc:
+        store.release_failed_answer(uid, item_id)
+        raise store.ReviewConflict(str(exc)) from exc
+    except store.ReviewStale as exc:
         store.finish_answer(uid, item_id, applied=False, uncertain=False, offered_version=state['version'], stale=True)
         raise store.ReviewStale(str(exc)) from exc
     except (

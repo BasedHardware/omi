@@ -125,7 +125,7 @@ def test_yes_after_redirects_converge_resolves_without_second_merge(harness):
     )
 
 
-@pytest.mark.parametrize('failure', ['same_node_no', 'missing', 'types', 'kind', 'redirect_cycle', 'suppressed'])
+@pytest.mark.parametrize('failure', ['same_node_no', 'types', 'kind', 'redirect_cycle'])
 def test_deterministic_conflicts_retire_and_refund_attention(harness, failure):
     client, db = harness
     item_id = offer(client)
@@ -133,15 +133,9 @@ def test_deterministic_conflicts_retire_and_refund_attention(harness, failure):
         store.user(UID).collection('knowledge_nodes').document('person:b').set({'redirect_entity_id': 'person:a'})
         if failure == 'redirect_cycle':
             store.user(UID).collection('knowledge_nodes').document('person:a').set({'redirect_entity_id': 'person:b'})
-    elif failure == 'missing':
-        store.user(UID).collection('people').document('b').delete()
     elif failure == 'types':
         store.user(UID).collection('knowledge_nodes').document('person:b').set({'redirect_entity_id': 'org'})
         store.user(UID).collection('knowledge_nodes').document('org').set({'node_type': 'organization', 'label': 'Org'})
-    elif failure == 'suppressed':
-        store.user(UID).collection('review_do_not_redo').document(store.safe_id('merge:person:a:person:b')).set(
-            {'blocked': True}
-        )
     elif failure == 'kind':
         # A legacy persisted shape bypassing today's enqueue prefix validator.
         offered = store.user(UID).collection('review_answers').document(store.safe_id(item_id))
@@ -248,10 +242,11 @@ def test_dream_answer_wrapper_preserves_transient_fences(monkeypatch, spelling):
     assert not isinstance(caught.value, store.ReviewStale)
 
 
-def test_dream_evidence_change_is_stale_and_evidence_read_conflict_stays_transient(monkeypatch):
+def test_dream_evidence_change_and_read_conflict_release_by_default(monkeypatch):
     monkeypatch.setattr(tools, 'proposal_record', lambda *a: {'text': 'new'})
-    with pytest.raises(store.ReviewStale, match='evidence changed'):
+    with pytest.raises(store.ReviewConflict, match='evidence changed') as changed:
         tools.revalidate_proposal(UID, {'records': {'conversations/toy': {'text': 'old'}}})
+    assert not isinstance(changed.value, store.ReviewStale)
     conflict = store.ReviewConflict('dream_lease_lost')
     monkeypatch.setattr(tools, 'proposal_record', Mock(side_effect=conflict))
     with pytest.raises(store.ReviewConflict) as caught:
@@ -259,7 +254,7 @@ def test_dream_evidence_change_is_stale_and_evidence_read_conflict_stays_transie
     assert caught.value is conflict
 
 
-@pytest.mark.parametrize('status', [402, 404, 423])
+@pytest.mark.parametrize('status', [402, 404, 423, 503])
 def test_dream_temporary_access_denial_is_retryable_but_missing_evidence_is_stale(monkeypatch, status):
     monkeypatch.setattr(tools, 'proposal_record', Mock(side_effect=HTTPException(status_code=status)))
     with pytest.raises(store.ReviewConflict) as caught:
@@ -267,7 +262,7 @@ def test_dream_temporary_access_denial_is_retryable_but_missing_evidence_is_stal
     assert isinstance(caught.value, store.ReviewStale) is (status == 404)
 
 
-def offer_vocabulary(client, records):
+def offer_vocabulary(client, records, *, auxiliary=None):
     item = ReviewItemV2(
         item_id='agent_proposal:availability',
         kind='agent_proposal',
@@ -282,7 +277,7 @@ def offer_vocabulary(client, records):
         item,
         evidence_version='v1',
         edit_key='agent:availability',
-        source={'records': records, 'edit_key': 'agent:availability'},
+        source={'records': records, 'edit_key': 'agent:availability', 'auxiliary': auxiliary or {}},
     )
     assert client.get('/v2/review/items').json()['items'][0]['item_id'] == item.item_id
     return item.item_id
@@ -314,7 +309,7 @@ def test_memory_lock_releases_through_real_reader_and_upgrade_allows_same_answer
         user_review=True,
     )
     locked = False
-    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda *a: None)
+    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda *a, **kw: None)
 
     def fetch(self, uid, key):
         assert (uid, key) == (UID, 'toy')
@@ -337,22 +332,31 @@ def test_memory_lock_releases_through_real_reader_and_upgrade_allows_same_answer
     assert client.get('/v2/review/items').json()['items'] == []
 
 
-@pytest.mark.parametrize('condition', ['discarded', 'is_locked', 'deleted'])
+@pytest.mark.parametrize('condition', ['discarded', 'is_locked', 'deleted', 'missing', 'decode_failed'])
 def test_conversation_availability_uses_real_reader_and_refunds_reservation(harness, monkeypatch, condition):
     client, _ = harness
     row = {'id': 'toy', 'transcript_segments': [], 'structured': {'title': 'Zarathion'}}
     monkeypatch.setattr(reads.conversations, 'get_conversation_raw_snapshot', lambda *a: row.copy())
-    monkeypatch.setattr(reads.conversations, 'decode_transcript_segments_verified', lambda *a: [])
+
+    def decode(*args):
+        if row.get('decode_failed'):
+            raise ValueError('Synthetic transcript decode failure')
+        return []
+
+    monkeypatch.setattr(reads.conversations, 'decode_transcript_segments_verified', decode)
     monkeypatch.setattr(reads.conversations, 'prepare_conversation_for_read', lambda raw, uid: raw)
     item_id = offer_vocabulary(client, {'conversations/toy': reads.read_record(UID, 'conversations/toy')})
-    row[condition] = True
+    if condition == 'missing':
+        row.clear()
+    else:
+        row[condition] = True
     if condition == 'is_locked':
         with pytest.raises(HTTPException) as caught:
             reads.read_record(UID, 'conversations/toy')
         assert caught.value.status_code == 423
     response = accept_vocabulary(client, item_id)
     assert response.status_code == 409, response.text
-    if condition == 'deleted':
+    if condition in {'deleted', 'missing'}:
         assert proposal(item_id).get().to_dict()['resolution'] == 'stale'
         assert client.get('/v2/review/items').json()['items'] == []
         assert store.remaining_today(UID) == 3
@@ -381,7 +385,28 @@ def test_vocabulary_capacity_releases_and_same_answer_succeeds_after_removing_a_
     assert proposal(item_id).get().to_dict()['status'] == 'resolved'
 
 
-@pytest.mark.parametrize('condition', ['archive', 'user_rejected', 'locked', 'processing_pending'])
+@pytest.mark.parametrize(
+    'condition',
+    [
+        'deleted',
+        'tombstoned',
+        'hidden',
+        'source_tombstoned',
+        'source_purged',
+        'archive',
+        'user_rejected',
+        'chat_deleted',
+        'restricted',
+        'public',
+        'shared',
+        'valid_to',
+        'processing_pending',
+        'processing_blocked',
+        'locked',
+        'superseded',
+        'content_changed',
+    ],
+)
 def test_canonical_memory_unavailability_settles_only_terminal_reasons(harness, monkeypatch, condition):
     client, db = harness
     monkeypatch.setattr(canonical_memory_adapter, 'default_db_client', db)
@@ -408,15 +433,46 @@ def test_canonical_memory_unavailability_settles_only_terminal_reasons(harness, 
     assert snapshot is not None
     item_id = offer_vocabulary(client, {'memory_items/toy': snapshot})
     changed = {
+        'deleted': {},
+        'tombstoned': {'status': 'tombstoned'},
+        'hidden': {'status': 'hidden'},
+        'source_tombstoned': {'source_state': 'tombstoned'},
+        'source_purged': {'source_state': 'purged'},
+        'chat_deleted': {'promotion': {'chat_deleted': True}},
+        'restricted': {'sensitivity_labels': ['health']},
+        'public': {'visibility': 'public'},
+        'shared': {'visibility': 'shared'},
+        'valid_to': {'valid_to': NOW + timedelta(days=1)},
+        'processing_blocked': {'processing_state': 'blocked'},
+        'superseded': {'status': 'superseded'},
+        'content_changed': {'content': 'New evidence about Zarathion'},
         'archive': {'tier': 'archive'},
         'user_rejected': {'promotion': {'user_review': False}},
         'locked': {'promotion': {'is_locked': True}},
         'processing_pending': {'processing_state': 'pending'},
     }[condition]
-    ref.set({**memory.model_dump(mode='python'), **changed})
+    # The only legacy fallback is a genuinely absent canonical item; its owner
+    # fetch reports missing. The canonical reader/filter/adapter stay real.
+    legacy_fetch = Mock(side_effect=HTTPException(404, 'Memory not found'))
+    monkeypatch.setattr(reads.MemoryService, 'fetch', legacy_fetch)
+    if condition == 'deleted':
+        ref.delete()
+    else:
+        ref.set({**memory.model_dump(mode='python'), **changed})
+    if condition in {'tombstoned', 'hidden', 'superseded'}:
+        assert canonical_memory_adapter.read_canonical_memory_item(UID, 'toy') is None
     response = accept_vocabulary(client, item_id)
     assert response.status_code == 409, response.text
-    if condition in {'archive', 'user_rejected'}:
+    assert legacy_fetch.call_count == (1 if condition == 'deleted' else 0)
+    if condition in {
+        'deleted',
+        'tombstoned',
+        'hidden',
+        'source_tombstoned',
+        'source_purged',
+        'archive',
+        'user_rejected',
+    }:
         assert proposal(item_id).get().to_dict()['status'] == 'resolved'
         assert proposal(item_id).get().to_dict()['resolution'] == 'stale'
         assert store.remaining_today(UID) == 3
@@ -427,3 +483,79 @@ def test_canonical_memory_unavailability_settles_only_terminal_reasons(harness, 
         response = accept_vocabulary(client, item_id)
         assert response.status_code == 200, response.text
         assert response.json()['applied'] is True
+
+
+@pytest.mark.parametrize('condition', ['user_rejected', 'public', 'shared', 'valid_to'])
+def test_legacy_memory_row_gate_releases_unless_user_rejected(harness, monkeypatch, condition):
+    client, _ = harness
+    memory = MemoryDB(
+        id='toy',
+        uid=UID,
+        content='Zarathion is a person',
+        category='core',
+        created_at=NOW,
+        updated_at=NOW,
+        visibility='private',
+        user_review=True,
+    )
+    current = memory
+    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda *a, **kw: None)
+    monkeypatch.setattr(reads.MemoryService, 'fetch', lambda *a: current)
+    item_id = offer_vocabulary(client, {'memories/toy': reads.read_record(UID, 'memories/toy')})
+    changes = {
+        'user_rejected': {'user_review': False},
+        'public': {'visibility': 'public'},
+        'shared': {'visibility': 'shared'},
+        'valid_to': {'invalid_at': NOW + timedelta(days=1)},
+    }[condition]
+    current = memory.model_copy(update=changes)
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 409, response.text
+    if condition == 'user_rejected':
+        assert proposal(item_id).get().to_dict()['resolution'] == 'stale'
+        assert client.get('/v2/review/items').json()['items'] == []
+        assert store.remaining_today(UID) == 3
+    else:
+        assert_released(client, item_id)
+        current = memory
+        response = accept_vocabulary(client, item_id)
+        assert response.status_code == 200, response.text
+        assert response.json()['applied'] is True
+
+
+def test_suppression_conflict_is_not_on_the_terminal_allowlist(harness):
+    client, _ = harness
+    item_id = offer(client)
+    store.user(UID).collection('review_do_not_redo').document(store.safe_id('merge:person:a:person:b')).set(
+        {'blocked': True}
+    )
+    response = answer(client, item_id)
+    assert response.status_code == 409, response.text
+    assert_released(client, item_id)
+
+
+def test_auxiliary_snapshot_change_releases_instead_of_retiring(harness):
+    client, _ = harness
+    item_id = offer_vocabulary(
+        client,
+        {'people/a': reads.read_record(UID, 'people/a')},
+        auxiliary={'dream_vocabulary/current': None},
+    )
+    target = store.user(UID).collection('dream_vocabulary').document('current')
+    target.set(store.encode_doc(UID, {'source': []}))
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 409, response.text
+    assert_released(client, item_id)
+    target.delete()
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 200, response.text
+    assert response.json()['applied'] is True
+
+
+def test_missing_entity_is_not_on_the_terminal_allowlist(harness):
+    client, _ = harness
+    item_id = offer(client)
+    store.user(UID).collection('people').document('b').delete()
+    response = answer(client, item_id)
+    assert response.status_code == 409, response.text
+    assert_released(client, item_id)

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "id": "FC-permanent-review-conflict-reoffered",
-  "violated_contract": "A Review question whose offered premise is permanently invalid must settle its proposal. Releasing every conflict back to offered leaves the proposal pending and serves the same unanswerable question on each app open.",
-  "canonical_prevention": "Classify permanent invalidation as ReviewStale and atomically settle the offered answer, refund its reserved attention slot, and resolve only the matching proposal evidence version. Already-true affirmative identity answers settle successfully without another merge. Preserve reversible access, visibility and capacity conditions as well as lease and transactional fence conflicts through wrappers, and release those reservations instead.",
+  "violated_contract": "A Review question on the explicit terminal allowlist must settle its proposal; all other pre-application conflicts must release. Releasing terminal premises re-offers unanswerable questions, while treating unknown or reversible exclusions as permanent silently loses valid questions.",
+  "canonical_prevention": "Release pre-application conflicts by default. Settle only explicit permanent evidence exclusions (deleted, tombstoned, hidden, source purged, archived or user-rejected), collapsed entity identities, incompatible entity types and invalid item shapes. Settlement atomically resolves only the matching proposal evidence version and refunds attention. Already-true affirmative identity answers succeed without another merge. Reader-path lifecycle tests cover both terminal exclusions and default release.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_review_stale_answers.py",
     "backend/tests/integration/test_review_surface_emulator.py"
