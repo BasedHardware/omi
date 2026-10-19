@@ -18,8 +18,10 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
-from diarizer.batch_pipeline_context import LeftContextIndex, starts_in_speech
+from diarizer.batch_pipeline_context import LeftContextIndex, capture_stream, starts_in_speech
 from config.batch_pipeline import (
+    LONG_SPEECH_HANDOFF_SECONDS,
+    long_speech_handoff_enabled,
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
     worker_io_concurrency,
@@ -28,6 +30,7 @@ from config.batch_pipeline import (
 )
 from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
+from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
@@ -292,6 +295,29 @@ def pack_windows(windows, config):
         yield batch
 
 
+PARAKEET_LANGUAGES = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
+
+
+def long_speech_handoff(state: dict, reason: str) -> bool:
+    """Skip the padded Parakeet retry: it cannot recover speech in a language Parakeet lacks.
+
+    Only a zero-word first pass whose intake recorded an STT language that is
+    unknown (''), ``multi`` or outside Parakeet's set, with at least
+    LONG_SPEECH_HANDOFF_SECONDS of worker VAD speech, and only while the
+    quarantine-recovery handoff exists. Units without a recorded intake language
+    (older staged audio, record lane) keep the retry.
+    """
+    language = state.get('stt_language')
+    return (
+        reason == 'empty_asr'
+        and isinstance(language, str)
+        and language not in PARAKEET_LANGUAGES
+        and state.get('speech_seconds', 0.0) >= LONG_SPEECH_HANDOFF_SECONDS
+        and (empty_asr_recovery_enabled() or empty_asr_disposition_enabled())
+        and long_speech_handoff_enabled()
+    )
+
+
 class PipelineWorker:
     def __init__(
         self,
@@ -309,6 +335,8 @@ class PipelineWorker:
         gpu_lock=None,
         io_concurrency: int | None = None,
         flight_models=None,
+        stream_of: Callable | None = None,
+        language_of: Callable | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -325,6 +353,11 @@ class PipelineWorker:
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
+        # Capture stream of a decoded unit (see batch_pipeline_context.capture_stream).
+        # Without it only conversation units have a stream.
+        self.stream_of = stream_of or capture_stream
+        # Intake's resolved STT language of a decoded unit; None when unrecorded.
+        self.language_of = language_of or (lambda item: None)
         self.left_context = LeftContextIndex(
             max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
         )
@@ -452,7 +485,7 @@ class PipelineWorker:
             or not starts_in_speech(state.get('vad_raw') or [])
         ):
             return clips
-        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE)
+        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE, state.get('stream'))
         if context is None:
             return clips
         room = int((self.config.max_padded_seconds - first.duration) * SAMPLE_RATE)
@@ -654,6 +687,14 @@ class PipelineWorker:
                         'flight_features': features,
                     }
                     states[item.segment_id] = state
+                    try:
+                        state['stream'] = self.stream_of(item)
+                    except Exception:
+                        state['stream'] = None  # No stream identity: no left context.
+                    try:
+                        state['stt_language'] = self.language_of(item)
+                    except Exception:
+                        state['stt_language'] = None  # Unrecorded: the padded retry runs as before.
                     if not clips:
                         self.counts['silence'] += 1
                         continue
@@ -683,7 +724,9 @@ class PipelineWorker:
             # earlier flights' tails persist in the bounded index.
             for state in states.values():
                 if state['item'].segment_id not in failed:
-                    self.left_context.remember(state['item'], state['samples'], state.get('vad_raw') or [])
+                    self.left_context.remember(
+                        state['item'], state['samples'], state.get('vad_raw') or [], state.get('stream')
+                    )
             attached = self.counts['left_context']
             for state in states.values():
                 clips = state.pop('asr_clips', None)
@@ -699,19 +742,21 @@ class PipelineWorker:
 
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
-                if cap_dispatch_enabled():
+                required = {
+                    w.segment_id for w in batch if cap_dispatch_enabled(states[w.segment_id]['item'].owner_id, 'batch')
+                }
+                if required:
                     # Authorization belongs immediately before ASR, after potentially
                     # slow decode/VAD and between successive microbatches. Missing
                     # policy authority is a hold, never provider permission.
-                    required = {w.segment_id for w in batch}
                     held.update(required - allowed(required))
                     batch = [w for w in batch if w.segment_id not in held]
                 if not batch:
                     continue
                 try:
                     hypotheses = self.words.transcribe_batch([w.samples for w in batch])
-                    if cap_dispatch_enabled():
-                        for window in batch:
+                    for window in batch:
+                        if cap_dispatch_enabled(states[window.segment_id]['item'].owner_id, 'batch'):
                             accepted(window.segment_id, window.duration)
                     if len(hypotheses) != len(batch):
                         raise ValueError('provider result cardinality mismatch')
@@ -755,51 +800,72 @@ class PipelineWorker:
                         reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
                         stage = 'asr_recovery'
                         fits_retry = padded_retry_fits(state['samples'], self.config.max_padded_seconds)
-                        if cap_dispatch_enabled():
-                            recovered = self.recover_words(
-                                state['samples'],
-                                self.config.max_padded_seconds,
-                                before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
-                                after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
-                            )
-                            if recovered is None and (
-                                fits_retry
-                                or not (
-                                    reason == 'empty_asr'
-                                    and empty_asr_recovery_enabled()
-                                    or reason in {'empty_asr', 'no_owned_words'}
-                                    and empty_asr_disposition_enabled()
-                                )
-                            ):
-                                held.add(item.segment_id)
-                                results.append(HeldWork(item.segment_id))
-                                continue
-                        else:
-                            recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
-                        if recovered is None or not fits_retry:
+                        if long_speech_handoff(state, reason):
+                            # Repadding cannot make Parakeet transcribe a language it
+                            # does not have. Hand off to recovery without a retry.
                             words = []
-                            state['padded_retry'] = 'skipped_oversize'
+                            state['padded_retry'] = 'skipped_long_speech'
                             state['padded_retry_empty'] = False
-                            recovery_outcome = 'skipped_oversize'
-                        else:
-                            words = validate_words(recovered, duration)
-                            state['padded_retry'] = 'recovered' if words else 'empty'
-                            state['padded_retry_empty'] = not words
-                            recovery_outcome = 'recovered' if words else 'empty'
-                        recovery_records.append(
-                            (
-                                item.segment_id,
-                                reason,
-                                len(state['samples']),
-                                len(words),
-                                shapes[item.segment_id]['asr_words'],
-                                shapes[item.segment_id]['windows'],
-                                state['window_min_samples'],
-                                state['window_max_samples'],
-                                round(state['speech_seconds'] * SAMPLE_RATE),
-                                recovery_outcome,
+                            recovery_records.append(
+                                (
+                                    item.segment_id,
+                                    reason,
+                                    len(state['samples']),
+                                    0,
+                                    shapes[item.segment_id]['asr_words'],
+                                    shapes[item.segment_id]['windows'],
+                                    state['window_min_samples'],
+                                    state['window_max_samples'],
+                                    round(state['speech_seconds'] * SAMPLE_RATE),
+                                    'skipped_long_speech',
+                                )
                             )
-                        )
+                        else:
+                            if cap_dispatch_enabled(item.owner_id, 'batch'):
+                                recovered = self.recover_words(
+                                    state['samples'],
+                                    self.config.max_padded_seconds,
+                                    before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
+                                    after_dispatch=lambda seconds: accepted(item.segment_id, seconds),
+                                )
+                                if recovered is None and (
+                                    fits_retry
+                                    or not (
+                                        reason == 'empty_asr'
+                                        and empty_asr_recovery_enabled()
+                                        or reason in {'empty_asr', 'no_owned_words'}
+                                        and empty_asr_disposition_enabled()
+                                    )
+                                ):
+                                    held.add(item.segment_id)
+                                    results.append(HeldWork(item.segment_id))
+                                    continue
+                            else:
+                                recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                            if recovered is None or not fits_retry:
+                                words = []
+                                state['padded_retry'] = 'skipped_oversize'
+                                state['padded_retry_empty'] = False
+                                recovery_outcome = 'skipped_oversize'
+                            else:
+                                words = validate_words(recovered, duration)
+                                state['padded_retry'] = 'recovered' if words else 'empty'
+                                state['padded_retry_empty'] = not words
+                                recovery_outcome = 'recovered' if words else 'empty'
+                            recovery_records.append(
+                                (
+                                    item.segment_id,
+                                    reason,
+                                    len(state['samples']),
+                                    len(words),
+                                    shapes[item.segment_id]['asr_words'],
+                                    shapes[item.segment_id]['windows'],
+                                    state['window_min_samples'],
+                                    state['window_max_samples'],
+                                    round(state['speech_seconds'] * SAMPLE_RATE),
+                                    recovery_outcome,
+                                )
+                            )
                         stage = 'assemble_words'
                     silence = state['silence_payload']
                     if (
@@ -885,7 +951,7 @@ class PipelineWorker:
                     }
                     if silence is not None:
                         payload.update(silence)
-                    if cap_dispatch_enabled():
+                    if cap_dispatch_enabled(item.owner_id, 'batch'):
                         payload['cap_dispatch'] = {
                             'omi_funded_accepted_provider_audio_seconds': state.get('cap_provider_audio_seconds', 0),
                             'admission': 'authorized_compute',
@@ -943,7 +1009,11 @@ class PipelineWorker:
                     outcome=(
                         'recovered'
                         if owned
-                        else ('degraded' if recovery_outcome == 'skipped_oversize' else 'exhausted')
+                        else (
+                            'degraded'
+                            if recovery_outcome in {'skipped_oversize', 'skipped_long_speech'}
+                            else 'exhausted'
+                        )
                     ),
                 )
                 logger.info(

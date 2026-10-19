@@ -13,7 +13,10 @@ from typing import Any, Callable, Concatenate, Iterator, ParamSpec, TypeVar
 
 from fastapi import HTTPException
 
-from config.stt_cap_dispatch import execution_admission_enabled as generated_compute_enabled
+from config.stt_cap_dispatch import (
+    execution_admission_enabled,
+    execution_admission_configured as generated_compute_configured,
+)
 
 _generation_uid: ContextVar[str | None] = ContextVar('generated_compute_uid', default=None)
 
@@ -39,7 +42,9 @@ def generated_compute_allowed(
     belong to this UID, so a copied background context cannot fund another user.
     Both switches off returns before identity, keys, plan or allowance reads.
     """
-    if not generated_compute_enabled():
+    if not generated_compute_configured():
+        return True
+    if not execution_admission_enabled(uid or 'unknown', 'batch'):
         return True
     if not uid or uid == 'unknown':
         return False
@@ -101,7 +106,7 @@ def current_compute_uid(uid: str | None = None) -> str | None:
 
 
 def current_generated_compute_allowed(feature: str, *, allow_byok: bool = True) -> bool:
-    if not generated_compute_enabled():
+    if not generated_compute_configured():
         return True
     return generated_compute_allowed(current_compute_uid(), feature, allow_byok=allow_byok)
 
@@ -109,7 +114,7 @@ def current_generated_compute_allowed(feature: str, *, allow_byok: bool = True) 
 def require_current_generated_compute(
     feature: str, *, uid: str | None = None, provider: str | None = None, allow_byok: bool = True
 ) -> None:
-    if not generated_compute_enabled():
+    if not generated_compute_configured():
         return
     require_generated_compute(current_compute_uid(uid), feature, provider=provider, allow_byok=allow_byok)
 
@@ -117,7 +122,7 @@ def require_current_generated_compute(
 @contextmanager
 def generated_compute_scope(uid: str) -> Iterator[None]:
     """Supply worker ownership without changing flag-off metering or prompts."""
-    if not generated_compute_enabled():
+    if not generated_compute_configured():
         yield
         return
     token = _generation_uid.set(uid)

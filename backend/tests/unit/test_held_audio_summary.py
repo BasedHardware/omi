@@ -1,4 +1,6 @@
 import asyncio
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -25,7 +27,8 @@ def test_manifest_records_recording_start():
 
 
 def test_flag_off_does_not_read_holds(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: False)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
 
     def explode(uid):
         raise AssertionError('holds were read while dispatch enforcement is off')
@@ -37,7 +40,7 @@ def test_flag_off_does_not_read_holds(monkeypatch):
 
 
 def test_exhausted_account_lists_holds_and_asks_the_client_to_retain_live(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     now = datetime(2026, 10, 17, 12, tzinfo=timezone.utc)
     result = summary.client_held_audio(
         'synthetic',
@@ -58,12 +61,12 @@ def test_exhausted_account_lists_holds_and_asks_the_client_to_retain_live(monkey
 
 
 def test_funded_account_with_nothing_held_omits_the_field(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     assert summary.client_held_audio('synthetic', allowance=SimpleNamespace(managed=True), rows=[]) is None
 
 
 def test_funded_account_still_reports_audio_already_held(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     result = summary.client_held_audio(
         'synthetic',
         allowance=SimpleNamespace(managed=True),
@@ -77,7 +80,7 @@ def test_funded_account_still_reports_audio_already_held(monkeypatch):
 
 
 def test_summary_total_is_exact_when_the_page_is_truncated(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     result = summary.client_held_audio(
         'synthetic',
         allowance=SimpleNamespace(managed=False),
@@ -92,7 +95,7 @@ def test_summary_total_is_exact_when_the_page_is_truncated(monkeypatch):
 
 
 def test_positive_count_reads_the_summary_then_one_page(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     reads = {'summary': 0, 'rows': 0}
 
     def load_summary(uid):
@@ -115,7 +118,7 @@ def test_positive_count_reads_the_summary_then_one_page(monkeypatch):
 
 
 def test_empty_summary_does_not_query_holds(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setattr(summary, '_load_summary', lambda uid: {'seconds': 0, 'count': 0})
     monkeypatch.setattr(summary, '_load_rows', lambda uid: (_ for _ in ()).throw(AssertionError('page was read')))
     assert summary.client_held_audio('synthetic', allowance=SimpleNamespace(managed=True)) is None
@@ -138,13 +141,14 @@ def test_subscription_open_never_creates_recovery_intent(monkeypatch):
     monkeypatch.setattr(backlog_worker, 'run', run)
     monkeypatch.setattr(cap_hold_recovery, 'recover', recover)
     for managed in (False, True):
-        monkeypatch.setattr(summary, 'enabled', lambda: False)
+        monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+        monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
         response = SimpleNamespace()
         allowance = SimpleNamespace(managed=managed)
         summary.attach_subscription_held_audio(response, 'synthetic', allowance)
         assert not hasattr(response, 'held_audio') or response.held_audio is None
 
-        monkeypatch.setattr(summary, 'enabled', lambda: True)
+        monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
         monkeypatch.setattr(summary, '_load_summary', lambda uid: {'seconds': 5, 'count': 1})
         monkeypatch.setattr(summary, '_load_rows', lambda uid: [{'id': 'a', 'started_at': 9, 'seconds': 5}])
         summary.attach_subscription_held_audio(response, 'synthetic', allowance)
@@ -223,7 +227,7 @@ def _summary_ref(payload):
 
 
 def test_zero_summary_count_issues_no_hold_list_read(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     events = []
     monkeypatch.setattr(summary, 'holds', lambda uid: _HoldQuery(events))
     monkeypatch.setattr(cap_hold, 'summary_ref', _summary_ref({'version': 2, 'seconds': 0, 'count': 0}))
@@ -234,7 +238,7 @@ def test_zero_summary_count_issues_no_hold_list_read(monkeypatch):
 
 
 def test_positive_summary_count_lists_at_most_twenty_holds(monkeypatch):
-    monkeypatch.setattr(summary, 'enabled', lambda: True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     events = []
     monkeypatch.setattr(summary, 'holds', lambda uid: _HoldQuery(events))
     monkeypatch.setattr(cap_hold, 'summary_ref', _summary_ref({'version': 2, 'seconds': 30, 'count': 2}))

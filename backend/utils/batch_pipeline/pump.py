@@ -228,7 +228,9 @@ class Pump:
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         try:
-            required = [v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled()]
+            required = [
+                v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled(v.item.owner_id, 'batch')
+            ]
             if required:
                 receipt = {}
                 try:
@@ -260,7 +262,7 @@ class Pump:
                 if not leases:
                     return 0
             dispatch_kwargs = {}
-            if cap_dispatch_enabled():
+            if any(cap_dispatch_enabled(v.item.owner_id, 'batch') for v in leases):
 
                 def authorize_dispatch(segments):
                     selected = [v for v in leases if v.item.segment_id in segments]

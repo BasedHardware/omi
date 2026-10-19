@@ -795,6 +795,13 @@ async def test_byok_gpu_unit_is_funded_once_at_admission_end_to_end(dark_intake,
     (lease,) = Scheduler(store).pull(200.0, limit=4)
     assert store.get('jobs', lease.item.segment_id)['policy']['provider_reason'] == ('byok' if byok else 'none')
 
+    # Main #22494 scopes dispatch by cohort and lane and code-fences the batch lane; open it as
+    # tests/unit/fixtures/cap_rollout.py does, so the non-BYOK unit meets the funded gate.
+    from config import stt_cap_dispatch as cap_policy
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
+    monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', True)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     gate = Mock(return_value=False)  # the owner's keyless allowance is exhausted
     monkeypatch.setattr(admission, 'sync_allowed', gate)

@@ -126,7 +126,7 @@ def build_incoming(
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
-        is_locked=False if cap_dispatch_enabled() else binding.is_locked,
+        is_locked=False if cap_dispatch_enabled(item.owner_id, 'batch') else binding.is_locked,
         private_cloud_sync_enabled=binding.private_cloud_sync_enabled,
         client_device_id=binding.client_device_id,
         client_platform=binding.client_platform,

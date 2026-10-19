@@ -366,7 +366,10 @@ def test_config_cohorts_has_only_standard_library_dependencies():
 
     tree = ast.parse((Path(__file__).parents[2] / 'config/rollout_cohorts.py').read_text())
     assert {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)} <= {'__future__', 'typing'}
-    assert {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} == {'os'}
+    assert {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names} == {
+        'os',
+        'hashlib',
+    }
 
 
 def test_serving_composition_roots_bind_private_cohort_runtime():

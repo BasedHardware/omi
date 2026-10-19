@@ -445,7 +445,9 @@ class Scheduler:
             padded_retry = 'empty'
         elif padded_retry == 'empty' and not padded_retry_empty:
             padded_retry_empty = True
-        if padded_retry not in {None, 'empty', 'skipped_oversize'} or (padded_retry_empty and padded_retry != 'empty'):
+        if padded_retry not in {None, 'empty', 'skipped_oversize', 'skipped_long_speech'} or (
+            padded_retry_empty and padded_retry != 'empty'
+        ):
             raise ValueError('invalid padded retry evidence')
 
         candidates = {}
@@ -472,7 +474,7 @@ class Scheduler:
                     quarantined_at=now,
                     recovery_state='held',
                 )
-                if quarantine and padded_retry in {'empty', 'skipped_oversize'}:
+                if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
                 if worker_failure is not None:
                     job['worker_failure'] = dict(worker_failure)
