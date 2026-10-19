@@ -108,20 +108,20 @@ def decode_opus_file_to_wav(
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
         return False
-    except BackfillStoragePressure:
-        if os.path.exists(wav_file_path):
-            os.remove(wav_file_path)
-        raise
     except Exception as e:
-        try:
-            raise_sync_storage_pressure(e)
-        except BackfillStoragePressure:
-            if os.path.exists(wav_file_path):
-                os.remove(wav_file_path)
-            raise
+        # Capacity pressure must leave as itself (never as a corrupt-stream
+        # False) so the worker defers instead of consuming the staged audio.
+        pressure = e if isinstance(e, BackfillStoragePressure) else None
+        if pressure is None:
+            try:
+                raise_sync_storage_pressure(e)
+            except BackfillStoragePressure as mapped:
+                pressure = mapped
         logger.error(f"Error during decode: {e}")
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
+        if pressure is not None:
+            raise pressure
         return False
 
 
