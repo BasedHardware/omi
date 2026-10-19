@@ -13,7 +13,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useChat } from '@/components/chat/ChatContext';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { ConversationDetailPanel } from '@/components/conversations/ConversationDetailPanel';
-import { DateFilter } from '@/components/conversations/DateFilter';
+import { DateFilter, type DateRange } from '@/components/conversations/DateFilter';
 import { MergeActionBar } from '@/components/conversations/MergeActionBar';
 import { MergeConfirmationDialog } from '@/components/conversations/MergeConfirmationDialog';
 import { DeleteConversationsDialog } from '@/components/conversations/DeleteConversationsDialog';
@@ -102,7 +102,7 @@ export function ConversationSplitView() {
   } = useSearchConversations();
 
   // Date filter state
-  const [filterDate, setFilterDate] = useState<Date | null>(null);
+  const [filterDate, setFilterDate] = useState<DateRange | null>(null);
 
   // Resizable detail pane width
   const [panelWidth, setPanelWidth] = useLocalStorage(
@@ -142,9 +142,9 @@ export function ConversationSplitView() {
     } = {};
 
     if (filterDate) {
-      const startDate = new Date(filterDate);
+      const startDate = new Date(filterDate.start);
       startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(filterDate);
+      const endDate = new Date(filterDate.end);
       endDate.setHours(23, 59, 59, 999);
       params.startDate = startDate;
       params.endDate = endDate;
@@ -425,8 +425,8 @@ export function ConversationSplitView() {
 
   // Handle date filter change
   const handleDateFilterChange = useCallback(
-    (date: Date | null) => {
-      setFilterDate(date);
+    (range: DateRange | null) => {
+      setFilterDate(range);
       setSelection(null); // Reset selection to auto-select first from new results
       // Clear search when changing date filter
       if (searchQuery || submittedSearchQuery) {
@@ -714,7 +714,10 @@ export function ConversationSplitView() {
                 setSelection({ kind: 'recap', id: recap.id });
               }}
             />
-            <DateFilter selectedDate={filterDate} onDateChange={handleDateFilterChange} />
+            <DateFilter
+              selectedRange={filterDate}
+              onRangeChange={handleDateFilterChange}
+            />
 
             {/* Select/Cancel button for merge mode */}
             <button
