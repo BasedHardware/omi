@@ -7,6 +7,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.proactivity_v2 import ProactivityDenied, utc_now
 from database import proactivity as ledger
+from utils.conversations.datetime_utils import coerce_utc_datetime
 
 
 def mentor_history_query(client: Any, uid: str) -> Any:
@@ -62,12 +63,12 @@ def record_mentor_reply(uid: str, *, firestore_client: Any = None) -> None:
     now = utc_now()
     for snapshot in recent_mentor_query(client, uid, now - timedelta(hours=48)).stream():
         item = snapshot.to_dict()
-        if not item or item.get('state') != 'ready':
+        if not item or item.get('state') != 'ready' or not item.get('item_id'):
             continue
-        anchor = item.get('delivered_at') or (
-            item.get('mentor_chat_persisted_at') if item.get('mentor_chat_message_id') else None
+        anchor = coerce_utc_datetime(item.get('delivered_at')) or (
+            coerce_utc_datetime(item.get('mentor_chat_persisted_at')) if item.get('mentor_chat_message_id') else None
         )
-        if anchor is not None and anchor <= now <= anchor + timedelta(hours=24):
+        if anchor is not None and timedelta(0) <= now - anchor <= timedelta(hours=24):
             try:
                 ledger.record_server_outcome(item['item_id'], 'replied', uid=uid, firestore_client=client, now=now)
             except ProactivityDenied:
@@ -79,7 +80,12 @@ def record_task_completion(uid: str, task_id: str, *, firestore_client: Any = No
     now = utc_now()
     for snapshot in task_items_query(client, uid, task_id).stream():
         item = snapshot.to_dict()
-        if not item or item.get('producer') != 'commitment_followup' or item.get('state') != 'ready':
+        if (
+            not item
+            or item.get('producer') != 'commitment_followup'
+            or item.get('state') != 'ready'
+            or not item.get('item_id')
+        ):
             continue
         # Retain even an independently completed task; the spine refuses value credit without exposure.
         try:

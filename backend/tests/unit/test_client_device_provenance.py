@@ -168,6 +168,27 @@ def test_listen_conversation_stamps_websocket_device_provenance():
     assert "client_platform=context.platform" in conversations
 
 
+def test_capture_devices_order_mixed_timestamps_and_keep_unknown_order():
+    from utils.memory.canonical_memory_adapter import _ordered_capture_devices_from_evidence
+
+    evidence = [
+        {'client_device_id': 'missing'},
+        {'client_device_id': 'late', 'created_at': datetime(2025, 1, 3)},
+        {'client_device_id': 'early', 'created_at': '2025-01-01T12:00:00Z'},
+        {'client_device_id': 'middle', 'created_at': '2025-01-02T12:00:00'},
+        {'client_device_id': 'earliest', 'created_at': datetime(2024, 12, 31, tzinfo=timezone.utc)},
+        {'artifact_ref': {'client_device_id': 'offset'}, 'created_at': '2025-01-01T12:30:00+01:00'},
+        {'client_device_id': 'invalid', 'created_at': 'bad'},
+        {'client_device_id': 'early', 'created_at': '2025-01-05T00:00:00Z'},
+        {'created_at': '2024-01-01T00:00:00Z'},
+    ]
+
+    device_ids, primary = _ordered_capture_devices_from_evidence(evidence)
+
+    assert device_ids == ['earliest', 'offset', 'early', 'middle', 'late', 'missing', 'invalid']
+    assert primary == 'earliest'
+
+
 def test_web_listen_forwards_first_message_device_provenance():
     source = (Path(__file__).resolve().parents[2] / "routers" / "transcribe.py").read_text(encoding="utf-8")
 

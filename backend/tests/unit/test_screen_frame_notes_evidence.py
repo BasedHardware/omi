@@ -16,6 +16,7 @@ os.environ.setdefault(
 import io  # noqa: E402
 import json  # noqa: E402
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -90,6 +91,66 @@ def _jpeg(width=1200, height=700) -> bytes:
     out = io.BytesIO()
     Image.new('RGB', (width, height), (40, 90, 160)).save(out, format='JPEG')
     return out.getvalue()
+
+
+class TestStoredFrameTimestamps:
+    @pytest.mark.parametrize('score', [None, 'bad', '', float('nan'), float('inf'), True, {}, 10**1000])
+    def test_stored_frames_keep_valid_times_and_ignore_bad_scores(self, monkeypatch, score):
+        monkeypatch.setenv('BUCKET_SCREEN_FRAMES', PROD)
+        monkeypatch.setattr(evidence_mod, 'get_meeting_note_screenshots_enabled', lambda uid: True)
+        docs = [
+            dict(id='iso', captured_at=START.isoformat(), banner_suitability=score, storage_bucket=PROD),
+            dict(id='epoch', captured_at=(START + timedelta(minutes=1)).timestamp(), storage_bucket=PROD),
+            dict(id='naive', captured_at=(START + timedelta(minutes=2)).replace(tzinfo=None), storage_bucket=PROD),
+            dict(id='invalid', captured_at='bad', storage_bucket=PROD),
+            dict(id='bool', captured_at=True, storage_bucket=PROD),
+        ]
+        monkeypatch.setattr(evidence_mod, 'get_conversation_screen_frames', lambda *args: docs)
+
+        result = load_screen_frame_evidence('u', 'c')
+
+        assert [item.frame_id for item in result] == ['iso', 'epoch', 'naive']
+        assert result[0].banner_suitability == 0.0
+        assert all(item.captured_at.tzinfo is timezone.utc for item in result)
+
+    @pytest.mark.parametrize('score,expected', [('0.75', 0.75), (0.5, 0.5), (0, 0.0)])
+    def test_numeric_suitability_is_preserved(self, score, expected):
+        assert evidence_mod._safe_banner_suitability(score) == expected
+
+    @pytest.mark.parametrize('started_at', [START.replace(tzinfo=None), START.isoformat(), START.timestamp()])
+    def test_conversation_dates_and_frame_offsets_use_utc(self, started_at):
+        conversation = SimpleNamespace(started_at=started_at, finished_at=(START + timedelta(minutes=10)).isoformat())
+        assert evidence_mod.frame_evidence_started_at(conversation) == START
+        assert evidence_mod.frame_evidence_duration_minutes(conversation) == 10
+        context = with_screen_frame_participants(None, ['Jordan Rivera'], started_at=started_at, duration_minutes=10)
+        assert context.start_time == START
+        assert context.start_time.tzinfo is timezone.utc
+        for captured_at in [
+            (START + timedelta(minutes=2)).replace(tzinfo=None),
+            '2026-09-30T17:02:00Z',
+            (START + timedelta(minutes=2)).timestamp(),
+        ]:
+            frame = replace(_evidence('frame', 2, summary='Shared slide'), captured_at=captured_at)
+            assert screen_moment_lines([frame], started_at) == ('- [+02:00] Shared slide',)
+
+    def test_bad_conversation_start_cannot_create_a_context(self):
+        assert with_screen_frame_participants(None, ['Jordan Rivera'], started_at='bad', duration_minutes=10) is None
+
+    def test_image_selection_sorts_mixed_times_and_retains_the_banner(self):
+        frames = [
+            replace(_evidence('naive', 5), captured_at=(START + timedelta(minutes=5)).replace(tzinfo=None)),
+            replace(_evidence('iso', 1), captured_at='2026-09-30T17:01:00Z'),
+            _evidence('aware', 2),
+            replace(_evidence('epoch', 3), captured_at=(START + timedelta(minutes=3)).timestamp()),
+            _evidence('unused', 4),
+            _evidence('banner', 6, role='banner'),
+        ]
+        assert [item.frame_id for item in evidence_mod._select_for_images(frames)] == [
+            'iso',
+            'epoch',
+            'naive',
+            'banner',
+        ]
 
 
 class TestFrameNames:

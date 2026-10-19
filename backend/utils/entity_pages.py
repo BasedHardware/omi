@@ -14,6 +14,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from database import action_items, conversations, knowledge_graph, review_queries, review_store as store, users
 from models.entity_pages import ConversationRef, EntityPage, Fact, FactSource, TaskRef
 from models.review import EntityRef, ReviewItem
+from utils.conversations.datetime_utils import coerce_utc_datetime
 
 MAX_RELATED = 30
 # Each page considers at most 20 fact IDs and runs at most 20 fact source
@@ -165,7 +166,7 @@ def _facts(
                 kind='conversation',
                 label=_title(conversation),
                 conversation_id=source_id,
-                at=conversation.get('started_at') or row.created_at,
+                at=coerce_utc_datetime(conversation.get('started_at')) or coerce_utc_datetime(row.created_at),
             )
         else:
             source_type = evidence[0].get('source_type', '') if evidence and isinstance(evidence[0], dict) else ''
@@ -175,7 +176,9 @@ def _facts(
                 else 'screen' if 'screen' in source_type else 'chat'
             )
             source = FactSource(
-                kind=kind, label={'user': 'You', 'screen': 'Screen', 'chat': 'Chat'}[kind], at=row.created_at
+                kind=kind,
+                label={'user': 'You', 'screen': 'Screen', 'chat': 'Chat'}[kind],
+                at=coerce_utc_datetime(row.created_at),
             )
         fact = Fact(fact_id=memory_id, text=row.content, source=source)
         facts.append(fact)
@@ -331,9 +334,11 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
         conversation = conversation_cache.get(cid)
         if not conversation or not conversations.is_visible_conversation(conversation):
             continue
-        start = conversation.get('started_at') or conversation.get('created_at')
-        end = conversation.get('finished_at') or start
+        start = coerce_utc_datetime(conversation.get('started_at')) or coerce_utc_datetime(
+            conversation.get('created_at')
+        )
         if start:
+            end = coerce_utc_datetime(conversation.get('finished_at')) or start
             recent.append(
                 ConversationRef(
                     conversation_id=cid,

@@ -1,7 +1,9 @@
 """Actual server hooks exercise the transactional first-event reducer."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+
+import pytest
 
 import database.action_items as tasks
 import database.chat as chat
@@ -156,3 +158,72 @@ def test_server_reducer_refuses_reply_without_persisted_chat_or_exposure(store):
     item = ready(store, producer='conversation_mentor_v2')
     with pytest.raises(ProactivityDenied, match='chat_unconfirmed'):
         ledger.record_server_outcome(item['item_id'], 'replied', uid='u', firestore_client=store, now=NOW)
+
+
+@pytest.mark.parametrize(
+    'anchor',
+    [NOW.replace(tzinfo=None), NOW, NOW.isoformat(), NOW.isoformat().replace('+00:00', 'Z'), NOW.timestamp()],
+)
+@pytest.mark.parametrize('already_delivered', [True, False])
+def test_mixed_mentor_anchors_reach_the_real_outcome_reducer(store, monkeypatch, anchor, already_delivered):
+    item = ready(store, producer='conversation_mentor_v2')
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    row.update(mentor_chat_message_id='chat-message', mentor_chat_persisted_at=anchor)
+    if already_delivered:
+        row.update(delivered=True, delivered_at=anchor)
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: query_for(store, item))
+
+    mapping.record_mentor_reply('u', firestore_client=store)
+    mapping.record_mentor_reply('u', firestore_client=store)
+
+    saved = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert saved['acted_24h'] and saved['delivered']
+    assert list(saved['outcomes']) == ['replied']
+
+
+@pytest.mark.parametrize(
+    'anchor',
+    [None, 'bad', True, float('nan'), 10**100, NOW + timedelta(days=1), datetime.max.replace(tzinfo=timezone.utc)],
+)
+def test_bad_or_future_mentor_anchor_does_not_abort_later_records(store, monkeypatch, anchor):
+    item = ready(store, producer='conversation_mentor_v2')
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    row.update(mentor_chat_message_id='chat-message', mentor_chat_persisted_at=NOW)
+    bad = dict(row, delivered_at=anchor, mentor_chat_persisted_at=anchor)
+    missing_id = {key: value for key, value in row.items() if key != 'item_id'}
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    monkeypatch.setattr(
+        mapping,
+        'recent_mentor_query',
+        lambda *args: SimpleNamespace(
+            stream=lambda: [
+                SimpleNamespace(to_dict=lambda: bad),
+                SimpleNamespace(to_dict=lambda: missing_id),
+                SimpleNamespace(to_dict=lambda: row),
+            ]
+        ),
+    )
+
+    mapping.record_mentor_reply('u', firestore_client=store)
+
+    assert store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['acted_24h']
+
+
+def test_task_completion_skips_missing_item_id_and_still_credits_valid_item(store, monkeypatch):
+    item = ready(store)
+    outcome(store, item, 'shown')
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    missing_id = {key: value for key, value in row.items() if key != 'item_id'}
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    monkeypatch.setattr(
+        mapping,
+        'task_items_query',
+        lambda *args: SimpleNamespace(
+            stream=lambda: [SimpleNamespace(to_dict=lambda: missing_id), SimpleNamespace(to_dict=lambda: row)]
+        ),
+    )
+
+    mapping.record_task_completion('u', 'a', firestore_client=store)
+
+    assert store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['acted_24h']
