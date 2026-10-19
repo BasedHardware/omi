@@ -559,7 +559,7 @@ void main() {
     await sync.stop();
   });
 
-  test('Limitless: a failed durable save aborts — no ACK, wal stays miss', () async {
+  test('Limitless: a failed durable save fails the transfer — no ACK, wal stays miss', () async {
     const ts1 = 1700000000000;
     final card = _FakeLimitless(
       pages: [
@@ -590,10 +590,41 @@ void main() {
       ..testWals = [wal];
     sync.setLocalSync(local);
 
-    await sync.syncWal(wal: wal);
+    // Transfer to Phone shows "Transfer complete" whenever syncWal returns normally.
+    await expectLater(sync.syncWal(wal: wal), throwsException);
 
     expect(card.acks, isEmpty);
     expect(wal.status, isNot(WalStatus.synced));
+    expect(wal.isSyncing, isFalse);
+    await sync.stop();
+  });
+
+  test('Limitless: a cancelled transfer returns quietly and keeps the wal pending', () async {
+    final card = _FakeLimitless(pages: const []);
+    final wal = Wal(
+      timerStart: 1700000000,
+      codec: BleAudioCodec.opus,
+      seconds: 5,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'limitless-1',
+      fileNum: 0,
+      storageOffset: 0,
+      storageTotalBytes: 2,
+    );
+    final sync = FlashPageWalSyncImpl(_Listener())
+      ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+      ..testConnection = card
+      ..testWals = [wal];
+    sync.setLocalSync(_FakeLocalSync());
+
+    final transfer = sync.syncWal(wal: wal);
+    sync.cancelSync();
+
+    expect(await transfer, isNull, reason: 'the page already reported the cancel');
+    expect(wal.status, WalStatus.miss);
+    expect(wal.isSyncing, isFalse);
+    expect(card.realTimeMode, isTrue);
     await sync.stop();
   });
 }

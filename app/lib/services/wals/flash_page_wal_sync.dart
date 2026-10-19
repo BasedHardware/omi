@@ -318,7 +318,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     _cancelRequested = false;
     _lastStallReason = FlashSyncStallReason.none;
     final matches = _wals.where((w) => w == wal).toList();
-    if (matches.isEmpty) return null;
+    // Transfer to Phone reports any normal return as complete. The list is
+    // rebuilt when the pendant connects and before each sync, so a recording
+    // opened before that must fail here, not return null.
+    if (matches.isEmpty) throw Exception('Device recording list changed; go back and try again');
     final walToSync = matches.first;
 
     walToSync.isSyncing = true;
@@ -339,6 +342,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     walToSync.deviceDownloadFraction = null;
 
     listener.onWalUpdated();
+    // A stall or error leaves the rest of the audio on the pendant. Only a user
+    // cancel may return quietly; anything else would read as a finished transfer.
+    if (!completed && !_cancelRequested) {
+      throw Exception('Device transfer incomplete; recording kept on device');
+    }
     return null;
   }
 
