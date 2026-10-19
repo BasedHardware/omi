@@ -1298,6 +1298,18 @@ def _first_word_offset(words: list[Any]) -> float:
     return round(float(timing[0]), 2) if timing else 0.0
 
 
+def _shift_to_vad_file_clock(segments: list[TranscriptSegment], offset: float) -> None:
+    """Put lines timed from the first word back on the VAD file clock.
+
+    started_at, the stored audio chunk and capture evidence share that clock. The
+    file can open on a cough or noise well before the first word.
+    """
+    if offset:
+        for segment in segments:
+            segment.start = round(segment.start + offset, 2)
+            segment.end = round(segment.end + offset, 2)
+
+
 def _recover_empty_segment(
     path: str, uid: str, provider: str, lane: str, job_id: str | None, attempt_ref: str | None
 ) -> tuple[list[TranscriptSegment], str, float] | None:
@@ -1669,13 +1681,7 @@ def process_segment(
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
-        # Put each line back on the VAD file clock that started_at, the stored audio
-        # chunk and capture evidence share. The file can open on a cough or noise
-        # well before the first word.
-        if speech_offset:
-            for segment in transcript_segments:
-                segment.start = round(segment.start + speech_offset, 2)
-                segment.end = round(segment.end + speech_offset, 2)
+        _shift_to_vad_file_clock(transcript_segments, speech_offset)
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
