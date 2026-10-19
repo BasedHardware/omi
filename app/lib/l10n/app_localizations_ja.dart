@@ -10910,6 +10910,32 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
 
   @override
+  String get captureBannerTryReconnect => '再接続を試す';
+
+  @override
+  String get captureBannerRetrySync => '同期を再試行';
+
+  @override
+  String get captureBannerWhatsWrong => '何が起きていますか？';
+
+  @override
+  String get captureBannerDismiss => '非表示';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      'OmiとのBluetoothリンクが停止したため、音声がアプリに届いていません。Omiはデバイスで録音を続けており、リンクが回復すると同期されます。再試行するとリンクが再接続されます。引き続き失敗する場合は、設定 > デバイスでデバイスを確認してください。';
+
+  @override
+  String get captureLinkStalledTranscribesLater => 'オーディオ接続が停滞しています — 復旧後に文字起こしが再開されます';
+
+  @override
+  String get captureIngressNeedsReconnect => 'オーディオがアプリに届いていません — Omiを再接続してください';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      'アプリはOmiデバイスからのオーディオを受信できず、接続を自動的に復元できませんでした。デバイスの接続を解除して再接続してください — デバイス設定から、または電源を切って入れ直してください。デバイスに保存されたオーディオは後で同期されます。';
+
+  @override
   String get captureStillRecording => '録音は継続中';
 
   @override
