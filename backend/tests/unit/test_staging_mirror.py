@@ -207,3 +207,12 @@ def test_copy_object_rejects_sha_mismatch_and_bad_audio():
 def test_writer_only_targets_the_mirror_bucket():
     with pytest.raises(mo.MirrorRefused):
         mo.make_writer(object(), 'based-hardware-dev-staging-sync')
+
+
+def test_copy_stats_public_is_serializable():
+    stats = mo.CopyStats()
+    stats.audio_seconds = 7200.0
+    stats.fail('read:Timeout')
+    out = stats.public()
+    assert out['audio_hours'] == 2.0 and out['failed'] == {'read:Timeout': 1}
+    json.dumps(out)

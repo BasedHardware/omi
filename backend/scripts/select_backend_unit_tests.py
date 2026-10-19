@@ -216,6 +216,22 @@ def is_firestore_index_guard_path(path: str) -> bool:
 
 AREA_TESTS = (
     (
+        # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
+        # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES
+        # key: routers/batch_pipeline.py selected no route test. utils/enrichment/ stays unmapped on
+        # purpose so it keeps the full-suite fallback (which includes these tests).
+        ('backend/routers/batch_pipeline.py', 'backend/routers/sync.py', 'backend/utils/sync/reprocess.py'),
+        (),
+        (
+            'tests/unit/test_batch_pipeline_serving.py',
+            'tests/unit/test_sync_reprocess_coalesce.py',
+            'tests/unit/test_sync_enrichment_*.py',
+            'tests/unit/test_enrichment_route.py',
+            'tests/unit/test_task_target_retry_semantics.py',
+            'tests/unit/test_cloud_tasks_queue_model.py',
+        ),
+    ),
+    (
         # Legacy-sync retirement shared stubs (lane 1); owners extend the test list.
         ('backend/utils/workers/', 'backend/utils/observability/reasons.py', 'backend/utils/rollout/'),
         (),

@@ -3213,3 +3213,20 @@ _add(
         },
     )
 )
+
+
+_add(
+    DriverEntry(
+        'database.cap_hold_redrive.page',
+        domains={
+            'kind': ['choices', 'staging', 'cleanup'],
+            'after': [None, 'users/synthetic/processing_backlog/current'],
+        },
+    )
+)
+_add(
+    DriverEntry(
+        'database.cap_hold_redrive.discover',
+        domains={'kind': ['choices', 'staging', 'cleanup']},
+    )
+)

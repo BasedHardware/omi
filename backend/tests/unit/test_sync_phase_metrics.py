@@ -293,6 +293,7 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch, app_shutdown_h
     namespace = {
         'app': SimpleNamespace(state=SimpleNamespace()),
         'batch_pressure': SimpleNamespace(stop=AsyncMock()),
+        'flush_active': AsyncMock(),
         'drain_background_tasks': AsyncMock(),
         'shutdown_managed_spend_ledger': AsyncMock(),
         'shutdown_sync_metrics': metrics.shutdown_sync_metrics,
@@ -308,6 +309,8 @@ def test_app_shutdown_stops_and_joins_metrics_worker(monkeypatch, app_shutdown_h
         assert metrics._flush_shutdown.is_set()
         assert not flush.worker.is_alive()
         assert flush.pending.unfinished_tasks == 0
+        namespace['flush_active'].assert_awaited_once_with(timeout=30.0)
+        namespace['drain_background_tasks'].assert_awaited_once_with(timeout=10.0)
         namespace['close_all_clients'].assert_awaited_once()
     finally:
         flush.stop()
