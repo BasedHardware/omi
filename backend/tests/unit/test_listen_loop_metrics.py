@@ -10,9 +10,10 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
+from prometheus_client import REGISTRY
 
 import routers.listen.runtime as runtime_module
-import routers.transcribe  # noqa: F401  the listen websocket route's import path
+import routers.transcribe as transcribe_module
 import utils.observability.listen_loop as listen_loop
 from routers.metrics import metrics
 from routers.listen.receiver import ListenReceiver
@@ -292,6 +293,11 @@ async def test_listen_session_entry_starts_lag_probe_before_runtime(monkeypatch)
 
 
 def test_listen_metrics_endpoint_renders_lag_histogram(monkeypatch):
+    # The listen websocket route reaches this module's probe, and the histogram is the
+    # import-time collector on the default registry that listen /metrics serves.
+    assert transcribe_module.run_listen_session is runtime_module.run_listen_session
+    assert runtime_module.ensure_loop_lag_probe is listen_loop.ensure_loop_lag_probe
+    assert REGISTRY._names_to_collectors['omi_listen_event_loop_lag_seconds'] is LISTEN_EVENT_LOOP_LAG_SECONDS
     monkeypatch.setenv('METRICS_SECRET', 'scrape-token')
     response = metrics(HTTPAuthorizationCredentials(scheme='Bearer', credentials='scrape-token'))
     body = response.body.decode()
