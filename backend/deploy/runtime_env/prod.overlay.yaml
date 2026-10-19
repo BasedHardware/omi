@@ -1027,17 +1027,11 @@ overlay:
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
             category: rollout
-          SYNC_DURABLE_REDRIVE_GUARD:
-            value: 'true'
-            category: rollout
           SYNC_JOB_COMPLETED_TTL_SECONDS:
             value: '21600'
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
-            category: rollout
-          SYNC_LEGACY_COMPLETION_CONVERGENCE:
-            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'
@@ -1314,17 +1308,11 @@ overlay:
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
             category: rollout
-          SYNC_DURABLE_REDRIVE_GUARD:
-            value: 'true'
-            category: rollout
           SYNC_JOB_COMPLETED_TTL_SECONDS:
             value: '21600'
             category: rollout
           SYNC_JOB_METRIC_ONCE_TTL_SECONDS:
             value: '3600'
-            category: rollout
-          SYNC_LEGACY_COMPLETION_CONVERGENCE:
-            value: 'true'
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
             value: '600'

@@ -71,11 +71,8 @@ def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, mon
     from config import summary_guarantee
 
     prod_hosts = hosts(manifest['prod'])
-    for service in ('backend-sync', 'backend-sync-backfill'):
-        env = prod_hosts[service]
-        assert env['SYNC_DURABLE_REDRIVE_GUARD'] == {'value': 'true', 'category': 'rollout'}
-        assert env['SYNC_LEGACY_COMPLETION_CONVERGENCE'] == {'value': 'true', 'category': 'rollout'}
-    for service in ('backend', 'backend-integration', 'backend-listen'):
+    # Legacy-retire C11 deleted the redrive guard and its flags with legacy transcription.
+    for service in ('backend', 'backend-integration', 'backend-listen', 'backend-sync', 'backend-sync-backfill'):
         env = prod_hosts[service]
         assert 'SYNC_DURABLE_REDRIVE_GUARD' not in env
         assert 'SYNC_LEGACY_COMPLETION_CONVERGENCE' not in env

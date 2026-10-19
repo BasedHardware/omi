@@ -1412,13 +1412,6 @@ def _load_sync_router_for_fast_path():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.sync_redrive = types.SimpleNamespace(
-        enabled=lambda: os.getenv('SYNC_DURABLE_REDRIVE_GUARD') == 'true',
-        legacy_convergence_enabled=lambda: os.getenv('SYNC_LEGACY_COMPLETION_CONVERGENCE') == 'true',
-        preserve_missing_job=MagicMock(return_value='redrive_required'),
-        converge_legacy_completion=MagicMock(return_value=None),
-    )
-    module.redrive_policy = module.sync_redrive
 
     async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
