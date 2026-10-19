@@ -208,6 +208,24 @@ def projection_pagination_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'
 
 
+WORKER_PIPELINE_DEPTH_DEFAULT = 2
+WORKER_PIPELINE_DEPTH_MAX = 4
+
+
+def worker_pipeline_depth() -> int:
+    """Ship-on pump flights per GPU process; ``1`` restores the serial pump.
+
+    Only claim/admission and publication overlap: the GPU chain itself stays
+    exclusive, so device and host memory remain one flight. Malformed values
+    keep the default rather than silently serializing.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', str(WORKER_PIPELINE_DEPTH_DEFAULT)))
+    except ValueError:
+        return WORKER_PIPELINE_DEPTH_DEFAULT
+    return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
+
+
 WORKER_IO_CONCURRENCY_DEFAULT = 3
 WORKER_IO_CONCURRENCY_MAX = 8
 
@@ -242,3 +260,24 @@ def publish_concurrency() -> int:
     except ValueError:
         return 1
     return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+RECOVERY_WAKE_LEASE_DEFAULT = 600
+RECOVERY_WAKE_LEASE_MAX = 3600
+
+
+def recovery_wake_lease_seconds() -> int:
+    """Ship-on: one outstanding recovery delivery task per prepared intent.
+
+    The lease bounds how long an undelivered wake is trusted before the sweep
+    repairs it with a new one. ``0`` is the kill switch: the legacy 120s
+    time-bucketed wake on every sweep. Malformed or out-of-range values keep the
+    default.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS', str(RECOVERY_WAKE_LEASE_DEFAULT)))
+    except ValueError:
+        return RECOVERY_WAKE_LEASE_DEFAULT
+    if value == 0:
+        return 0
+    return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT

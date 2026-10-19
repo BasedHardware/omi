@@ -399,6 +399,7 @@ SCHEMA_GROUPS = {
             'FcmTokenResponse',
             'DeleteKnowledgeGraphResponse',
             'KnowledgeGraphResponse',
+            'CanonicalKnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
             'StatusResponse',

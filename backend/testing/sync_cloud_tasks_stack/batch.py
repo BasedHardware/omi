@@ -371,6 +371,7 @@ class BatchStack(Stack):
                 headers={
                     'Authorization': f'Bearer {local_oidc_token(SERVING_ORIGIN, LOCAL_INVOKER_SA)}',
                     'X-CloudTasks-TaskRetryCount': str(retry_count),
+                    'X-CloudTasks-TaskName': str(task.get('task_id') or ''),
                 },
             )
         _record_job_event(
@@ -998,7 +999,15 @@ def _fence_reason(stack: BatchStack, uid: str, conversation_id: str | None, gene
 # serving can stall one heartbeat for seconds; the 8s/2s compression used by
 # the kill scenario would then expire healthy leases (result_lease_lost). Keep
 # prod's 6:1 lease/heartbeat ratio at a scale the emulator can honour.
-TWO_WORKER_TIMING = {'OMI_BATCH_STACK_LEASE_SECONDS': '60', 'OMI_BATCH_STACK_HEARTBEAT_SECONDS': '10'}
+# One unit per flight: with the default pipeline depth a replica holds up to
+# depth x capacity claimed units (one chain plus a waiting lane), which at the
+# stack capacity of 4 covers this whole six-unit scenario. Bounding each claim
+# keeps both replicas draining so cross-replica once-only and order are tested.
+TWO_WORKER_TIMING = {
+    'OMI_BATCH_STACK_LEASE_SECONDS': '60',
+    'OMI_BATCH_STACK_HEARTBEAT_SECONDS': '10',
+    'BATCH_PIPELINE_MODEL_BATCH_SIZE': '1',
+}
 
 
 def _two_workers(stack: BatchStack) -> None:
