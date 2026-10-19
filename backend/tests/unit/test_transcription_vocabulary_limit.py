@@ -38,5 +38,6 @@ def test_vocabulary_at_the_limit_is_saved_whole(endpoint):
     response = client.patch('/v1/users/transcription-preferences', json={'vocabulary': terms})
 
     assert response.status_code == 200
-    assert response.json() == {'status': 'ok'}
+    # UserStatusResponse also serializes its optional message (None) for released clients.
+    assert response.json()['status'] == 'ok'
     assert saved == [('user-1', {'single_language_mode': None, 'vocabulary': terms})]
