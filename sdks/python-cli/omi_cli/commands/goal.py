@@ -211,7 +211,7 @@ def delete_goal(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete goal {goal_id}?", abort=True)
+        typer.confirm(f"Delete goal {goal_id}?", abort=True, err=ctx.renderer.json_mode)
     with ctx.make_client() as client:
         result = client.delete(f"/v1/dev/user/goals/{path_segment(goal_id)}")
     if ctx.renderer.json_mode:

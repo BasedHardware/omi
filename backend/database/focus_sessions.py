@@ -21,9 +21,17 @@ def _user_col(uid: str, collection: str) -> Any:
     return db.collection('users').document(uid).collection(collection)
 
 
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+def _typed_doc(doc: Any) -> Optional[Dict[str, Any]]:
+    doc_id = getattr(doc, 'id', 'unknown')
+    try:
+        raw: object = doc.to_dict()
+    except Exception as exc:
+        logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+        return None
+    if not isinstance(raw, dict) or not raw:
+        logger.warning("Skipping malformed focus session %s: EmptyOrNonDictDocument", doc_id)
+        return None
+    return cast(Dict[str, Any], raw)
 
 
 def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs: Any) -> Dict[str, Any]:
@@ -108,8 +116,16 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
     query = query.offset(offset).limit(limit)
     items: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = _typed_doc(doc)
-        items.append(_normalize_focus_session_doc(doc.id, data))
+        raw = _typed_doc(doc)
+        if raw is None:
+            continue
+
+        doc_id = getattr(doc, 'id', 'unknown')
+        try:
+            items.append(_normalize_focus_session_doc(str(doc_id), raw))
+        except Exception as exc:
+            logger.warning("Skipping malformed focus session %s: %s", doc_id, type(exc).__name__)
+            continue
     return items
 
 

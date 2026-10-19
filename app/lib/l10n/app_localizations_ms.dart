@@ -9340,9 +9340,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count lagi';
-  }
+  String get quoteShowSources => 'Tunjukkan sumber';
 
   @override
   String get jumpToLatestMessage => 'Lompat ke mesej terkini';
@@ -11087,7 +11085,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Omi tidak menghantar audio — ketik untuk menyambung semula';
+  String get captureRecoveryBannerTitle => 'Omi tidak menghantar audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11106,17 +11104,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureBannerRetrySync => 'Cuba segerak semula';
 
   @override
-  String get captureBannerWhatsWrong => 'Apa yang berlaku?';
-
-  @override
-  String get captureBannerDismiss => 'Tutup';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Pautan Bluetooth ke Omi anda tersekat, jadi audio tidak sampai ke aplikasi. Omi terus merakam pada peranti dan akan disegerakkan apabila pautan pulih. Mencuba semula menyambung semula pautan; jika ia terus gagal, semak peranti anda di Tetapan > Peranti.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Pautan audio terhenti — transkripsi diteruskan apabila pulih';
 
   @override
   String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan semula Omi anda';
@@ -13715,7 +13704,30 @@ class AppLocalizationsMs extends AppLocalizations {
   String get activityRetryAll => 'Cuba semua semula';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Storan tidak dapat disemak';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Rakaman dijedakan';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Muat naik terhenti';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman menunggu',
+      one: '1 rakaman menunggu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
+
+  @override
+  String get activityAttentionSemantics => 'Aktiviti, memerlukan perhatian';
 
   @override
   String get connectAgentHeadline => 'Gunakan memori Omi anda dalam ChatGPT dan ejen AI anda';
@@ -14402,4 +14414,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return '$saved daripada $total audio disimpan';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi masih merakam';
 }

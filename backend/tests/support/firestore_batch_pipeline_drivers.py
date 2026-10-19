@@ -57,6 +57,18 @@ def entries():
             domains={'namespace': namespaces, 'after': [None, (2.0, 'result-100')]},
             neutrals={'limit': (100, 'bounded page size only')},
         ),
+        DriverEntry(
+            'database.batch_pipeline_store.projection_successor',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'previous': [None, 'segment-head']},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_successor',
+            covered_by=('database.batch_pipeline_store.projection_successor',),
+            reason='store adapter forwards namespace, owner and predecessor unchanged',
+            expect_observed=False,
+            body_digest='96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
+        ),
         CoveredByEntry(
             'database.batch_pipeline_store.projection_pending',
             covered_by=('database.batch_pipeline_store.projection_page',),
