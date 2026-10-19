@@ -10,6 +10,7 @@ from google.api_core.exceptions import (
     GoogleAPICallError,
     NotFound,
 )
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -998,15 +999,24 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
 def _unchanged_action_item_patch(current: Dict[str, Any], patch: Dict[str, Any]) -> bool:
     """Use only an already-required read; absent fields still need a write.
 
-    Explicit timestamp touches, transforms and conditional chat edits keep the
-    ordinary write path. SDK invalidation remains mandatory for every commit.
+    Structured values, untrusted subclasses, explicit timestamp touches,
+    transforms and conditional chat edits keep the ordinary write path. Python
+    collection equality can conflate nested bool/int values; do not trust it.
+    Only a current-derived SDK completion timestamp may match by identity.
+    SDK invalidation remains mandatory for every commit.
     """
     if os.getenv('OMI_DEV_ACTION_ITEMS_SKIP_NOOP_WRITES_ENABLED', '').strip().lower() == 'false':
         return False
     if 'updated_at' in patch:
         return False
     return all(
-        key in current and type(current[key]) is type(value) and current[key] == value for key, value in patch.items()
+        key in current
+        and type(current[key]) is type(value)
+        and (
+            (key == 'completed_at' and type(value) is DatetimeWithNanoseconds and value is current[key])
+            or (type(value) in (type(None), bool, int, float, str, datetime) and current[key] == value)
+        )
+        for key, value in patch.items()
     )
 
 

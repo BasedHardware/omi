@@ -73,15 +73,21 @@ version. Removing invalidation for actual writes would make cached responses
 stale.
 
 Single-item ordinary/linked updates now compare the effective patch against the
-snapshot they **already must read**. Exactly identical stored fields acknowledge
+snapshot they **already must read**. Exactly identical stored scalar fields acknowledge
 success without updating `updated_at`, committing or bumping versions. Missing
-fields, changed values/types, explicit `updated_at` touches, transforms and
+fields, changed values/types, structured values, untrusted subclasses, explicit
+`updated_at` touches, transforms and
 conditional chat journal edits retain the write path. Linked updates still
 validate goal/workstream relationships transactionally. Completion follow-up
 reconciliation still runs. Batch sync entries with no existing pre-read remain
 unchanged: introducing read-before-write to suppress them would add cost. This
 is a bounded source of avoided churn; its production frequency is unmeasured.
-No additional read is introduced. The mutation intentionally preserves the old
+No additional read is introduced. The reused current `completed_at` may be a
+real SDK `DatetimeWithNanoseconds`: the exact trusted SDK type is accepted by
+identity only, so ordinary and linked completion replays remain optimized.
+Distinct timestamp objects retain writes, including nanosecond changes hidden
+by Python datetime equality. Collections, transforms and arbitrary equality
+overrides are never used to establish a no-op. The mutation intentionally preserves the old
 stored timestamp for a true no-op; changing data still stamps `updated_at`.
 
 Effective pagination was already clamped before cache addressing. Equivalent

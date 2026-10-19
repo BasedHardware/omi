@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
 from database import action_items as items
 
@@ -107,3 +108,59 @@ def test_conditional_chat_edit_never_short_circuits(stored, monkeypatch):
     apply.assert_called_once()
     assert state['after'] == {'description': 'Task'}
     bumps.assert_called_once()
+
+
+@pytest.mark.parametrize('value', [[{'ordinal': True}], [{'ordinal': 1}]])
+def test_structured_fields_keep_write_and_invalidation_even_when_python_equal(stored, value):
+    state, ref, bumps, _ = stored
+    state.row['provenance'] = [{'ordinal': 1}]
+    assert items.update_action_item('owner', 'task', {'provenance': value}) is True
+    assert ref.get.call_count == ref.update.call_count == 1
+    bumps.assert_called_once_with('owner')
+
+
+@pytest.mark.parametrize('linked', [False, True])
+def test_real_sdk_completion_timestamp_replay_reuses_identity_without_writing(stored, monkeypatch, linked):
+    state, ref, bumps, followups = stored
+    state.row['completed_at'] = DatetimeWithNanoseconds.from_rfc3339('2026-01-01T00:00:00.123456789Z')
+    patch = {'completed': True, 'completed_at': datetime(2026, 10, 19, tzinfo=timezone.utc)}
+    transaction = Mock()
+    if linked:
+        patch['goal_id'] = None
+        monkeypatch.setattr(items.firestore, 'transactional', lambda fn: fn)
+        monkeypatch.setattr(items, 'validate_task_relationship_in_transaction', Mock())
+        monkeypatch.setattr(
+            items, 'run_with_transaction_contention_retry', lambda factory, fn, **kwargs: fn(transaction)
+        )
+    assert items.update_action_item('owner', 'task', patch) is True
+    assert ref.get.call_count == 1
+    ref.update.assert_not_called()
+    transaction.update.assert_not_called()
+    bumps.assert_not_called()
+    followups.assert_called_once_with('owner', 'task')
+    assert state.row['completed_at'].nanosecond == 123456789
+
+
+def test_distinct_sdk_nanoseconds_are_written_even_when_datetime_equality_conflates_them(stored):
+    state, ref, bumps, _ = stored
+    previous = DatetimeWithNanoseconds.from_rfc3339('2026-01-01T00:00:00.123456789Z')
+    changed = DatetimeWithNanoseconds.from_rfc3339('2026-01-01T00:00:00.123456790Z')
+    assert previous == changed and previous.nanosecond != changed.nanosecond
+    state.row['completed_at'] = previous
+    assert items.update_action_item('owner', 'task', {'completed_at': changed}) is True
+    ref.update.assert_called_once()
+    assert ref.update.call_args.args[0]['completed_at'].nanosecond == 123456790
+    bumps.assert_called_once_with('owner')
+
+
+def test_arbitrary_scalar_subclass_equality_is_never_trusted(stored):
+    class UntrustedText(str):
+        def __eq__(self, other):
+            raise AssertionError('arbitrary equality must not be evaluated')
+
+    state, ref, bumps, _ = stored
+    value = UntrustedText('Task')
+    state.row['description'] = value
+    assert items.update_action_item('owner', 'task', {'description': value}) is True
+    ref.update.assert_called_once()
+    bumps.assert_called_once_with('owner')
