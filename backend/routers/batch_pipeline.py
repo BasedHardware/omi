@@ -32,7 +32,8 @@ ENRICHMENT_RETRIES = Counter(
 # Deliberate retain-and-retry signals, matched by defining module and name so
 # this router does not import the sync pipeline at startup.
 EXPECTED_RETRIES = {
-    ('utils.sync.reprocess', 'FirstSummaryCallbackPending'): 'callback_pending',
+    # Keyed by the defining module: utils.sync.reprocess is only an alias of utils.enrichment.outbox (#22431).
+    ('utils.enrichment.outbox', 'FirstSummaryCallbackPending'): 'callback_pending',
     ('utils.sync.pipeline', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
 }
 
