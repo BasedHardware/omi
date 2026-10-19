@@ -275,7 +275,9 @@ silence until the stored `external_data.calendar_meeting_context.start_time` +
 `duration_minutes` + 120 seconds of grace. The stored calendar event id owns this
 window; screen-derived identity does not extend it, and meeting-treatment
 eligibility does not gate it. Reconnect admission, continuation-pointer lookup,
-and the active lifecycle loop use the same deadline. Source/device/lock partitions
+and the active lifecycle loop use the same deadline. The window never shortens the
+ordinary or user-configured silence deadline: speech after the scheduled end, or a
+longer silence setting, keeps that deadline. Source/device/lock partitions
 and empty-generation deletion keep their existing checks; non-meeting recordings
 keep the 120-second silence rule. The continuation transaction reads the complete
 conversation metadata, including the stored calendar context, without decoding

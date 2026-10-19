@@ -125,17 +125,29 @@ class BatchMutationResult:
 
 
 def _iter_query_pages(
-    query: Any, *, page_size: int = _ACTION_ITEM_SCAN_PAGE_SIZE, budget: Optional[ListReadBudget] = None
+    query: Any,
+    *,
+    page_size: int = _ACTION_ITEM_SCAN_PAGE_SIZE,
+    budget: Optional[ListReadBudget] = None,
+    transaction: Any = None,
 ) -> Iterable[Any]:
-    """Yield a complete query result through bounded snapshot-cursor pages."""
+    """Yield a complete query result through bounded snapshot-cursor pages.
+
+    With ``transaction``, every page is read inside that transaction instead of under ``budget``.
+    """
     cursor = None
     while True:
         page_query = query.limit(page_size)
         if cursor is not None:
             page_query = page_query.start_after(cursor)
         page = []
+        rows = (
+            budgeted_stream_iter(page_query, budget)
+            if transaction is None
+            else page_query.stream(transaction=transaction)
+        )
         try:
-            for doc in budgeted_stream_iter(page_query, budget):
+            for doc in rows:
                 page.append(doc)
                 yield doc
         except ListReadBudgetExhausted:
@@ -298,8 +310,9 @@ def create_action_item(
                 existing_query = existing_query.where(
                     filter=FieldFilter('account_generation', '==', account_generation)
                 )
-            existing_query = existing_query.limit(5)
-            for existing in existing_query.stream(transaction=write_transaction):
+            # Rows skipped below still match the key, so read every match page by page:
+            # a single limit(5) read let five deleted rows hide the live task.
+            for existing in _iter_query_pages(existing_query, page_size=5, transaction=write_transaction):
                 data = typed_doc(existing)
                 if account_generation == 0 and int(data.get('account_generation', 0)) != 0:
                     continue
