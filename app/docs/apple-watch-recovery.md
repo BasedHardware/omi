@@ -102,8 +102,15 @@ to the processing services as well as releasing both mobile companions.
   unavailable, disk pressure, account switch, Stop before transfer and at least
   11h06m of capture. Compare sample counts/digests, memory, battery and transfer
   completion, and verify playback/Process Now on iPhone.
-- [ ] Complete full iPhone build/CI review, merge, deploy the sync processing
-  backend and release both companions.
+- [x] After merging current main, re-verify project membership: `WatchRecordingStore.swift`
+  compiles once into Runner, RunnerRayBanDat and omiWatchApp, and `SafeFoundationSinks.swift`
+  has no duplicate build entries (`watch_recording_recovery_test.rb` checks the store count).
+- [ ] Complete full iPhone build/CI review and merge.
+- [ ] Deploy the sync processing backend (fresh/backfill workers and inline hosts)
+  before releasing the iOS build that contains the paired iPhone and Watch apps;
+  an older backend ignores the explicit Process Now keep rule, so recovered Watch
+  speech can fall back to the automatic discard policy.
+- [ ] Release the signed iPhone app with its Watch companion.
 - [ ] Verify this customer's old server records, crash diagnostics and queued
   legacy transfers using private account ID and exact recording times.
 - [ ] Confirm customer recovery or explicitly document which audio could not be
