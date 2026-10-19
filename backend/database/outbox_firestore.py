@@ -343,6 +343,10 @@ def FirestoreOutbox(  # noqa: N802 (the conformance suite's factory name, contra
     create_wake: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> FirestoreEnrichmentOutbox:
     """A Firestore outbox bound to ``client``; the conformance suite injects the privacy check and task creator."""
+    if OutboxKind(kind) is OutboxKind.PROVIDER_STT:  # lane 8 (lead ruling 10-19)
+        from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+        return FirestoreProviderSttOutbox(client, privacy_blocked=privacy_blocked, create_wake=create_wake)  # type: ignore[return-value]
     if OutboxKind(kind) is not OutboxKind.ENRICHMENT:
         raise NotImplementedError(f'no Firestore outbox for {OutboxKind(kind).value} in this window')
     return FirestoreEnrichmentOutbox(client, privacy_blocked=privacy_blocked, create_wake=create_wake)
@@ -352,4 +356,8 @@ def firestore_outbox(kind: OutboxKind):
     """The Firestore implementation behind ``database.outbox.outbox_for`` in this window."""
     if OutboxKind(kind) is OutboxKind.ENRICHMENT:
         return ENRICHMENT_OUTBOX
+    if OutboxKind(kind) is OutboxKind.PROVIDER_STT:  # lane 8 (lead ruling 10-19)
+        from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+        return FirestoreProviderSttOutbox()
     raise NotImplementedError(f'no Firestore outbox for {OutboxKind(kind).value} in this window')
