@@ -902,6 +902,7 @@ extension SettingsContentView {
           ) {
             vocabularyList = transcription.vocabulary
             AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+            savedVocabularyList = transcription.vocabulary
           } else {
             vocabularyList = AssistantSettings.shared.transcriptionVocabulary
           }
