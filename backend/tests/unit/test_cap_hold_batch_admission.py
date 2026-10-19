@@ -171,8 +171,15 @@ async def test_draining_hands_the_hold_to_batch_and_never_runs_legacy(hook, monk
         return adapter.HeldAdmission('admitted', 'bp_job')
 
     monkeypatch.setattr(adapter, 'admit_held', admit)
+    # The funded-capacity reservation (lane 6) lands before the hand-off is durable.
+    monkeypatch.setattr(
+        cap_hold_recovery.cap_hold_reservations,
+        'reserve',
+        lambda uid, hold_id, **kwargs: hook.events.append(('reserve', hold_id, kwargs['batch_job_id'])),
+    )
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert hook.events == [
+        ('reserve', 'hold-1', 'bp_job'),
         ('save', {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}),
         ('erase',),
         ('release', 'lease'),
