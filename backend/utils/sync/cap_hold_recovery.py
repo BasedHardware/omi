@@ -381,6 +381,11 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
     if row.get('state') == 'completed':
         await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
         return True
+    if row.get('state') == 'batch_admitted':
+        # Terminal hand-off (lane 8): batch owns this audio. Only finish an interrupted erase; never
+        # claim, re-admit, or settle it (settlement would bill the batch-processed audio twice).
+        await run_blocking(storage_executor, _erase, uid, snapshot, row)
+        return True
     row = await run_blocking(db_executor, cap_hold.claim, uid, snapshot.reference, time.time())
     if row is None:
         return False
@@ -390,6 +395,11 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
         if await run_blocking(db_executor, cap_hold_admission.enabled_for, row):
             # Legacy draining/dark: re-enter through batch admission (lane 8). Batch owns the
             # conversation and usage; the hold is handed off and erased, never settled as legacy.
+            # The same new-dispatch gate as legacy recovery (funded allowance, hard restriction,
+            # daily ceiling): a gated owner's audio stays held.
+            if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+                return False
+            # checkpoint() decrements the held-audio summary in this same transaction (held -> batch_admitted).
             admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
             if admitted.outcome not in ('admitted', 'already_admitted'):
                 return False

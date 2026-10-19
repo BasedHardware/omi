@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 HeldOutcome = Literal['admitted', 'already_admitted', 'privacy_blocked', 'retry']
 # Sealing/staging live sources are not immutable yet; the recovery worker returns early for them too.
 _UNSEALED = frozenset({'staging', 'sealing'})
+# Terminal or legacy-owned states: never (re-)admitted.
+_DONE = frozenset({'batch_admitted', 'completed', 'retained', 'purged'})
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,12 @@ def held_content_id(uid: str, hold_id: str) -> str:
 
 def eligible(row: Mapping[str, Any]) -> bool:
     """No legacy spend has started on this hold and its source is sealed."""
-    return not row.get('piece_receipts') and not row.get('processed_paths') and row.get('state') not in _UNSEALED
+    return (
+        not row.get('piece_receipts')
+        and not row.get('processed_paths')
+        and row.get('state') not in _UNSEALED
+        and row.get('state') not in _DONE
+    )
 
 
 def enabled_for(row: Mapping[str, Any], mode: LegacySyncMode | None = None) -> bool:

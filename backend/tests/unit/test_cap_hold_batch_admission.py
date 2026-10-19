@@ -38,6 +38,8 @@ def test_derived_content_id_is_stable_per_hold_and_never_the_legacy_one():
         ({'state': 'held', 'processed_paths': ['a']}, False),
         ({'state': 'staging'}, False),
         ({'state': 'sealing'}, False),
+        ({'state': 'batch_admitted', 'batch_job_id': 'bp_x'}, False),
+        ({'state': 'completed'}, False),
     ],
 )
 def test_only_unspent_sealed_holds_are_eligible(row, expected):
@@ -156,8 +158,9 @@ def hook(monkeypatch):
     monkeypatch.setattr(cap_hold_recovery, '_recover_row', legacy)
     monkeypatch.setattr(cap_hold_recovery, '_erase', lambda uid, snapshot, current: events.append(('erase',)))
     monkeypatch.setattr(cap_hold_recovery, '_settle_and_erase', lambda *a: events.append(('settle_and_erase',)))
+    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid: True)
     snapshot = SimpleNamespace(id='hold-1', reference=object(), to_dict=lambda: dict(row))
-    return SimpleNamespace(events=events, snapshot=snapshot)
+    return SimpleNamespace(events=events, snapshot=snapshot, row=row)
 
 
 @pytest.mark.asyncio
@@ -193,3 +196,53 @@ async def test_on_keeps_the_legacy_recovery_path(hook, monkeypatch):
     monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: False)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert ('legacy',) in hook.events and ('erase',) not in hook.events
+
+
+@pytest.mark.asyncio
+async def test_restricted_or_capped_owner_keeps_the_audio_held(hook, monkeypatch):
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None: True)
+    monkeypatch.setattr(cap_hold_recovery, '_new_dispatch_allowed', lambda uid: False)
+    monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('gated owner admitted'))
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
+    assert hook.events == [('release', 'lease')]
+
+
+@pytest.mark.asyncio
+async def test_reselecting_a_batch_admitted_row_is_a_no_op(hook, monkeypatch):
+    hook.row.update(state='batch_admitted', batch_job_id='bp_job')
+    monkeypatch.setattr(cap_hold, 'claim', lambda *a: pytest.fail('terminal hand-off claimed again'))
+    monkeypatch.setattr(adapter, 'admit_held', lambda *a: pytest.fail('terminal hand-off re-admitted'))
+    assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
+    assert hook.events == [('erase',)]  # finishes an interrupted erase only; never settles (no double bill)
+
+
+def test_batch_admitted_transition_leaves_nothing_held_so_checkpoint_decrements_the_summary():
+    held = {'state': 'held', 'seconds': 42.0}
+    assert cap_hold.remaining_seconds(held) == 42.0
+    assert cap_hold.remaining_seconds({**held, 'state': 'batch_admitted', 'batch_job_id': 'bp_job'}) == 0.0
+
+
+def test_checkpoint_decrements_the_held_summary_once_on_batch_admitted(monkeypatch):
+    from contextlib import nullcontext
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    path = ('users', UID, 'stt_cap_holds', 'hold-1')
+    summary = ('users', UID, cap_hold.SUMMARY_COLLECTION, 'current')
+    client = StrictFirestore(
+        {
+            path: {'state': 'held', 'seconds': 42.0, 'lease_until': 0},
+            summary: {'version': 2, 'seconds': 42.0, 'count': 1},
+        }
+    )
+    ref = client.document('/'.join(path))
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
+    monkeypatch.setattr(cap_hold, 'ensure_summary', lambda uid: None)
+    monkeypatch.setattr(cap_hold, 'forget_request_reads', lambda uid: None)
+    monkeypatch.setattr(cap_hold.time, 'time', lambda: 100.0)
+    token = cap_hold.claim(UID, ref, 100.0)['lease_token']
+    handoff = {'state': 'batch_admitted', 'batch_job_id': 'bp_job'}
+    assert cap_hold.checkpoint(UID, ref, token, handoff)
+    assert client.rows[summary] == {'version': 2, 'seconds': 0.0, 'count': 0}
+    assert cap_hold.checkpoint(UID, ref, token, handoff)  # a retried save never double-decrements
+    assert client.rows[summary] == {'version': 2, 'seconds': 0.0, 'count': 0}
