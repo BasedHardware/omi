@@ -40,6 +40,15 @@ SMOKE = load_module("smoke_public_build_browser", SMOKE_PATH)
 RUNTIME_PREFLIGHT = load_module("preflight_public_build_runtime", RUNTIME_PREFLIGHT_PATH)
 
 
+@contextlib.contextmanager
+def fake_browser_discovery():
+    with (
+        patch.object(SMOKE, "_resolve_browser", side_effect=lambda browser, _environment: browser),
+        patch.object(SMOKE, "_browser_version", return_value="Google Chrome 130.0.0.0"),
+    ):
+        yield
+
+
 def fixture_contract() -> dict:
     return {
         "schema_version": 4,
@@ -211,7 +220,7 @@ jobs:
         contract = fixture_contract()
         contract["targets"]["fake"]["candidate_acceptance"]["path"] = "/login"
         self.write_json("config/public-build-contract.json", contract)
-        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+        with fake_browser_discovery(), patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
             SMOKE.smoke(
                 target="fake",
                 base_url="https://candidate.example",
@@ -221,7 +230,7 @@ jobs:
         self.assertEqual(run.call_args.args[0][-1], "https://candidate.example/login")
 
         self.write_json("config/public-build-contract.json", fixture_contract())
-        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+        with fake_browser_discovery(), patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
             SMOKE.smoke(
                 target="fake",
                 base_url="https://candidate.example",
@@ -238,6 +247,21 @@ jobs:
         self.assertEqual((frontend.timeout_seconds, frontend.retry_timeout_seconds), (45, 19))
         self.assertEqual(app.path, "/login")
         self.assertEqual(frontend.path, "/")
+        self.assertEqual(
+            STATIC.MAX_BROWSER_CANDIDATES,
+            len(SMOKE.browser_candidates({"OMI_BROWSER_BIN": "custom-browser"})),
+        )
+        worst_case_seconds = STATIC.MAX_BROWSER_CANDIDATES * (
+            app.timeout_seconds
+            + STATIC.BROWSER_EXIT_GRACE_SECONDS
+            + (STATIC.SMOKE_RETRY_ATTEMPTS - 1)
+            * (
+                app.retry_timeout_seconds
+                + STATIC.BROWSER_EXIT_GRACE_SECONDS
+                + STATIC.SMOKE_RETRY_SLEEP_SECONDS
+            )
+        )
+        self.assertLessEqual(worst_case_seconds, STATIC.MAX_TOTAL_SMOKE_SECONDS)
 
     def test_manual_development_dispatch_on_an_exact_pr_head_uses_development(self) -> None:
         self.assertEqual(
@@ -1183,12 +1207,13 @@ jobs:
         original = SMOKE.render_candidate
         SMOKE.render_candidate = lambda **_kwargs: '<span data-omi-public-build-canary="fake:ready" />'
         try:
-            SMOKE.smoke(
-                target="fake",
-                base_url="https://candidate.example",
-                contract_path=self.root / "config/public-build-contract.json",
-                environment={"OMI_BROWSER_BIN": "fake-browser"},
-            )
+            with fake_browser_discovery():
+                SMOKE.smoke(
+                    target="fake",
+                    base_url="https://candidate.example",
+                    contract_path=self.root / "config/public-build-contract.json",
+                    environment={"OMI_BROWSER_BIN": "fake-browser"},
+                )
         finally:
             SMOKE.render_candidate = original
 
@@ -1205,6 +1230,7 @@ jobs:
             for failed_attempts in (1, 2):
                 with self.subTest(failure=failure, failed_attempts=failed_attempts):
                     with (
+                        fake_browser_discovery(),
                         patch.object(SMOKE.subprocess, "run", side_effect=[failure] * failed_attempts + [ready]) as run,
                         patch.object(SMOKE.time, "sleep") as sleep,
                         contextlib.redirect_stderr(io.StringIO()),
@@ -1227,6 +1253,7 @@ jobs:
         self.write_json("config/public-build-contract.json", contract)
         ready = SimpleNamespace(returncode=0, stdout='<span data-omi-public-build-canary="fake:ready" />')
         with (
+            fake_browser_discovery(),
             patch.object(
                 SMOKE.subprocess,
                 "run",
@@ -1261,7 +1288,7 @@ jobs:
             stdout='<span data-omi-public-build-canary="fake:ready" />',
             stderr="",
         )
-        with patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
+        with fake_browser_discovery(), patch.object(SMOKE.subprocess, "run", return_value=ready) as run:
             SMOKE.smoke(
                 target="fake",
                 base_url="https://candidate.example",
@@ -1270,6 +1297,102 @@ jobs:
                 virtual_time_budget_ms=2_500,
             )
         self.assertIn("--virtual-time-budget=2500", run.call_args.args[0])
+
+    def test_browser_candidates_order_override_headless_shell_before_desktop_chrome(self) -> None:
+        self.assertEqual(
+            SMOKE.browser_candidates({"OMI_BROWSER_BIN": "/custom/chrome"}),
+            (
+                "/custom/chrome",
+                "chrome-headless-shell",
+                "google-chrome",
+                "google-chrome-stable",
+                "chromium",
+                "chromium-browser",
+            ),
+        )
+        self.assertEqual(
+            SMOKE.browser_candidates({"OMI_BROWSER_BIN": "chrome-headless-shell"})[0],
+            "chrome-headless-shell",
+        )
+
+    def test_browser_smoke_prefers_headless_shell_and_logs_each_version_once(self) -> None:
+        ready = '<span data-omi-public-build-canary="fake:ready" />'
+        stderr = io.StringIO()
+        with (
+            patch.object(SMOKE, "_resolve_browser", side_effect=lambda browser, _environment: browser),
+            patch.object(SMOKE, "_browser_version", return_value="HeadlessShell 130.0") as version,
+            patch.object(SMOKE, "render_candidate", return_value=ready) as render,
+            contextlib.redirect_stderr(stderr),
+        ):
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={},
+            )
+
+        self.assertEqual(render.call_args.kwargs["browser"], "chrome-headless-shell")
+        self.assertEqual(version.call_count, len(SMOKE.browser_candidates({})))
+        self.assertEqual(stderr.getvalue().count("version=HeadlessShell 130.0"), len(SMOKE.browser_candidates({})))
+
+    def test_browser_smoke_logs_missing_candidates_and_skips_their_render(self) -> None:
+        ready = '<span data-omi-public-build-canary="fake:ready" />'
+        stderr = io.StringIO()
+        with (
+            patch.object(
+                SMOKE,
+                "_resolve_browser",
+                side_effect=lambda browser, _environment: browser if browser == "chrome-headless-shell" else None,
+            ),
+            patch.object(SMOKE, "_browser_version", return_value="HeadlessShell 130.0"),
+            patch.object(SMOKE, "render_candidate", return_value=ready) as render,
+            contextlib.redirect_stderr(stderr),
+        ):
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={},
+            )
+
+        self.assertEqual(render.call_args.kwargs["browser"], "chrome-headless-shell")
+        self.assertIn("browser candidate: name=google-chrome version=absent", stderr.getvalue())
+        self.assertEqual(stderr.getvalue().count("version=absent"), len(SMOKE.browser_candidates({})) - 1)
+
+    def test_browser_smoke_uses_hardening_flags_and_a_fresh_profile_per_attempt(self) -> None:
+        result = SimpleNamespace(returncode=0, stdout="<html></html>", stderr="")
+        with patch.object(SMOKE.subprocess, "run", return_value=result) as run:
+            SMOKE._render_candidate_once(
+                browser="fake-browser",
+                base_url="https://candidate.example",
+                timeout=45,
+                virtual_time_budget_ms=10_000,
+            )
+            SMOKE._render_candidate_once(
+                browser="fake-browser",
+                base_url="https://candidate.example",
+                timeout=19,
+                virtual_time_budget_ms=10_000,
+            )
+
+        argv = [call.args[0] for call in run.call_args_list]
+        required_flags = {
+            "--disable-crash-reporter",
+            "--disable-breakpad",
+            "--disable-component-update",
+            "--disable-sync",
+            "--disable-features=MediaSessionService,MediaRouter",
+            "--no-first-run",
+            "--disable-gpu-sandbox",
+        }
+        for args in argv:
+            self.assertTrue(required_flags.issubset(args))
+            self.assertIn("--headless=new", args)
+            self.assertIn("--dump-dom", args)
+        profile_args = [next(arg for arg in args if arg.startswith("--user-data-dir=")) for args in argv]
+        profile_paths = [Path(arg.partition("=")[2]) for arg in profile_args]
+        self.assertEqual(len(set(profile_paths)), 2)
+        self.assertTrue(all(not path.exists() for path in profile_paths))
 
     def test_browser_smoke_logs_stderr_tail_and_stdout_presence_on_failure(self) -> None:
         stderr = "discarded-prefix\n" + ("x" * 2_050) + "\nlast chrome error"
@@ -1309,6 +1432,7 @@ jobs:
         rendered = SimpleNamespace(returncode=0, stdout="partial DOM", stderr="Firebase boot still pending")
         output = io.StringIO()
         with (
+            fake_browser_discovery(),
             patch.object(SMOKE.subprocess, "run", return_value=rendered),
             contextlib.redirect_stderr(output),
         ):
@@ -1355,6 +1479,7 @@ jobs:
                     results = [SimpleNamespace(returncode=1, stdout="")] if transient_first else []
                     results.append(SimpleNamespace(returncode=0, stdout=document))
                     with (
+                        fake_browser_discovery(),
                         patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
                         patch.object(SMOKE.time, "sleep") as sleep,
                         contextlib.redirect_stderr(io.StringIO()),
@@ -1390,6 +1515,7 @@ jobs:
                 ] * len(browsers)
                 results[-1] = last_failure
                 with (
+                    fake_browser_discovery(),
                     patch.object(SMOKE.subprocess, "run", side_effect=results) as run,
                     patch.object(SMOKE.time, "sleep") as sleep,
                     contextlib.redirect_stderr(io.StringIO()),
@@ -1496,22 +1622,23 @@ jobs:
             lambda **_kwargs: '<span data-omi-public-build-canary="fake:ready" data-omi-public-build-sha="aaaa" />'
         )
         try:
-            with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+            with fake_browser_discovery():
+                with self.assertRaises(SMOKE.BrowserSmokeError) as caught:
+                    SMOKE.smoke(
+                        target="fake",
+                        base_url="https://candidate.example",
+                        contract_path=self.root / "config/public-build-contract.json",
+                        environment={"OMI_BROWSER_BIN": "fake-browser"},
+                        expect_sha="bbbb",
+                    )
+                self.assertEqual(str(caught.exception), "client public-build sha did not match")
                 SMOKE.smoke(
                     target="fake",
                     base_url="https://candidate.example",
                     contract_path=self.root / "config/public-build-contract.json",
                     environment={"OMI_BROWSER_BIN": "fake-browser"},
-                    expect_sha="bbbb",
+                    expect_sha="aaaa",
                 )
-            self.assertEqual(str(caught.exception), "client public-build sha did not match")
-            SMOKE.smoke(
-                target="fake",
-                base_url="https://candidate.example",
-                contract_path=self.root / "config/public-build-contract.json",
-                environment={"OMI_BROWSER_BIN": "fake-browser"},
-                expect_sha="aaaa",
-            )
         finally:
             SMOKE.render_candidate = original
         self.assertIn("client public-build sha did not match", SMOKE.SAFE_BROWSER_SMOKE_REASONS)
