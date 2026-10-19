@@ -15,17 +15,13 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled
 from utils.observability.stt_cap_dispatch import record_audio
 from utils.observability.fallback import record_fallback
 from config.batch_pipeline import (
-    recovery_owners,
     recovery_dispatch_batch_size,
-    recovery_tasks_enabled,
     recovery_wake_lease_seconds,
-    recovery_enabled_for,
-    recover_all_admitted,
     empty_asr_disposition_enabled,
-    speech_empty_multilingual_enabled,
-    terminal_empty_disposition_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_policy import load_stage_policy
+from config.policy import RecoveryPolicy, kill_switch
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
@@ -86,7 +82,7 @@ def transcribe(item, binding, audio, *, multilingual=None):
         clean.writeframes(pcm)
     # attempts=2 disables all existing client retry branches. An uncertain call
     # must remain held, never be silently reissued by the recovery dispatcher.
-    use_multilingual = speech_empty_multilingual_enabled() if multilingual is None else multilingual
+    use_multilingual = RecoveryPolicy().speech_empty_multilingual if multilingual is None else multilingual
     if use_multilingual:
         # Unknown intake language currently selects Parakeet again. Its European
         # language model cannot recover unsupported-language speech by repadding.
@@ -136,12 +132,14 @@ class QuarantineRecovery:
         self.store, self.artifacts, self.stt, self.clock = store, artifacts, stt, clock
         self.protocol = RecoveryStore(store)
         self._candidate_after: str | None = None
-        self._cohort_offset = 0
 
     def recover(self, segment_id, owner_id):
-        if not recovery_enabled_for(owner_id):
-            return 'disabled'
         try:
+            job, policy = load_stage_policy(self.store, segment_id, 'recovery')
+            if not job or job.get('owner_id') != owner_id:
+                return 'held'
+            if not policy.recovery_enabled:
+                return 'disabled'
             job = self.protocol.prepare(segment_id, owner_id, self.clock())
             if job is None:
                 return 'held'
@@ -184,8 +182,8 @@ class QuarantineRecovery:
                 and not sync_allowed(owner_id, item.duration_seconds, lane='batch')
             ):
                 return 'held'
-            multilingual = speech_empty_multilingual_enabled()
-            if not recovery_enabled_for(owner_id) or not self.protocol.start(
+            multilingual = policy.speech_empty_multilingual
+            if not self.protocol.start(
                 segment_id, token, self.clock(), provider='modulate' if multilingual else 'legacy_sync'
             ):
                 return 'held'
@@ -230,7 +228,7 @@ class QuarantineRecovery:
                     else {'stage': 'provider', 'reason': 'operation_failed'}
                 )
                 if (
-                    terminal_empty_disposition_enabled()
+                    policy.terminal_empty_disposition
                     and multilingual
                     and padded_empty(job)
                     and isinstance(error, MultilingualEmpty)
@@ -299,7 +297,10 @@ class QuarantineRecovery:
             return self.recover(segment_id, owner_id)
 
     def _dispatch(self, segment_id, owner_id):
-        if not recovery_enabled_for(owner_id):
+        existing, policy = load_stage_policy(self.store, segment_id, 'recovery')
+        if not existing or existing.get('owner_id') != owner_id:
+            return 'held'
+        if not policy.recovery_enabled:
             return 'disabled'
         # prepare() is the existing durable privacy/ownership fence. Enqueue
         # acknowledgement loss never spends the intent. The HTTP handler or
@@ -382,40 +383,33 @@ class QuarantineRecovery:
 
     def sweep(self):
         counts = {}
-        all_admitted = recover_all_admitted()
-        owners = (None,) if all_admitted else recovery_owners()
         budget = recovery_dispatch_batch_size()
-        # Rotate allowlisted cohorts so a global pass bound cannot starve later
-        # owners. The all-admitted document cursor already rotates its page.
-        offset = self._cohort_offset % len(owners) if owners else 0
-        owners = owners[offset:] + owners[:offset]
-        for index, selected_owner in enumerate(owners):
-            if all_admitted:
-                candidates = recovery_candidates(
-                    self.store.client, self.store.namespace, None, limit=budget, after_id=self._candidate_after
+        # Discovery is independent of today's admission/recovery cohort. Every
+        # candidate is authorized by its recorded policy; rollback must drain it.
+        candidates = recovery_candidates(
+            self.store.client, self.store.namespace, None, limit=budget, after_id=self._candidate_after
+        )
+        if not candidates:
+            self._candidate_after = None
+        for segment_id, owner_id in candidates[:budget]:
+            self._candidate_after = segment_id
+            try:
+                _, policy = load_stage_policy(self.store, segment_id, 'recovery')
+                task = (
+                    kill_switch('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', policy_id=policy.policy_id)
+                    if policy
+                    else False
                 )
-            else:
-                candidates = recovery_candidates(self.store.client, self.store.namespace, selected_owner, limit=budget)
-            if all_admitted and not candidates:
-                self._candidate_after = None  # Wrap next tick, without a second query.
-            for segment_id, owner_id in candidates:
-                budget -= 1  # Held/error rows also consume bounded work this pass.
-                if all_admitted:
-                    self._candidate_after = segment_id  # Held/capped rows cannot pin the global page.
-                try:
-                    outcome = (self.dispatch if recovery_tasks_enabled() else self.recover)(segment_id, owner_id)
-                except Exception as error:
-                    logger.warning(
-                        'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
-                        type(error).__name__,
-                    )
-                    outcome = 'held'
-                counts[outcome] = counts.get(outcome, 0) + 1
-                try:
-                    logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
-                except Exception:
-                    pass
-                if budget == 0:
-                    self._cohort_offset = offset + index + 1
-                    return counts
+                outcome = (self.dispatch if task else self.recover)(segment_id, owner_id)
+            except Exception as error:
+                logger.warning(
+                    'event=batch_quarantine_recovery action=dispatch outcome=retry exception_type=%s',
+                    type(error).__name__,
+                )
+                outcome = 'held'
+            counts[outcome] = counts.get(outcome, 0) + 1
+            try:
+                logger.info('event=batch_quarantine_recovery outcome=%s', outcome)
+            except Exception:
+                pass
         return counts

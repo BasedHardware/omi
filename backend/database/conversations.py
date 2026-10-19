@@ -7,6 +7,7 @@ import logging
 import uuid
 import zlib
 from collections.abc import Mapping
+from functools import wraps
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
@@ -23,6 +24,8 @@ from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 from utils import encryption
+from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
+from config.firestore_read_levers import lever_enabled
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
@@ -100,6 +103,7 @@ MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'status',
     'discarded',
     'deleted',
+    'dream_duplicate_of',
     'relevance_decision',
     'sync_relevance_user_kept',
     'has_photos',
@@ -834,6 +838,64 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
 _RULE_DISCARD_PAGE_SKIP_CAP = 64
 
 
+def _conversation_list_cursor_enabled(uid: Optional[str]) -> bool:
+    if uid is None:
+        return False
+    try:
+        return lever_enabled('conversation_list_cursor', uid)
+    except ValueError:
+        # WQ4's new lever is registered by the integrator in a separate file.
+        # Until then, the unknown-name guard must keep existing lists working.
+        return False
+
+
+def _with_conversation_cursor_envelope(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        uid = args[0] if args else kwargs.get('uid')
+        if (
+            not kwargs.get('page_envelope', False)
+            or kwargs.get('metadata_only', False)
+            or not _conversation_list_cursor_enabled(uid)
+        ):
+            return func(*args, **kwargs)
+        page = {}
+        kwargs['cursor_page'] = page
+        # Wrap after existing decorators have decrypted/hydrated individual rows.
+        rows = func(*args, **kwargs)
+        return {'conversations': rows, 'next_cursor': page.get('next_cursor')}
+
+    return wrapper
+
+
+def _collect_cursor_conversation_page(conversations_ref, *, limit, include_discarded, budget, bookmark):
+    """Bound the scan by page size plus the existing hidden-row allowance."""
+    conversations = []
+    last_doc = None
+    skipped = 0
+    query = conversations_ref.start_after(bookmark)
+    try:
+        while len(conversations) < limit and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP:
+            batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - skipped + 1)
+            fetched = 0
+            for doc in budgeted_stream_iter(query.limit(batch_limit), budget):
+                fetched += 1
+                last_doc = doc
+                conversation = document_data_with_revision(doc)
+                if conversation is None or not is_visible_conversation(
+                    conversation, include_discarded=include_discarded
+                ):
+                    skipped += 1
+                    continue
+                conversations.append(conversation)
+            if fetched < batch_limit or last_doc is None:
+                break
+            query = conversations_ref.start_after(last_doc)
+    except ListReadBudgetExhausted:
+        pass
+    return conversations, last_doc
+
+
 def _collect_visible_conversation_page(
     conversations_ref: Any,
     *,
@@ -841,6 +903,11 @@ def _collect_visible_conversation_page(
     offset: int,
     include_discarded: bool,
     budget: Optional[ListReadBudget] = None,
+    uid: Optional[str] = None,
+    cursor: Optional[str] = None,
+    cursor_page: Optional[Dict[str, Any]] = None,
+    cursor_filters: Optional[Dict[str, Any]] = None,
+    sort_field: str = 'created_at',
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -850,11 +917,56 @@ def _collect_visible_conversation_page(
     If that window is full but some rows are completed rule-discards, keep
     reading after the last snapshot until the page is full or the skip cap hits.
     """
+    cursor_enabled = _conversation_list_cursor_enabled(uid)
+    scope = (
+        query_scope(dict(uid=uid, sort_field=sort_field, include_discarded=include_discarded, **(cursor_filters or {})))
+        if cursor_enabled
+        else None
+    )
+    last_doc = None
+
+    def finish(rows):
+        if cursor_enabled and cursor_page is not None:
+            cursor_page['next_cursor'] = None
+            if last_doc is not None:
+                try:
+                    cursor_page['next_cursor'] = encode_cursor(last_doc.to_dict().get(sort_field), last_doc.id, scope)
+                except (ValueError, TypeError, AttributeError):
+                    # A null/corrupt ordering key must omit the cursor, not 500 the list route.
+                    logger.warning('conversation_list_cursor: ordering key unavailable; next cursor omitted')
+        return rows
+
+    if cursor_enabled and cursor is not None:
+        try:
+            stamp, doc_id = decode_cursor(cursor, scope)
+        except ValueError:
+            record_fallback(
+                component='firestore_read',
+                from_mode='cursor',
+                to_mode='offset',
+                reason='malformed',
+                outcome='degraded',
+                log=logger,
+            )
+        else:
+            # Firestore implicitly orders document IDs in the last order's
+            # direction. Make that tie-break explicit for the value cursor.
+            ordered = conversations_ref.order_by('__name__', direction=firestore.Query.DESCENDING)
+            conversations, last_doc = _collect_cursor_conversation_page(
+                ordered,
+                limit=limit,
+                include_discarded=include_discarded,
+                budget=budget,
+                bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
+            )
+            return finish(conversations)
+
     if include_discarded:
         skipped_visible = 0
         conversations: List[Dict[str, Any]] = []
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
+                last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
                     conversation, include_discarded=include_discarded
@@ -868,13 +980,13 @@ def _collect_visible_conversation_page(
                     break
         except ListReadBudgetExhausted:
             pass
-        return conversations
+        return finish(conversations)
 
     if budget is not None and offset > 0:
         try:
             budget.charge(offset)
         except ListReadBudgetExhausted:
-            return []
+            return finish([])
     page_query = conversations_ref.limit(limit).offset(offset)
     conversations = []
     last_doc = None
@@ -889,7 +1001,7 @@ def _collect_visible_conversation_page(
                 continue
             conversations.append(conversation)
     except ListReadBudgetExhausted:
-        return conversations
+        return finish(conversations)
 
     skipped = fetched - len(conversations)
     while (
@@ -912,16 +1024,16 @@ def _collect_visible_conversation_page(
                 if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
                     skipped += 1
                     if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
-                        return conversations
+                        return finish(conversations)
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
-                    return conversations
+                    return finish(conversations)
         except ListReadBudgetExhausted:
-            return conversations
+            return finish(conversations)
         if fetched < batch_limit:
             break
-    return conversations
+    return finish(conversations)
 
 
 def _drop_summary_memo(uid: str) -> None:
@@ -1530,6 +1642,7 @@ def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dic
     return (snapshot.to_dict() or {}).get('conversation_audio')
 
 
+@_with_conversation_cursor_envelope
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversations(
@@ -1546,6 +1659,9 @@ def get_conversations(
     date_field: str = 'created_at',
     *,
     metadata_only: bool = False,
+    cursor: Optional[str] = None,
+    page_envelope: bool = False,
+    cursor_page: Optional[Dict[str, Any]] = None,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -1593,7 +1709,22 @@ def get_conversations(
         ]
 
     return _collect_visible_conversation_page(
-        conversations_ref, limit=limit, offset=offset, include_discarded=include_discarded
+        conversations_ref,
+        limit=limit,
+        offset=offset,
+        include_discarded=include_discarded,
+        uid=uid,
+        cursor=cursor,
+        cursor_page=cursor_page,
+        sort_field=sort_field,
+        cursor_filters=dict(
+            statuses=statuses,
+            start_date=start_date,
+            end_date=end_date,
+            categories=categories,
+            folder_id=folder_id,
+            starred=starred,
+        ),
     )
 
 
@@ -1669,6 +1800,7 @@ def count_conversations_with_geolocation(uid: str, *, firestore_client: Any = No
     return int(result[0][0].value or 0)
 
 
+@_with_conversation_cursor_envelope
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,
@@ -1684,6 +1816,10 @@ def get_conversations_without_photos(
     starred: Optional[bool] = None,
     budget: Optional[ListReadBudget] = None,
     list_fields_only: bool = False,
+    *,
+    cursor: Optional[str] = None,
+    page_envelope: bool = False,
+    cursor_page: Optional[Dict[str, Any]] = None,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -1758,6 +1894,18 @@ def get_conversations_without_photos(
         offset=offset,
         include_discarded=include_discarded,
         budget=budget,
+        uid=uid,
+        cursor=cursor,
+        cursor_page=cursor_page,
+        cursor_filters=dict(
+            statuses=statuses,
+            sources=sources,
+            start_date=start_date,
+            end_date=end_date,
+            categories=categories,
+            folder_id=folder_id,
+            starred=starred,
+        ),
     )
 
 

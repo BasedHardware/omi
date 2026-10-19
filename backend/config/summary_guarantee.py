@@ -61,6 +61,14 @@ def preserves_admitted(row: Mapping[str, Any]) -> bool:
 
 
 def first_summary_pending(row: Mapping[str, Any]) -> bool:
+    if row.get('first_summary_policy') is not None:
+        from config.policy import FirstSummaryPolicy
+
+        return bool(
+            not row.get('effects_only')
+            and not row.get('summary_seen')
+            and FirstSummaryPolicy.from_dict(row['first_summary_policy']).first_summary_enabled
+        )
     return (
         not row.get('effects_only')
         and not row.get('summary_seen')

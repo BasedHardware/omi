@@ -272,7 +272,11 @@ def list_people(
 
 
 def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
-    """Find the first active owner-scoped person with an exact display name."""
+    """Find the first active owner-scoped person with this display name, ignoring case.
+
+    An exact match costs one indexed query. Firestore has no case-insensitive equality,
+    so only a miss scans the owner's people, comparing names the way renames dedupe aliases.
+    """
 
     people_ref = db_client.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name))
@@ -282,4 +286,12 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
             continue
         data.setdefault('id', person.id)
         return data
+    wanted = normalized_person_alias(name)
+    if wanted is None:
+        return None
+    folded = wanted.casefold()
+    for data in list_people(db_client, uid):
+        stored = normalized_person_alias(data.get('name'))
+        if stored is not None and stored.casefold() == folded:
+            return data
     return None

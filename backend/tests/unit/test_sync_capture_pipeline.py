@@ -17,6 +17,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
 from tests.unit.test_sync_cross_job_assignment import intake, conversations, chunk
 from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+from utils.stt.pre_recorded import postprocess_words
 from utils.sync import telemetry
 from utils.sync.capture import chunk_identity
 
@@ -92,6 +93,48 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert row['transcript_segments'][0]['start'] == 0
     assert row['id'] == chunk_identity('u', 'omi', None, False, 1700000020)
     assert outcome['outcome'].value == 'success'
+
+
+@pytest.mark.parametrize('recovered', [False, True])
+def test_late_first_word_stays_on_the_vad_file_clock(pipeline, monkeypatch, tmp_path, recovered):
+    """A cough 20 s before speech opens their shared VAD file (gaps under 120 s merge).
+
+    postprocess_words times lines from the first word. They must land where they were
+    spoken on the file clock that started_at and the stored audio use, and finished_at
+    and the merge lookup must end at the last word.
+    """
+    module, store = pipeline
+    original = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=50000).export(original, format='wav')
+    module.vad_is_empty = lambda *a, **kw: [{'start': 20, 'end': 21}, {'start': 40, 'end': 45}]
+    paths = set()
+    module.retrieve_vad_segments(str(original), paths, [])
+    path = next(iter(paths))
+    assert Path(path).stem == '1700000020.0'
+    # Provider clocks are relative to the exported file: speech starts 20.5 s in.
+    words = [
+        {'timestamp': [20.5, 21.0], 'speaker': 'SPEAKER_00', 'text': 'Keep'},
+        {'timestamp': [21.0, 24.25], 'speaker': 'SPEAKER_00', 'text': 'this'},
+    ]
+    if recovered:
+        monkeypatch.setenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'true')
+        module.get_prerecorded_service = lambda language: ('parakeet', None, 'parakeet')
+        module.prerecorded = MagicMock(return_value=([], 'multi'))
+        recovery = MagicMock(return_value=(words, 'en', 25.0, [{'start': 20.5, 'end': 24.25}]))
+        monkeypatch.setattr(module.empty_recovery, 'recover', recovery)
+    else:
+        module.prerecorded = MagicMock(return_value=(words, 'en'))
+    module.postprocess_words = postprocess_words
+    module.get_closest_conversation_to_timestamps = MagicMock(return_value=None)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    assert module.process_segment(path, 'u', response, threading.Lock(), errors)
+    assert errors == []
+    row = conversations(store)[0]
+    assert row['started_at'].timestamp() == 1700000020
+    assert [(s['text'], s['start'], s['end']) for s in row['transcript_segments']] == [('Keep this', 20.5, 24.25)]
+    assert row['finished_at'].timestamp() == 1700000044.25
+    module.get_closest_conversation_to_timestamps.assert_called_once_with('u', 1700000020.0, 1700000044.25)
 
 
 def test_colliding_absolute_timestamps_from_distinct_sources_keep_both_segments(pipeline, tmp_path):

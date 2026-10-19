@@ -4,11 +4,8 @@ from copy import deepcopy
 from dataclasses import asdict
 from uuid import uuid4
 
-from config.batch_pipeline import (
-    recovery_enabled_for,
-    speech_empty_multilingual_enabled,
-    terminal_empty_disposition_enabled,
-)
+from config.policy import RecoveryPolicy
+from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
 from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -32,7 +29,11 @@ class SpeechRedriveStore:
             job.get('state') == 'quarantined'
             and job.get('quarantine_reason') == 'worker_failed'
             and (
-                job.get('recovery_state') == 'failed_held' or terminal_empty_disposition_enabled() and spent_canary(job)
+                job.get('recovery_state') == 'failed_held'
+                or RecoveryPolicy.from_dict(
+                    (job.get('policy_parts') or {}).get('recovery', {})
+                ).terminal_empty_disposition
+                and spent_canary(job)
             )
             and bool(job.get('recovery', {}).get('settled_at'))
             and not job.get('token')
@@ -44,12 +45,15 @@ class SpeechRedriveStore:
         )
 
     def prepare(self, segment_id, owner_id, plan_digest, expected_recovery, now, *, gpu_padded_retry_empty=False):
-        if not speech_empty_multilingual_enabled() or not recovery_enabled_for(owner_id):
-            raise ProjectionBlocked('speech redrive disabled')
+        candidates, observations = {}, []
         token = uuid4().hex
 
         def commit(tx):
+            observations.clear()
             job, binding = self.checked(tx, segment_id)
+            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            if not policy.speech_empty_multilingual or not policy.recovery_enabled:
+                raise ProjectionBlocked('speech redrive disabled')
             existing = tx.get('results', segment_id)
             marker = job.get('speech_redrive') or {}
             if (
@@ -87,10 +91,13 @@ class SpeechRedriveStore:
             tx.put('jobs', segment_id, job)
             return job
 
-        return self.store.run(commit)
+        result = self.store.run(commit)
+        record_policy_observations(observations)
+        return result
 
     def start(self, segment_id, token, plan_digest, now):
-        if not speech_empty_multilingual_enabled():
+        _, policy = load_stage_policy(self.store, segment_id, 'recovery')
+        if policy is None or not policy.speech_empty_multilingual:
             return False
 
         def commit(tx):
@@ -98,7 +105,7 @@ class SpeechRedriveStore:
             existing = tx.get('results', segment_id)
             marker = job.get('speech_redrive') or {}
             if (
-                not recovery_enabled_for(binding.owner_id)
+                not policy.recovery_enabled
                 or not self.terminal(job, existing, now)
                 or marker.get('token') != token
                 or marker.get('plan_digest') != plan_digest

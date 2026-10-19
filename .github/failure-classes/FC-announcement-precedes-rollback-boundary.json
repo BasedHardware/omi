@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-announcement-precedes-rollback-boundary",
+  "violated_contract": "An operation that can still roll back (delete) the record it is building must not send an irreversible external announcement of that record before the point after which its failure handling keeps the record. User-initiated conversation merge processed the merged conversation, which queued the developer conversation_created webhook, before the correction-anchor transfer; a transfer conflict (for example a source deleted, locked or edited while the merge was processing) then deleted the merged conversation and restored the sources after developer endpoints had already been told the deleted conversation exists. Nothing fails visibly: the webhook is delivered and the rollback succeeds.",
+  "canonical_prevention": "The step that produces the record hands its announcement to the operation that owns the rollback (an observer that receives the send) instead of sending it, and that owner releases the send only once failure handling can no longer delete the record. Callers without a rollback keep sending immediately. Keep an ordering test through the real orchestrator for both the rolled-back path (nothing announced) and the committed path (announced after the rollback boundary).",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_merge_created_webhook.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/merge_conversations.py",
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/webhooks.py"
+  ],
+  "status": "open"
+}

@@ -1,11 +1,10 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
 from enum import IntEnum
-import hashlib
 import math
 import os
 
-from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
+from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
@@ -24,22 +23,18 @@ class RecordOwnerContention(RuntimeError):
 
 
 def enabled_for(owner_id: str) -> bool:
-    if os.getenv('BATCH_PIPELINE_ENABLED', 'false').lower() != 'true':
-        return False
-    try:
-        percent = float(os.getenv('BATCH_PIPELINE_PERCENT', '0'))
-    except ValueError:
-        return False
-    if not math.isfinite(percent) or not 0 <= percent <= 100:
-        return False
-    return in_rollout_cohort(owner_id, 'batch-pipeline') or in_percent_cohort(owner_id, percent)
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy(owner_id).batch_enabled
 
 
 def in_percent_cohort(owner_id: str, percent: float) -> bool:
     """Shared unsalted admission bucket; invalid percentages never admit."""
     if not owner_id or not math.isfinite(percent) or not 0 <= percent <= 100:
         return False
-    bucket = int.from_bytes(hashlib.sha256(owner_id.encode()).digest()[:4], 'big') / 2**32 * 100
+    from config.policy import cohort_bucket
+
+    bucket = cohort_bucket(owner_id, '')
     return bucket < percent
 
 
@@ -63,16 +58,23 @@ def admit_or_legacy(owner_id: str, admit: Callable[..., T], legacy: Callable[...
 
 
 def live_record_admission_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy('').live_admission_enabled
 
 
 def live_record_enabled_for(owner_id: str) -> bool:
-    return live_record_admission_enabled() and enabled_for(owner_id)
+    from config.policy import resolve_batch_policy
+
+    return resolve_batch_policy(owner_id).live_record_enabled
 
 
-def record_capture_eligible(owner_id: str, capture: dict) -> bool:
+def record_capture_eligible(owner_id: str, capture: dict, *, policy=None) -> bool:
+    from config.policy import resolve_batch_policy
+
+    policy = policy or resolve_batch_policy(owner_id)
     return bool(
-        live_record_enabled_for(owner_id)
+        policy.live_record_enabled
         and capture.get('private_cloud_sync_enabled')
         and not capture.get('uses_custom_stt')
         and not capture.get('deleted')
@@ -84,7 +86,9 @@ def record_capture_eligible(owner_id: str, capture: dict) -> bool:
 
 
 def shared_live_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'scheduler').shared_live
 
 
 SCHEDULER_SHARDS = 64
@@ -96,23 +100,23 @@ def scheduler_control_key(hashed_owner: str) -> str:
 
 
 def max_worker_attempts() -> int:
-    """Bound charged worker failures; malformed configuration keeps the safe default."""
-    try:
-        value = int(os.getenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5'))
-    except ValueError:
-        return 5
-    return value if 1 <= value <= 20 else 5
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'scheduler').max_attempts
 
 
 def recovery_owners() -> tuple[str, ...]:
-    """Recovery is independent of admission; empty allowlist always denies."""
-    if os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() != 'on':
+    from config.policy import resolve_stage_policy
+
+    if resolve_stage_policy('', 'recovery').recovery_mode != 'on':
         return ()
     return rollout_cohort_members('batch-pipeline-recovery')
 
 
 def authoritative_labels_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').authoritative_labels
 
 
 def empty_asr_recovery_enabled() -> bool:
@@ -120,22 +124,21 @@ def empty_asr_recovery_enabled() -> bool:
 
 
 def require_live_target_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'false').lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').require_live_target
 
 
 def recover_all_admitted() -> bool:
-    # These are already batch-owned obligations; rollback must still drain them.
-    return (
-        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').lower() == 'on'
-        and os.getenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'false').lower() == 'true'
-    )
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'recovery').recovery_all_admitted
 
 
 def recovery_enabled_for(owner_id: str) -> bool:
-    return recover_all_admitted() or (
-        os.getenv('BATCH_PIPELINE_RECOVERY_MODE', 'off').strip().lower() == 'on'
-        and in_rollout_cohort(owner_id, 'batch-pipeline-recovery')
-    )
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy(owner_id, 'recovery').recovery_enabled
 
 
 def empty_asr_disposition_enabled() -> bool:
@@ -144,17 +147,21 @@ def empty_asr_disposition_enabled() -> bool:
 
 
 def projection_contention_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').projection_contention
 
 
 def speech_empty_multilingual_enabled() -> bool:
-    """Dark alternate-provider recovery; one call per durable paid intent."""
-    return os.getenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'recovery').speech_empty_multilingual
 
 
 def terminal_empty_disposition_enabled() -> bool:
-    """Dark, evidenced terminal empty result; never grants another paid intent."""
-    return os.getenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'recovery').terminal_empty_disposition
 
 
 def read_only_metrics_enabled() -> bool:
@@ -166,7 +173,9 @@ def read_only_metrics_enabled() -> bool:
 
 
 def projection_timing_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').projection_timing
 
 
 def worker_silence_disposition_enabled() -> bool:
@@ -180,18 +189,21 @@ def worker_validation_disposition_enabled() -> bool:
 
 
 def head_priority_enabled() -> bool:
-    """Prefer a queued capture-order head without changing lease/merge authority."""
-    return os.getenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'scheduler').head_priority
 
 
 def async_projection_enabled() -> bool:
-    """Persist in order, then drain durable follow-ups outside the owner claim."""
-    return os.getenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'false').strip().lower() == 'true'
+    from config.policy import resolve_stage_policy
+
+    return resolve_stage_policy('', 'projection').async_projection
 
 
 def recovery_tasks_enabled() -> bool:
-    """Ship-on request-backed paid recovery; false restores inline sweeping."""
-    return os.getenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'true').strip().lower() == 'true'
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED')
 
 
 def recovery_dispatch_batch_size() -> int:
@@ -204,8 +216,27 @@ def recovery_dispatch_batch_size() -> int:
 
 
 def projection_pagination_enabled() -> bool:
-    """Ship-on fair discovery; false restores the legacy oldest-page scan."""
-    return os.getenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true').strip().lower() == 'true'
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
+
+
+WORKER_PIPELINE_DEPTH_DEFAULT = 2
+WORKER_PIPELINE_DEPTH_MAX = 4
+
+
+def worker_pipeline_depth() -> int:
+    """Ship-on pump flights per GPU process; ``1`` restores the serial pump.
+
+    Only claim/admission and publication overlap: the GPU chain itself stays
+    exclusive, so device and host memory remain one flight. Malformed values
+    keep the default rather than silently serializing.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', str(WORKER_PIPELINE_DEPTH_DEFAULT)))
+    except ValueError:
+        return WORKER_PIPELINE_DEPTH_DEFAULT
+    return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
 WORKER_IO_CONCURRENCY_DEFAULT = 3

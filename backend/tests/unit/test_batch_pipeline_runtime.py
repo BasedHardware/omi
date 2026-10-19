@@ -261,6 +261,7 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
     monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
     monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '3600')
+    monkeypatch.delenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raising=False)
 
     class Pump:
         def __init__(self, scheduler, worker, **kwargs):
@@ -281,6 +282,18 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     state = runtime.RuntimeState()
     asyncio.run(runtime.run_process(object(), object(), CollectorRegistry(), state))
     assert not state.ready and captured['batch_size'] == 4
+    assert captured['flights'] == 2
+
+
+@pytest.mark.parametrize('raw,expected', [(None, 2), ('1', 1), ('4', 4), ('0', 2), ('9', 2), ('two', 2)])
+def test_worker_pipeline_depth_ships_on_and_one_restores_serial_pump(monkeypatch, raw, expected):
+    from config.batch_pipeline import worker_pipeline_depth
+
+    if raw is None:
+        monkeypatch.delenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raw)
+    assert worker_pipeline_depth() == expected
 
 
 def test_process_refuses_shared_live_before_model_startup(monkeypatch):

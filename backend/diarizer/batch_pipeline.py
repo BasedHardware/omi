@@ -18,6 +18,7 @@ import numpy as np
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
+from diarizer.batch_pipeline_context import LeftContextIndex, starts_in_speech
 from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
@@ -322,7 +323,11 @@ class PipelineWorker:
         self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
-        self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0}
+        self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
+        # Same-owner predecessor tails for units whose speech starts at sample 0.
+        self.left_context = LeftContextIndex(
+            max_seconds=self.config.asr_left_context_seconds, max_units=self.config.asr_left_context_units
+        )
         # Artifact IO only (fetch/decrypt/decode, encrypt/upload). Model calls,
         # CUDA work and the chain lock stay on the calling thread.
         self.io_concurrency = io_concurrency if io_concurrency is not None else worker_io_concurrency()
@@ -431,6 +436,38 @@ class PipelineWorker:
         except Exception:
             pass  # Observability cannot change the diarization result.
         return self.diarize(samples)
+
+    def _with_left_context(self, state, clips):
+        """Prefix the first window with the predecessor's speech-run audio.
+
+        Only a unit whose VAD speech starts at sample 0 qualifies. Window core
+        ownership still starts at 0, so prefix words are never emitted.
+        """
+        item, samples = state['item'], state['samples']
+        first = clips[0]
+        if (
+            self.config.asr_left_context_seconds <= 0
+            or first.start != 0
+            or not isinstance(samples, np.ndarray)
+            or not starts_in_speech(state.get('vad_raw') or [])
+        ):
+            return clips
+        context = self.left_context.lookup(item, len(samples) / SAMPLE_RATE)
+        if context is None:
+            return clips
+        room = int((self.config.max_padded_seconds - first.duration) * SAMPLE_RATE)
+        if room <= 0:
+            return clips
+        context = context[-room:]
+        self.counts['left_context'] += 1
+        prefixed = Window(
+            first.segment_id,
+            np.concatenate([context.astype(samples.dtype, copy=False), first.samples]),
+            -len(context) / SAMPLE_RATE,
+            first.core_start,
+            first.core_end,
+        )
+        return [prefixed, *clips[1:]]
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
@@ -620,6 +657,8 @@ class PipelineWorker:
                     if not clips:
                         self.counts['silence'] += 1
                         continue
+                    # Every non-silent unit can be a later unit's predecessor.
+                    state['vad_raw'] = spans
                     receipt = None
                     if self.config.reuse_live and self.live_words:
                         if sync_live_dedupe_active_for(item.owner_id):
@@ -636,9 +675,27 @@ class PipelineWorker:
                         state['reused'] = True
                         self.counts['reused_live'] += 1
                     else:
-                        windows.extend(clips)
+                        state['asr_clips'] = clips
                 except Exception as exc:
                     fail(item, exc, stage)
+
+            # Predecessors in this flight become visible before any lookup;
+            # earlier flights' tails persist in the bounded index.
+            for state in states.values():
+                if state['item'].segment_id not in failed:
+                    self.left_context.remember(state['item'], state['samples'], state.get('vad_raw') or [])
+            attached = self.counts['left_context']
+            for state in states.values():
+                clips = state.pop('asr_clips', None)
+                if not clips or state['item'].segment_id in failed:
+                    continue
+                windows.extend(self._with_left_context(state, clips))
+            if self.counts['left_context'] > attached:
+                logger.info(
+                    'event=batch_asr_left_context units=%d attached=%d',
+                    len(items),
+                    self.counts['left_context'] - attached,
+                )
 
             for batch in pack_windows(windows, self.config):
                 batch = [w for w in batch if w.segment_id not in failed and w.segment_id not in held]
@@ -667,12 +724,17 @@ class PipelineWorker:
                 for window, hypothesis in zip(batch, hypotheses):
                     try:
                         checked_words = validate_words(hypothesis, window.duration)
-                        shapes[window.segment_id]['asr_words'] += len(checked_words)
                         for word in checked_words:
                             start, end = [t + window.start for t in word['timestamp']]
                             midpoint = (start + end) / 2
+                            if midpoint < 0:
+                                # Left-context words are the predecessor's; they never
+                                # count as this unit's ASR output (empty_asr stays empty_asr).
+                                continue
+                            shapes[window.segment_id]['asr_words'] += 1
                             if window.core_start <= midpoint < window.core_end:
-                                states[window.segment_id]['words'].append({**word, 'timestamp': [start, end]})
+                                # A left-context window may own a word straddling the seam.
+                                states[window.segment_id]['words'].append({**word, 'timestamp': [max(0.0, start), end]})
                     except Exception as exc:
                         fail(states[window.segment_id]['item'], exc, 'word_clocks')
 

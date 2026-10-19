@@ -63,6 +63,7 @@ export function HomePage() {
     items: tasks,
     loading: tasksLoading,
     error: tasksError,
+    completeError: completeTaskError,
     complete: completeTask,
   } = useHomeTasks();
   const {
@@ -238,6 +239,11 @@ export function HomePage() {
                     error={tasksError}
                     onComplete={completeTask}
                   />
+                  {completeTaskError && (
+                    <p role="alert" className="mt-2 px-3 text-sm text-error">
+                      {completeTaskError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="mt-8 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-center">

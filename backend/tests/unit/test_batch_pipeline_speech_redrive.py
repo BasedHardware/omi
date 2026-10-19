@@ -1,6 +1,8 @@
 """Alternate multilingual dispatch and explicit, at-most-once paid epoch 2."""
 
 from copy import deepcopy
+from dataclasses import replace
+from config.policy import resolve_batch_policy
 import importlib.util
 from pathlib import Path
 from unittest.mock import Mock
@@ -45,7 +47,7 @@ def test_dark_flag_keeps_existing_provider(setup, monkeypatch, legacy_dependenci
 
 def test_fresh_speech_uses_exactly_one_independent_provider(setup, monkeypatch, legacy_dependencies):
     client, _, binding, _, legacy, alternate, _ = enabled(setup, monkeypatch, legacy_dependencies)
-    payload = transcribe(work(client), binding, wav())
+    payload = transcribe(work(client), binding, wav(), multilingual=True)
     assert payload['language'] == 'vi' and payload['words']
     assert alternate.call_count == 1 and alternate.call_args.kwargs['attempts'] == 2
     legacy.assert_not_called()

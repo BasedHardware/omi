@@ -169,7 +169,7 @@ def profile_delete(
     if name not in config.profiles:
         raise UsageError(message=f"No such profile: '{name}'")
     if not confirm:
-        typer.confirm(f"Delete profile '{name}'?", abort=True)
+        typer.confirm(f"Delete profile '{name}'?", abort=True, err=ctx.renderer.json_mode)
     config.delete_profile(name)
     cfg.save(config)
     ctx.renderer.success(f"Deleted profile [bold]{escape(name)}[/bold].")

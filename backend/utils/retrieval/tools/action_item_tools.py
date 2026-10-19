@@ -13,6 +13,7 @@ from langchain_core.runnables import RunnableConfig
 from utils.messaging.undo import record_write
 from utils.messaging.projection import surface_runtime
 from utils.messaging.turn_context import phone_reminder_confirmation
+from config.action_item_reminder_triggers import action_item_write_affects_reminder
 import database.action_items as action_items_db
 from utils.notifications import (
     send_action_item_completed_notification,
@@ -731,8 +732,8 @@ def update_action_item_tool(
                 # Don't fail the update if notification fails
 
         # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
-        # only for an open task with a due date (#5085).
-        if 'completed' in update_data or 'due_at' in update_data or 'deleted' in update_data:
+        # only for an open task with a due date (#5085). A rename re-arms it with the new title.
+        if action_item_write_affects_reminder(update_data):
             try:
                 sync_action_item_reminder(
                     uid,

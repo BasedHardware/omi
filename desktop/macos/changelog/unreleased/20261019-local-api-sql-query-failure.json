@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the local agent API reporting a failed SQL query as a successful result"
+}

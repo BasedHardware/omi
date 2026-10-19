@@ -20,6 +20,12 @@ stopped. `stop()` returns immediately, so transcript callbacks can continue afte
 Empty or failed runner results are skipped without blocking later batches; repeated
 stops and PCM appended after stopping do not submit more work.
 
+The Parakeet transcriber drops PCM until its server sends `ready`. If the server
+closes the stream before `ready` (for example 1013 `capacity_full` or
+`service_not_ready`, or 1006 when the connection fails), `appendPcm` and `stop()`
+throw `SttStreamClosedError` with its `closeCode` and `closeReason`, so callers can
+retry or switch engines instead of losing the session's audio.
+
 Run the component's hermetic tests with the repository CI version, Bun 1.3.14:
 
 ```sh

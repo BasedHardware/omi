@@ -17,6 +17,7 @@ from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_l
 
 from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
+from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
@@ -188,6 +189,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
             metrics=metrics,
             batch_size=config.batch_size,
+            flights=worker_pipeline_depth(),
             capacity=lambda: PoolCapacity(
                 observed_at=time.time(), available_slots=config.batch_size, max_item_seconds=config.max_unit_seconds
             ),
