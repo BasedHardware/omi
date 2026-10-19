@@ -62,16 +62,16 @@ Widget host(Widget child, {double scale = 1, TargetPlatform platform = TargetPla
 }
 
 Widget survey() => Stack(
-  children: [
-    Positioned.fill(child: Image.asset(Assets.images.onboardingBg1.path, fit: BoxFit.cover)),
-    OnboardingStepLayout(
-      reserveHeader: false,
-      onBack: () {},
-      progress: const OnboardingProgressDots(current: 2, total: 5),
-      child: FoundOmiWidget(goNext: () {}, saveSource: (_) async => true),
-    ),
-  ],
-);
+      children: [
+        Positioned.fill(child: Image.asset(Assets.images.onboardingBg1.path, fit: BoxFit.cover)),
+        OnboardingStepLayout(
+          reserveHeader: false,
+          onBack: () {},
+          progress: const OnboardingProgressDots(current: 2, total: 5),
+          child: FoundOmiWidget(goNext: () {}, saveSource: (_) async => true),
+        ),
+      ],
+    );
 
 class PairingProvider extends BaseProvider with MessageNotifierMixin implements OnboardingProvider {
   @override
@@ -113,13 +113,13 @@ class PairingHomeProvider extends HomeProvider {
 }
 
 Widget connect(OnboardingProvider pairing) => MultiProvider(
-  providers: [
-    ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
-    ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
-    ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
-  ],
-  child: const ConnectDevicePage(),
-);
+      providers: [
+        ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+        ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
+      ],
+      child: const ConnectDevicePage(),
+    );
 
 Future<void> loadFonts() async {
   final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
@@ -226,14 +226,14 @@ void main() {
       for (final reason in Reason.values) {
         var dismissed = 0, guides = 0;
         Widget page() => Center(
-          child: PairingFailureCard(
-            key: ValueKey(reason),
-            reason: reason,
-            onDismiss: () => dismissed++,
-            onGuide: () => guides++,
-            emit: events.add,
-          ),
-        );
+              child: PairingFailureCard(
+                key: ValueKey(reason),
+                reason: reason,
+                onDismiss: () => dismissed++,
+                onGuide: () => guides++,
+                emit: events.add,
+              ),
+            );
         await tester.pumpWidget(host(page(), platform: platform));
         expect(pairingFailureCopy(l10n, reason), copies[reason]);
         expect(find.text(copies[reason]!), findsOneWidget);
@@ -365,10 +365,10 @@ void main() {
           final ordinal = name == 'device-first'
               ? 1
               : name.startsWith('connect-')
-              ? Reason.values.indexWhere((reason) => name == 'connect-${reason.wireName}') +
-                    (platform == TargetPlatform.iOS ? 2 : 12)
-              : ['find-us', 'find-us-large', 'find-us-large-end'].indexOf(name) +
-                    (platform == TargetPlatform.iOS ? 9 : 19);
+                  ? Reason.values.indexWhere((reason) => name == 'connect-${reason.wireName}') +
+                      (platform == TargetPlatform.iOS ? 2 : 12)
+                  : ['find-us', 'find-us-large', 'find-us-large-end'].indexOf(name) +
+                      (platform == TargetPlatform.iOS ? 9 : 19);
           final filename = '${ordinal.toString().padLeft(3, '0')}-mobile-$tag-${name.replaceAll('_', '-')}.png';
           final file = File('../.agent-artifacts/ui-evidence/onb-polish/$filename');
           file.parent.createSync(recursive: true);

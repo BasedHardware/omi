@@ -21,11 +21,11 @@ import 'package:omi/widgets/extensions/string.dart';
 part 'memories_provider_loading.dart';
 
 typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
-typedef FetchMemoriesCursorRequest =
-    Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly, String? cursor});
+typedef FetchMemoriesCursorRequest = Future<GetMemoriesResult> Function(
+    {int limit, int offset, bool thisDeviceOnly, String? cursor});
 typedef FetchLedgerHistoryRequest = Future<GetLedgerHistoryResult> Function({int limit, int offset});
-typedef FetchLedgerHistoryCursorRequest =
-    Future<GetLedgerHistoryResult> Function({int limit, int offset, String? cursor});
+typedef FetchLedgerHistoryCursorRequest = Future<GetLedgerHistoryResult> Function(
+    {int limit, int offset, String? cursor});
 typedef ReviewMemoryRequest = Future<bool> Function(String memoryId, bool value);
 typedef EditMemoryRequest = Future<EditMemoryResult> Function(String memoryId, String value);
 typedef RevertMemoryRequest = Future<RevertMemoryResult> Function(String memoryId, String operationId);
@@ -117,20 +117,19 @@ class MemoriesProvider extends ChangeNotifier {
     EditMemoryRequest? editMemoryRequest,
     RevertMemoryRequest? revertMemoryRequest,
     ReadRetry? memoriesReadRetry,
-  }) : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
-       _memoriesReadRetry = memoriesReadRetry ?? ReadRetry(),
-       _fetchLedgerHistoryRequest =
-           fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
-       _fetchLedgerHistoryCursorRequest =
-           fetchLedgerHistoryCursorRequest ??
-           (fetchMemoriesRequest == null && fetchLedgerHistoryRequest == null ? getLedgerHistory : null),
-       _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
-       _deleteAllMemoriesRequest = deleteAllMemoriesRequest ?? deleteAllMemoriesServer,
-       _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
-       _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
-       _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
-       _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
-       _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer {
+  })  : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _memoriesReadRetry = memoriesReadRetry ?? ReadRetry(),
+        _fetchLedgerHistoryRequest =
+            fetchLedgerHistoryRequest ?? (fetchMemoriesRequest == null ? getLedgerHistory : _noLedgerHistory),
+        _fetchLedgerHistoryCursorRequest = fetchLedgerHistoryCursorRequest ??
+            (fetchMemoriesRequest == null && fetchLedgerHistoryRequest == null ? getLedgerHistory : null),
+        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _deleteAllMemoriesRequest = deleteAllMemoriesRequest ?? deleteAllMemoriesServer,
+        _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
+        _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
+        _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
+        _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer {
     _fetchMemoriesCursorRequest =
         fetchMemoriesCursorRequest ?? (fetchMemoriesRequest == null ? _getMemoriesCursorPage : null);
   }
@@ -212,11 +211,10 @@ class MemoriesProvider extends ChangeNotifier {
         (memory.supersededBy ?? '').trim().isNotEmpty;
   }
 
-  List<Memory> get currentLedgerFacts =>
-      _memories
-          .where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact)
-          .toList(growable: false)
-        ..sort(_ledgerOrder);
+  List<Memory> get currentLedgerFacts => _memories
+      .where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.ledgerKind == KnowledgeLedgerKind.fact)
+      .toList(growable: false)
+    ..sort(_ledgerOrder);
 
   List<Memory> get currentLedgerPlaybooks =>
       _memories.where((memory) => memory.isCurrentKnowledgeLedgerRow && memory.isLedgerPlaybook).toList(growable: false)
@@ -271,8 +269,7 @@ class MemoriesProvider extends ChangeNotifier {
       // When the server does not support device_scope, legacy memories have no
       // primary_capture_device/capture_device_ids. Skip the local device filter
       // in that case to avoid hiding all legacy rows on the "This device" view.
-      final deviceMatch =
-          !_filterThisDeviceOnly ||
+      final deviceMatch = !_filterThisDeviceOnly ||
           !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
@@ -280,7 +277,8 @@ class MemoriesProvider extends ChangeNotifier {
           );
 
       return collectionMatch && matchesSearch && categoryMatch && deviceMatch;
-    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setCollectionView(MemoryCollectionView view) {
@@ -570,8 +568,8 @@ class MemoriesProvider extends ChangeNotifier {
             _inFlightLoad = null;
             SharedPreferencesUtil().cachedMemories = [
               ...SharedPreferencesUtil().cachedMemories.where(
-                (cached) => cached.id != memory.id && cached.id != serverMemory.id,
-              ),
+                    (cached) => cached.id != memory.id && cached.id != serverMemory.id,
+                  ),
               serverMemory,
             ];
             SiriIntegration.current.queueUpsertMemories([serverMemory]);
@@ -883,8 +881,8 @@ class MemoriesProvider extends ChangeNotifier {
   static const Duration pendingDeletionWindow = Duration(seconds: 8);
 
   void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, () async {
-    await _finalizeDeletion();
-  });
+        await _finalizeDeletion();
+      });
 
   Future<void> _finalizeDeletion() async {
     if (_pendingDeletionId == null) {
@@ -915,9 +913,8 @@ class MemoriesProvider extends ChangeNotifier {
     if (deleteSucceeded) {
       if (generation == _sessionGeneration && SharedPreferencesUtil().uid == ownerUid) {
         _ledgerProjectionRevision++;
-        SharedPreferencesUtil().cachedMemories = SharedPreferencesUtil().cachedMemories
-            .where((memory) => memory.id != id)
-            .toList();
+        SharedPreferencesUtil().cachedMemories =
+            SharedPreferencesUtil().cachedMemories.where((memory) => memory.id != id).toList();
       }
     } else if (deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
@@ -1044,8 +1041,8 @@ class MemoriesProvider extends ChangeNotifier {
       _inFlightLoad = null;
       SharedPreferencesUtil().cachedMemories = [
         ...SharedPreferencesUtil().cachedMemories.where(
-          (cached) => cached.id != pendingId && cached.id != serverMemory.id,
-        ),
+              (cached) => cached.id != pendingId && cached.id != serverMemory.id,
+            ),
         serverMemory,
       ];
       SiriIntegration.current.queueUpsertMemories([serverMemory]);

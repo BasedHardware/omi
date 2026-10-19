@@ -13,63 +13,63 @@ import 'package:omi/services/siri_integration.dart';
 const _uid = 'progressive-load-user';
 
 Memory _row(String id) => Memory(
-  id: id,
-  uid: _uid,
-  content: 'Memory $id',
-  category: MemoryCategory.manual,
-  createdAt: DateTime.utc(2026, 8, 17),
-  updatedAt: DateTime.utc(2026, 8, 17),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: _uid,
+      content: 'Memory $id',
+      category: MemoryCategory.manual,
+      createdAt: DateTime.utc(2026, 8, 17),
+      updatedAt: DateTime.utc(2026, 8, 17),
+      visibility: MemoryVisibility.private,
+    );
 
 Memory _supersededFact() => Memory(
-  id: 'superseded',
-  uid: _uid,
-  content: 'Lives in Brooklyn',
-  category: MemoryCategory.system,
-  createdAt: DateTime.utc(2026, 8, 23),
-  updatedAt: DateTime.utc(2026, 8, 23),
-  visibility: MemoryVisibility.private,
-  ledgerSchemaVersion: 'knowledge_ledger.v1',
-  ledgerKind: KnowledgeLedgerKind.fact,
-  ledgerSlot: 'home_city',
-  supersededBy: 'newer-fact',
-  invalidAt: DateTime.utc(2026, 8, 24),
-  intentBacked: true,
-);
+      id: 'superseded',
+      uid: _uid,
+      content: 'Lives in Brooklyn',
+      category: MemoryCategory.system,
+      createdAt: DateTime.utc(2026, 8, 23),
+      updatedAt: DateTime.utc(2026, 8, 23),
+      visibility: MemoryVisibility.private,
+      ledgerSchemaVersion: 'knowledge_ledger.v1',
+      ledgerKind: KnowledgeLedgerKind.fact,
+      ledgerSlot: 'home_city',
+      supersededBy: 'newer-fact',
+      invalidAt: DateTime.utc(2026, 8, 24),
+      intentBacked: true,
+    );
 
 Memory _currentFact() => Memory(
-  id: 'current-fact',
-  uid: _uid,
-  content: 'Lives in Brooklyn',
-  category: MemoryCategory.system,
-  createdAt: DateTime.utc(2026, 8, 23),
-  updatedAt: DateTime.utc(2026, 8, 23),
-  visibility: MemoryVisibility.private,
-  ledgerSchemaVersion: 'knowledge_ledger.v1',
-  ledgerKind: KnowledgeLedgerKind.fact,
-  ledgerSlot: 'home_city',
-  intentBacked: true,
-);
+      id: 'current-fact',
+      uid: _uid,
+      content: 'Lives in Brooklyn',
+      category: MemoryCategory.system,
+      createdAt: DateTime.utc(2026, 8, 23),
+      updatedAt: DateTime.utc(2026, 8, 23),
+      visibility: MemoryVisibility.private,
+      ledgerSchemaVersion: 'knowledge_ledger.v1',
+      ledgerKind: KnowledgeLedgerKind.fact,
+      ledgerSlot: 'home_city',
+      intentBacked: true,
+    );
 
 Memory _revertReplacement(Memory source) => Memory(
-  id: 'restored-fact',
-  uid: source.uid,
-  content: source.content,
-  category: source.category,
-  createdAt: DateTime.utc(2026, 8, 24),
-  updatedAt: DateTime.utc(2026, 8, 24),
-  visibility: source.visibility,
-  ledgerSchemaVersion: 'knowledge_ledger.v1',
-  ledgerKind: KnowledgeLedgerKind.fact,
-  ledgerSlot: source.ledgerSlot,
-  validAt: DateTime.utc(2026, 8, 24),
-  intentBacked: true,
-  writeReason: 'direct_user_statement',
-  evidence: [
-    {'source_type': 'explicit_user_revert', 'source_id': source.id},
-  ],
-);
+      id: 'restored-fact',
+      uid: source.uid,
+      content: source.content,
+      category: source.category,
+      createdAt: DateTime.utc(2026, 8, 24),
+      updatedAt: DateTime.utc(2026, 8, 24),
+      visibility: source.visibility,
+      ledgerSchemaVersion: 'knowledge_ledger.v1',
+      ledgerKind: KnowledgeLedgerKind.fact,
+      ledgerSlot: source.ledgerSlot,
+      validAt: DateTime.utc(2026, 8, 24),
+      intentBacked: true,
+      writeReason: 'direct_user_statement',
+      evidence: [
+        {'source_type': 'explicit_user_revert', 'source_id': source.id},
+      ],
+    );
 
 class _RecordingIndex extends SiriIndexApi {
   final calls = <String>[];

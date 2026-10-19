@@ -58,8 +58,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
   void _choose(OnboardingFirstCaptureChoiceSelectedChoice choice) {
     _property('capture_choice', choice.wireName);
     // Pairing evidence owns the device property; a selected route is only intent.
-    final hasOmi =
-        _pairedOmi ||
+    final hasOmi = _pairedOmi ||
         SharedPreferencesUtil().btDevices.any((device) => device.id.isNotEmpty && device.type == DeviceType.omi);
     _property('has_omi_device', hasOmi);
     _emit(OnboardingFirstCaptureChoiceSelected(choice: choice));
@@ -94,8 +93,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
         ),
       );
       if (!mounted) return;
-      paired =
-          connected == true &&
+      paired = connected == true &&
           context.read<OnboardingProvider>().isConnected &&
           context.read<OnboardingProvider>().deviceType == DeviceType.omi;
     }

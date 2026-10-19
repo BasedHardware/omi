@@ -35,14 +35,14 @@ final _memory = Memory(
 );
 
 Memory _row(String id) => Memory(
-  id: id,
-  uid: 'memory-delete-all-test-user',
-  content: 'Memory $id',
-  category: MemoryCategory.manual,
-  createdAt: DateTime(2026, 1, 1),
-  updatedAt: DateTime(2026, 1, 1),
-  visibility: MemoryVisibility.private,
-);
+      id: id,
+      uid: 'memory-delete-all-test-user',
+      content: 'Memory $id',
+      category: MemoryCategory.manual,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      visibility: MemoryVisibility.private,
+    );
 
 class _RecordingIndex extends SiriIndexApi {
   final calls = <String>[];
@@ -78,10 +78,10 @@ class _RecordingIndex extends SiriIndexApi {
 }
 
 MemoriesProvider _provider() => MemoriesProvider(
-  fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
-    return GetMemoriesResult([_memory], true);
-  },
-);
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        return GetMemoriesResult([_memory], true);
+      },
+    );
 
 void main() {
   setUpAll(() {

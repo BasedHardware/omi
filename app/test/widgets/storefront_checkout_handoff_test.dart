@@ -63,21 +63,21 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => OmiSheetScaffold(
-    child: PlansSheet(
-      waveController: animation,
-      notesController: animation,
-      arrowController: animation,
-      arrowAnimation: animation,
-      initialStorefront: widget.data,
-      readStorefrontGate: widget.gate ?? () async => true,
-      analyticsSource: 'budget_80',
-      storefrontApi: PlanStorefrontApi(
-        baseUrl: 'http://127.0.0.1:1/',
-        send: (_) async =>
-            http.Response(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync(), 200),
-      ),
-    ),
-  );
+        child: PlansSheet(
+          waveController: animation,
+          notesController: animation,
+          arrowController: animation,
+          arrowAnimation: animation,
+          initialStorefront: widget.data,
+          readStorefrontGate: widget.gate ?? () async => true,
+          analyticsSource: 'budget_80',
+          storefrontApi: PlanStorefrontApi(
+            baseUrl: 'http://127.0.0.1:1/',
+            send: (_) async => http.Response(
+                File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync(), 200),
+          ),
+        ),
+      );
 }
 
 void main() {
@@ -94,14 +94,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json =
-          jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-              as Map<String, dynamic>;
+      final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+          as Map<String, dynamic>;
       json['current']['plan_id'] = current == 'legacy' ? 'unlimited_v2' : current;
       json['current']['legacy'] = current == 'legacy';
-      json['current']['legacy_note'] = current == 'legacy'
-          ? "We don't sell this plan anymore, but yours stays exactly as it is."
-          : null;
+      json['current']['legacy_note'] =
+          current == 'legacy' ? "We don't sell this plan anymore, but yours stays exactly as it is." : null;
       json['current']['price_id'] = 'fixture_existing';
       final data = PlanStorefront.fromJson(json);
       usage.debugSetSubscription(
@@ -163,9 +161,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-            as Map<String, dynamic>;
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+        as Map<String, dynamic>;
     json['current']['plan_id'] = 'architect';
     json['current']['legacy'] = false;
     json['current']['price_id'] = 'fixture_architect_month';
@@ -234,12 +231,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/plus_annual_current.json').readAsStringSync())
-            as Map<String, dynamic>;
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_annual_current.json').readAsStringSync())
+        as Map<String, dynamic>;
     final plusTier = (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere(
-      (tier) => tier['plan_id'] == 'plus',
-    );
+          (tier) => tier['plan_id'] == 'plus',
+        );
     plusTier['action'] = 'checkout';
     plusTier['cta_label'] = 'Get Plus';
     (plusTier['prices'] as List).insert(0, {
@@ -581,9 +577,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-            as Map<String, dynamic>;
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+        as Map<String, dynamic>;
     json['usage']['kind'] = 'transcription';
     final data = PlanStorefront.fromJson(json);
     final price = _plan(data, 'operator').priceFor('month')!;
@@ -771,13 +766,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json =
-          jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
-              as Map<String, dynamic>;
+      final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+          as Map<String, dynamic>;
       json['current'] = null;
       final plusTier = (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere(
-        (tier) => tier['plan_id'] == 'plus',
-      );
+            (tier) => tier['plan_id'] == 'plus',
+          );
       plusTier['is_current'] = false;
       plusTier['action'] = 'checkout';
       plusTier['cta_label'] = 'Get Plus';

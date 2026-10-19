@@ -66,8 +66,7 @@ abstract final class PaywallCheckout {
         return PaywallCheckoutOutcome.failed;
       }
       if (session['status'] == 'reactivated') {
-        final date =
-            billingDateLabel(context, session['next_billing_date']) ??
+        final date = billingDateLabel(context, session['next_billing_date']) ??
             billingDateLabel(context, subscription?.currentPeriodEnd);
         final planName = currentPlanDisplayName(context, provider.subscription);
         final message = date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);

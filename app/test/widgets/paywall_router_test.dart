@@ -36,17 +36,18 @@ UserSubscriptionResponse _response({
   required PlanType plan,
   bool showSubscriptionUi = true,
   bool trialEligible = false,
-}) => UserSubscriptionResponse(
-  trialEligible: trialEligible,
-  subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
-  transcriptionSecondsUsed: 0,
-  transcriptionSecondsLimit: 18000,
-  wordsTranscribedUsed: 0,
-  wordsTranscribedLimit: 0,
-  insightsGainedUsed: 0,
-  insightsGainedLimit: 0,
-  showSubscriptionUi: showSubscriptionUi,
-);
+}) =>
+    UserSubscriptionResponse(
+      trialEligible: trialEligible,
+      subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 18000,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      showSubscriptionUi: showSubscriptionUi,
+    );
 
 void main() {
   testWidgets('a free reader in control is exposed as control and the opener keeps the sheet', (tester) async {

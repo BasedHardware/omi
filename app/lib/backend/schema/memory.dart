@@ -204,8 +204,7 @@ class Memory {
     // A bad Siri lifecycle field must not reject an otherwise valid app page.
     // The backend normally rejects an unknown canonical enum; if one reaches
     // this older-client decoder, keep the row visible but exclude it from Siri.
-    final siriTierValid =
-        (rawMemoryTier == null || memoryTierValue != null) &&
+    final siriTierValid = (rawMemoryTier == null || memoryTierValue != null) &&
         [layerValue, tierValue, memoryTierValue].whereType<MemoryLayer>().toSet().length <= 1 &&
         normalizedJson['siri_tier_valid'] != false;
     normalizedJson['layer'] = (layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm).apiValue;
@@ -237,8 +236,7 @@ class Memory {
       layer: resolvedLayer,
       layerIsExplicit: layerIsExplicit,
       siriTierValid: siriTierValid,
-      siriVisibilityValid:
-          json['siri_visibility_valid'] != false &&
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || MemoryVisibility.values.asNameMap().containsKey(json['visibility'])),
       primaryCaptureDevice: generated.primaryCaptureDevice,
       captureDeviceIds: generated.captureDeviceIds ?? const [],

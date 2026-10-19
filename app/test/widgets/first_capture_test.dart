@@ -18,27 +18,27 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
 Widget host(Widget child, {TargetPlatform platform = TargetPlatform.iOS}) => MaterialApp(
-  debugShowCheckedModeBanner: false,
-  theme: buildOmiTheme(brightness: Brightness.light).copyWith(
-    platform: platform,
-    snackBarTheme: buildOmiTheme(brightness: Brightness.light).snackBarTheme.copyWith(
-      contentTextStyle: buildOmiTheme(brightness: Brightness.light).snackBarTheme.contentTextStyle!.copyWith(
-        fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto',
+      debugShowCheckedModeBanner: false,
+      theme: buildOmiTheme(brightness: Brightness.light).copyWith(
+        platform: platform,
+        snackBarTheme: buildOmiTheme(brightness: Brightness.light).snackBarTheme.copyWith(
+              contentTextStyle: buildOmiTheme(brightness: Brightness.light).snackBarTheme.contentTextStyle!.copyWith(
+                    fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto',
+                  ),
+            ),
+        appBarTheme: buildOmiTheme(brightness: Brightness.light).appBarTheme.copyWith(
+              titleTextStyle: OmiType.headline.copyWith(
+                fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto',
+              ),
+            ),
+        textTheme: buildOmiTheme(
+          brightness: Brightness.light,
+        ).textTheme.apply(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto'),
       ),
-    ),
-    appBarTheme: buildOmiTheme(brightness: Brightness.light).appBarTheme.copyWith(
-      titleTextStyle: OmiType.headline.copyWith(
-        fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto',
-      ),
-    ),
-    textTheme: buildOmiTheme(
-      brightness: Brightness.light,
-    ).textTheme.apply(fontFamily: platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto'),
-  ),
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   setUp(() async {
