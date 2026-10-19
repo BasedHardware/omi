@@ -11093,7 +11093,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get openCall => 'Адкрыць званок';
 
   @override
-  String get captureRecoveryBanner => 'Omi не перадае гук — націсніце, каб падключыцца зноў';
+  String get captureRecoveryBannerTitle => 'Omi не перадае гук';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';
@@ -11111,17 +11111,8 @@ class AppLocalizationsBe extends AppLocalizations {
   String get captureBannerRetrySync => 'Паўтарыць сінхранізацыю';
 
   @override
-  String get captureBannerWhatsWrong => 'Што адбываецца?';
-
-  @override
-  String get captureBannerDismiss => 'Схаваць';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Спынілася Bluetooth-злучэнне з вашым Omi, таму гук не трапляе ў праграму. Omi працягвае запіс на прыладзе і сінхранізуецца, калі злучэнне адновіцца. Паўтор спрабыў зноў падлучыць злучэнне; калі гэта працягвае не працаваць, праверце прыладу ў Налады > Прылада.';
-
-  @override
-  String get captureLinkStalledTranscribesLater => 'Сувязь аўдыё перарвалася — транскрыпцыя з\'явіцца пасля аднаўлення';
 
   @override
   String get captureIngressNeedsReconnect => 'Аўдыё не даходзіць да праграмы — перападлучыце Omi';
@@ -13717,7 +13708,30 @@ class AppLocalizationsBe extends AppLocalizations {
   String get activityRetryAll => 'Паўтарыць усё';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Немагчыма праверыць памяць';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Запісы прыпынены';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Загрузка спынілася';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Чакаюць $count запісы',
+      one: 'Чакае 1 запіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';
+
+  @override
+  String get activityAttentionSemantics => 'Актыўнасць, патрабуе ўвагі';
 
   @override
   String get connectAgentHeadline => 'Выкарыстоўвайце памяць Omi у ChatGPT і сваіх ІІ-агентах';
@@ -14400,4 +14414,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Захавана $saved з $total аўдыя';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi працягвае запіс';
 }

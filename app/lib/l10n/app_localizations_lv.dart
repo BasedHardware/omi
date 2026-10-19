@@ -11091,7 +11091,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openCall => 'Atvērt zvanu';
 
   @override
-  String get captureRecoveryBanner => 'Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu';
+  String get captureRecoveryBannerTitle => 'Omi nesūta audio';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
@@ -11109,18 +11109,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureBannerRetrySync => 'Atkārtot sinhronizāciju';
 
   @override
-  String get captureBannerWhatsWrong => 'Kas notiek?';
-
-  @override
-  String get captureBannerDismiss => 'Paslēpt';
-
-  @override
   String get captureWedgeBleExplanation =>
       'Bluetooth savienojums ar jūsu Omi ir apstājies, tāpēc audio nesasniedz lietotni. Omi turpina ierakstīt ierīcē un sinhronizēsies, kad savienojums atjaunosies. Atkārtots mēģinājums atkal izveido savienojumu; ja tas joprojām neizdodas, pārbaudiet ierīci sadaļā Iestatījumi > Ierīce.';
-
-  @override
-  String get captureLinkStalledTranscribesLater =>
-      'Audio savienojums pārtrūka — transkripcija turpināsies pēc tā atjaunošanas';
 
   @override
   String get captureIngressNeedsReconnect => 'Audio nesasniedz lietotni — atkārtoti pievienojiet Omi';
@@ -13713,7 +13703,30 @@ class AppLocalizationsLv extends AppLocalizations {
   String get activityRetryAll => 'Mēģināt visu vēlreiz';
 
   @override
+  String get activityAttentionStorageUnknownTitle => 'Atmiņu neizdevās pārbaudīt';
+
+  @override
+  String get activityAttentionStorageSubtitle => 'Ieraksti apturēti';
+
+  @override
+  String get activityAttentionUploadStalledTitle => 'Augšupielāde apstājusies';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gaida $count ieraksti',
+      one: 'Gaida 1 ieraksts',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
+
+  @override
+  String get activityAttentionSemantics => 'Aktivitāte, pieprasa uzmanību';
 
   @override
   String get connectAgentHeadline => 'Izmantojiet savu Omi atmiņu ChatGPT un savos MI aģentos';
@@ -14397,4 +14410,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String playbackPartialAudioSaved(String saved, String total) {
     return 'Saglabāts $saved no $total audio';
   }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi joprojām ieraksta';
 }
