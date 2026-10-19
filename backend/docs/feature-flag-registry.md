@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-18 -->
+<!-- feature-flag-registry as-of: 2026-10-19 -->
 
 # Feature-flag authority registry
 
@@ -78,7 +78,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-18.
+None as of 2026-10-19.
 
 ## Flags
 
@@ -321,6 +321,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_DEV_ACTION_ITEMS_VERSION_CACHE_ENABLED` | Default on unless false; 15-minute encrypted Developer action-item cache fenced by every SDK task commit; false restores ten-second caching | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED` | Default on unless false; Bound developer conversation nonzero offsets and add cursor guidance with honest truncation | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_DEV_MEMORY_ADAPTIVE_CATEGORY_SCAN_ENABLED` | Default on unless false; category scans start at requested window under one admitted memory read operation; false restores 500-row chunks | backend | env | open | — | — | — | — | keep | — | dazheng |
+| `OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED` | Default on unless false; reuse historical metadata prefixes and status checks within one Developer memory list read | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_EXTERNAL_LIST_CACHE_ENABLED` | Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_EXTERNAL_LIST_METRICS_ENABLED` | Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend, llm-gateway | env | open | — | — | — | — | keep | — | unowned |
@@ -508,6 +509,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_DEV_ACTION_ITEMS_VERSION_CACHE_ENABLED` — Default on unless false; 15-minute encrypted Developer action-item cache fenced by every SDK task commit; false restores ten-second caching (fail: open)
 - `OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED` — Default on unless false; Bound developer conversation nonzero offsets and add cursor guidance with honest truncation (fail: open)
 - `OMI_DEV_MEMORY_ADAPTIVE_CATEGORY_SCAN_ENABLED` — Default on unless false; category scans start at requested window under one admitted memory read operation; false restores 500-row chunks (fail: open)
+- `OMI_DEV_MEMORY_REUSE_READ_WINDOWS_ENABLED` — Default on unless false; reuse historical metadata prefixes and status checks within one Developer memory list read (fail: open)
 - `OMI_EXTERNAL_LIST_CACHE_ENABLED` — Default on unless false; Encrypted authorized external list responses; ten seconds unless collection write coverage admits a versioned cache; expiry anchored before the origin query (fail: open)
 - `OMI_EXTERNAL_LIST_METRICS_ENABLED` — Default on unless false; Count four external list GETs and staged promote POST including auth rate-limit validation and server errors (fail: open)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
