@@ -9348,9 +9348,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ яшчэ $count';
-  }
+  String get quoteShowSources => 'Паказаць крыніцы';
 
   @override
   String get jumpToLatestMessage => 'Перайсці да апошняга паведамлення';

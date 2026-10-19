@@ -9368,9 +9368,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+మరో $count';
-  }
+  String get quoteShowSources => 'మూలాలను చూపించు';
 
   @override
   String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';

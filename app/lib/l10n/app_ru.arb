@@ -3043,7 +3043,7 @@
     "deviceOnboardingIntroSubtitle": "Попробуйте живую расшифровку, задайте вопрос и используйте быстрый жест двойным касанием.",
     "deviceOnboardingIntroDuration": "Около 1 минуты",
     "quoteJumpToTime": "Перейти к {duration}",
-    "quoteMoreTimestamps": "+ ещё {count}",
+    "quoteShowSources": "Показать источники",
     "jumpToLatestMessage": "Перейти к последнему сообщению",
     "latest": "Последнее",
     "flashFirmware": "Установить прошивку",

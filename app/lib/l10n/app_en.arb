@@ -11106,14 +11106,9 @@
             }
         }
     },
-    "quoteMoreTimestamps": "+{count} more",
-    "@quoteMoreTimestamps": {
-        "description": "Expand the remaining supporting transcript timestamps in this summary section",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
+    "quoteShowSources": "Show sources",
+    "@quoteShowSources": {
+        "description": "Accessibility label and tooltip for the control beside a summary section heading that lists the transcript moments supporting it"
     },
     "jumpToLatestMessage": "Jump to latest message",
     "@jumpToLatestMessage": {

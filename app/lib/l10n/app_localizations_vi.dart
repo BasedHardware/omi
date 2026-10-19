@@ -9321,9 +9321,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count nữa';
-  }
+  String get quoteShowSources => 'Hiện nguồn';
 
   @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';

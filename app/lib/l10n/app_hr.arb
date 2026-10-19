@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "Isprobajte transkripciju uživo, postavljanje pitanja i prečac dvostrukim dodirom.",
     "deviceOnboardingIntroDuration": "Otprilike 1 minuta",
     "quoteJumpToTime": "Idi na {duration}",
-    "quoteMoreTimestamps": "+ još {count}",
+    "quoteShowSources": "Prikaži izvore",
     "jumpToLatestMessage": "Idi na najnoviju poruku",
     "latest": "Najnovije",
     "flashFirmware": "Instaliraj firmver",

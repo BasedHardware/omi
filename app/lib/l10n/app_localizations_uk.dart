@@ -9340,9 +9340,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+ ще $count';
-  }
+  String get quoteShowSources => 'Показати джерела';
 
   @override
   String get jumpToLatestMessage => 'Перейти до останнього повідомлення';

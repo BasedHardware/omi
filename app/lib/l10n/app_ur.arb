@@ -10422,7 +10422,7 @@
     "deviceOnboardingIntroSubtitle": "لائیو ٹرانسکرپشن، سوال پوچھنے اور ڈبل ٹیپ شارٹ کٹ کو آزمائیں۔",
     "deviceOnboardingIntroDuration": "تقریباً 1 منٹ",
     "quoteJumpToTime": "{duration} پر جائیں",
-    "quoteMoreTimestamps": "+مزید {count}",
+    "quoteShowSources": "ذرائع دکھائیں",
     "jumpToLatestMessage": "تازہ ترین پیغام پر جائیں",
     "latest": "تازہ ترین",
     "flashFirmware": "فرم ویئر فلیش کریں",

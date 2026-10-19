@@ -9311,9 +9311,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count ďalších';
-  }
+  String get quoteShowSources => 'Zobraziť zdroje';
 
   @override
   String get jumpToLatestMessage => 'Prejsť na najnovšiu správu';

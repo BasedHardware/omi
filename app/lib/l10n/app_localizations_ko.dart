@@ -9184,9 +9184,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String quoteMoreTimestamps(int count) {
-    return '+$count개 더';
-  }
+  String get quoteShowSources => '출처 보기';
 
   @override
   String get jumpToLatestMessage => '최신 메시지로 이동';

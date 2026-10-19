@@ -17373,11 +17373,11 @@ abstract class AppLocalizations {
   /// **'Jump to {duration}'**
   String quoteJumpToTime(String duration);
 
-  /// Expand the remaining supporting transcript timestamps in this summary section
+  /// Accessibility label and tooltip for the control beside a summary section heading that lists the transcript moments supporting it
   ///
   /// In en, this message translates to:
-  /// **'+{count} more'**
-  String quoteMoreTimestamps(int count);
+  /// **'Show sources'**
+  String get quoteShowSources;
 
   /// Accessibility label and tooltip for the jump-to-latest button in chat
   ///
