@@ -62,6 +62,23 @@ def test_backlog_share_follows_profile(plans):
     assert 0.25 < backfill < 0.6  # profile fixture has no lane_decisions -> 0.4 default
 
 
+def test_off_peak_window_keeps_backfill_share_and_hour_level():
+    # Off-peak start: curve at hours 8-9 is half the peak and 2/3 of the daily mean. Before the
+    # window fix the backlog was sized on the daily mean while steady arrivals were thinned, so
+    # the m1p1 plan carried 57% backfill against the profile's 39%.
+    curve = [50.0 if h in (8, 9) else 100.0 for h in range(24)]
+    profile = dict(PROFILE, uploads={'accepted_per_min_mean': 200.0, 'accepted_per_min_by_utc_hour': curve})
+    level, thinning = pop._window_weights(profile, _spec(start_utc_hour=8))
+    assert thinning == pytest.approx(0.5)
+    assert level == pytest.approx(50.0 / (sum(curve) / 24.0))
+    plans = pop.generate(pop.synthetic_recordings(400), profile, _spec(start_utc_hour=8, percent_of_prod=5.0))
+    backfill = sum(1 for p in plans if p.lane_hint == 'backfill') / len(plans)
+    assert 0.3 < backfill < 0.5
+    target = 200.0 * 0.05 * 120 * level
+    assert abs(len(plans) - target) / target < 0.2
+    assert pop._window_weights(profile, _spec()) == (1.0, 1.0)  # no start hour = flat
+
+
 def test_owner_ids_are_synthetic_and_bounded():
     assert pop.owner_id('r1', 3) == 'lg-r1-o0003'
     with pytest.raises(ValueError):
