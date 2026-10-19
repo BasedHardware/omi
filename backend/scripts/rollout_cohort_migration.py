@@ -18,7 +18,6 @@ KEYS = {
     'dream-agent': 'DREAM_AGENT_UID_ALLOWLIST',
     'speaker-grouping-shadow': 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST',
     'stt-live-demand': 'STT_LIVE_DEMAND_UID_ALLOWLIST',
-    'sync-legacy-fresh': 'SYNC_LEGACY_FRESH_UID_ALLOWLIST',
     'sync-lineage-resolve': 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
     'transcription-final-pass': 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST',
     'transcription-shadow': 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
@@ -32,7 +31,6 @@ HOSTS = {
     'stt-live-demand': {'helm/backend-listen'},
     'mobile-standard-batch': {'helm/backend-listen'},
     'sync-lineage-resolve': ALL_HOSTS - {'helm/pusher'},
-    'sync-legacy-fresh': {'cloud-run/backend-sync', 'cloud-run/backend-sync-backfill'},
 }
 LIMIT = 450  # A single bounded atomic seed; refuse to truncate a larger live cohort.
 
