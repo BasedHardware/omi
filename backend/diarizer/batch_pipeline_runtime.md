@@ -110,8 +110,13 @@ embedding or Parakeet release. Dedicated bucket lifecycle must preserve pending
 accepted work; D arms cleanup only after successful projection.
 
 HPA uses A's **ready** age, separately targeting fresh 30s, recent 300s and deep
-3600s, with 300s downscale stabilization. Minimum one worker keeps the queue
-sampler alive; zero is rejected until an independent sampler exists. Enable
+3600s, with 300s downscale stabilization. Each worker samples queue age every
+15s on its own supervised task, independent of the GPU batch, so series stay
+fresh while every replica is busy. Minimum one worker keeps the queue
+sampler alive; zero is rejected until an independent sampler exists. With
+several replicas, lease recovery and the result-ready drain run on one replica
+per 30-second lease (`pump_recovery` in `{namespace}_leases`); each pump still
+drains the owners of its own completions, and a lease-store error fails open. Enable
 PodMonitoring only where its CRD is installed (it defaults on). The worker exports
 `worker_release`; a different collector must preserve the same label plus
 namespace and pod. Merge `prometheus-adapter-rules.yaml` into the existing
@@ -196,6 +201,46 @@ malformed, unavailable or noncanonical evidence takes the held recovery route.
 The worker never calls an external provider for this silence check. Rollback:
 set the worker validation disposition flag to `false`, restoring bounded GPU
 retries; existing held intents and receipts remain authoritative.
+
+## GPU skips that cannot change the transcript
+
+Diarization was the dominant per-unit GPU cost (pyannote RTF ~0.04 versus
+Parakeet ~0.0025) and ran over the whole unit, silence included, while ASR
+already saw only padded VAD windows. Two Helm switches decide whether and on
+what audio diarization runs; batching is unchanged.
+
+- `worker.diarizeSpeechOnlyEnabled` (`BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED`,
+  **on**; unset is on, only `false` disables): evidence is unpadded VAD speech
+  plus every emitted word clock (so a word in ASR context outside VAD is never
+  withheld). Each region is padded 1 s, regions under 4 s apart keep their
+  in-between audio, and pieces are joined with 0.5 s of zeros. Turns and
+  overlaps map back to capture clocks; seam audio maps to nothing. The full
+  unit is diarized when:
+  - over 80% of samples would be kept: `omi_fallback_total{component="vad",
+    from="batch_speech_only_diarization",reason="kept_over_80pct",outcome="recovered"}`;
+  - compaction or mapping raises, or compacted output has no turns while words
+    exist: same series with `reason="other",outcome="degraded"`.
+  Every decision increments `omi_batch_pipeline_diarization_decisions_total{decision}`
+  (`compacted`, `full_flag_off`, `full_no_evidence`, `full_kept_over_80pct`,
+  `full_compaction_error`, `full_compacted_empty`, `skipped_short`), and
+  `omi_batch_pipeline_diarization_audio_seconds_total{kind="unit"|"diarized"}`
+  gives the measured retained fraction. A persisted compacted result with any
+  word outside every turn (a diarizer gap inside a retained piece) increments
+  `omi_batch_pipeline_compacted_unassigned_units_total` and `..._words_total`;
+  such words abstain exactly as they do in full-unit gaps. The persisted
+  diarization adds `speech_compaction.diarized_seconds`.
+- `worker.shortSpeechSingleEnabled` (`BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED`,
+  **off**; only `true` enables): one evidence region of at most 2 s, where
+  pauses of at most 0.5 s (inclusive) join and a longer pause splits, takes the
+  existing `skipped_single` `SPEAKER_00` result with `single_evidence:
+  short_speech` and no model check. **Enablement precondition:** a paired run on
+  the prod pyannote revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee`
+  showing the full diarizer returns a single speaker on the gate's own evidence
+  (VAD plus words), including two bursts separated by at most 0.5 s. The AMI
+  bench used other weights and only single continuous slices.
+
+ASR inputs and words are identical with either switch on or off. Rollback:
+set `worker.diarizeSpeechOnlyEnabled=false`.
 
 Quarantine events are cumulative transitions, not current debt. For read-only
 Firestore aggregation, count `batch_pipeline_prod_jobs` with `state ==

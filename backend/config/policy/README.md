@@ -62,7 +62,7 @@ re-salting would reassign users. Every new percentage cohort needs its own salt.
 Registry and policy tests enforce the nested-retire rule and exception set.
 
 `kill_switch(name)` is the live E1 reader for recovery-task dispatch and projection
-pagination. Its allowlist must match registry `lifecycle: ops_kill`. Worker-only
+pagination and the maintenance leader lease. Its allowlist must match registry `lifecycle: ops_kill`. Worker-only
 switches, `EMPTY_ASR_*` and worker dispositions remain E1b. The worker-owned
 `pump.py` and `diarizer/batch_pipeline.py` are unchanged by E1.
 

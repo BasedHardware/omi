@@ -88,6 +88,9 @@ def test_cohort_registry_and_live_switch_contract():
     assert 'nested' in by_key['BATCH_LIVE_STT_RETIRE_PERCENT']['notes'].lower()
     with pytest.raises(ValueError):
         kill_switch('BATCH_PIPELINE_ENABLED')
+    assert kill_switch(
+        'BATCH_PIPELINE_LEADER_LEASE_ENABLED', flags={'BATCH_PIPELINE_LEADER_LEASE_ENABLED': 'unexpected'}
+    )
 
 
 @pytest.fixture(scope='module')
