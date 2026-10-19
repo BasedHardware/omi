@@ -781,8 +781,8 @@
 				A39438EBCDB909113855E505 /* Sources */,
 				C82A98EF678B6558928D2B66 /* Frameworks */,
 				86C81B2505549CDA309E429B /* Resources */,
-				5E566183C4137FBADE4077BD /* Thin Binary */,
 				84317A1F9CC5D75F9718DFFF /* Embed Frameworks */,
+				5E566183C4137FBADE4077BD /* Thin Binary */,
 			);
 			buildRules = (
 			);
