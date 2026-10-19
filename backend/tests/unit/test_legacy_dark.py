@@ -1,13 +1,12 @@
 """Legacy dark (contract (h)): neutral at ``on``, fenced in ``draining``/``dark``."""
 
 import json
-import sys
-import types
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from database import sync_ledger
+from utils.rollout import runtime_percent
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import (
     DrainCensus,
@@ -28,21 +27,16 @@ DRAINING, DARK, ON = LegacySyncMode.DRAINING, LegacySyncMode.DARK, LegacySyncMod
 
 @pytest.fixture
 def runtime_mode(monkeypatch):
-    """Install a fake (f) module; the real stub arrives with lane 1/6."""
-    module = types.ModuleType('utils.rollout.runtime_percent')
+    """Drive the (f) reader; lane 6 implements it behind the same name."""
     state = {'value': 'on'}
 
     def legacy_sync_mode():
         value = state['value']
-        if isinstance(value, Exception):
+        if isinstance(value, BaseException):
             raise value
         return value
 
-    module.legacy_sync_mode = legacy_sync_mode
-    package = types.ModuleType('utils.rollout')
-    package.runtime_percent = module
-    monkeypatch.setitem(sys.modules, 'utils.rollout', package)
-    monkeypatch.setitem(sys.modules, 'utils.rollout.runtime_percent', module)
+    monkeypatch.setattr(runtime_percent, 'legacy_sync_mode', legacy_sync_mode)
     return state
 
 
@@ -50,9 +44,13 @@ def test_stale_window_matches_ledger():
     assert legacy_dark.CLAIM_STALE_SECONDS == sync_ledger.CLAIM_STALE_SECONDS
 
 
-def test_mode_absent_serves_on(monkeypatch):
-    monkeypatch.setitem(sys.modules, 'utils.rollout.runtime_percent', None)
+def test_unimplemented_stub_serves_on_without_error_log(runtime_mode, caplog):
+    runtime_mode['value'] = NotImplementedError('legacy_sync_mode: lane 6')
+    counter = legacy_dark.OMI_LEGACY_SYNC_MODE_READ_TOTAL.labels(source='absent')
+    before = counter._value.get()
     assert legacy_dark.current_mode() is ON
+    assert counter._value.get() == before + 1
+    assert 'outcome=error' not in caplog.text
     assert legacy_dark.legacy_admission_allowed()
     assert legacy_dark.sequencer_registration_allowed()
     assert legacy_dark.sequencer_dispatch_allowed()
