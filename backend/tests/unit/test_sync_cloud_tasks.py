@@ -5967,6 +5967,135 @@ async def test_route_preamble_stall_in_fence_read_ends_request_at_the_route_dead
                 sys.modules[name] = original
 
 
+def _legacy_preamble_module(job_status, stalled_fn_name=None, raises=None):
+    """Direct (epoch-less) backfill delivery with the sequencer on, stubbed so a
+    single preamble await can stall or fail."""
+    module, saved_modules, _, _, fallback_calls, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'})
+    module.uid_sequencer.foreign_delivery = MagicMock(return_value=False)
+    module.uid_sequencer.production_stage = MagicMock(return_value=True)
+    module.uid_sequencer.enabled = MagicMock(return_value=True)
+    module.uid_sequencer.kick = MagicMock(return_value=True)
+    module.get_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': job_status})
+    module.update_sync_job = MagicMock(return_value={'job_id': 'job-1'})
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.register_job = MagicMock()
+    module.backfill_cutover.refresh_direct_run = MagicMock(side_effect=raises)
+    module.warm_rollout_cohorts = AsyncMock()
+    module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'body'}))
+    module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+    passthrough = module.run_blocking
+
+    async def _stalling(executor, fn, *args, **kwargs):
+        if stalled_fn_name and fn is getattr(module.uid_sequencer, stalled_fn_name, None):
+            await asyncio.sleep(30)
+        if stalled_fn_name == 'refresh_direct_run' and fn is module.backfill_cutover.refresh_direct_run:
+            await asyncio.sleep(30)
+        return await passthrough(executor, fn, *args, **kwargs)
+
+    module.run_blocking = _stalling
+    return module, saved_modules, request, fallback_calls
+
+
+def _restore_sync_modules(saved_modules):
+    sys.modules.pop('routers.sync', None)
+    sys.modules.pop('utils.sync.pipeline', None)
+    sys.modules.pop('utils.sync.ledger_completion', None)
+    for name, original in saved_modules.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_legacy_kick_still_acks_the_registered_job():
+    """Registration already committed, so a kick stall ends inside the route
+    deadline with the 200 ack; a 409 would redeliver a payload that no longer
+    needs the queue."""
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued', stalled_fn_name='kick')
+    try:
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert time.monotonic() - started < 5
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'sequenced_legacy_job'}
+        module.sync_backfill_sequencer.register_job.assert_called_once()
+        module._run_sync_job_body.assert_not_awaited()
+        assert fallback_calls == []
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_direct_refresh_defers_with_the_queue_owned_409():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module(
+        'processing', stalled_fn_name='refresh_direct_run'
+    )
+    try:
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert time.monotonic() - started < 5
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._run_sync_job_body.assert_not_awaited()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_direct_refresh_error_continues_into_the_attempt_body_instead_of_a_fast_500():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module(
+        'processing', raises=RuntimeError('redis down')
+    )
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'body'}
+        module.backfill_cutover.refresh_direct_run.assert_called_once()
+        module._run_sync_job_body.assert_awaited_once()
+        assert fallback_calls == []
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_route_preamble_stall_in_cohort_warm_ends_request_at_the_route_deadline():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued')
+
+    async def _warm_stalls(uid):
+        await asyncio.sleep(30)
+
+    module.warm_rollout_cohorts = _warm_stalls
+    try:
+        started = time.monotonic()
+        response = await module.run_sync_job(request, task_retry_count=0)
+        assert time.monotonic() - started < 5
+        assert response.status_code == 409
+        assert json.loads(response.body) == {'status': 'locked'}
+        module._run_sync_job_body.assert_not_awaited()
+        module.update_sync_job.assert_not_called()
+        assert [call['reason'] for call in fallback_calls] == ['preamble_timeout']
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_cohort_warm_error_is_not_turned_into_a_success_response():
+    module, saved_modules, request, fallback_calls = _legacy_preamble_module('queued')
+    module.warm_rollout_cohorts = AsyncMock(side_effect=RuntimeError('cohort read failed'))
+    try:
+        with pytest.raises(RuntimeError):
+            await module.run_sync_job(request, task_retry_count=0)
+        module._run_sync_job_body.assert_not_awaited()
+        module.update_sync_job.assert_not_called()
+        assert fallback_calls == []
+    finally:
+        _restore_sync_modules(saved_modules)
+
+
 @pytest.mark.asyncio
 async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
     """Thread: the terminal_cleanup_retry 500 hands the queue a retry-only

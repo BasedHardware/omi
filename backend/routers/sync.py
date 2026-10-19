@@ -2119,7 +2119,12 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     )
                     return _budget_deferral_fallback('preamble_timeout', 'degraded')
                 try:
-                    await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
+                    async with asyncio.timeout_at(route_deadline):
+                        await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
+                except TimeoutError:
+                    # Registration already committed: a 409 would redeliver a
+                    # payload that no longer needs the queue.
+                    logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_kick')
                 except Exception as error:
                     logger.error(
                         'event=sync_uid_sequencer action=legacy_migration outcome=deferred exception_type=%s',
@@ -2128,7 +2133,19 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 logger.info('event=sync_uid_sequencer action=legacy_migration outcome=registered')
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
             if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
-                await run_blocking(db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id'])
+                try:
+                    async with asyncio.timeout_at(route_deadline):
+                        await run_blocking(
+                            db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id']
+                        )
+                except TimeoutError:
+                    logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=direct_refresh')
+                    return _budget_deferral_fallback('preamble_timeout', 'degraded')
+                except Exception as error:
+                    logger.error(
+                        'event=sync_transcription_job outcome=direct_refresh_failed exception_type=%s',
+                        type(error).__name__,
+                    )
         return await _run_sync_job_body(request, task_retry_count, entry_state)
     uid = payload.get('uid')
     job_id = payload.get('job_id')
