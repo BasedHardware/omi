@@ -176,7 +176,7 @@ def test_copy_object_decrypts_reseals_and_records_hashes():
         write=lambda name, sealed, meta: written.setdefault(name, (sealed, meta)) is not None,
         stats=stats,
     )
-    assert entry and entry['duration_s'] == pytest.approx(1.0)
+    assert entry and abs(entry['duration_s'] - 1.0) < 1e-6  # not pytest.approx: it imports numpy in the timed call
     sealed, meta = written[entry['object']]
     assert mc.open_mirror_object(mirror_key, entry['object'], sealed) == plain
     assert meta['plaintext_sha256'] == hashlib.sha256(plain).hexdigest() == entry['plaintext_sha256']
@@ -216,3 +216,23 @@ def test_copy_stats_public_is_serializable():
     out = stats.public()
     assert out['audio_hours'] == 2.0 and out['failed'] == {'read:Timeout': 1}
     json.dumps(out)
+
+
+def test_private_cloud_sync_reads_only_the_owner_chunk_prefix():
+    assert mo.prefixes_for('private-cloud-sync', UID) == [f'chunks/{UID}/']
+
+
+def test_spread_selection_covers_history_and_size_bound():
+    inv = mo.Inventory()
+    for n in range(10):
+        got = mo.classify(
+            'private-cloud-sync',
+            UID,
+            f'chunks/{UID}/grp{n:02d}x/{1_700_000_000 + n * 86400:.3f}.opus.enc',
+            500 if n != 9 else 5_000_000,
+            None,
+        )
+        inv.objects.append(got)
+    picked = mo.select_groups(inv, max_groups=3, spread=True, max_group_bytes=1_000_000)
+    assert [f[0].group for f in picked] == ['grp08x', 'grp05x', 'grp02x']
+    assert [f[0].group for f in mo.select_groups(inv, max_groups=2)] == ['grp09x', 'grp08x']
