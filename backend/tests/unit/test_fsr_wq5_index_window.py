@@ -2,6 +2,7 @@
 
 import copy
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
@@ -12,6 +13,8 @@ from database import memories
 from tests.unit.test_external_list_nested_budget import Query, Ref, Snapshot, Store
 from tests.unit.test_memory_service_parity import _load_memory_service
 from utils.memory import read_resilience
+from utils.memory.index_window import validate_window_cursors
+from utils.memory.universal_list_cursor import StreamKeyset
 from utils.memory.index_window_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 
 UID = 'owner'
@@ -223,3 +226,12 @@ def test_mixed_nanosecond_boundaries_follow_timestamp_before_id(monkeypatch):
         if token is None:
             break
     assert remaining == ['a']
+
+
+def test_legacy_cursor_without_exact_position_restarts_instead_of_guessing_nanoseconds():
+    state = SimpleNamespace(
+        historical_updated_scan=StreamKeyset(updated_at_us=123456, memory_id='old-boundary'),
+        historical_created_scan=None,
+    )
+    with pytest.raises(ValueError, match='no exact index-window position'):
+        validate_window_cursors(state, UID)
