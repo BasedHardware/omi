@@ -318,7 +318,8 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.toLowerCase();
+    // Kept as typed so the Memories search field can show it again; filteredMemories ignores case.
+    _searchQuery = query;
     notifyListeners();
   }
 
