@@ -956,7 +956,12 @@ _add(
             ),
         ),
         profiles=WITHOUT_PHOTOS_PROFILES,
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET, 'budget': _BUDGET},
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'budget': _BUDGET,
+            'scan_stats': (None, 'optional rows-read counter filled after the query; no filter effect'),
+        },
     )
 )
 _add(DriverEntry('database.conversations.get_in_progress_conversation', base={'uid': UID}))

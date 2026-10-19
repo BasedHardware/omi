@@ -841,6 +841,7 @@ def _collect_visible_conversation_page(
     offset: int,
     include_discarded: bool,
     budget: Optional[ListReadBudget] = None,
+    scan_stats: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -849,6 +850,8 @@ def _collect_visible_conversation_page(
     ``discarded == False`` query's server ``limit``/``offset`` (desktop parity).
     If that window is full but some rows are completed rule-discards, keep
     reading after the last snapshot until the page is full or the skip cap hits.
+    That path counts each stored row it reads past ``offset``, hidden ones too,
+    in ``scan_stats['rows_read']``; a server offset counts those rows as well.
     """
     if include_discarded:
         skipped_visible = 0
@@ -870,6 +873,8 @@ def _collect_visible_conversation_page(
             pass
         return conversations
 
+    stats: Dict[str, int] = {} if scan_stats is None else scan_stats
+    stats['rows_read'] = 0
     if budget is not None and offset > 0:
         try:
             budget.charge(offset)
@@ -883,6 +888,7 @@ def _collect_visible_conversation_page(
     try:
         for doc in budgeted_stream_iter(page_query, budget):
             fetched += 1
+            stats['rows_read'] += 1
             last_doc = doc
             conversation = document_data_with_revision(doc)
             if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
@@ -907,6 +913,7 @@ def _collect_visible_conversation_page(
         try:
             for doc in budgeted_stream_iter(follow, budget):
                 fetched += 1
+                stats['rows_read'] += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
@@ -1684,6 +1691,7 @@ def get_conversations_without_photos(
     starred: Optional[bool] = None,
     budget: Optional[ListReadBudget] = None,
     list_fields_only: bool = False,
+    scan_stats: Optional[Dict[str, int]] = None,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -1694,7 +1702,8 @@ def get_conversations_without_photos(
     large offset consumes real read work — and the page's stream runs under
     the budget's per-RPC timeout with each fetched row charged. An offset
     that exhausts the allowance returns an empty, explicitly truncated page
-    instead of pretending to be complete.
+    instead of pretending to be complete. ``scan_stats`` is filled as
+    ``_collect_visible_conversation_page`` describes.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if list_fields_only and indexed_list_reads_enabled():
@@ -1758,6 +1767,7 @@ def get_conversations_without_photos(
         offset=offset,
         include_discarded=include_discarded,
         budget=budget,
+        scan_stats=scan_stats,
     )
 
 
