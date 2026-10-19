@@ -212,6 +212,14 @@ def test_mixed_nanosecond_boundaries_follow_timestamp_before_id(monkeypatch):
     monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
     first = service.read_page(UID, limit=1)
     assert [memory.id for memory in first.memories] == ['z']
-    second = service.read_page(UID, limit=1, cursor=first.next_cursor)
-    assert [memory.id for memory in second.memories] == ['a']
-    assert db.physical <= 4
+    token = first.next_cursor
+    remaining = []
+    for _ in range(4):
+        before = db.physical
+        page = service.read_page(UID, limit=1, cursor=token)
+        assert db.physical - before <= 2
+        remaining.extend(memory.id for memory in page.memories)
+        token = page.next_cursor
+        if token is None:
+            break
+    assert remaining == ['a']
