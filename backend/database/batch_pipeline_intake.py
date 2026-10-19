@@ -3,7 +3,7 @@
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 
-from config.policy import resolve_batch_policy
+from config.policy import BatchUnitPolicy, resolve_batch_policy
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
@@ -55,7 +55,11 @@ def admit(
             and pending.get('conversation_id') == binding.target_conversation_id
             and pending.get('record_content_id') == binding.content_id
         )
-        if reserved_recording and pending.get('policy') and pending['policy'] != policy.to_dict():
+        if (
+            reserved_recording
+            and pending.get('policy') is not None
+            and BatchUnitPolicy.from_dict(pending['policy']) != policy
+        ):
             raise ValueError('reserved recording policy is immutable')
         if not reserved_recording and not policy.batch_enabled:
             raise AdmissionDisabled('recorded admission policy does not enable batch')

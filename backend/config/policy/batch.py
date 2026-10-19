@@ -109,7 +109,7 @@ def resolve_batch_policy(
     comes from the configured rollout cache in production and explicit flags in
     replay. Retire is clamped to batch percent and also requires batch admission.
     """
-    from config.rollout_cohorts import in_rollout_cohort
+    from config.rollout_cohorts import in_rollout_cohort, valid_uid
 
     env = dict(os.environ if flags is None else flags)
 
@@ -117,7 +117,7 @@ def resolve_batch_policy(
         if flags is None:
             members = tuple(value.strip() for value in env.get(key, '').split(',') if value.strip())
             return in_rollout_cohort(uid, name, legacy_members=members)
-        return bool(uid) and uid in {value.strip() for value in env.get(key, '').split(',') if value.strip()}
+        return valid_uid(uid) and uid in {value.strip() for value in env.get(key, '').split(',') if value.strip()}
 
     def boolean(key, default='false', *, strip=True):
         value = env.get(key, default)

@@ -166,6 +166,10 @@ class SimConfig:
     policy: BatchUnitPolicy | None = None
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
 
+    def __post_init__(self):
+        if isinstance(self.policy, dict):
+            self.policy = BatchUnitPolicy.from_dict(self.policy)
+
 
 @dataclass
 class UploadRecord:
@@ -559,6 +563,9 @@ class Simulation:
         record.policy = self.config.policy or resolve_batch_policy(
             upload.owner, flags={**DEFAULT_FLAGS, **self.config.flags}
         )
+        if not record.policy.batch_enabled:
+            record.status = 'rejected_other'
+            return
         target = self._target_id(upload) if upload.target else None
         try:
             generation = self.customer.check(upload.owner, (target,) if target else ())

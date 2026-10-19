@@ -347,3 +347,30 @@ def test_legacy_fallback_can_anchor_on_an_unfenced_sibling():
     _, policy = load_job_policy(store, 'live')
     assert store.get('jobs', 'live')['policy'] == policy.to_dict()
     assert not store.get('jobs', 'old').get('policy')
+
+
+@pytest.fixture(params=[True, False])
+def explicit_sim_policy(request, monkeypatch):
+    import os
+    from testing.pipeline_sim.sim import Simulation
+    from testing.pipeline_sim.trace import GOLDEN_CONFIGS
+
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
+    config = GOLDEN_CONFIGS['healthy']()
+    policy = BatchUnitPolicy(batch_enabled=request.param)
+    config.policy = policy
+    sim = Simulation(config)
+    observed = []
+    sim.store.observers.append(lambda *args: observed.append(os.environ['BATCH_PIPELINE_ENABLED']))
+    return sim.run(), policy, observed
+
+
+def test_sim_accepts_an_explicit_policy_without_installing_scoped_env(explicit_sim_policy):
+    result, policy, observed = explicit_sim_policy
+    assert result.records and all(record.policy is policy for record in result.records)
+    assert all(value == 'false' for value in observed)
+    admitted = [record for record in result.records if record.status == 'admitted']
+    assert bool(admitted) is policy.batch_enabled
+    assert all(job['policy'] == policy.to_dict() for job in result.store.jobs())
+    if not policy.batch_enabled:
+        assert result.stt.stats.requests == 0
