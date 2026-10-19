@@ -31,9 +31,26 @@ as failed reconciliation. Successful siblings finalize independently. Flagged
 oversized GPU empty-result retries become held work without a failure attempt;
 the unflagged retry follows main's behavior.
 
+Both legacy and ladder-only execution require the authenticated owner to match
+`STT_CAP_DISPATCH_COHORT` and the original lane to match
+`STT_CAP_DISPATCH_LANES`. Empty cohort admits nobody; both manifests keep the
+switch false, cohort empty, lanes `live`. Listen's receiver and each provider
+constructor name the UID and live lane. Pusher retains its existing source/import
+and shutdown closure; it does not own another PCM hold sink. Recovery of a live
+hold stays live through the shared sync segment processor, even while sync/batch
+are disabled. Missing legacy hold origin maps to sync, explicit unknown origins
+stay paused. A reserved excluded backlog source can yield to a later live hold
+only after an ownership/month-fenced transaction proves it never dispatched and
+refunds its chosen estimate once; receipts, leases, text claims and uncertain
+reads retain the reservation. Even empty/null lease-token or piece-plan keys
+and missing/nonzero retry timestamps retain claim history. Flag-off and custom
+STT bypass admission before request identity is read; active non-custom calls
+still require the authenticated UID and live scope. See [cohort, provenance and ramp](stt-cap-dispatch.md#cohort-and-lane-rollout-david-2026-10-18)
+for the dazheng-owned rollout, three-hour 5% soak, rollback and #22352 dependency.
+
 ## Ladder budget refresh and execution admission (default off)
 
-With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, funded ladder/Free live sessions
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`, selected funded ladder/Free live sessions
 install the shared provider admission state even when legacy dispatch remains off.
 It carries remaining units and debits accepted PCM at the pinned provider speech
 rate. A packet exceeding the estimate is suppressed while capture continues.
@@ -3005,9 +3022,11 @@ TDT tail when projected capture lag reaches two thirds of the 90-second ring.
 The remaining third is headroom for another paced POST; it is not a guarantee
 that a cut can advance the anchor. Empty responses provide no held tail to cut,
 and very short text can make insufficient progress. A stalled leg still fails
-over before replay audio is evicted. `capacity_full` fallback logs carry a
-bounded `subtype` identifying PCM buffer, replay ring, or admission capacity
-without adding a metric label.
+over before replay audio is evicted, with its own bounded reason
+`replay_ring_overflow`: replay lag is session-local, so it is neither
+`capacity_full` nor provider-health evidence. `capacity_full` fallback logs
+carry a bounded `subtype` identifying PCM buffer, admission, or queue-timeout
+capacity without adding a metric label.
 
 When no admitted speech is awaiting an answer, the ring retains **15 seconds**
 of recent VAD-negative capture before trimming settled silence. This is the
@@ -3090,7 +3109,9 @@ speech. Thus the additional flush rate is bounded by one per blip plus at least
 five seconds of capture silence, as well as the existing wall POST pacing.
 `omi_stt_window_stranded_flushes_total{outcome}` counts `performed`,
 `answered_empty`, and `answered_text`; answers describe parsed server output,
-not necessarily emitted text. These three fixed values have no user/session
+not necessarily emitted text. `settled_unplaced` is additive, not a fourth
+exclusive result: it also counts an `answered_text` flush whose text was only
+unplaceable, so do not sum it with the answer outcomes. These fixed values have no user/session
 labels. A failed/cancelled attempt has no answer increment. Retained empty
 history and its context-expiry endpoints remain bounded by the capture horizon.
 
@@ -3104,7 +3125,7 @@ subsequently performed; these counters are not mutually exclusive outcomes.
 An already pending request is not counted again for each capture chunk. A
 natural sentence/idle emission is `no_held_tail`, rather than a pressure cut.
 
-Before `replay_ring_cap` cancels the pump, listen snapshots numeric state and
+Before `replay_ring_overflow` cancels the pump, listen snapshots numeric state and
 carries it onto the existing recovered fallback event: `un_emitted_capture_seconds`
 (projected protected capture span including the unsent overflow chunk),
 `vad_admitted_seconds` (accepted VAD output in the existing ring, including
@@ -3124,7 +3145,12 @@ is it a ledger of every capture sample retained behind an empty-result slide.
 An answered-empty POST is not proof that admitted audio contains no words:
 TDT can return empty on a mid-utterance start. A long-silence stranded answer
 therefore settles capacity without eagerly discarding its context or replay
-copy. Other empty context-cap slides retain their existing pending-speech
+copy. A stranded answer whose text lies only past the fragment's real duration
+(inside the added silence envelope) settles the same way, counted as
+`omi_stt_window_stranded_flushes_total{outcome="settled_unplaced"}`; otherwise
+its anchor would wait for a repost no quiet span selects and overflow the
+ring (`PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`, default on, is the kill
+switch). Other empty context-cap slides retain their existing pending-speech
 protection. Retaining replay gives the replacement leg an opportunity to recover
 words that Parakeet never emitted. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
@@ -5333,7 +5359,7 @@ series. Completed-session exhaustion is separately exported as
 `omi_listen_demand_exhausted_sessions_total{demand_cohort,outcome="yes|no"}`;
 this counts sockets once, whereas chain exhaustion and fallback detail count
 hops. `omi_listen_demand_failure_detail_total` exposes bounded
-`first_text_deadline|capacity_full|other` reasons and capacity subtypes without
+`first_text_deadline|capacity_full|replay_ring_overflow|gate_unavailable|other` reasons and capacity subtypes without
 changing the shared `omi_fallback_total` schema.
 
 `omi_stt_provider_wire_audio_seconds_total{provider,demand_cohort}` counts PCM16

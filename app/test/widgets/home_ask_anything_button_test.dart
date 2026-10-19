@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
 // Regression test for #19854: Mobile: clean up the Home bottom bar with an Ask Anything button

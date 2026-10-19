@@ -458,8 +458,26 @@ would advance the anchor by less than one 6-second pace. Earlier windows keep
 their sentence boundary, and windows with enough progress still hold the last
 segment. This extends the forced cut already used for one unfinished segment.
 Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
-`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
-fallback metric gains no new label.
+`buffer_cap`, `admission`, or `queue_timeout` (or `unknown`); the shared
+fallback metric gains no new label. A capture replay ring that outgrows its
+90-second horizon before the leg emits is session-local replay lag, not
+provider capacity: it fails over with its own bounded reason
+`replay_ring_overflow` (formerly `capacity_full` subtype `replay_ring_cap`),
+so capacity alerts and dashboards do not count it, and it is censored from
+provider health like other session causes.
+
+A long-silence stranded flush is the last POST a quiet span selects. When its
+answer carries text whose TDT timestamps fall in the silence envelope added to
+the short fragment (dropped as `timestamp_beyond_window`), the leg settles that
+fragment like an answered-empty one: when nothing was emitted the POST anchor
+stays, its PCM remains context for the next window, and its replay copy ages
+out only at the natural ring horizon. When some text was placed, the existing
+beyond-window anchoring applies and the remainder is accounted the same way. Before 2026-10-19 the anchor waited for a repost that no job
+would select, so ~90 s of near-silence overflowed the ring into failover (prod
+signature `posts_since_anchor=1 empty_posts_since_anchor=0 cut_pending=1
+post_in_flight=0`). `omi_stt_window_stranded_flushes_total{outcome="settled_unplaced"}`
+counts these settlements. `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED`
+(default on; `false` is the kill switch) restores the held anchor.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.

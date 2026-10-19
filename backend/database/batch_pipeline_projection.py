@@ -50,6 +50,10 @@ class ProjectionStore:
             raise ProjectionBlocked('committed result and durable intake binding required')
         return job, entry, normalized_binding(job['projection_binding'])
 
+    def projection_watermark(self, hashed_owner: str) -> str | None:
+        # A fetch hint only; assignment rereads the watermark transactionally.
+        return (self.ref('owners', hashed_owner).get().to_dict() or {}).get('projection_watermark')
+
     def policy(self, segment_id: str) -> ProjectionPolicy:
         _, policy = load_stage_policy(self.store, segment_id, 'projection')
         if policy is None:

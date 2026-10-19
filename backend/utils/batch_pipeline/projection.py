@@ -27,6 +27,9 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 logger = logging.getLogger(__name__)
+# One recovery wake's owner-chain bound; the periodic sweep resumes beyond it.
+OWNER_CHAIN_LIMIT = 64
+OWNER_CHAIN_SECONDS = 30.0
 
 
 @contextmanager
@@ -123,7 +126,7 @@ def build_incoming(
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
-        is_locked=False if cap_dispatch_enabled() else binding.is_locked,
+        is_locked=False if cap_dispatch_enabled(item.owner_id, 'batch') else binding.is_locked,
         private_cloud_sync_enabled=binding.private_cloud_sync_enabled,
         client_device_id=binding.client_device_id,
         client_platform=binding.client_platform,
@@ -205,13 +208,13 @@ class Projector:
                 raise ProjectionBlocked('projection assignment claim busy')
             self._assign(segment_id, job, entry, binding, finish=False)
 
-    async def start_followups(self):
+    async def start_followups(self, priority=()):
         # Imported lazily: the synchronous worker seam remains lightweight.
         from utils.batch_pipeline.projection_followup import ProjectionFollowups
 
         if self.followups is None:
             self.followups = ProjectionFollowups(self)
-        await self.followups.schedule()
+        await self.followups.schedule(priority)
 
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
@@ -567,6 +570,81 @@ class Projector:
 
     def status(self, uid: str, content_id: str) -> dict | None:
         return self.store.status(uid, content_id)
+
+    def project_owner(
+        self,
+        owner_id: str,
+        *,
+        recovered: str | None = None,
+        limit: int = OWNER_CHAIN_LIMIT,
+        budget_seconds: float = OWNER_CHAIN_SECONDS,
+    ) -> list[str]:
+        """Walk one owner's result log forward from its projection watermark.
+
+        A recovered unit commits at the log tail, behind successors the global
+        cursor may already have passed. This targeted wake assigns the owner's
+        unprojected rows in chain order within one pass and stops at the first
+        row that does not advance the watermark. Every row still passes the
+        transactional predecessor, privacy and receipt fences. Returns async
+        rows whose follow-ups should run next: the rows this walk persisted
+        plus their contents' persisted, not-yet-ready siblings, grouped by
+        content with the ``recovered`` unit's content first.
+        """
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+        key = owner_key(owner_id)
+        deadline = time.monotonic() + budget_seconds
+        groups: dict[str, dict[str, None]] = {}
+        first = None
+        advanced = 0
+        previous = self.store.projection_watermark(key)
+        for _ in range(max(1, limit)):
+            if time.monotonic() >= deadline:
+                break
+            segment_id = self.store.store.projection_successor(key, previous)
+            if segment_id is None:
+                break
+            row = self.store.ref('results', segment_id).get().to_dict() or {}
+            if row.get('projection_state') == 'erased':
+                # The predecessor check walks erased receipts; so does discovery.
+                previous = segment_id
+                continue
+            try:
+                job, entry, binding = self.store.read(segment_id)
+                policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+                if policy.async_projection:
+                    self._persist_read(segment_id, job, entry, binding)
+                else:
+                    self._project_read(segment_id, job, entry, binding)
+            except (ProjectionBlocked, BatchPrivacyBlocked):
+                break
+            except Exception as error:
+                logger.error(
+                    'event=batch_projection action=owner_chain outcome=error exception_type=%s', type(error).__name__
+                )
+                break
+            if self.store.projection_watermark(key) != segment_id:
+                break  # Busy claim or partial multipart: the sweep retries it.
+            previous, advanced = segment_id, advanced + 1
+            if policy.async_projection:
+                group = groups.get(binding.content_id)
+                if group is None:
+                    group = groups[binding.content_id] = {}
+                    for sibling in binding.segment_ids:
+                        receipt = (self.store.ref('results', sibling).get().to_dict() or {}).get('projection') or {}
+                        if receipt and receipt.get('state') != 'ready':
+                            group[sibling] = None
+                group[segment_id] = None
+                if segment_id == recovered:
+                    first = binding.content_id
+        ordered = [groups.pop(first)] if first is not None else []
+        followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
+        logger.info(
+            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d',
+            advanced,
+            len(followups),
+        )
+        return followups
 
     def sweep(self, limit: int = 100) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""

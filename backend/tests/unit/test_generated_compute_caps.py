@@ -3,6 +3,8 @@
 No provider/database imports: execute actual source entrypoints with narrow fakes.
 """
 
+from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
+
 import ast
 import asyncio
 from contextlib import nullcontext
@@ -250,7 +252,7 @@ def test_onboarding_denial_does_not_take_lenient_answer_fallback(gate, monkeypat
         '_ai_check_answer',
         dict(
             generated_compute_allowed=module.generated_compute_allowed,
-            generated_compute_enabled=module.generated_compute_enabled,
+            generated_compute_configured=module.generated_compute_configured,
             run_blocking=run_blocking,
             db_executor=None,
         ),
@@ -285,7 +287,7 @@ def test_interactive_denial_precedes_fallback_catches_and_side_effects(gate, mon
         name,
         dict(
             require_generated_compute=module.require_generated_compute,
-            generated_compute_enabled=module.generated_compute_enabled,
+            generated_compute_configured=module.generated_compute_configured,
             run_blocking=run_blocking,
             db_executor=None,
         ),
@@ -346,7 +348,7 @@ def test_managed_authorizer_reuses_shared_admission_without_another_monthly_scan
         '_authorize_omi',
         dict(
             generated_compute_allowed=module.generated_compute_allowed,
-            generated_compute_enabled=module.generated_compute_enabled,
+            execution_admission_enabled=module.execution_admission_enabled,
             _resolve_plan=lambda *args: ('basic', True),
             _UNRESOLVED=object(),
             _decision=lambda **kwargs: SimpleNamespace(**kwargs),
@@ -364,3 +366,23 @@ def test_managed_authorizer_reuses_shared_admission_without_another_monthly_scan
     assert decision.allowed is ladder
     assert decision.reason == ('ladder_budget_available' if ladder else 'basic_not_entitled')
     monthly.assert_not_called()
+
+
+@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('cohort,lanes', [('', 'batch'), ('uid:other', 'batch'), ('all', 'live')])
+def test_generated_work_uses_shared_owner_and_batch_scope(gate, monkeypatch, ladder, cohort, lanes):
+    module, funded, byok = gate
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', cohort)
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', lanes)
+    assert module.generated_compute_allowed('user', 'synthetic')
+    funded.processing_allowed.assert_not_called()
+
+
+def test_empty_cohort_does_not_deny_unowned_generated_work(gate, monkeypatch):
+    module, funded, byok = gate
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', '')
+    assert module.generated_compute_allowed(None, 'synthetic')
+    funded.processing_allowed.assert_not_called()
