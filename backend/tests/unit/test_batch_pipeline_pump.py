@@ -345,27 +345,48 @@ async def test_pipelined_publication_overlaps_next_exclusive_chain_and_keeps_cap
     assert store.rows['results', 'second']['previous_segment_id'] == 'first'
 
 
+def blocked_chain(worker):
+    """Hold the first chain until released; record which segment entered it."""
+    release, entered = threading.Event(), []
+    process = worker.process_batch
+
+    def chain(items):
+        entered.extend(v.segment_id for v in items)
+        return release.wait(5) and process(items)
+
+    worker.process_batch = chain
+    return release, entered
+
+
+def assert_refunded_waiter(store, entered):
+    # Lanes race for the GPU lock; either claimed segment may run first.
+    assert len(entered) == 1
+    computed = entered[0]
+    waiting = 'second' if computed == 'first' else 'first'
+    # The computed result is published, but never merged past its predecessor.
+    assert store.rows['jobs', computed]['state'] == ('committed' if computed == 'first' else 'result_ready')
+    job = store.rows['jobs', waiting]
+    assert job['state'] == 'retry' and job['attempt'] == 0 and job['merge_pending'] and job['token'] == ''
+    return waiting
+
+
 @pytest.mark.asyncio
 async def test_waiting_lane_refunds_claimed_leases_on_stop_without_attempt_charge(monkeypatch):
     monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
-    release = threading.Event()
     worker = ExclusiveWorker()
-    process = worker.process_batch
-    worker.process_batch = lambda items: (release.wait(5) and process(items))
+    release, entered = blocked_chain(worker)
     store, queue, pump = pipelined(worker)
     stop = asyncio.Event()
     task = asyncio.create_task(pump.run(stop))
     for _ in range(500):
-        if all(store.rows['jobs', v]['state'] == 'leased' for v in ('first', 'second')):
+        if entered and all(store.rows['jobs', v]['state'] == 'leased' for v in ('first', 'second')):
             break
         await asyncio.sleep(0.01)
     stop.set()
     release.set()
     await task
     assert worker.calls == 1
-    assert store.rows['jobs', 'first']['state'] == 'committed'
-    second = store.rows['jobs', 'second']
-    assert second['state'] == 'retry' and second['attempt'] == 0 and second['merge_pending']
+    assert_refunded_waiter(store, entered)
 
 
 @pytest.mark.asyncio
@@ -423,16 +444,15 @@ async def test_stopped_waiting_lane_refunds_lease_lost_to_a_timed_out_heartbeat(
     """
     monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
     monkeypatch.setattr(module, 'HEARTBEAT_TIMEOUT_SECONDS', 0.05)
-    release_chain = threading.Event()
     worker = ExclusiveWorker()
-    process = worker.process_batch
-    worker.process_batch = lambda items: (release_chain.wait(5) and process(items))
+    release_chain, entered = blocked_chain(worker)
     store, queue, pump = pipelined(worker)
     original = queue.heartbeat
     late_started, release_late, late_result = threading.Event(), threading.Event(), []
 
     def heartbeat(segment, token, now):
-        if segment != 'second':
+        # Only the lane waiting behind the chain loses its renewals.
+        if not entered or segment in entered:
             return original(segment, token, now)
         if not late_started.is_set():
             late_started.set()
@@ -444,31 +464,29 @@ async def test_stopped_waiting_lane_refunds_lease_lost_to_a_timed_out_heartbeat(
     monkeypatch.setattr(queue, 'heartbeat', heartbeat)
     stop = asyncio.Event()
     task = asyncio.create_task(pump.run(stop))
-    for _ in range(500):
-        if late_started.is_set() and store.rows['jobs', 'second']['state'] == 'leased':
-            break
-        await asyncio.sleep(0.01)
-    await asyncio.sleep(0.1)  # the 0.05 s renewal wait has timed out: 'second' is lost
+
+    async def until(condition):
+        for _ in range(500):
+            if condition():
+                return
+            await asyncio.sleep(0.01)
+        pytest.fail('condition not reached')
+
+    await until(late_started.is_set)
+    await asyncio.sleep(0.1)  # the 0.05 s renewal wait has timed out: the waiter's lease is lost
     if late == 'before_refund':
         release_late.set()
-        for _ in range(500):
-            if late_result:
-                break
-            await asyncio.sleep(0.01)
-        assert late_result == [True]  # the late beat extended the lease we still own
+        await until(lambda: bool(late_result))
+        assert late_result == [True]  # the late beat extended a lease we still own
     stop.set()
     release_chain.set()
     await task
-    second = store.rows['jobs', 'second']
-    assert second['state'] == 'retry' and second['attempt'] == 0 and second['token'] == ''
+    waiting = assert_refunded_waiter(store, entered)
     if late == 'after_refund':
         release_late.set()
-        for _ in range(500):
-            if late_result:
-                break
-            await asyncio.sleep(0.01)
+        await until(lambda: bool(late_result))
         assert late_result == [False]  # fenced by the cleared token
-        assert store.rows['jobs', 'second']['state'] == 'retry'
-    assert worker.calls == 1 and store.rows['jobs', 'first']['state'] == 'committed'
-    assert queue.recover(store.rows['jobs', 'second']['available_at'] + 1) >= 1
-    assert store.rows['jobs', 'second']['state'] == 'ready'
+        assert store.rows['jobs', waiting]['state'] == 'retry'
+    assert worker.calls == 1
+    assert queue.recover(store.rows['jobs', waiting]['available_at'] + 1) >= 1
+    assert store.rows['jobs', waiting]['state'] == 'ready'
