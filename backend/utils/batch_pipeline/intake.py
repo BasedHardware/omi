@@ -65,7 +65,14 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         if not completed:
             for job in jobs:
                 Scheduler.redrive_in_transaction(tx, job, time.time())
-        failed = sum(job.get('state') == 'quarantined' for job in jobs)
+        recovering = any(
+            job.get('state') == 'quarantined' and job.get('recovery_state') in {'held', 'prepared', 'running'}
+            for job in jobs
+        )
+        failed = sum(
+            job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
+            for job in jobs
+        )
         status = (
             'failed'
             if failed
@@ -74,7 +81,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
                 if completed
                 else (
                     'processing'
-                    if any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
+                    if recovering or any(job.get('state') in {'leased', 'result_ready', 'committed'} for job in jobs)
                     else 'queued'
                 )
             )
@@ -295,13 +302,7 @@ async def accept_upload(
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
     except BatchPrivacyBlocked:
-        return JSONResponse(
-            status_code=409,
-            content={
-                'code': 'sync_batch_privacy_blocked',
-                'detail': 'Capture is unavailable for server processing',
-            },
-        )
+        return privacy_blocked_response()
     except Exception as error:
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
@@ -317,6 +318,16 @@ async def accept_upload(
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
+
+
+def privacy_blocked_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            'code': 'sync_batch_privacy_blocked',
+            'detail': 'Capture is unavailable for server processing',
+        },
+    )
 
 
 def get_durable_job_status(job_id: str, uid: str) -> dict | None:

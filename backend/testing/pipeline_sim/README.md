@@ -80,3 +80,57 @@ fixture is absent here, so this is a minimal virtual-time equivalent.
 - Real projection (`Projector`), enrichment and LLM summaries are not run.
 - Recovery provider latency is paid before the synchronous `recover()` call, so `running` has zero
   duration.
+
+## Characterization goldens
+
+`trace.py` turns one seeded run into a normalized trace of what a caller or operator could observe.
+`tests/unit/test_pipeline_characterization.py` compares the trace of each configuration in
+`trace.GOLDEN_CONFIGS` with `tests/unit/fixtures/pipeline_sim_goldens/<name>.json`. A refactor or rewrite
+of the batch pipeline that preserves behavior leaves every golden unchanged.
+
+The trace contains:
+
+- **Per segment.** Each durable job transition (`state`, `recovery:<state>`, `client:<status>`) and
+  each result-log transition, with the time bucketed relative to admission (`<1s` … `>=1h`). It also has
+  every `/recover-quarantine` task-handler response, the paid-call count, the final job and result rows,
+  and a summary of the committed result artifact (provider, outcome, evidence, word count and digest).
+- **Per upload.** The intake outcome and its HTTP status (202 or 409), the dedupe target, and what the
+  conversation shows: projected or excluded, speech seconds, word count and digest, and first-summary state.
+- **Totals.** Paid calls and their outcomes, simulation counters, final job and recovery states, and the
+  revision-drain counts.
+
+The trace is built from store writes (`SimStore.observers`, purge deletes) and handler responses, never
+from internal call order. Synthetic IDs are renamed by first appearance (`owner-1`, `seg-1`, `conv-1`).
+Lease and intent tokens, URIs, owner hashes, queue links and absolute timestamps are dropped.
+
+| Golden | Behavior pinned |
+|---|---|
+| `healthy` | Speech only: ready, leased, result_ready, committed, projected |
+| `empty_asr_padded_retry` | An empty first ASR is rescued by the padded retry, or quarantines, spends one paid call, and recovers or settles as terminal empty |
+| `empty_asr_terminal` | Every ASR attempt is empty: one paid call, then `no_recoverable_speech` |
+| `provider_failure_quarantine` | Provider errors: five attempts with retries, then quarantine and one paid recovery |
+| `privacy_fence_midflight` | 409 at admission; a mid-flight fence purges the owner, and no paid call lands after it |
+| `deleted_merged_targets` | Merged targets project normally; deleted targets are purged, erased and excluded |
+| `duplicate_delivery` | Duplicate upload (202, deduplicated), duplicate worker RPCs, duplicate recovery task (`held`) |
+| `revision_replacement` | A background first summary is lost at replacement; durable work survives |
+
+**Not covered.** The goldens pin the real state machine, which is admission, scheduler, pump, worker,
+merge, serving and quarantine recovery. They do not pin the modelled parts. Projection, first summary,
+the `content` status and Parakeet/Modulate behavior come from the simulation's models. So do Cloud Tasks
+delivery, the `admission.authorize` RPC and executor timing. The legacy sync path is out of scope
+entirely: `trace()` rejects `path='legacy'`. A change to a model or to `GOLDEN_CONFIGS` also changes the
+goldens. That is a harness change, not a pipeline behavior change.
+
+**Updating in a refactor PR.** Run the test. If it fails, the failure lists the changed JSON paths and
+a bounded diff. A diff means observable behavior changed. If the change is intended, regenerate the
+goldens and commit them in the same PR. Explain each changed path in the PR description:
+
+```bash
+cd backend
+PIPELINE_GOLDEN_UPDATE=1 python -m pytest tests/unit/test_pipeline_characterization.py
+git diff tests/unit/fixtures/pipeline_sim_goldens/
+```
+
+Some diffs are expected even when behavior is preserved. If a refactor merges two transactions, an
+intermediate durable state disappears from the transitions, and other readers could have observed that
+state. Review those diffs rather than normalizing them away.

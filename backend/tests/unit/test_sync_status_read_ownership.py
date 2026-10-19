@@ -125,3 +125,21 @@ def test_poll_recovers_abandoned_cloud_task_through_real_finalizer(status_client
     assert response.json()['reason_code'] == reason
     assert json.loads(redis.get(key))['reason_code'] == reason
     assert redis.get(f'{sync_jobs.RUN_LOCK_KEY_PREFIX}job-1') is None
+
+
+def test_batch_privacy_fence_poll_returns_upload_conflict_shape(status_client, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    client, _ = status_client
+    monkeypatch.setattr(sync_router, 'admit_sync_job_poll', lambda uid: True)
+
+    def blocked(*args):
+        raise BatchPrivacyBlocked('synthetic privacy fence')
+
+    monkeypatch.setattr(sync_router, 'get_durable_job_status', blocked)
+    response = client.get('/v2/sync-local-files/bp_blocked')
+    assert response.status_code == 409
+    assert response.json() == {
+        'code': 'sync_batch_privacy_blocked',
+        'detail': 'Capture is unavailable for server processing',
+    }
