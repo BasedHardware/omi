@@ -354,7 +354,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    await Future.wait(items.map((item) => provider.deleteActionItem(item)));
+    final deleted = await Future.wait(items.map(provider.deleteActionItem));
+    if (!mounted || deleted.every((ok) => ok)) return;
+    // The provider has already put each rejected row back; say so, as a single delete does
+    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {

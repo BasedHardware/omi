@@ -4117,6 +4117,9 @@ environments:
             BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
               value: batch-quarantine-recovery
               category: reliability
+            BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE:
+              value: '64'
+              category: reliability
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}

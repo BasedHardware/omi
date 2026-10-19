@@ -851,6 +851,7 @@ extension SettingsContentView {
     transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+    vocabularyLoadedFromAccount = false
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
     let dailySummaryDepthRevisionAtLoadStart = dailySummaryDepthRevision
@@ -902,9 +903,11 @@ extension SettingsContentView {
           ) {
             vocabularyList = transcription.vocabulary
             AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+            savedVocabularyList = transcription.vocabulary
           } else {
             vocabularyList = AssistantSettings.shared.transcriptionVocabulary
           }
+          vocabularyLoadedFromAccount = true
 
           // Sync backend language to local if different (backend is source of truth for language)
           let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)

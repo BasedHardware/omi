@@ -260,6 +260,7 @@
           "{base_url}"
         ],
         "marker": "app:ready",
+        "path": "/login",
         "timeout_seconds": 120,
         "retry_timeout_seconds": 60
       },

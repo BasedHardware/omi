@@ -342,6 +342,7 @@ behavior relative to the merged serving-owned settlement implementation.
 | Quota / authentication | account/us | quota / auth | censored/provider_budget_exhausted or provider_auth_rejected (connect auth remains auth) |
 | Window first-text deadline / empty streak | unresolved audio/recognizer | first_text_deadline / empty_streak | censored, same cause |
 | Admission, capability/allocation, PCM/replay/send-queue capacity | us/capacity | capacity_full / allocation_rejected / capability_mismatch | censored, same cause |
+| Window capture replay ring outgrows its horizon before emission | us/session replay lag | replay_ring_overflow | censored, same cause |
 | VAD / invalid request or audio / loop misuse | us/audio | vad_failed / other | censored, same cause |
 | Soniox 400 no-audio / 408 request timeout | client/input timing | soniox_idle_timeout / soniox_request_timeout | censored, same cause |
 | Soniox duration rotation | protocol lifecycle | soniox_rotation | censored/soniox_rotation |

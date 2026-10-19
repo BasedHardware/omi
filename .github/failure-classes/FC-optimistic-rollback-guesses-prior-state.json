@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-optimistic-rollback-guesses-prior-state",
+  "violated_contract": "When an optimistic write fails, the client must put back the values that write replaced. Rebuilding them from the request instead (the opposite of the requested flag, a hard-coded null) shows a state the server never held. The web Tasks page reverted a failed completion toggle to completed: !completed, completed_at: null, so a completed task whose reopen failed came back completed but without its completion time, which the server still had: its row lost the completion date, it sank to the bottom of the Completed list, and the streak and exports no longer saw when it was done.",
+  "canonical_prevention": "Capture the item before the optimistic write and, on failure, restore every field the write overwrote from that capture, as the hook's due-date and description handlers already do. Prove it with a hermetic test whose write rejects and which asserts each overwritten field is back to its value from before the write, not only the toggled flag.",
+  "canonical_prevention_artifact": [
+    "web/app/src/hooks/__tests__/useActionItems.toggleComplete.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/hooks/**"
+  ],
+  "status": "open"
+}

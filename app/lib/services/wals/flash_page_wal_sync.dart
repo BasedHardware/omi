@@ -99,7 +99,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) return null;
 
     try {
@@ -175,9 +175,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     int estimatedSeconds = (pageCount * secondsPerFlashPage).round();
 
     if (pageCount > 30) {
-      int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
+      // Wal.id is device_timerStart, and this list is rebuilt on connect, on every
+      // discovery and after every sync pass. Keep the start estimated when this
+      // backlog (same pendant, same first page) was listed, so the recording keeps
+      // its id; a fresh estimate from the clock gave it a new id on every rebuild.
+      final listed = _wals.where((w) => w.device == deviceId && w.storageOffset == _oldestPage).firstOrNull;
+      int timerStart = listed?.timerStart ?? DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) return [];
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
@@ -313,7 +318,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     _cancelRequested = false;
     _lastStallReason = FlashSyncStallReason.none;
     final matches = _wals.where((w) => w == wal).toList();
-    if (matches.isEmpty) return null;
+    // Transfer to Phone reports any normal return as complete. The list is
+    // rebuilt when the pendant connects and before each sync, so a recording
+    // opened before that must fail here, not return null.
+    if (matches.isEmpty) throw Exception('Device recording list changed; go back and try again');
     final walToSync = matches.first;
 
     walToSync.isSyncing = true;
@@ -334,6 +342,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     walToSync.deviceDownloadFraction = null;
 
     listener.onWalUpdated();
+    // A stall or error leaves the rest of the audio on the pendant. Only a user
+    // cancel may return quietly; anything else would read as a finished transfer.
+    if (!completed && !_cancelRequested) {
+      throw Exception('Device transfer incomplete; recording kept on device');
+    }
     return null;
   }
 

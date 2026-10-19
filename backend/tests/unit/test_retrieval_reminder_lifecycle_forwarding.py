@@ -146,6 +146,23 @@ def test_due_edit_forwards_terminal_postwrite_state(producer, status, deleted):
     )
 
 
+def test_description_edit_rearms_the_reminder_with_the_saved_title(producer):
+    # The phone reminder shows the title it was armed with, so a rename must re-arm it.
+    kind, module, database, notifications = producer
+    old = {'id': 'task-1', 'description': 'Before', 'due_at': DUE, 'completed': False, 'status': 'active'}
+    database.get_action_item.side_effect = [old, {**old, 'description': 'Renamed'}]
+    _update(kind, module, description='Renamed')
+    notifications.sync_action_item_reminder.assert_called_once_with(
+        'u1',
+        'task-1',
+        'Renamed',
+        False,
+        DUE,
+        status='active',
+        deleted=False,
+    )
+
+
 def test_explicit_reopen_uses_active_saved_status_not_old_cancelled_status(producer):
     kind, module, database, notifications = producer
     old = {'id': 'task-1', 'description': 'Task', 'due_at': DUE, 'completed': False, 'status': 'cancelled'}

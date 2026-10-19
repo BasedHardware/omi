@@ -18,6 +18,8 @@ export interface UseHomeTasksReturn {
   items: ActionItem[];
   loading: boolean;
   error: string | null;
+  /** Why the last tick did not save. The task is back in `items` by then. */
+  completeError: string | null;
   complete: (id: string) => Promise<void>;
 }
 
@@ -43,15 +45,22 @@ export function useHomeTasks(): UseHomeTasksReturn {
     [data, completedIds],
   );
 
+  // A failed tick puts the row back, so the hub has to say why. Otherwise the
+  // task looks done and then quietly reappears. Kept apart from `error`, which
+  // means the list never loaded and is shown in place of it.
+  const [completeError, setCompleteError] = useState<string | null>(null);
+
   const complete = useCallback(async (id: string) => {
     setCompletedIds((prev) => [...prev, id]);
+    setCompleteError(null);
     try {
       await toggleActionItemCompleted(id, true);
     } catch (err) {
       console.error('Failed to complete task:', err);
       setCompletedIds((prev) => prev.filter((completed) => completed !== id));
+      setCompleteError(err instanceof Error ? err.message : 'Failed to complete task');
     }
   }, []);
 
-  return { items, loading, error, complete };
+  return { items, loading, error, completeError, complete };
 }

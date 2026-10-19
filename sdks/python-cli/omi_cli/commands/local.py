@@ -207,7 +207,7 @@ def delete_task(
 ) -> None:
     ctx = _ctx(typer_ctx)
     if not confirm:
-        typer.confirm(f"Delete task {task_id}?", abort=True)
+        typer.confirm(f"Delete task {task_id}?", abort=True, err=ctx.renderer.json_mode)
     _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{escape(task_id)}[/bold].")
 
 
@@ -399,8 +399,10 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
 
     results: list[dict[str, Any]] = []
     current: Optional[dict[str, Any]] = None
+    # Desktop labels each hit with its similarity score (Gemini route) or with how it
+    # matched: "hybrid: keyword|vector|both" (on-device route), "match: text" (text fallback).
     result_line = re.compile(
-        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), similarity: ([0-9.]+)\)$"
+        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), (?:similarity: ([0-9.]+)|\w+: (\w+))\)$"
     )
     for line in result.splitlines():
         match = result_line.match(line)
@@ -411,7 +413,8 @@ def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
                 "app_name": match.group(3),
                 "window_title": match.group(4) or None,
                 "screenshot_id": int(match.group(5)),
-                "similarity": float(match.group(6)),
+                "similarity": float(match.group(6)) if match.group(6) else None,
+                "matched_by": match.group(7),
             }
             results.append(current)
             continue

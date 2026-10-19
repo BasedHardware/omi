@@ -21,7 +21,7 @@ from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
-from database.jobstore.dual_store import shadow_from_env
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store

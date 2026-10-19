@@ -74,8 +74,8 @@
       "path": "utils/conversations/process_conversation.py",
       "function": "process_conversation._emit_derived_effects",
       "kind": "submit_with_context",
-      "count": 4,
-      "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor"
+      "count": 5,
+      "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor; the created webhook is submitted from one of two mutually exclusive sites (directly, or by the merge via created_webhook_observer once it can no longer roll back, #22415), so still at most once per run"
     },
     {
       "path": "utils/conversations/process_conversation.py",

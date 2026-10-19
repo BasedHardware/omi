@@ -4213,5 +4213,300 @@
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-stt-capacity-full-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - capacity_full exhausting live sessions",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",reason=\"capacity_full\",outcome=\"exhausted\"}[15m])) / on () group_left () clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 100 && $B > 0.15",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "16",
+      "summary": "More than 15% of accepted /v4/listen sessions per 15m end with an exhausted capacity_full failover into one failover target",
+      "threshold": "per to_mode: exhausted capacity_full fallbacks / listen-accepted > 0.15 with >= 100 accepted sockets in 15m, for 30m",
+      "user_impact": "Sessions lose live transcription because the failover target had no room or the replay ring overflowed; clients fall back to offline sync.",
+      "scope": "backend-listen omi_fallback_total{reason=capacity_full,outcome=exhausted} by to_mode over omi_listen_accepted_total. capacity_full covers several limits; the bounded log field subtype= (admission, buffer_cap, span_cap, replay_ring_cap, queue_timeout, unknown) on omi_fallback_event says which tripped.",
+      "verification": "Backtest 2026-10-12..10-19 (7d, 5m steps, prod Prometheus via Grafana proxy): to_mode=parakeet p50 0.037 / p90 0.09 / p99 0.168 / max 0.206; soniox max 0.089; modulate max 0.035; unavailable max 0.108. At > 0.15 for 30m it fires twice in 7d, both parakeet (10-14 18:22Z, 10-15 17:22Z, during the known window-capacity periods). At 2026-10-19 14:05Z parakeet was 0.043.",
+      "evaluated_bad": "parakeet 0.206 (2026-10-14 18:57Z 15m)",
+      "evaluated_good": "parakeet 0.043 (2026-10-19 14:05Z 15m)",
+      "safe_next_action": "Group recent omi_fallback_event reason=capacity_full log lines by subtype=. admission means the window-admission cap (listen pods x per-pod cap); replay_ring_cap/buffer_cap are session-local replay limits, not pod or GPU capacity. Only raise capacity for admission.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-capacity-full-exhausted",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-provider-terminal-failure-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - provider terminal failures per leg are high",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (provider) (increase(omi_live_stt_terminal_failures_total{job=\"backend-listen-metrics\"}[15m])) / clamp_min(sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"success\"}[15m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 30 && $B > 0.75",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "summary": "Live STT terminal failures on one provider exceed 75% of its successful leg connects in 15m",
+      "threshold": "per provider: omi_live_stt_terminal_failures_total / successful omi_stt_provider_connect_total > 0.75 with >= 30 successful connects in 15m, for 30m",
+      "user_impact": "Legs on this provider connect fine and then die. The connect-error alerts cannot see this because handshakes succeed.",
+      "scope": "backend-listen omi_live_stt_terminal_failures_total (all phases/outcomes) by provider over omi_stt_provider_connect_total{outcome=success} by provider. The outcome label is the bounded public outcome (upstream_error); the typed cause is in omi_fallback_total reason (capacity_full, connection_lost, modulate_serve_error, no_text_rescue_complete).",
+      "verification": "Backtest 2026-10-12..10-19 (7d, 5m steps): modulate p50 0.181 / p90 0.50 / p99 0.768 (chronic: Modulate legs end in failover often); parakeet p50 0.012 / p90 0.207 / p99 0.794; soniox max 0.357. At > 0.75 for 30m it fires twice in 7d (modulate 10-18 05:32Z, parakeet 10-14 17:47Z); > 0.6 fires 5 times, > 0.5 fires 10 times. At 2026-10-19 14:05Z modulate was 0.25-0.41.",
+      "evaluated_bad": "modulate 1.15 (2026-10-18 05:47Z 15m)",
+      "evaluated_good": "modulate 0.25 (2026-10-19 13:50Z 15m)",
+      "safe_next_action": "Split omi_fallback_total{from_mode=<provider>} by reason and the fallback log subtype= before touching provider credentials or capacity.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-provider-terminal-failure-ratio",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

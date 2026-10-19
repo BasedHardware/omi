@@ -75,7 +75,12 @@ def test_off_ladder_value_moves_to_next_step_without_skipping():
         'recovery_spend_unknown',
         'quarantine_projection_p95_over_5m',
         'pre_existing_debt_growing',
+        'projection_transient_rate',
+        'first_summary_completion_outlier',
+        'quarantine_projection_p95_unknown',
+        'recovery_spend_over_0_005_per_worn_hour',
         'parity_fail',
+        'parity_row_3',
     ],
 )
 def test_ordinary_fail_rolls_back_one(reason):
@@ -110,11 +115,23 @@ def test_data_loss_and_privacy_roll_back_to_zero(reason, expected):
         'gate_output_unparsed',
         'timeout_incomplete',
         'usage_fleet_gate.sh',
+        # fleet_gate.sh GateError tokens: the gate could not judge the cohort (C1), never a rollback.
+        'ro_dev_unavailable',
+        'http_route_logs_truncated_or_invalid',
+        'http_route_logs_read_failed',
+        'projection_logs_truncated_or_invalid',
+        'job_read_limit_exceeded',
+        'http_metric_invalid_response',
+        'canary_allowlists_not_matching_singleton',
+        'projection_completion_precedes_quarantine',
+        'parity_not_run',
+        'some_future_gate_error',
     ],
 )
 def test_gate_execution_failures_hold(reason):
     d = decide(snap(25.0), verdict('FAIL', reason, percent=25.0))
     assert d.action is rc.Action.HOLD
+    assert rc.gate_unavailable(verdict('FAIL', reason, percent=25.0))
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@ Tools for accessing user conversations.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import contextvars
+import threading
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -201,53 +202,67 @@ def _bounded_result(result: str, total_found: int, truncated: bool, *, already_b
     return result
 
 
+# Citation [k] resolves to conversations_collected[k - 1]. Tool calls in one model turn run on
+# executor threads that share that list, so numbering a record and appending its card is one step.
+_collected_conversations_lock = threading.Lock()
+
+
 def _render_addressable_conversations(conversations, *, configurable, admitted_ids=None, **render_options) -> str:
-    """Publish cards and refs only for records actually admitted to the model's budget."""
+    """Publish cards and refs only for records actually admitted to the model's budget.
+
+    A conversation already collected this turn keeps its citation number instead of gaining a
+    duplicate card.
+    """
     collected = configurable.get('conversations_collected', [])
     blocks = []
     used = 0
     elapsed_legend_emitted = False
     untrusted_legend_emitted = False
-    for conversation in conversations:
-        block = conversations_to_string(
-            [conversation], include_refs=True, index_start=len(collected) + 1, **render_options
-        )
-        if ELAPSED_LEGEND in block:
-            if elapsed_legend_emitted:
-                block = block.replace(ELAPSED_LEGEND + '\n', '', 1)
-            else:
-                elapsed_legend_emitted = True
-        if UNTRUSTED_LEGEND in block:
-            if untrusted_legend_emitted:
-                block = block.replace(UNTRUSTED_LEGEND + '\n', '', 1)
-            else:
-                untrusted_legend_emitted = True
-        size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
-        if used + size > MAX_RESULT_CHARS:
-            if not blocks:
-                blocks.append(
-                    'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
-                    'or omit the transcript.'
-                )
-            else:
-                blocks.append(
-                    truncation_note(
-                        shown=len(blocks),
-                        total=len(conversations),
-                        unit='conversations',
-                        how_to_get_more='Narrow the read for more detail.',
+    with _collected_conversations_lock:
+        numbers = {card.get('id'): number for number, card in enumerate(collected, start=1)}
+        for conversation in conversations:
+            number = numbers.get(conversation.id)
+            block = conversations_to_string(
+                [conversation], include_refs=True, index_start=number or len(collected) + 1, **render_options
+            )
+            if ELAPSED_LEGEND in block:
+                if elapsed_legend_emitted:
+                    block = block.replace(ELAPSED_LEGEND + '\n', '', 1)
+                else:
+                    elapsed_legend_emitted = True
+            if UNTRUSTED_LEGEND in block:
+                if untrusted_legend_emitted:
+                    block = block.replace(UNTRUSTED_LEGEND + '\n', '', 1)
+                else:
+                    untrusted_legend_emitted = True
+            size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
+            if used + size > MAX_RESULT_CHARS:
+                if not blocks:
+                    blocks.append(
+                        'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
+                        'or omit the transcript.'
                     )
-                )
-            break
-        blocks.append(block)
-        used += size
-        collected.append(conversation_to_citation_card(conversation))
-        register_record_ref(configurable, 'conversations', conversation.id)
-        if admitted_ids is not None:
-            admitted_ids.add(conversation.id)
-        for person in render_options.get('people') or ():
-            if person.id in conversation.get_person_ids():
-                register_record_ref(configurable, 'people', person.id)
+                else:
+                    blocks.append(
+                        truncation_note(
+                            shown=len(blocks),
+                            total=len(conversations),
+                            unit='conversations',
+                            how_to_get_more='Narrow the read for more detail.',
+                        )
+                    )
+                break
+            blocks.append(block)
+            used += size
+            if number is None:
+                collected.append(conversation_to_citation_card(conversation))
+                numbers[conversation.id] = len(collected)
+            register_record_ref(configurable, 'conversations', conversation.id)
+            if admitted_ids is not None:
+                admitted_ids.add(conversation.id)
+            for person in render_options.get('people') or ():
+                if person.id in conversation.get_person_ids():
+                    register_record_ref(configurable, 'people', person.id)
     return '\n\n---------------------\n\n'.join(blocks)
 
 
