@@ -65,7 +65,7 @@ fixture is absent here, so this is a minimal virtual-time equivalent.
 |---|---|
 | `burst_owner_serial_sequencer` | 365-upload burst drains one job at a time per UID and fails the 15-min obligation; `per_owner_concurrency=32` clears it |
 | `mixed_fleet_steady` | Healthy baseline passes every gate |
-| `provider_exhaustion_window` | Empty ASR at HPA max causes `empty_asr` quarantines, then one paid recovery each, then a quarantine-to-projection p95 above 300 s |
+| `provider_exhaustion_window` | Empty ASR at HPA max causes `empty_asr` quarantines, then one paid recovery each; bounded recovery dispatch keeps the quarantine-to-projection p95 under 300 s, and the one terminal paid failure fails the gate as `unrecovered_quarantine` |
 | `revision_replacement_mid_run` | Background first summaries are lost; request-scoped (`summary_dispatch='task'`) and lease-durable work survive |
 | `stale_finalize_targets` | Merged targets complete, deleted targets are excluded, and no paid call lands after the fence; duplicates never double-spend |
 | `privacy_blocked_users` | 409 at admission or purge mid-flight; no paid calls after the fence; reported under `sim.upload_status`/`excluded_uploads` |
