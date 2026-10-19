@@ -10,11 +10,13 @@ from fastapi.testclient import TestClient
 
 from database import review_store as store, review_changes, task_intelligence_control
 from models.agent_tools import HarnessQuestion
-from models.review import EntitySummary, ReviewItem, SamePersonItem
+from models.review import AgentProposalItem, EntitySummary, ReviewItem, ReviewItemV2, SamePersonItem
+from models.dream_edit import Term
+from models.memories import MemoryDB
 from routers import review as router
 from tests.support.dream_firestore import DreamFirestore
 from utils import dream_review_policy, entity_pages, review
-from utils.agent_capabilities import staging, tools
+from utils.agent_capabilities import reads, staging, tools
 from utils.task_intelligence import chat_first_eligibility
 
 UID = 'synthetic-stale-owner'
@@ -255,9 +257,123 @@ def test_dream_evidence_change_is_stale_and_evidence_read_conflict_stays_transie
     assert caught.value is conflict
 
 
-@pytest.mark.parametrize('status', [402, 404])
+@pytest.mark.parametrize('status', [402, 404, 423])
 def test_dream_temporary_access_denial_is_retryable_but_missing_evidence_is_stale(monkeypatch, status):
     monkeypatch.setattr(tools, 'proposal_record', Mock(side_effect=HTTPException(status_code=status)))
     with pytest.raises(store.ReviewConflict) as caught:
         tools.revalidate_proposal(UID, {'records': {'conversations/toy': {}}})
     assert isinstance(caught.value, store.ReviewStale) is (status == 404)
+
+
+def offer_vocabulary(client, records):
+    item = ReviewItemV2(
+        item_id='agent_proposal:availability',
+        kind='agent_proposal',
+        title='Add vocabulary?',
+        created_at=NOW,
+        agent_proposal=AgentProposalItem(
+            vocabulary=Term(kind='person', spelling='Zarathion', evidence=list(records)),
+        ),
+    )
+    store.enqueue_review_proposal(
+        UID,
+        item,
+        evidence_version='v1',
+        edit_key='agent:availability',
+        source={'records': records, 'edit_key': 'agent:availability'},
+    )
+    assert client.get('/v2/review/items').json()['items'][0]['item_id'] == item.item_id
+    return item.item_id
+
+
+def accept_vocabulary(client, item_id):
+    return client.post(f'/v2/review/items/{item_id}/answer', json={'agent_proposal': {'decision': 'accept'}})
+
+
+def assert_released(client, item_id):
+    state = store.user(UID).collection('review_answers').document(store.safe_id(item_id)).get().to_dict()
+    assert state['state'] == 'offered'
+    assert proposal(item_id).get().to_dict()['status'] == 'pending'
+    assert store.remaining_today(UID) == 3
+    assert client.get('/v2/review/items').json()['items'][0]['item_id'] == item_id
+
+
+@pytest.mark.parametrize('lock', ['paywall', 'locked_row'])
+def test_memory_lock_releases_through_real_reader_and_upgrade_allows_same_answer(harness, monkeypatch, lock):
+    client, _ = harness
+    memory = MemoryDB(
+        id='toy',
+        uid=UID,
+        content='Zarathion is a person',
+        category='core',
+        created_at=NOW,
+        updated_at=NOW,
+        visibility='private',
+        user_review=True,
+    )
+    locked = False
+    monkeypatch.setattr(reads, 'read_canonical_memory_item', lambda *a: None)
+
+    def fetch(self, uid, key):
+        assert (uid, key) == (UID, 'toy')
+        if locked and lock == 'paywall':
+            raise HTTPException(402, 'Paid plan required')
+        return memory.model_copy(update={'is_locked': locked})
+
+    monkeypatch.setattr(reads.MemoryService, 'fetch', fetch)
+    # Both snapshot and revalidation use read_record -> _read_memory_record.
+    item_id = offer_vocabulary(client, {'memory_items/toy': reads.read_record(UID, 'memory_items/toy')})
+    locked = True
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 409, response.text
+    assert_released(client, item_id)
+    locked = False  # Same evidence is accessible again after the upgrade.
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 200, response.text
+    assert response.json()['applied'] is True
+    assert proposal(item_id).get().to_dict()['status'] == 'resolved'
+    assert client.get('/v2/review/items').json()['items'] == []
+
+
+@pytest.mark.parametrize('condition', ['discarded', 'is_locked', 'deleted'])
+def test_conversation_availability_uses_real_reader_and_refunds_reservation(harness, monkeypatch, condition):
+    client, _ = harness
+    row = {'id': 'toy', 'transcript_segments': [], 'structured': {'title': 'Zarathion'}}
+    monkeypatch.setattr(reads.conversations, 'get_conversation_raw_snapshot', lambda *a: row.copy())
+    monkeypatch.setattr(reads.conversations, 'decode_transcript_segments_verified', lambda *a: [])
+    monkeypatch.setattr(reads.conversations, 'prepare_conversation_for_read', lambda raw, uid: raw)
+    item_id = offer_vocabulary(client, {'conversations/toy': reads.read_record(UID, 'conversations/toy')})
+    row[condition] = True
+    if condition == 'is_locked':
+        with pytest.raises(HTTPException) as caught:
+            reads.read_record(UID, 'conversations/toy')
+        assert caught.value.status_code == 423
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 409, response.text
+    if condition == 'deleted':
+        assert proposal(item_id).get().to_dict()['resolution'] == 'stale'
+        assert client.get('/v2/review/items').json()['items'] == []
+        assert store.remaining_today(UID) == 3
+    else:
+        assert_released(client, item_id)
+        row.pop(condition)
+        response = accept_vocabulary(client, item_id)
+        assert response.status_code == 200, response.text
+        assert response.json()['applied'] is True
+
+
+def test_vocabulary_capacity_releases_and_same_answer_succeeds_after_removing_a_term(harness):
+    client, _ = harness
+    item_id = offer_vocabulary(client, {'people/a': reads.read_record(UID, 'people/a')})
+    vocabulary = store.user(UID).collection('dream_vocabulary').document('current')
+    rows = [{'spelling': f'Synthetic-{i}'} for i in range(500)]
+    vocabulary.set(store.encode_doc(UID, {'source': rows}))
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 409, response.text
+    assert response.json()['detail'] == 'agent_vocabulary_cap'
+    assert_released(client, item_id)
+    vocabulary.set(store.encode_doc(UID, {'source': rows[:-1]}))
+    response = accept_vocabulary(client, item_id)
+    assert response.status_code == 200, response.text
+    assert response.json()['applied'] is True
+    assert proposal(item_id).get().to_dict()['status'] == 'resolved'

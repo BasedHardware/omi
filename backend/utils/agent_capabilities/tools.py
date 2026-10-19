@@ -28,7 +28,7 @@ from utils.agent_capabilities.guards import (
     verbatim_quote,
 )
 from utils.agent_capabilities.evidence import EvidenceRecords
-from utils.agent_capabilities.errors import ToolError
+from utils.agent_capabilities.errors import AgentRecordUnavailable, ToolError
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
 
@@ -73,8 +73,10 @@ def _replace_tree(value: Any, before: str, after: str) -> Any:
 def validate_summary_edit(edit, row, *, full=False, authority='dream'):
     if edit.kind not in {'title', 'overview'}:
         return
-    if row.get('is_locked') or not conversations.is_visible_conversation(row):
+    if not conversations.is_visible_conversation(row, include_discarded=True):
         raise review_store.ReviewStale('Dream conversation unavailable')
+    if row.get('is_locked') or not conversations.is_visible_conversation(row):
+        raise review_store.ReviewConflict('Dream conversation unavailable')
     if authority == 'user' and isinstance(edit, HarnessEdit):
         current = (
             row.get('user_title')
@@ -249,7 +251,7 @@ def proposal_record(uid, ref, snapshot):
             ),
             None,
         )
-    return dream_reads.read_record(uid, ref)
+    return dream_reads.read_record(uid, ref, require_available=True)
 
 
 def revalidate_proposal(uid, source):
@@ -261,10 +263,12 @@ def revalidate_proposal(uid, source):
             current = proposal_record(uid, ref, snapshot)
         except review_store.ReviewConflict:
             raise
+        except AgentRecordUnavailable as exc:
+            raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
         except (review_store.ReviewNotFound, LookupError, ValueError) as exc:
             raise review_store.ReviewStale('Dream proposal evidence unavailable') from exc
         except HTTPException as exc:
-            if exc.status_code == 402:
+            if exc.status_code in {402, 423}:
                 raise review_store.ReviewConflict('Dream proposal evidence unavailable') from exc
             if exc.status_code != 404:
                 raise
@@ -446,6 +450,8 @@ def answer_proposal(uid, proposal, source, decision):
     except (review_store.ReviewConflict, review_store.ReviewNotFound):
         raise
     except ValueError as exc:
+        if str(exc) == 'agent_vocabulary_cap':
+            raise review_store.ReviewConflict('agent_vocabulary_cap') from exc
         raise review_store.ReviewStale('Dream proposal no longer valid') from exc
     if status == 'suppressed':
         raise review_store.ReviewStale('Dream proposal was suppressed')

@@ -55,8 +55,11 @@ Task resolution delegates to `utils.task_intelligence.candidate_service`; option
 user description/due/project edits occur inside its existing accept transaction,
 including account generation and task-link checks.
 
-A retryable pre-application conflict (lease loss or a transactional fence race)
-releases its reserved attention slot. A `ReviewStale` conflict instead atomically
+A retryable pre-application conflict (lease loss, a transactional fence race,
+a paywalled or locked memory, a discarded or locked conversation, or vocabulary
+capacity) releases its reserved attention slot and leaves the proposal pending.
+Review evidence reads distinguish temporary invisibility from missing or changed
+evidence, so the same answer can succeed after access or capacity recovers. A `ReviewStale` conflict instead atomically
 refunds the slot and resolves the matching proposal evidence version, returning
 409 once; later GETs omit it. This includes missing entities, incompatible entity
 types, stale item-kind shapes, and permanently invalid Dream evidence. An
