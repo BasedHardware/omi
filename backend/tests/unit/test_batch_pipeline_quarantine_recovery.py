@@ -1063,3 +1063,18 @@ def test_asgi_held_delivery_rearms_only_its_named_wake(setup, monkeypatch):
     assert response.json() == {'status': 'held'}
     assert row(client)['recovery_wake']['wake_until'] == 100 + 120
     stt.assert_not_called()
+
+
+def test_extend_never_overrides_a_concurrent_held_rearm(setup, monkeypatch):
+    module, enqueue = _wake_env(monkeypatch)
+    client, _, binding, _, _, recovery = setup
+    clock = [100.0]
+    recovery.clock = lambda: clock[0]
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    token = row(client)['recovery']['token']
+    clock[0] = 701.0
+    # The delivery answers held while the sweep's custody probe is in flight.
+    recovery.delivered('bad', 'held', enqueue.call_args.args[2])
+    assert row(client)['recovery_wake']['wake_until'] == 821.0
+    assert recovery.protocol.extend_wake('bad', token, 1, 701.0, 600) is False
+    assert row(client)['recovery_wake']['wake_until'] == 821.0

@@ -151,6 +151,8 @@ class RecoveryStore:
                 or job.get('recovery', {}).get('token') != token
                 or wake.get('token') != token
                 or wake.get('seq') != seq
+                # A concurrent shorten (held delivery) or extend already stands.
+                or wake.get('wake_until', 0) > now
             ):
                 return False
             errors = wake.get('probe_errors', 0) + 1 if probe_error else 0
@@ -174,7 +176,10 @@ class RecoveryStore:
                 or job.get('recovery_state') != 'prepared'
                 or wake.get('token') != job.get('recovery', {}).get('token')
                 or wake.get('seq') != seq
-                or wake.get('wake_until', 0) <= now + rewake_seconds
+                # Already re-armed at least as soon. An expired lease is re-armed
+                # too, so a custody probe racing this delivery cannot restore
+                # the full lease (extend_wake skips a live wake_until).
+                or now < wake.get('wake_until', 0) <= now + rewake_seconds
             ):
                 return False
             job['recovery_wake'] = {**wake, 'wake_until': now + rewake_seconds}
