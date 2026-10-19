@@ -4,6 +4,8 @@ import time
 from typing import Any
 
 from database._client import get_firestore_client
+from google.cloud import firestore
+from database.legal_holds import external_write_fence
 
 
 class RecoveryIngestFenced(RuntimeError):
@@ -71,3 +73,28 @@ def ingested_piece(uid: str, hold_id: str, piece: str) -> dict | None:
         or {}
     )
     return (row.get('piece_ingests') or {}).get(piece)
+
+
+def provider_checkpoint(uid: str, context: dict, updates: dict) -> bool:
+    """Fence dispatch start/result before another attempt may reuse this piece."""
+    client = get_firestore_client()
+    ref = client.collection('users').document(uid).collection('stt_cap_holds').document(context['hold_id'])
+
+    @firestore.transactional
+    def commit(tx):
+        with external_write_fence(uid, firestore_client=client, transaction=tx):
+            row = ref.get(transaction=tx).to_dict() or {}
+            receipts = dict(row.get('piece_receipts') or {})
+            receipt = receipts.get(context['piece']) or {}
+            if (
+                row.get('lease_token') != context['lease_token']
+                or row.get('lease_until', 0) <= time.time()
+                or receipt.get('state') != 'dispatched'
+                or receipt.get('attempt', 1) != context['attempt']
+            ):
+                return False
+            receipts[context['piece']] = {**receipt, **updates}
+            tx.update(ref, {'piece_receipts': receipts})
+            return True
+
+    return commit(client.transaction())

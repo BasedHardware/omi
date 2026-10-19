@@ -222,20 +222,12 @@ def job_harness(monkeypatch):
         processed.append(deepcopy(item))
         return worker.AttemptOutcome.COMPLETE
 
-    def schedule(coroutine, *, name):
-        if name == 'processing_backlog_continuation':
-            scheduled.append((name, job['token']))
-            coroutine.close()
-            return None
-        return asyncio.create_task(coroutine)
-
     monkeypatch.setattr(worker.store, 'claim', claim)
     monkeypatch.setattr(worker.store, 'checkpoint', checkpoint)
     monkeypatch.setattr(worker.store, 'finish', finish)
     # This fake exercises worker composition. Root's lane separately verifies
     # the actual finish transaction's reservation and pending-upgrade predicates.
     monkeypatch.setattr(worker, 'run_blocking', run_blocking)
-    monkeypatch.setattr(worker, 'start_background_task', schedule)
     monkeypatch.setattr(worker, '_process', process)
     monkeypatch.setattr(worker, '_page', lambda *args: [])
     return SimpleNamespace(
@@ -290,16 +282,14 @@ async def test_worker_merges_multiple_equal_timestamp_pages_without_drops_or_dou
     assert harness.job['reserved'] == {} and len(harness.finishes) == 1
     assert isinstance(harness.job['cursor_audio']['at'], datetime if audio_timestamp else float)
     assert isinstance(harness.job['cursor_text']['at'], float)
-    assert len(harness.scheduled) >= 4
+    assert harness.scheduled == []  # Repeated durable sweeps drive the pages.
 
 
 async def test_flags_off_worker_does_not_read_or_schedule(monkeypatch):
     monkeypatch.setattr(worker.funded_processing, 'enabled', lambda: False)
     blocked = Mock(side_effect=AssertionError('Flag-off worker touched IO/scheduling'))
     monkeypatch.setattr(worker, 'run_blocking', blocked)
-    monkeypatch.setattr(worker, 'start_background_task', blocked)
     await worker.run('synthetic')
-    worker.kick('synthetic')
     blocked.assert_not_called()
 
 
@@ -583,7 +573,7 @@ async def test_unreserved_failure_consumes_pending_upgrade_and_schedules_new_tok
     assert harness.job['state'] == 'processing' and harness.job['token'] == 'upgrade-choice'
     assert harness.job['remaining'] == 100 and harness.job['pending_upgrade'] == {}
     assert harness.job['lease_until'] == 0 and harness.job['reserved'] == {}
-    assert harness.scheduled == [('processing_backlog_continuation', 'upgrade-choice')]
+    assert harness.scheduled == []  # The durable sweep owns the next token/page.
     monkeypatch.setattr(worker, '_page', lambda *args: [])
     await worker.run('synthetic', continuation=True)
     assert harness.finishes[-1] == ('synthetic', 'upgrade-choice', 'lease', '2026-10')
@@ -661,7 +651,7 @@ async def test_pending_upgrade_waits_for_reserved_attempt_to_have_known_outcome(
     assert process.await_args_list[0].args == process.await_args_list[1].args == ('synthetic', reserved)
     assert harness.job['reserved'] == {} and harness.job['pending_upgrade'] == {}
     assert harness.job['token'] == 'upgrade-choice' and harness.job['remaining'] == 100
-    assert harness.scheduled == [('processing_backlog_continuation', 'upgrade-choice')]
+    assert harness.scheduled == []  # The durable sweep owns the next token/page.
 
 
 async def test_prior_month_job_cannot_create_consent_or_claim_a_lease(monkeypatch, job_harness):

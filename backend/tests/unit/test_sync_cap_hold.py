@@ -99,11 +99,21 @@ def test_recovery_pins_checkpointed_provider_only_with_enforcement(tmp_path, mon
     monkeypatch.setattr(pipeline, '_record_empty_segment_as_silence', Mock())
     errors = []
     service = ('parakeet', 'multi', 'parakeet')
+    checkpoint = Mock(return_value=True)
+    monkeypatch.setattr(pipeline.cap_recovery_provider.sync_cap_recovery, 'provider_checkpoint', checkpoint)
     assert not pipeline.process_segment(
-        str(path), 'synthetic', {}, threading.Lock(), errors, cap_recovery=True, cap_recovery_service=service
+        str(path),
+        'synthetic',
+        {},
+        threading.Lock(),
+        errors,
+        cap_recovery=True,
+        cap_recovery_service=service,
+        cap_recovery_checkpoint={'hold_id': 'h', 'piece': 'p', 'lease_token': 'l', 'attempt': 1, 'receipt': {}},
     )
     assert not errors
-    assert stt.call_count == 2
+    assert stt.call_count == (1 if enforce else 2)
+    assert checkpoint.call_count == (2 if enforce else 0)
     for call in stt.call_args_list:
         if enforce:
             assert call.kwargs['selected_service'] == service

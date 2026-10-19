@@ -10,7 +10,8 @@ from database.legal_holds import external_write_fence
 from utils.sync.live_cap_codec import MAX_OBJECT_BYTES
 
 BLOCK_GROUPS = 64
-SLOT_BYTES = MAX_OBJECT_BYTES + 64  # Two authenticated encryption frames.
+SLOT_BYTES = MAX_OBJECT_BYTES + 128  # Four authenticated fragment encryption frames.
+BLOCK_BYTES = (BLOCK_GROUPS + 1) * SLOT_BYTES  # One active group may coexist with its composed source.
 MAX_MONTHLY_BYTES = 8 * 1024**3
 MAX_MONTHLY_GROUPS = 100_000
 
@@ -25,7 +26,7 @@ class Capacity:
     def consume(self) -> None:
         if self.used >= BLOCK_GROUPS:
             raise ValueError('held capacity block exhausted')
-        self.used += 1  # Retire capacity before any possibly ambiguous upload.
+        self.used += 1  # Consume only after a reconciled durable publication receipt.
 
 
 def acquire(uid: str, month: str, identity: str | None = None) -> Capacity:
@@ -47,11 +48,11 @@ def acquire(uid: str, month: str, identity: str | None = None) -> Capacity:
             return
         snapshot = quota.get(transaction=tx)
         row = (snapshot.to_dict() or {}) if snapshot.exists else {}
-        size, groups = row.get('bytes', 0) + BLOCK_GROUPS * SLOT_BYTES, row.get('chunks', 0) + BLOCK_GROUPS
+        size, groups = row.get('bytes', 0) + BLOCK_BYTES, row.get('chunks', 0) + BLOCK_GROUPS
         if size > MAX_MONTHLY_BYTES or groups > MAX_MONTHLY_GROUPS:
             raise RuntimeError('live held audio storage capacity reached')
         tx.set(quota, {'bytes': size, 'chunks': groups}, merge=True)
-        tx.create(lease, {'groups': BLOCK_GROUPS, 'closed': False})
+        tx.create(lease, {'groups': BLOCK_GROUPS, 'bytes': BLOCK_BYTES, 'closed': False})
 
     commit(client.transaction())
     return Capacity(uid, month, identity)
@@ -78,9 +79,8 @@ def release(capacity: Capacity) -> None:
         current = quota.get(transaction=tx)
         row = current.to_dict() or {}
         unused = BLOCK_GROUPS - capacity.used
-        tx.update(
-            quota, {'bytes': max(0, row['bytes'] - unused * SLOT_BYTES), 'chunks': max(0, row['chunks'] - unused)}
-        )
+        refund_bytes = max(0, snapshot.to_dict().get('bytes', BLOCK_GROUPS * SLOT_BYTES) - capacity.used * SLOT_BYTES)
+        tx.update(quota, {'bytes': max(0, row['bytes'] - refund_bytes), 'chunks': max(0, row['chunks'] - unused)})
         tx.update(lease, {'closed': True, 'groups': capacity.used})
 
     commit(client.transaction())

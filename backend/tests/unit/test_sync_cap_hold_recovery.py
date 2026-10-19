@@ -53,9 +53,12 @@ def state(monkeypatch, tmp_path):
     monkeypatch.setattr(recovery, 'finalize_recovered_sync_segment', Mock())
     monkeypatch.setattr(recovery, 'record_usage', Mock())
     monkeypatch.setattr(recovery, 'get_prerecorded_service', Mock(return_value=('modulate', 'en', 'velma-2')))
+    row = {'lease_token': 'owner-token', 'state': 'held'}
+    reference = Mock()
+    reference.get.return_value.to_dict.side_effect = lambda: dict(row)
     return SimpleNamespace(
-        snapshot=SimpleNamespace(id='hold', reference=Mock()),
-        row={'lease_token': 'owner-token', 'state': 'held'},
+        snapshot=SimpleNamespace(id='hold', reference=reference),
+        row=row,
         checkpoint=checkpoint,
         renew=renew,
     )

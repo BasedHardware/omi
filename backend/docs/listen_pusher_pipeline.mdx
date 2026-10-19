@@ -5880,3 +5880,32 @@ include `superseded_segments` with zero failures, rather than reporting silence.
 A fresh transaction rechecks privacy/deletion fences, immutable binding and
 ledger ownership before settlement; a concurrently committed assignment receipt
 wins. Account/protection revocation still follows the existing erasure path.
+
+
+## Cap-held live audio and durable redrive
+
+Listen owns denied PCM before provider replay. Its sink accepts at most 15 seconds
+of volatile PCM, persists short encrypted fragments and composes each continuous
+minute into one immutable held source. It freezes staging before composition;
+expired staging and post-publication fragment cleanup resume from server sweeps.
+Pusher receives admitted audio/transcripts and has no duplicate cap-held PCM sink.
+Both lifespans await the lightweight sink registry before background drain/HTTP
+teardown; socket close flushes tails. GKE grace is 120 seconds with a 15-second
+preStop and a 60-second uvicorn session-drain bound, leaving 45 seconds for the
+30-second custody flush plus existing 10-second drain.
+
+`POST /v2/cap-hold-recovery/sweep` uses sync Tasks OIDC and awaits bounded work.
+Production Scheduler calls it every two minutes; independent persisted discovery
+cursors visit processing choices, abandoned staging and cleanup. Only existing
+same-month user/upgrade consent may process audio. Existing UID/hold/text leases,
+cutoffs, reserved estimates, abuse and allowance checks still own admission.
+Process death cannot erase the choice or require a client wakeup. The fixed
+60-second memory wakeup and processing self-respawn are retired.
+
+Held STT uses one provider POST per persisted dispatch attempt and encrypts
+nonempty provider results before ingestion; restart reuses those results. A kill
+between vendor acceptance and the result checkpoint can still repeat a paid call.
+The [durability runbook](runbooks/cap-hold-durability.md) owns the two-attempt bound,
+retained uncertainty, kill switches, three new group indexes, deployment order,
+15-second SIGKILL residual window and measured cost increase. Enforcement flags
+remain off; this source change does not activate the cap cohort.

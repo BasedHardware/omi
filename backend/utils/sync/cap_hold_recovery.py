@@ -4,12 +4,10 @@ The async coordinator borrows leaf workers. Audio stays held until transcription
 content persistence and idempotent usage settlement succeed, including silence.
 """
 
-import asyncio
 import logging
 import threading
 import time
 
-from anyio import from_thread
 from typing import Any, Awaitable, Callable
 from google.api_core.exceptions import NotFound
 
@@ -17,7 +15,7 @@ from config.stt_cap_dispatch import execution_admission_enabled as enabled
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery
 from utils.analytics import record_usage
-from utils.executors import run_blocking, db_executor, sync_executor, storage_executor, start_background_task
+from utils.executors import run_blocking, db_executor, sync_executor, storage_executor
 from utils.stt_cap_dispatch import sync_allowed
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
 from utils.stt.pre_recorded import get_prerecorded_service
@@ -47,6 +45,7 @@ def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
     objects = [
         row,
         *({'audio_path': part} for part in row.get('audio_parts') or []),
+        *(row.get('stage_parts') or []),
         *(row.get('piece_plan') or {}).values(),
     ]
     for path in {item[key] for item in objects for key in ('audio_path', 'metadata_path') if item.get(key)}:
@@ -63,6 +62,11 @@ def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
             {
                 'state': 'purged',
                 'live_custody_version': 4,
+                **(
+                    {'stage_fragment_ids': [part['id'] for part in row['stage_parts']]}
+                    if row.get('stage_parts')
+                    else {}
+                ),
                 'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT,
             }
         )
@@ -162,8 +166,8 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             receipt: dict[str, Any] | None = receipts.get(name)
             if receipt and receipt.get('state') == 'failed_reconciliation':
                 continue
-            attempt = 1
-            if receipt and receipt.get('state') == 'dispatched':
+            attempt = (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1
+            if receipt and receipt.get('state') == 'dispatched' and not receipt.get('provider_result'):
                 if 'dispatched_at' not in receipt:
                     receipt = {
                         **receipt,
@@ -191,7 +195,8 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 else:
                     attempt = 2
             if receipt is None or receipt.get('state') == 'dispatched':
-                if not await run_blocking(db_executor, _new_dispatch_allowed, uid):
+                cached_result = (receipt or {}).get('provider_result')
+                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid):
                     pending = True
                     continue
                 previous = receipt
@@ -200,8 +205,12 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         uid, name, plan[name], directory, local_paths, contexts
                     )
                     language = prefs.get('language') or ''
-                    service = get_prerecorded_service(
-                        language if prefs.get('single_language_mode') and language else 'multi'
+                    service = (
+                        ((receipt or {})['provider'], None, (receipt or {})['model'])
+                        if cached_result
+                        else get_prerecorded_service(
+                            language if prefs.get('single_language_mode') and language else 'multi'
+                        )
                     )
                 except Exception as error:
                     logger.warning(
@@ -213,6 +222,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     pending = True
                     continue
                 intent: dict[str, Any] = {
+                    **({'provider_result': cached_result} if cached_result else {}),
                     'state': 'dispatched',
                     'provider': service[0],
                     'model': service[2],
@@ -282,6 +292,10 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                 if attempt == 2:
                     record_reconciliation('redispatched', snapshot.id, name)
                 if errors or outcome.get('cap_held') or outcome.get('recovery_ambiguous'):
+                    refreshed = await run_blocking(db_executor, snapshot.reference.get)
+                    persisted = (refreshed.to_dict() or {}).get('piece_receipts') or {}
+                    receipts.update(persisted)
+                    row['piece_receipts'] = dict(receipts)
                     pending = True
                     continue
                 receipt = {
@@ -383,30 +397,3 @@ async def recover(uid: str) -> None:
     # create consent. Worker is imported lazily to avoid pipeline import cycles.
     if enabled() and _backlog_runner is not None:
         await _backlog_runner(uid)
-
-
-def continue_after_cooldown(uid: str) -> None:
-    if enabled():
-        start_background_task(_continue_recovery(uid), name='stt_cap_hold_recovery_continuation')
-
-
-async def _continue_recovery(uid: str) -> None:
-    # Continue a productive bounded page after the distributed cooldown. A
-    # single app open can drain a backlog; blocked pages never self-poll.
-    await asyncio.sleep(60)
-    await recover(uid)
-
-
-async def _schedule(uid: str) -> None:
-    start_background_task(recover(uid), name='stt_cap_hold_recovery')
-
-
-def kick(uid: str) -> None:
-    if not enabled():
-        return
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        from_thread.run(_schedule, uid)
-    else:
-        start_background_task(recover(uid), name='stt_cap_hold_recovery')
