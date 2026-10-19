@@ -1984,6 +1984,7 @@
     "workqueue_work_duration_seconds_sum"
   ],
   "declared_metrics": [
+    "omi_listen_demand_failure_detail_total",
     "omi_listen_lb_attached_ready_endpoints",
     "omi_listen_lb_exporter_errors_total",
     "omi_listen_lb_exporter_last_success_timestamp_seconds",
