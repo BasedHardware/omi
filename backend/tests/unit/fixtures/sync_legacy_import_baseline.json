@@ -1,0 +1,97 @@
+{
+  "description": "Frozen importers of legacy sync modules scheduled for retirement (plan C class (a)). May only shrink. Owned by tests/unit/test_sync_legacy_import_ratchet.py.",
+  "modules": {
+    "database.sync_backfill_sequencer": {
+      "retire_in": "C10",
+      "importers": {
+        "scripts/recover_dev_failed_sync_backfill.py": "Dev-only operator recovery for the backfill sequencer; deleted with the sequencer in C10.",
+        "scripts/repair_sync_backfill_owners.py": "Operator repair for sequencer owner rows; deleted with the sequencer in C10."
+      }
+    },
+    "database.sync_dead_letters": {
+      "retire_in": "C10",
+      "importers": {
+        "database/sync_jobs.py": "Legacy Redis sync job records write dead letters on terminal failure; both retire with legacy transcription (C10/C11)."
+      }
+    },
+    "database.sync_empty_recovery": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "database.sync_redrive": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.backfill_cutover": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.backfill_order": {
+      "retire_in": "C10",
+      "importers": {
+        "utils/cloud_tasks.py": "Shared Cloud Tasks client computes direct backfill schedule_at; the call is cut when sync-backfill is deleted in C10."
+      }
+    },
+    "utils.sync.completed_status": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.empty_recovery": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.empty_recovery_intent": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.legacy_fresh": {
+      "retire_in": "C9/C11",
+      "importers": {}
+    },
+    "utils.sync.owner_prefetch": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.pipeline": {
+      "retire_in": "C11",
+      "importers": {
+        "testing/e2e/test_sync_lifecycle.py": "Hermetic e2e for the legacy sync lifecycle; deleted with legacy transcription in C11.",
+        "testing/replay_harness_phase0a/apps.py": "Replay harness serves the legacy sync worker; drop the legacy app in C11.",
+        "testing/sync_cloud_tasks_stack/app.py": "Gauntlet (GA) stack serves the legacy sync worker; drop it in C11 once the gauntlet is batch-only.",
+        "utils/batch_pipeline/enrichment.py": "Batch enrichment calls back _reprocess_conversation_after_update; C2 moves it to utils/enrichment/callback.py and removes this edge."
+      }
+    },
+    "utils.sync.redrive_policy": {
+      "retire_in": "C10",
+      "importers": {}
+    },
+    "utils.sync.safety_wal_coverage": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.safety_wal_metrics": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.staged_prefetch": {
+      "retire_in": "C10",
+      "importers": {
+        "utils/other/storage.py": "Storage download path consumes legacy staged prefetch bytes; cut when the sequencer prefetch is deleted in C10."
+      }
+    },
+    "utils.sync.uid_sequencer": {
+      "retire_in": "C10",
+      "importers": {
+        "scripts/recover_dev_failed_sync_backfill.py": "Dev-only operator recovery kicks the sequencer; deleted with the sequencer in C10."
+      }
+    },
+    "utils.sync.wal_audio_coverage": {
+      "retire_in": "C11",
+      "importers": {}
+    },
+    "utils.sync.wal_audio_coverage_metrics": {
+      "retire_in": "C11",
+      "importers": {}
+    }
+  }
+}
