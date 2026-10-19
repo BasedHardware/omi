@@ -512,8 +512,13 @@ ZH_NAME_STOPWORDS = frozenset(
     }
 )
 
-ZH_INVALID_CHARS = frozenset(
-    '的了着得地我你他她它咱您谁什么哪怎不没别吗呢吧啊呀哦喔嗯哈嘛啦呗过把被给让跟从往向去来到在有是叫说看听做吃喝买卖想要会能该很太都也就还又再些'
+ZH_INVALID_CHARS = frozenset('的了着得地')
+
+# Characters that open a clause ("我叫他过来") but essentially never open a name.
+# Checked on the first character only. 向, 哈 and 都 are deliberately absent:
+# they start real surnames and transliterated names (向东, 哈里).
+ZH_INVALID_LEADING_CHARS = frozenset(
+    '我你他她它咱您谁什哪怎不没别吗呢吧啊呀哦喔嗯嘛啦呗来去到在有是叫说看听做吃喝买卖想要把被给让跟往就还又再很太也些该会能过从'
 )
 
 KO_NAME_STOPWORDS = frozenset(
@@ -703,6 +708,8 @@ def _is_valid_cjk_speaker_name(name: str, pattern_lang: Optional[str] = None) ->
         if len(name) > 5:
             return False
         if name in ZH_NAME_STOPWORDS:
+            return False
+        if name[:1] in ZH_INVALID_LEADING_CHARS:
             return False
         for char in ZH_INVALID_CHARS:
             if char in name:
