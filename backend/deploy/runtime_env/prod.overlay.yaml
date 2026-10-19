@@ -1408,6 +1408,11 @@ overlay:
           BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
             value: batch-quarantine-recovery
             category: reliability
+          # 64 (the code maximum) per serving pass, set live during the 10-19 record-lane ramp so
+          # recovery keeps pace with quarantines; the code default 16 would return on every train.
+          BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE:
+            value: '64'
+            category: reliability
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'

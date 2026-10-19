@@ -265,7 +265,9 @@ def window_replay_action(
             first, end = ring.capture_bounds
             raw.replay_lag_diagnostics = snapshot(first, end, ring.projected_span_samples(data, start_sample))
         fail = getattr(socket, 'fail', None) or raw.fail
-        fail('capacity_full', capacity_subtype='replay_ring_cap')
+        # Session-local replay lag, not provider capacity: alerts that read
+        # capacity_full must not count it, and it never benches a target.
+        fail('replay_ring_overflow')
     return 'failover'
 
 
