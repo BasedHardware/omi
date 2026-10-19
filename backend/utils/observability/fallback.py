@@ -18,6 +18,7 @@ from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.observability.reasons import FallbackReason, reason_values
 from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
@@ -128,57 +129,7 @@ _SAFE_LABEL_CHARS = frozenset('._:-')
 
 ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
-ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
-    {
-        'gate_unavailable',
-        'http_error',
-        'http_429',
-        'transport_error',
-        'unavailable',
-        'unconfigured',
-        'malformed',
-        'timeout',
-        'provider_5xx',
-        'provider_429',
-        'enqueue_failed',
-        'marker_failed',
-        'enqueue_uncertain',
-        'marker_timeout',
-        'acquire_unsettled',
-        'marker_clear_failed',
-        'owner_write_failed',
-        'pre_lock_expiry',
-        'preamble_timeout',
-        'deferrals_exhausted',
-        'config_incomplete',
-        'circuit_open',
-        'last_resort',
-        'connection_lost',
-        'modulate_serve_error',
-        'capability_mismatch',
-        'auth',
-        'quota',
-        'local_heal',
-        'policy',
-        'dispatch_disabled',
-        'byok',
-        'malformed_doc',
-        'capacity_full',
-        'auth_error',
-        'connection_error',
-        'first_text_deadline',
-        'empty_streak',
-        'allocation_rejected',
-        'private_tool_output_in_context',
-        'not_authorized',
-        'authorization_unavailable',
-        'unmigrated_principal',
-        'document_size_limit',
-        'kept_over_80pct',
-        'other',
-        'none',
-    }
-)
+ALLOWED_REASONS = reason_values(FallbackReason)
 
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
