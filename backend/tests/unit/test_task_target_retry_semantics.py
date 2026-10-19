@@ -121,15 +121,16 @@ def test_unmounted_route_reports_nothing(tmp_path):
 # deploy/cross_service_known_gaps.json.
 KNOWN = {
     'account-deletion/routers/users.py:run_account_deletion_wipe/500',
-    'batch-quarantine-recovery/routers/batch_pipeline.py:recover_quarantine/503',
     'listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/500',
     'listen-finalization/routers/conversation_finalization.py:run_listen_finalization_job/503',
+    'sync-backfill/routers/sync.py:_run_sync_job_attempt/500',
+    'sync-backfill/routers/sync.py:_run_sync_job_attempt/503',
     'sync-backfill/routers/sync.py:_run_sync_job_body/500',
-    'sync-backfill/routers/sync.py:_run_sync_job_body/503',
     'sync-backfill/routers/sync.py:run_sync_job/500',
     'sync-backfill/routers/sync.py:run_sync_job/503',
+    'sync-jobs/routers/sync.py:_run_sync_job_attempt/500',
+    'sync-jobs/routers/sync.py:_run_sync_job_attempt/503',
     'sync-jobs/routers/sync.py:_run_sync_job_body/500',
-    'sync-jobs/routers/sync.py:_run_sync_job_body/503',
     'sync-jobs/routers/sync.py:run_sync_job/500',
     'sync-jobs/routers/sync.py:run_sync_job/503',
 }
