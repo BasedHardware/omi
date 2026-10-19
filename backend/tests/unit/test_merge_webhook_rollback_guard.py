@@ -88,6 +88,7 @@ def _setup_merge_mocks(monkeypatch, *, transfer_side_effect=None, custom_effects
 
     # Patch notification module
     import utils.notifications as notif_mod
+
     monkeypatch.setattr(notif_mod, "send_merge_completed_message", MagicMock())
 
     monkeypatch.setattr(merge, "_delete_conversation_and_related_data", MagicMock())
@@ -113,6 +114,7 @@ def _setup_merge_mocks(monkeypatch, *, transfer_side_effect=None, custom_effects
         mock_transfer.return_value = True
 
     from database import review_overlay_merge
+
     monkeypatch.setattr(review_overlay_merge, "transfer", mock_transfer)
 
     mock_handle_failure = MagicMock()

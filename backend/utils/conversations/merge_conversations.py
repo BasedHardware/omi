@@ -285,7 +285,7 @@ def perform_merge_async(
         # provider, so the merged conversation keeps accurate provenance (#7690).
         # A custom-STT source must not be able to shed the marker by merging with
         # a normal-STT one.
-        uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
+        uses_custom_stt = any(c.get("uses_custom_stt", False) for c in sorted_convs)
 
         # Discarded: only if ALL are discarded
         discarded = all(c.get("discarded", False) for c in sorted_convs)
@@ -383,7 +383,7 @@ def perform_merge_async(
 
         from database.review_overlay_merge import transfer
 
-        if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
+        if transfer(uid, [c["id"] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
 
@@ -463,10 +463,10 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
         # carried label) keeps its numeric speaker_ids — never move a manual
         # voice's authority while its receipt stays at the source.
         return bool(
-            source.get('manual_speaker_assignments')
+            source.get("manual_speaker_assignments")
             or any(
-                s.get('speaker_label_source') in ('manual', 'carried')
-                for s in (source.get('transcript_segments') or [])
+                s.get("speaker_label_source") in ("manual", "carried")
+                for s in (source.get("transcript_segments") or [])
             )
         )
 
@@ -475,26 +475,26 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     # renumbered voice can never collide with a manual voice's id.
     for conv in conversations:
         if source_has_manual_tags(conv):
-            allocator.hydrate_receipt(conv.get('manual_speaker_assignments'))
-            allocator.hydrate(conv.get('transcript_segments') or [])
+            allocator.hydrate_receipt(conv.get("manual_speaker_assignments"))
+            allocator.hydrate(conv.get("transcript_segments") or [])
 
     def copy_segment(segment, source):
         copied = copy.deepcopy(segment)
-        speaker_id = copied.get('speaker_id')
+        speaker_id = copied.get("speaker_id")
         if (
             isinstance(speaker_id, (int, str))
             and str(speaker_id).isdigit()
             and int(speaker_id) != OMI_SPEAKER_ID_SENTINEL
         ):
-            if not copied.get('speaker_id_scope'):
+            if not copied.get("speaker_id_scope"):
                 # Unidentified legacy inputs cannot establish a new voice scope.
-                if source.get('id'):
-                    copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
+                if source.get("id"):
+                    copied["speaker_id_scope"] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
             # Renumber is per-source, not global: only an untagged source's
             # voices are reallocated, so they can't collide with a manually
             # tagged voice from another conversation.
-            if not source_has_manual_tags(source) and copied.get('speaker_id_scope'):
-                copied['speaker_id'] = int(speaker_id)
+            if not source_has_manual_tags(source) and copied.get("speaker_id_scope"):
+                copied["speaker_id"] = int(speaker_id)
                 allocator.assign(copied)
         return copied
 
@@ -731,11 +731,11 @@ def _cancel_open_dated_task_reminders(uid: str, items: List[Dict]) -> None:
     ``process_conversation._write_action_items``.
     """
     for item in items:
-        if item.get('due_at') and not item.get('completed'):
+        if item.get("due_at") and not item.get("completed"):
             _sync_source_task_reminder(
                 user_id=uid,
-                action_item_id=item['id'],
-                description='',
+                action_item_id=item["id"],
+                description="",
                 completed=True,
                 due_at=None,
             )
@@ -748,13 +748,13 @@ def retract_sync_bridge_source(uid: str, source_id: str) -> None:
 
 def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     """Copy retained donor audio strictly; never checkpoint a failed copy."""
-    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
+    _copy_audio_chunks_for_merge(uid, [{"id": source_id}], target_id, strict=True)
 
 
 def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
     row = conversations_db.get_conversation(uid, conversation_id) or {}
-    for source_id in row.get('sync_merged_from', []):
+    for source_id in row.get("sync_merged_from", []):
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments
             # session id would re-derive the same id on the next backlog retry and
@@ -765,7 +765,7 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, mer
             try:
                 conversation_tombstones.record_deletion(uid, source_id)
             except Exception:
-                logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
+                logger.exception("merge-source tombstone write failed uid=%s source=%s", uid, source_id)
             _delete_conversation_and_related_data(
                 uid,
                 source_id,
@@ -775,7 +775,7 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, mer
     conversations_db.delete_conversation(uid, conversation_id)
     record_survivor_deleted(uid, conversation_id, row)
 
-    folder_id = row.get('folder_id')
+    folder_id = row.get("folder_id")
     if folder_id:
         # conversation_count is derived state the folder tabs render. Nothing
         # else recomputes it after a delete, so a folder keeps counting a
@@ -827,7 +827,7 @@ def _delete_conversation_and_related_data(
             # take the exclusive per-account destructive gate.
             retract_kwargs: dict[str, Any] = {}
             if retain_capture:
-                retract_kwargs['claim_destructive_gate'] = False
+                retract_kwargs["claim_destructive_gate"] = False
             if on_authoritative_retraction is None:
                 memory_service.retract_conversation_memories(uid, conversation_id, **retract_kwargs)
             else:
