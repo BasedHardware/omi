@@ -1,12 +1,16 @@
 """Behavioral contract for the exclusive conversation lifecycle owner (#9516)."""
 
 import copy
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
+import anthropic
+import httpx
 import pytest
+from fastapi import HTTPException
 from google.api_core.exceptions import AlreadyExists
 
 import database.conversations as conversations_db
@@ -14,6 +18,7 @@ from database import conversation_finalization_jobs as jobs_db
 from models.conversation_enums import ConversationStatus
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.merge_conversations import validate_merge_compatibility
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 
 
 @dataclass
@@ -429,6 +434,129 @@ def test_processing_admission_guard_stops_the_heartbeat_when_the_processor_finis
     snapshot_after_exit = len(renew_calls)
     stop_seen.wait(timeout=0.05)
     assert len(renew_calls) == snapshot_after_exit
+
+
+_ANTHROPIC_CREDIT_EXHAUSTED_BODY = {
+    'type': 'error',
+    'error': {
+        'type': 'invalid_request_error',
+        'message': 'Your credit balance is too low to access the Anthropic API. '
+        'Please go to Plans & Billing to upgrade or purchase credits.',
+    },
+}
+
+
+def _raise_byok_credit_exhaustion_halt() -> None:
+    """Raise the exact chain ``_get_structured`` produces for a spent BYOK Anthropic account."""
+    request = httpx.Request('POST', 'https://api.anthropic.com/v1/messages')
+    response = httpx.Response(
+        400, request=request, headers={'request-id': 'req_unit'}, json=_ANTHROPIC_CREDIT_EXHAUSTED_BODY
+    )
+    try:
+        raise anthropic.BadRequestError(
+            f'Error code: 400 - {_ANTHROPIC_CREDIT_EXHAUSTED_BODY}',
+            response=response,
+            body=_ANTHROPIC_CREDIT_EXHAUSTED_BODY,
+        )
+    except anthropic.BadRequestError as error:
+        raise conversation_processing_http_exception(error) from error
+
+
+def _quiet_heartbeat(monkeypatch) -> None:
+    monkeypatch.setattr(jobs_db, 'renew_processing_lease', lambda *_args: True)
+    monkeypatch.setattr(lifecycle_service, '_processing_lease_renewal_interval', lambda: 60.0)
+
+
+def _guard_failure_records(caplog) -> list[logging.LogRecord]:
+    return [
+        record
+        for record in caplog.records
+        if record.name == lifecycle_service.logger.name
+        and 'synchronous conversation processing failed' in record.getMessage()
+    ]
+
+
+def test_processing_admission_guard_logs_a_byok_account_state_halt_by_bounded_class(monkeypatch, caplog):
+    """A spent BYOK provider account is account state only the user can fix. The
+    composition boundary already answered it as a typed 429 and logged it by
+    bounded class; the guard must not re-emit the chained provider traceback
+    (which carries the provider's error body) as an ERROR for the same halt.
+    """
+    _quiet_heartbeat(monkeypatch)
+    caplog.set_level(logging.WARNING)
+
+    with pytest.raises(HTTPException) as raised:
+        with lifecycle_service.processing_admission_guard('uid', 'conversation', rollback_on_failure=False):
+            _raise_byok_credit_exhaustion_halt()
+
+    # The typed response reaches the caller unchanged.
+    assert raised.value.status_code == 429
+    assert raised.value.detail['code'] == 'byok_quota'
+    assert isinstance(raised.value.__cause__, anthropic.BadRequestError)
+
+    (record,) = _guard_failure_records(caplog)
+    assert record.levelno == logging.WARNING
+    assert record.exc_info is None
+    assert 'no rollback: producer owns recovery' in record.getMessage()
+    assert 'credit balance' not in caplog.text
+    assert 'Traceback' not in caplog.text
+    assert 'BadRequestError' not in caplog.text
+
+
+def test_processing_admission_guard_still_rolls_back_a_byok_account_state_halt(monkeypatch, caplog):
+    _quiet_heartbeat(monkeypatch)
+    caplog.set_level(logging.WARNING)
+    rolled_back: list[tuple[str, str]] = []
+
+    def fake_rollback(uid, conversation_id):
+        rolled_back.append((uid, conversation_id))
+        return True
+
+    monkeypatch.setattr(lifecycle_service, 'rollback_processing_admission', fake_rollback)
+
+    with pytest.raises(HTTPException):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+            _raise_byok_credit_exhaustion_halt()
+
+    assert rolled_back == [('uid', 'conversation')]
+    (record,) = _guard_failure_records(caplog)
+    assert record.levelno == logging.WARNING
+    assert record.exc_info is None
+    assert 'rolled_back=True' in record.getMessage()
+    assert 'credit balance' not in caplog.text
+
+
+def test_processing_admission_guard_keeps_the_traceback_for_unexpected_failures(monkeypatch, caplog):
+    """Every other failure is still a processor fault and keeps its full traceback."""
+    _quiet_heartbeat(monkeypatch)
+    caplog.set_level(logging.WARNING)
+
+    with pytest.raises(RuntimeError):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation', rollback_on_failure=False):
+            raise RuntimeError('processor crashed')
+
+    (record,) = _guard_failure_records(caplog)
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
+    assert 'processor crashed' in caplog.text
+
+
+def test_processing_admission_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, caplog):
+    """The boundary's generic 500 is not account state; its traceback stays visible."""
+    _quiet_heartbeat(monkeypatch)
+    caplog.set_level(logging.WARNING)
+
+    with pytest.raises(HTTPException) as raised:
+        with lifecycle_service.processing_admission_guard('uid', 'conversation', rollback_on_failure=False):
+            try:
+                raise ValueError('notes parse failed')
+            except ValueError as error:
+                raise conversation_processing_http_exception(error) from error
+
+    assert raised.value.status_code == 500
+    (record,) = _guard_failure_records(caplog)
+    assert record.levelno == logging.ERROR
+    assert record.exc_info is not None
 
 
 def test_first_completed_writes_observe_shape_once(monkeypatch, lifecycle_store):

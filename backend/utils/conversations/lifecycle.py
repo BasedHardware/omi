@@ -39,6 +39,7 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.llm.gateway_error_contract import is_byok_account_state_http_exception
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -393,21 +394,25 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     thread.start()
     try:
         yield
-    except Exception:
+    except Exception as error:
+        # The composition boundary already logged a typed BYOK account-state halt
+        # by its bounded class; a traceback here would re-emit the chained
+        # provider error body for account state only the user can fix.
+        log_failure = logger.warning if is_byok_account_state_http_exception(error) else logger.exception
         if rollback_on_failure:
             try:
                 rolled_back = rollback_processing_admission(uid, conversation_id)
             except Exception:
                 logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
                 rolled_back = False
-            logger.exception(
+            log_failure(
                 'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
                 uid,
                 conversation_id,
                 rolled_back,
             )
         else:
-            logger.exception(
+            log_failure(
                 'synchronous conversation processing failed uid=%s conversation=%s (no rollback: producer owns recovery)',
                 uid,
                 conversation_id,

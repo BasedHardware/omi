@@ -23,6 +23,7 @@ BYOK_QUOTA_ERROR_DETAIL = {
 # Anthropic's stable wording for an exhausted prepaid balance; direct-lane BYOK
 # raises it as a plain 400, so the provider's own text is the only classifier.
 _ANTHROPIC_CREDIT_EXHAUSTED_MARKER = 'credit balance is too low'
+_BYOK_ACCOUNT_STATE_FAILURE_CLASSES = frozenset({BYOK_RATE_LIMIT_FAILURE_CLASS, BYOK_QUOTA_FAILURE_CLASS})
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,24 @@ def is_byok_quota_error(error: BaseException) -> bool:
     if status_code != 400:
         return False
     return _ANTHROPIC_CREDIT_EXHAUSTED_MARKER in _bounded_error_text(error)
+
+
+def is_byok_account_state_http_exception(error: BaseException) -> bool:
+    """Return whether ``error`` is the typed BYOK account-state response that
+    ``conversation_processing_http_exception`` raises for a rate-limited or
+    spent provider account.
+
+    Lifecycle owners wrapping the composition boundary use it to log the halt
+    by its bounded class: the boundary already logged it, and a traceback there
+    would re-emit the chained provider error body for account state only the
+    user can fix.
+    """
+    if not isinstance(error, HTTPException) or error.status_code != 429:
+        return False
+    detail = error.detail
+    if not isinstance(detail, Mapping):
+        return False
+    return _string_value(detail.get('code')) in _BYOK_ACCOUNT_STATE_FAILURE_CLASSES
 
 
 def conversation_processing_http_exception(error: BaseException) -> HTTPException:

@@ -41,6 +41,7 @@ from utils.llm.gateway_error_contract import (  # noqa: E402
     BYOK_RATE_LIMIT_ERROR_DETAIL,
     GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL,
     conversation_processing_http_exception,
+    is_byok_account_state_http_exception,
     is_byok_quota_error,
 )
 
@@ -143,3 +144,32 @@ def test_unrelated_exceptions_keep_the_generic_500():
         mapped = conversation_processing_http_exception(error)
         assert mapped.status_code == 500
         assert mapped.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+
+
+def test_typed_byok_account_state_responses_are_recognised_above_the_boundary():
+    # The boundary's own typed 429s for a spent or rate-limited BYOK account are
+    # what lifecycle owners must log by bounded class instead of as a traceback.
+    quota = conversation_processing_http_exception(_anthropic_error(_ANTHROPIC_CREDIT_BODY))
+    rate_limit = conversation_processing_http_exception(
+        _GatewayStyleError(
+            code="credential_failure",
+            failure_class="byok_rate_limit",
+            status_code=429,
+            body={"error": {"code": "credential_failure", "failure_class": "byok_rate_limit"}},
+        )
+    )
+
+    assert is_byok_account_state_http_exception(quota)
+    assert is_byok_account_state_http_exception(rate_limit)
+
+
+def test_other_failures_are_not_byok_account_state_responses():
+    generic = conversation_processing_http_exception(RuntimeError("boom"))
+
+    assert not is_byok_account_state_http_exception(generic)
+    # The raw provider error is classified at the boundary, not above it.
+    assert not is_byok_account_state_http_exception(_anthropic_error(_ANTHROPIC_CREDIT_BODY))
+    # A 429 that is not the boundary's typed BYOK detail stays a generic failure.
+    assert not is_byok_account_state_http_exception(HTTPException(status_code=429, detail="Too Many Requests"))
+    assert not is_byok_account_state_http_exception(HTTPException(status_code=429, detail={"code": "other"}))
+    assert not is_byok_account_state_http_exception(HTTPException(status_code=402, detail=BYOK_QUOTA_ERROR_DETAIL))
