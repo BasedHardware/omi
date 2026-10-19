@@ -270,10 +270,17 @@ runs:
         # sizing that compounded until queued recordings were scheduled almost
         # a day out. The bounded backoff keeps a transient rejection from
         # stranding a recording for hours.
+        # --max-attempts must mirror utils/cloud_tasks.py
+        # get_sync_tasks_max_attempts() (default 5): omitted queue fields keep
+        # Google's default of 100, so a handler-budget deferral chain that has
+        # spent its attempt contract and ended through the 409 would keep
+        # retrying long after the preserved run lock expired, re-running
+        # whole-budget pipelines the code-side bound already gave up on.
         if gcloud tasks queues describe "$BACKFILL_QUEUE" --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
           gcloud tasks queues update "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
+            --max-attempts=5 \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
@@ -282,10 +289,23 @@ runs:
           gcloud tasks queues create "$BACKFILL_QUEUE" \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
+            --max-attempts=5 \
             --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
             --max-dispatches-per-second=15 \
             --min-backoff=5s \
             --max-backoff=60s
+        fi
+        # The fresh lane and the fallback route in _enqueue_sync_job_routed
+        # deliver through the main sync-jobs queue (SYNC_TASKS_QUEUE), whose
+        # throughput limits another team owns; update-only reconciliation
+        # here still caps attempts so a deferral chain ended through the 409
+        # cannot outlive the code-side contract the same way. Without this
+        # the queue keeps Google's default of 100 attempts.
+        if gcloud tasks queues describe sync-jobs --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud tasks queues update sync-jobs \
+            --location=${{ inputs.region }} \
+            --project=${{ inputs.project_id }} \
+            --max-attempts=5
         fi
 
     - name: Reconcile backfill UID sequencer sweep

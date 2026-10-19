@@ -164,6 +164,7 @@ class Harness:
                 "SYNC_TASKS_INVOKER_SA": LOCAL_INVOKER_SA,
                 "SYNC_TASKS_MAX_ATTEMPTS": "2",
                 "HTTP_SYNC_JOBS_RUN_TIMEOUT": "30",
+                "SYNC_JOB_HANDLER_BUDGET_SECONDS": "20",
                 "FAIR_USE_ENABLED": "true",
                 "MAX_DAILY_AUDIO_HOURS": "30",
                 "STT_PRERECORDED_MODEL": "parakeet",
