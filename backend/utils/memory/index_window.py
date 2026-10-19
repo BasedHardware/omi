@@ -47,9 +47,30 @@ def validate_window_cursors(state: Any, uid: str) -> None:
             decode_cursor(keyset.index_window_cursor, query_scope({'uid': uid, 'order': field}))
 
 
-def window_sort_key(memory: Any) -> tuple[int, str]:
-    stamp = memory.updated_at or memory.created_at
+def _position_sort_key(stamp: Any, memory_id: str) -> tuple[int, str]:
     if isinstance(stamp, DatetimeWithNanoseconds):
         value = stamp.timestamp_pb()
-        return (-(value.seconds * 1_000_000_000 + value.nanos), memory.id)
-    return (-(int(stamp.replace(microsecond=0).timestamp()) * 1_000_000_000 + stamp.microsecond * 1000), memory.id)
+        return (-(value.seconds * 1_000_000_000 + value.nanos), memory_id)
+    return (-(int(stamp.replace(microsecond=0).timestamp()) * 1_000_000_000 + stamp.microsecond * 1000), memory_id)
+
+
+def window_sort_key(memory: Any) -> tuple[int, str]:
+    return _position_sort_key(memory.updated_at or memory.created_at, memory.id)
+
+
+def peek_index_window(stream: Any):
+    """Return a head or a lower bound on every unscanned row in this source.
+
+    Once a raw window ends, another source's newer heads are safe to emit:
+    no unseen row can precede the last consumed raw position. In particular,
+    a created window consisting entirely of updated-stream duplicates must
+    not block an otherwise full updated page.
+    """
+    try:
+        return stream.peek(), None
+    except MemoryIndexWindowLimit:
+        field = 'updated_at' if stream._kind == 'updated' else 'created_at'
+        stamp, memory_id = decode_cursor(
+            stream.scan_keyset.index_window_cursor, query_scope({'uid': stream._uid, 'order': field})
+        )
+        return None, _position_sort_key(stamp, memory_id)

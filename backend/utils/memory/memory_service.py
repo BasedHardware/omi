@@ -38,6 +38,7 @@ from utils.memory.index_window import (
     position_cursor,
     validate_window_cursors,
     window_sort_key,
+    peek_index_window,
 )
 from config import firestore_read_levers
 from database._client import db as default_db_client
@@ -1695,8 +1696,20 @@ class _HistoricalCursorStream:
         return self._updated.state_suppressed + self._created.state_suppressed
 
     def peek(self) -> Optional[MemoryDB]:
-        updated_memory = self._updated.peek()
-        created_memory = self._created.peek()
+        if self._updated._index_window:
+            updated_memory, updated_bound = peek_index_window(self._updated)
+            created_memory, created_bound = peek_index_window(self._created)
+            if updated_bound is not None and (
+                created_memory is None or window_sort_key(created_memory) > updated_bound
+            ):
+                raise MemoryIndexWindowLimit()
+            if created_bound is not None and (
+                updated_memory is None or window_sort_key(updated_memory) > created_bound
+            ):
+                raise MemoryIndexWindowLimit()
+        else:
+            updated_memory = self._updated.peek()
+            created_memory = self._created.peek()
         if updated_memory is None and created_memory is None:
             self._peek_source = None
             return None

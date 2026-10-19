@@ -235,3 +235,21 @@ def test_legacy_cursor_without_exact_position_restarts_instead_of_guessing_nanos
     )
     with pytest.raises(ValueError, match='no exact index-window position'):
         validate_window_cursors(state, UID)
+
+
+def test_all_modern_deep_account_emits_full_pages_without_exhausting_created_stream(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"memory_list_index_window":100}')
+    monkeypatch.setenv('MEMORY_ENABLED', 'on')
+    mod = _load_memory_service(monkeypatch)
+    monkeypatch.setattr(mod, 'read_canonical_scan_page', lambda *args, **kw: ([], True))
+    monkeypatch.setattr(memories, 'prepare_memory_for_read', lambda raw, uid: raw)
+    db = KeysetStore(rows(5000))
+    service = mod.MemoryService(db_client=db)
+    monkeypatch.setattr(service, 'canonical_statuses', lambda *args, **kw: {})
+    monkeypatch.setattr(read_resilience, '_retry_allowance', read_resilience.RetryAllowance())
+    first = service.read_page(UID, limit=7)
+    assert [memory.id for memory in first.memories] == [f'm-{i:05}' for i in range(7)]
+    assert db.physical == 14
+    second = service.read_page(UID, limit=7, cursor=first.next_cursor)
+    assert [memory.id for memory in second.memories] == [f'm-{i:05}' for i in range(7, 14)]
+    assert db.physical == 28
