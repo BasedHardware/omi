@@ -13,6 +13,9 @@ import logging
 import threading
 from typing import Any, Callable, Mapping, Sequence
 
+import numpy as np
+
+from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence
 from config.batch_pipeline import (
@@ -27,6 +30,15 @@ from config.batch_pipeline_providers import ProviderConfig
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
+from utils.batch_pipeline.diarization_gate import (
+    compact as compact_speech,
+    map_back,
+    plan_compaction,
+    short_single_region,
+    speech_regions,
+    unassigned_word_count,
+)
+from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.observability.fallback import record_fallback
 
@@ -317,6 +329,70 @@ class PipelineWorker:
             if self.io_concurrency > 1
             else None
         )
+
+    def _diarize_unit(self, samples, evidence, words):
+        """Diarize retained speech only; any doubt diarizes the full unit.
+
+        ``evidence`` is unpadded VAD speech plus every word clock, so no audio
+        VAD or ASR marked as speech is ever withheld from the diarizer.
+        """
+        seconds = len(samples) / SAMPLE_RATE
+        if not diarize_speech_only_enabled():
+            record_decision('full_flag_off', unit_seconds=seconds, diarized_seconds=seconds)
+            return self.diarize(samples)
+        if not evidence:
+            record_decision('full_no_evidence', unit_seconds=seconds, diarized_seconds=seconds)
+            return self.diarize(samples)
+        compacted = None
+        try:
+            plan = plan_compaction(evidence, len(samples))
+            compacted = (
+                compact_speech(
+                    samples, plan, concatenate=np.concatenate, zeros=lambda n: np.zeros(n, dtype=samples.dtype)
+                )
+                if plan is not None
+                else None
+            )
+        except Exception:
+            return self._diarize_full(samples, 'full_compaction_error')
+        if plan is None or compacted is None:
+            # Dense unit: compaction would remove too little audio to matter.
+            return self._diarize_full(samples, 'full_kept_over_80pct')
+        output = self.diarize(compacted)
+        try:
+            turns = map_back(output['turns'], plan)
+            mapped = {**output, 'turns': turns}
+            if 'overlaps' in output:
+                mapped['overlaps'] = map_back(output['overlaps'], plan)
+        except (KeyError, TypeError, ValueError):
+            return self._diarize_full(samples, 'full_compaction_error')
+        if words and not turns:
+            # Never let compaction alone remove all speaker evidence for words.
+            return self._diarize_full(samples, 'full_compacted_empty')
+        diarized = plan.compact_samples / SAMPLE_RATE
+        record_decision('compacted', unit_seconds=seconds, diarized_seconds=diarized)
+        try:
+            record_compacted_unassigned(unassigned_word_count(words, turns))
+        except Exception:
+            pass  # Observability cannot change the diarization result.
+        mapped['speech_compaction'] = {'diarized_seconds': diarized, 'audio_seconds': seconds}
+        return mapped
+
+    def _diarize_full(self, samples, decision):
+        seconds = len(samples) / SAMPLE_RATE
+        record_decision(decision, unit_seconds=seconds, diarized_seconds=seconds)
+        try:
+            dense = decision == 'full_kept_over_80pct'
+            record_fallback(
+                component='vad',
+                from_mode='batch_speech_only_diarization',
+                to_mode='full_unit_diarization',
+                reason='kept_over_80pct' if dense else 'other',
+                outcome='recovered' if dense else 'degraded',
+            )
+        except Exception:
+            pass  # Observability cannot change the diarization result.
+        return self.diarize(samples)
 
     def process_batch(
         self, items: Sequence[WorkItem], *, authorize_dispatch=None
@@ -636,16 +712,24 @@ class PipelineWorker:
                         and resolution.coverage >= 0.9
                         and len(set(resolution.speaker_ids.values())) == 1
                     )
+                    evidence = speech_regions(state['speech_spans'], words, duration) if words else []
+                    # Default off: one short contiguous utterance takes the
+                    # calibrated single label only once a prod-revision paired
+                    # run qualifies it (see batch_pipeline_runtime.md).
+                    short = not single and short_speech_single_enabled() and short_single_region(evidence)
                     if state['silence']:
                         diarization = {'turns': [], 'outcome': 'silence'}
-                    elif single:
+                    elif single or short:
                         diarization = {
                             'turns': [{'start': 0, 'end': duration, 'speaker': 'SPEAKER_00'}],
                             'outcome': 'skipped_single',
                         }
+                        if short:
+                            diarization['single_evidence'] = 'short_speech'
+                            record_decision('skipped_short', unit_seconds=duration)
                     else:
                         stage = 'diarize'
-                        diarization = self.diarize(state['samples'])
+                        diarization = self._diarize_unit(state['samples'], evidence, words)
                     payload = {
                         'words': words,
                         'diarization': diarization,
