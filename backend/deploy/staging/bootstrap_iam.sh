@@ -42,6 +42,8 @@
 #                          serviceAccountUser + serviceAccountTokenCreator on staging-tasks-invoker
 #                          (OIDC task tokens) and TokenCreator on itself (Firebase custom-token signer);
 #                          workloadIdentityUser for KSA staging/staging-runtime (listen, pusher)
+#   staging-runtime/worker cloudsql.client + cloudsql.instanceUser conditioned to instance staging-jobs,
+#                          and IAM database users on it (lane 12's Postgres job store)
 #   staging-worker         storage.objectAdmin on staging-batch, objectViewer on staging-sync and
 #                          staging-mirror; secretAccessor on staging-encryption-secret;
 #                          logging.logWriter, monitoring.metricWriter; workloadIdentityUser for
@@ -432,6 +434,17 @@ bootstrap() {
   else
     echo "[dry-run] secrets versions access staging-redis-password | kubectl -n $NAMESPACE create secret generic staging-redis --from-file=password=/dev/stdin | kubectl apply (never printed)"
   fi
+  echo "== Cloud SQL staging-jobs (lane 12 job store): IAM login for staging-runtime and staging-worker"
+  # Conditioned to the one instance. The instance itself and the database grants are lane 12's
+  # (created on the human tier 10-19); this codifies the identity side so --verify can re-check it.
+  local sql_condition="resource.name == \"projects/${DEV}/instances/staging-jobs\""
+  for sa in staging-runtime staging-worker; do
+    for role in roles/cloudsql.client roles/cloudsql.instanceUser; do
+      project_binding "serviceAccount:$(sa_email "$sa")" "$role" "$sql_condition" "staging-jobs-only"
+    done
+    run_create gcloud sql users create "${sa}@${DEV}.iam" --instance=staging-jobs \
+      --type=cloud_iam_service_account --project="$DEV"
+  done
   echo "== batch worker: k8s Secret staging/staging-batch-worker (ENCRYPTION_SECRET, HUGGINGFACE_TOKEN)"
   if [[ "$MODE" == apply ]]; then
     local wdir
@@ -528,6 +541,13 @@ verify() {
       fail=1
     }
   done
+  local sql_bound
+  sql_bound="$(gcloud projects get-iam-policy "$DEV" --format=json |
+    python3 -c 'import json,sys; d=json.load(sys.stdin); print(sum(1 for b in d.get("bindings",[]) if b["role"] in ("roles/cloudsql.client","roles/cloudsql.instanceUser") for m in b["members"] if m.split(":")[-1].split("@")[0] in ("staging-runtime","staging-worker")))')"
+  if [[ "$sql_bound" -ge 4 ]]; then echo "ok: cloudsql client+instanceUser for staging-runtime/worker ($sql_bound)"; else
+    echo "FAIL: cloudsql bindings for staging-runtime/worker: $sql_bound of 4"
+    fail=1
+  fi
   gcloud firestore databases describe --database="$DB" --project="$DEV" >/dev/null 2>&1 &&
     echo "ok: firestore $DB" || {
     echo "FAIL: firestore $DB missing"
