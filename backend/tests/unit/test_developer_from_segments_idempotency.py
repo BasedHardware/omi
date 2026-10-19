@@ -18,6 +18,17 @@ from utils.conversations.meeting_treatment import meeting_treatment_verdict
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+@pytest.fixture
+def segment_api_client():
+    """Keep fresh router/auth setup outside the request's fast-unit CPU budget."""
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_current_user_uid] = lambda: 'uid1'
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    with TestClient(app) as client:
+        yield client
+
+
 @pytest.fixture(autouse=True)
 def _passthrough_resolve_geolocation(monkeypatch):
     # utils.conversations.location is stubbed with an AutoMockModule here, so the imported
@@ -181,7 +192,9 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
 @pytest.mark.parametrize('source', ['workflow', 'external_integration', None])
 @pytest.mark.parametrize('client_session_id', [None, 'integration-segments-session'])
 @pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
-def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatch, source, client_session_id, path):
+def test_from_segments_keeps_transcript_shape_for_integration_sources(
+    monkeypatch, source, client_session_id, path, segment_api_client
+):
     captured = []
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -204,11 +217,7 @@ def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatc
         )
 
     monkeypatch.setattr(developer, 'process_conversation', process)
-    app = FastAPI()
-    app.include_router(developer.router)
-    app.dependency_overrides[developer.get_current_user_uid] = lambda: 'uid1'
-    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
-    response = TestClient(app).post(
+    response = segment_api_client.post(
         path, json=_request(source=source, client_session_id=client_session_id).model_dump(mode='json')
     )
 
@@ -938,7 +947,7 @@ def test_unknown_folder_id_is_rejected_before_processing(monkeypatch):
     process.assert_not_called()
 
 
-def test_folder_and_calendar_reach_create_conversation(monkeypatch):
+def test_folder_and_calendar_reach_create_conversation(monkeypatch, segment_api_client):
     captured = {}
     monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1'}))
     refresh = MagicMock()
@@ -961,12 +970,9 @@ def test_folder_and_calendar_reach_create_conversation(monkeypatch):
         )
 
     monkeypatch.setattr(developer, 'process_conversation', process)
-    app = FastAPI()
-    app.include_router(developer.router)
-    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
     body = _request().model_dump(mode='json')
     body.update(folder_id='folder-1', calendar_meeting_context=_calendar_meeting())
-    response = TestClient(app).post('/v1/dev/user/conversations/from-segments', json=body)
+    response = segment_api_client.post('/v1/dev/user/conversations/from-segments', json=body)
 
     assert response.status_code == 200, response.text
     conversation = captured['conversation']
