@@ -100,7 +100,9 @@ usage key. Empty responses retain existing reconciliation semantics; they are
 not cached as reusable completion or treated as proven silence.
 
 Caching measures the **whole proposed Firestore document** using the installed
-SDK protobuf encoding, including existing encrypted results, plan and receipts.
+SDK encoded-map Value envelope, including existing encrypted results, plan and
+receipts. Its serialized size conservatively exceeds the document field encoding
+by the outer map wrapper (verified with the real SDK/emulator).
 A new cache may grow it to at most **768 KiB**, leaving 256 KiB of the 1 MiB
 Firestore limit for ingest proofs and subsequent receipt fields. Existing cached
 results are preserved. Ingest proofs omit duplicate result ciphertext, and a

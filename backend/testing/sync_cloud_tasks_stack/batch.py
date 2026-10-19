@@ -544,6 +544,24 @@ def _happy_path(stack: BatchStack) -> None:
     _record_job_event({'event': 'batch_happy_verified', 'job_id': upload.job_id, 'fair_use_ms': meter})
 
 
+def _assert_recovery_pending(code: int, status: dict[str, Any]) -> None:
+    # Recoverable quarantine is not a terminal failure (#22321): clients must
+    # keep polling, without being told any unprojected content has succeeded.
+    if code != 200 or status.get('status') != 'processing':
+        raise StackFailure(f'recoverable quarantine reported HTTP {code} {status.get("status")!r}, expected processing')
+    delay = status.get('poll_after_ms')
+    if not isinstance(delay, int) or delay <= 0:
+        raise StackFailure('recoverable quarantine omitted its positive polling hint')
+    if (
+        status.get('result') is not None
+        or status.get('processed_segments') != 0
+        or status.get('successful_segments') != 0
+        or status.get('failed_segments') != 0
+        or status.get('error') is not None
+    ):
+        raise StackFailure('pending quarantine projected premature completion or terminal failure')
+
+
 def _quarantine(stack: BatchStack, upload: Upload) -> dict[str, Any]:
     _wait_job(
         stack,
@@ -553,6 +571,7 @@ def _quarantine(stack: BatchStack, upload: Upload) -> dict[str, Any]:
         timeout=60.0,
     )
     code, status = _status(stack, upload)
+    _assert_recovery_pending(code, status)
     _record_job_event(
         {
             'event': 'batch_quarantine_observed',
@@ -587,9 +606,7 @@ def _await_recovery_task(stack: BatchStack, upload: Upload) -> dict[str, Any]:
 
 def _empty_asr_recovery(stack: BatchStack) -> None:
     upload = _upload(stack, 'batch-empty-asr', words='empty')
-    status = _quarantine(stack, upload)
-    if status.get('status') != 'failed':
-        raise StackFailure(f'quarantined job reported {status.get("status")!r} while recovery was pending')
+    _quarantine(stack, upload)
     task = _await_recovery_task(stack, upload)
     first = stack.deliver_recovery(task, retry_count=0)
     if first.status_code != 200 or first.json().get('status') != 'recovered':
@@ -752,6 +769,7 @@ def _serving_killed_mid_paid_call(stack: BatchStack) -> None:
     if job.get('recovery_state') != 'running' or job.get('state') != 'quarantined':
         raise StackFailure(f'unknown paid outcome left recovery state {job.get("recovery_state")!r}')
     code, status = _status(stack, upload)
+    _assert_recovery_pending(code, status)
     _record_job_event(
         {
             'event': 'batch_serving_kill_paid_call',

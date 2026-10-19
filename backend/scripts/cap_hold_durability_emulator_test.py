@@ -23,6 +23,8 @@ from google.api_core.exceptions import NotFound, PreconditionFailed
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from google.cloud.firestore_v1.document import DocumentReference
+from google.cloud.firestore_v1 import _helpers
+from google.cloud.firestore_v1.types import Document
 from google.cloud.firestore_v1.transaction import Transaction
 from database import cap_hold_redrive as redrive, legal_holds, processing_backlog, sync_cap_recovery
 from utils.sync import cap_hold, live_cap_capacity as capacity, live_cap_staging as staging
@@ -397,6 +399,14 @@ def main():
         assert hold.get().to_dict()['piece_receipts']['p']['provider_result'] == 'encrypted-result'
         # Aggregate checkpoint budget uses the real SDK document encoding and
         # real transaction, preserves old ciphertext, and permits first ingestion.
+        # Oracle: map-Value encoding contains the same document fields plus
+        # an outer envelope. Production can avoid the additional types import
+        # without ever under-counting aggregate result bytes.
+        for probe in ({'result': 'x' * 900000}, {'nested': {'a': [1, None, True, 'opaque']}}):
+            assert (
+                _helpers.encode_value(probe)._pb.ByteSize()
+                >= Document.pb(Document(fields=_helpers.encode_dict(probe))).ByteSize()
+            )
         old = 'opaque-prior-result' * 35000
         hold.update({'piece_receipts.old': {'provider_result': old}})
         context['receipt'] = {}

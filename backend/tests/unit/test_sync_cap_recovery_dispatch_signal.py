@@ -38,6 +38,10 @@ def test_real_segment_reports_provider_boundary_without_changing_flag_off_calls(
     monkeypatch.setattr(pipeline, 'get_wav_duration', Mock(return_value=20))
     monkeypatch.setattr(pipeline, 'funded_allowance', Mock(return_value=Mock(reason='available')))
     monkeypatch.setattr(pipeline, '_record_empty_segment_as_silence', Mock())
+    # This test owns the provider-boundary fixture. Result custody is covered
+    # against real transactions separately; never invoke a real DB here.
+    checkpoint = Mock(return_value=True)
+    monkeypatch.setattr(pipeline.cap_recovery_provider.sync_cap_recovery, 'provider_checkpoint', checkpoint)
     outcome, errors = {}, []
     assert not pipeline.process_segment(
         '1792152000.wav',
@@ -53,9 +57,11 @@ def test_real_segment_reports_provider_boundary_without_changing_flag_off_calls(
         called = exit_at in {'provider_error', 'empty'}
         assert outcome['provider_called'] is called
         assert stt.call_count == int(called)
+        assert checkpoint.call_count == (2 if exit_at == 'empty' else int(called))
         assert outcome.get('recovery_ambiguous', False) is (exit_at == 'empty')
     else:
         assert 'provider_called' not in outcome
         assert 'recovery_ambiguous' not in outcome
         assert stt.call_count == (0 if exit_at in {'url', 'keyterms'} else 1 if exit_at == 'provider_error' else 2)
         gate.assert_not_called()
+        checkpoint.assert_not_called()

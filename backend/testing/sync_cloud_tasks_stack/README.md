@@ -101,7 +101,10 @@ the reconcile scheduler by calling the real `/reconcile` route while it polls
 status at 1s (the production poll limiter rejects faster polling).
 
 Scenarios: happy path with exactly-once metering; empty ASR → quarantine →
-one paid recovery despite duplicate/late deliveries; worker SIGTERM drain;
+one paid recovery despite duplicate/late deliveries (recoverable quarantine
+must remain HTTP 200 `processing` with a positive poll hint and zero projected
+success/failure, including after a killed paid call whose outcome is unknown);
+worker SIGTERM drain;
 worker SIGTERM + SIGKILL after grace → lease expiry → replacement completes;
 serving SIGTERM during the paid call → graceful settle → replacement never
 re-pays; serving SIGKILL during the paid call → intent stays `running`, never

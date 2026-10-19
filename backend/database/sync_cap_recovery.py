@@ -6,11 +6,11 @@ from typing import Any
 from database._client import get_firestore_client
 from google.cloud import firestore
 from google.cloud.firestore_v1 import _helpers
-from google.cloud.firestore_v1.types import Document
 from database.legal_holds import external_write_fence
 
 # Leave 256KiB for ingest proofs, usage/finalization and concurrent receipt fields.
-# This measures the whole encoded document, including earlier encrypted results.
+# The SDK map Value encloses all document fields plus a conservative wrapper;
+# it includes earlier encrypted results without importing another SDK module.
 RESULT_DOCUMENT_BUDGET = 768 * 1024
 
 
@@ -20,7 +20,7 @@ def bounded_provider_updates(row: dict, piece: str, updates: dict) -> dict:
     receipts = dict(row.get('piece_receipts') or {})
     receipts[piece] = {**receipts.get(piece, {}), **updates}
     proposed = {**row, 'piece_receipts': receipts}
-    if Document.pb(Document(fields=_helpers.encode_dict(proposed))).ByteSize() <= RESULT_DOCUMENT_BUDGET:
+    if _helpers.encode_value(proposed)._pb.ByteSize() <= RESULT_DOCUMENT_BUDGET:
         return updates
     # Never discard previously committed results. The usable response continues
     # to ordinary ingestion; only this response's crash cache is omitted.
