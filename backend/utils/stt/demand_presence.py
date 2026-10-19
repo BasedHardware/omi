@@ -7,7 +7,9 @@ No audio, transcript, credentials or user identifiers enter metric labels.
 
 import asyncio
 import hashlib
+import logging
 import os
+import time
 from typing import Any, NamedTuple
 
 import redis.asyncio as aioredis
@@ -41,9 +43,37 @@ return 0
 class PresenceSnapshot(NamedTuple):
     visible: bool
     unavailable: bool = False
+    # Bounded failure class (see error_class); empty when healthy.
+    error: str = ''
 
 
+logger = logging.getLogger(__name__)
 _client: Any = None
+_LOG_INTERVAL_SECONDS = 5.0
+_last_logged: float | None = None
+
+
+def error_class(exc: BaseException) -> str:
+    """Closed set of failure classes; never exception text, which may carry host or key data."""
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError, aioredis.TimeoutError)):
+        return 'timeout'
+    if isinstance(exc, (aioredis.ConnectionError, ConnectionError, OSError)):
+        return 'connection'
+    if isinstance(exc, ValueError):
+        return 'response'
+    if isinstance(exc, aioredis.ResponseError):
+        return 'redis_error'
+    return 'other'
+
+
+def _log_unavailable(kind: str) -> None:
+    """One bounded line per process per interval, so an outage cannot flood logs."""
+    global _last_logged
+    now = time.monotonic()
+    if _last_logged is not None and now - _last_logged < _LOG_INTERVAL_SECONDS:
+        return
+    _last_logged = now
+    logger.warning('demand_presence_unavailable error_class=%s', kind)
 
 
 def _key(uid: str) -> str:
@@ -70,5 +100,7 @@ async def update_presence(uid: str, socket_id: str, state: str) -> PresenceSnaps
         if type(result) is not int or result not in (0, 1):
             raise ValueError('Invalid demand presence result')
         return PresenceSnapshot(bool(result))
-    except Exception:
-        return PresenceSnapshot(True, unavailable=True)
+    except Exception as exc:
+        kind = error_class(exc)
+        _log_unavailable(kind)
+        return PresenceSnapshot(True, unavailable=True, error=kind)

@@ -301,6 +301,7 @@ class Simulation:
         self.backfill_used: dict[tuple[str, int], float] = {}
         self.backfill_reserved: dict[tuple[str, str], bool] = {}
         self._task_names: set[str] = set()
+        self._live_tasks: set[str] = set()  # created and not yet answered
         self._pumps: list[tuple[Pump, asyncio.Event, asyncio.Task]] = []
         self._supervisor: Any = None
         self.serving: Serving | None = None
@@ -343,6 +344,7 @@ class Simulation:
             (serving_module, 'time', self.clock.module()),
             (recovery_module, 'recovery_candidates', self._recovery_candidates),
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
+            (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
@@ -398,6 +400,7 @@ class Simulation:
         if task_id in self._task_names:
             return None
         self._task_names.add(task_id)
+        self._live_tasks.add(task_id)
         self.counters['recovery_tasks_enqueued'] += 1
         deliveries = 2 if self.rng['misc'].random() < self.config.recovery_duplicate_delivery_rate else 1
         loop = asyncio.get_running_loop()
@@ -406,13 +409,17 @@ class Simulation:
                 self.counters['recovery_duplicate_deliveries'] += 1
             loop.call_later(
                 self.config.task_hop_seconds * (1 + n),
-                lambda sid=payload['segment_id']: loop.create_task(
-                    self.revision.request('recover-quarantine', self._recover_handler(sid))
+                lambda sid=payload['segment_id'], tid=task_id: loop.create_task(
+                    self.revision.request('recover-quarantine', self._recover_handler(sid, tid))
                 ),
             )
         return None
 
-    async def _recover_handler(self, segment_id: str) -> str:
+    def _named_task_exists(self, queue, task_id):
+        """Cloud Tasks custody model: a named task exists until a delivery answers it."""
+        return task_id in self._live_tasks
+
+    async def _recover_handler(self, segment_id: str, task_id: str | None = None) -> str:
         """Mirrors routers/batch_pipeline.recover_quarantine (request-scoped paid STT)."""
         job = self.store.get('jobs', segment_id)
         if not job:
@@ -421,8 +428,14 @@ class Simulation:
             await self.modulate.occupy(job['duration_seconds'])
         outcome = self.recovery.recover(segment_id, job['owner_id'])
         self.counters[f'recovery_{outcome}'] += 1
+        if outcome == 'held':
+            try:  # Mirrors the handler's held re-arm, including its swallowed fence errors.
+                self.recovery.delivered(segment_id, outcome, task_id)
+            except Exception:
+                pass
         if outcome in {'recovered', 'reconciled'}:
             self.serving.reconcile()
+        self._live_tasks.discard(task_id)
         return outcome
 
     def _cancel_fenced_recovery(self, store, segment_id):
