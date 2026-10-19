@@ -28,6 +28,11 @@ connect cost/latency risk; inspect its reason counter and transcript/latency SLI
 and withdraw the endpoint manually if the aggregate shows an outage.
 Local VAD and other explicitly censored input/configuration failures also release
 circuit admission without accumulating provider failures.
+A Parakeet window whose own pump task listen cancelled (owner close, recovery
+switch, teardown) reports the censored reason `cancelled`, not `connection_lost`,
+so listen-side cancellation cannot bench Parakeet through the disruption gate.
+A pump that ends on its own, or a POST/transport error, still reports a provider
+reason (`connection_lost`, `provider_5xx`, `timeout`).
 
 `omi_stt_cost_routing_settlements_total{target,outcome,reason,path}` is the
 expected observation count from that seam (`path=close|failover|connect`). Its

@@ -451,7 +451,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._session_outcome_recorded or self._first_speech_at is None:
             return
         self._session_outcome_recorded = True
-        reason = self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak'} else 'none'
+        reason = (
+            self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak', 'cancelled'} else 'none'
+        )
         WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text', reason=reason).inc()
 
     def _cancel_first_text_timer(self) -> None:
@@ -755,6 +757,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         except asyncio.CancelledError:
             # A deadline can cancel an in-flight POST through finish(). Preserve
             # that first failure so session telemetry matches the replay reason.
+            # Otherwise listen cancelled this task (owner close, recovery switch,
+            # teardown): bounded, censored 'cancelled' (live_reason), never a
+            # provider connection_lost. The raw death_reason carries it, so a
+            # listen-local cause (send_failed/vad_failed) still takes precedence.
             if not self._dead:
                 self._dead = True
                 self._dead_reason = 'cancelled'

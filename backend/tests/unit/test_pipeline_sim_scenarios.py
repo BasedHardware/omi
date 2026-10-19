@@ -58,11 +58,12 @@ def test_bounded_recovery_clears_exhaustion_tail_without_hiding_unrecovered_audi
     sample = samples['exhaustion']
     sim = sample['sim']
     assert sample['quarantine_projection_cohort_count'] >= 20  # above the gate's low-sample floor
-    assert 0 < sample['quarantine_projection_p95_seconds'] <= 300
+    assert 0 < sample['quarantine_projection_p95_seconds'] < 300
     # Main #22321 removes the dispatch bottleneck. A real modeled failed-held
     # piece still fails the gate; faster scheduling must not imply full recovery.
     assert sample['verdict'] == 'GATE_FAIL unrecovered_quarantine'
     assert sim['recovery_states']['failed_held'] > 0
+    assert sample['unrecovered_quarantines'] == sim['recovery_states']['failed_held']
     former = samples['exhaustion_former_rate']
     assert former['quarantine_projection_p95_seconds'] > 300
     assert former['verdict'] == 'GATE_FAIL quarantine_projection_p95_over_5m'

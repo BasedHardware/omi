@@ -27,6 +27,9 @@ LIVE_STT_FAILURE_REASONS = frozenset(
         'vad_failed',
         'client_disconnect',
         'normal_close',
+        # Listen cancelled the leg's own task (owner close, recovery switch,
+        # teardown). Censored: it is not evidence about the provider.
+        'cancelled',
         'other',
         'config_incomplete',
         'auth',
