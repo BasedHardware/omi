@@ -345,6 +345,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` | Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `OMI_VERTEX_LEGACY_TASK_MODE` | enforce (default) refuses positively identified macOS task loops below the configured capable build after confirmed inactivity; unset/invalid threshold or observe only counts | backend | env | closed | env_var | env_var | env_var | — | keep | — | dazheng |
+| `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` | Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | — | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | — | unowned |
@@ -561,6 +562,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
+- `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` — Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow (fail: open)
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: closed)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)

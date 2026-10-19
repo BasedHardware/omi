@@ -317,12 +317,12 @@ def test_replay_diagnostics_are_bounded_log_values_not_metric_labels(monkeypatch
         component='stt_live_session',
         from_mode='parakeet',
         to_mode='soniox',
-        reason='capacity_full',
+        reason='replay_ring_overflow',
         outcome='recovered',
-        capacity_subtype='replay_ring_cap',
         replay_diagnostics=diagnostics,
     )
     labels, _ = counter.increments[0]
+    assert labels['reason'] == 'replay_ring_overflow'
     assert set(labels) == {'component', 'from_mode', 'to_mode', 'reason', 'outcome'}
     line = caplog.records[-1].message
     assert 'un_emitted_capture_seconds=86400.000' in line
