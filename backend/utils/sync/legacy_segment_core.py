@@ -7,6 +7,9 @@ Importers: utils/sync/cap_hold_recovery.py and utils/sync/cap_recovery_audio.py
 stale-job reaper for legacy jobs that were in flight at deletion). The sr- enrichment callback lives in utils/enrichment/callback.py (lane 9).
 """
 
+# Carried from the deleted pipeline.py (verbatim legacy code).
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnusedImport=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
+
 from __future__ import annotations
 from utils.observability.sync_phases import sync_phase
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
