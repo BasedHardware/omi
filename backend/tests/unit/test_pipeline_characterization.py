@@ -29,11 +29,12 @@ def _never_fits(samples, max_padded_seconds):
     return False
 
 
-_resolve_policy = sim_module.resolve_batch_policy
+_resolve_policy = sim_module.resolve_stage_policy
 
 
 def _terminal_empty_disabled(*args, **kwargs):
-    return replace(_resolve_policy(*args, **kwargs), terminal_empty_disposition=False)
+    policy = _resolve_policy(*args, **kwargs)
+    return replace(policy, terminal_empty_disposition=False) if args[1] == 'recovery' else policy
 
 
 # Deliberate behavior changes in REAL product modules; each must change its golden.
@@ -44,7 +45,7 @@ PERTURBATIONS = {
     'no_terminal_empty': (
         'empty_asr_terminal',
         sim_module,
-        'resolve_batch_policy',
+        'resolve_stage_policy',
         _terminal_empty_disabled,
     ),
 }

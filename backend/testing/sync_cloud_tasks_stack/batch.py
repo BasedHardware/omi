@@ -106,8 +106,6 @@ class BatchStack(Stack):
             flags={
                 'BATCH_PIPELINE_ENABLED': 'true',
                 'BATCH_PIPELINE_PERCENT': '100',
-                'BATCH_PIPELINE_RECOVERY_MODE': 'on',
-                'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
             },
         )
         # No owner identity is serialized; this 100% policy covers every
@@ -142,8 +140,9 @@ class BatchStack(Stack):
         if role == 'batch-serving':
             return {
                 'BATCH_PIPELINE_SERVING_ENABLED': 'true',
-                # Recovery's rollout decision comes from the job policy, even
-                # though this serving process retains the code-default off mode.
+                # Only the owning serving role stamps these onto each job.
+                'BATCH_PIPELINE_RECOVERY_MODE': 'on',
+                'BATCH_PIPELINE_RECOVERY_ALL_ADMITTED': 'true',
                 # Projection enrichment obligations bind to an HTTPS sync
                 # handler; the strict recorder captures, never delivers, them.
                 'SYNC_TASKS_HANDLER_URL': SERVING_ORIGIN + '/v2/sync-jobs/run',
@@ -528,6 +527,24 @@ def _assert_projected(stack: BatchStack, upload: Upload, status: dict[str, Any],
         job = stack.doc('jobs', segment)
         if job.get('state') != 'committed':
             raise StackFailure(f'batch job ended in state {job.get("state")!r}, expected committed')
+        from config.policy.stages import STAGE_TYPES
+
+        expected_roles = {'scheduler': 'scheduler', 'projection': 'batch-serving'}
+        if provider == 'legacy_sync':
+            expected_roles['recovery'] = 'batch-serving'
+        for stage, role in expected_roles.items():
+            raw = (job.get('policy_parts') or {}).get(stage)
+            if (
+                not raw
+                or raw.get('source_role') != role
+                or STAGE_TYPES[stage].from_dict(raw).policy_id != raw.get('policy_id')
+            ):
+                raise StackFailure('job did not retain a valid owning-role policy stamp')
+    obligation_id = hashlib.sha256(f'{upload.uid}\0{ids[0]}'.encode()).hexdigest()
+    obligation = stack.firestore.collection('sync_reprocess_outbox').document(obligation_id).get().to_dict() or {}
+    summary_part = obligation.get('first_summary_policy') or {}
+    if summary_part.get('source_role') != 'batch-serving' or not summary_part.get('policy_id'):
+        raise StackFailure('first-summary obligation did not retain its creation policy')
     _record_job_event(
         {
             'event': 'batch_projection_verified',

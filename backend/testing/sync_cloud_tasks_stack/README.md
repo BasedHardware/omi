@@ -116,7 +116,9 @@ three-capture single-owner burst. Provider behavior per owner comes from
 
 Batch admission receives a serialized `BatchUnitPolicy` from the coordinator's
 `batch-control/policy.json`; the admission seam supplies it to the real upload
-route, which records it on each binding/job. Serving and worker role environments
-therefore cannot change an admitted unit's E1 decisions. Their environment still
-carries excluded worker, provider, process and authentication settings. No cloud
+route, which records it on each binding/job. Scheduler, projection and recovery owners
+then stamp their parts at first handling, using their own role environment. Later
+handling consumes the recorded part across revision or env changes. The gauntlet
+checks actual job parts as well as the admission stamp. Excluded worker, provider,
+process and authentication settings remain process inputs. No cloud
 credentials or live endpoints participate in this replay.

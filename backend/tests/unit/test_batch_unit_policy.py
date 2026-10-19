@@ -9,12 +9,21 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.policy import BatchUnitPolicy, cohort_bucket, resolve_batch_policy, kill_switch
+from config.policy import (
+    BatchUnitPolicy,
+    ProjectionPolicy,
+    SchedulerPolicy,
+    FirstSummaryPolicy,
+    cohort_bucket,
+    resolve_batch_policy,
+    resolve_stage_policy,
+    kill_switch,
+)
 from config.policy.batch import COHORT_SALTS, LEGACY_CORRELATED_COHORTS, SNAPSHOT_ENV_KEYS
 from config.policy.kill_switches import KILL_SWITCHES
 
 from database.batch_pipeline_intake import admit
-from database.batch_pipeline_policy import load_job_policy
+from database.batch_pipeline_policy import load_job_policy, load_stage_policy
 from testing.pipeline_sim.store import CustomerData, SimStore
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, Priority
 from utils.batch_pipeline.scheduler import Scheduler
@@ -28,9 +37,9 @@ def test_defaults_roundtrip_and_content_identity():
     assert BatchUnitPolicy.from_dict(json.loads(json.dumps(policy.to_dict()))) == policy
     assert BatchUnitPolicy.from_dict({'future_field': 1}) == policy
     assert BatchUnitPolicy.from_dict({'max_attempts': 'malformed'}) == policy
-    assert replace(policy, max_attempts=6).policy_id != policy.policy_id
+    assert replace(policy, batch_percent=6).policy_id != policy.policy_id
     with pytest.raises(FrozenInstanceError):
-        policy.max_attempts = 1
+        policy.batch_enabled = True
 
 
 @pytest.mark.parametrize('percent', ['0', '1', '50', '100', 'nan', 'inf', '-1', '101', 'bad'])
@@ -116,7 +125,8 @@ def test_admission_policy_survives_env_change(monkeypatch):
     queue = Scheduler(store)
     lease = queue.pull(2)[0]
     assert queue.fail('seg', lease.token, 3)
-    assert store.get('jobs', 'seg')['state'] == 'quarantined'
+    assert store.get('jobs', 'seg')['state'] == 'retry'
+    assert store.get('jobs', 'seg')['policy_parts']['scheduler']['max_attempts'] == 20
     assert store.get('jobs', 'seg')['policy'] == policy.to_dict()
 
 
@@ -129,9 +139,9 @@ def test_legacy_fallback_persists_across_stages(monkeypatch):
     for sid in ('a', 'b'):
         store.rows[('jobs', sid)] = {'segment_id': sid, 'owner_id': 'owner', 'projection_binding': binding}
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
-    job, first = load_job_policy(store, 'a')
+    job, first = load_stage_policy(store, 'a', 'scheduler')
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '19')
-    _, second = load_job_policy(store, 'b')
+    _, second = load_stage_policy(store, 'b', 'scheduler')
     assert first == second and second.max_attempts == 2
     assert job['policy_source'] == store.get('jobs', 'b')['policy_source'] == 'fallback'
 
@@ -139,14 +149,16 @@ def test_legacy_fallback_persists_across_stages(monkeypatch):
 def test_summary_obligation_uses_creation_policy_after_ramp(monkeypatch):
     from config.summary_guarantee import first_summary_pending
 
-    policy = resolve_batch_policy(
-        'owner', flags={'FIRST_SUMMARY_DEADLINE_ENABLED': 'true', 'FIRST_SUMMARY_DEADLINE_PERCENT': '0'}
+    policy = resolve_stage_policy(
+        'owner',
+        'first_summary',
+        flags={'FIRST_SUMMARY_DEADLINE_ENABLED': 'true', 'FIRST_SUMMARY_DEADLINE_PERCENT': '0'},
     )
-    row = {'uid': 'owner', 'batch_policy': policy.to_dict(), 'first_pending_at': 1}
+    row = {'uid': 'owner', 'first_summary_policy': policy.to_dict(), 'first_pending_at': 1}
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     assert not first_summary_pending(row)
-    row['batch_policy'] = replace(policy, first_summary_enabled=True).to_dict()
+    row['first_summary_policy'] = replace(policy, first_summary_enabled=True).to_dict()
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     assert first_summary_pending(row)
 
@@ -174,8 +186,8 @@ def test_policy_window_is_graded_under_the_creation_policy(policy_window_result)
     assert sample['first_summary_deadline_breaches'] == 0
     # Counterfactual: today's contract would misgrade the same observations.
     for record in result.records:
-        if record.policy:
-            record.policy = replace(record.policy, first_summary_enabled=True)
+        if record.first_summary_policy:
+            record.first_summary_policy = replace(record.first_summary_policy, first_summary_enabled=True)
     assert score(result)['first_summary_deadline_breaches'] > 0
 
 
@@ -224,7 +236,15 @@ def test_existing_cohort_membership_stays_correlated():
                 'TRANSCRIPTION_FINAL_PASS_PERCENT': '25',
             },
         )
-        assert policy.batch_enabled == policy.first_summary_enabled == policy.final_pass_enabled
+        assert (
+            policy.batch_enabled
+            == resolve_stage_policy(
+                uid,
+                'first_summary',
+                flags={'FIRST_SUMMARY_DEADLINE_ENABLED': 'true', 'FIRST_SUMMARY_DEADLINE_PERCENT': '25'},
+            ).first_summary_enabled
+            == policy.final_pass_enabled
+        )
 
 
 @pytest.fixture
@@ -243,12 +263,12 @@ def test_redis_legacy_policy_is_persisted_once_without_resetting_ttl(sync_jobs_w
     jobs, redis = sync_jobs_with_redis
     key = jobs._key(jobs.JOB_KEY_PREFIX + 'legacy')
     redis.set(key, json.dumps({'uid': 'owner', 'job_id': 'legacy', 'processed_segments': 3}), ex=100)
-    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '2')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '2')
     first = jobs.get_sync_job('legacy')
-    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '19')
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '19')
     second = jobs.get_sync_job('legacy')
     assert first['policy'] == second['policy']
-    assert second['policy']['max_attempts'] == 2
+    assert second['policy']['batch_percent'] == 2
     assert second['processed_segments'] == 3 and second['policy_source'] == 'fallback'
     assert 95 <= redis.ttl(key) <= 100
 
@@ -278,7 +298,7 @@ def test_redis_policy_cas_adopts_an_existing_winner(sync_jobs_with_redis, monkey
     jobs, redis = sync_jobs_with_redis
     key = jobs._key(jobs.JOB_KEY_PREFIX + 'legacy')
     redis.set(key, json.dumps({'uid': 'owner', 'job_id': 'legacy'}), ex=100)
-    winner = BatchUnitPolicy(max_attempts=3).to_dict()
+    winner = BatchUnitPolicy(batch_percent=3).to_dict()
     original_eval = redis.eval
 
     def race(script, *args):

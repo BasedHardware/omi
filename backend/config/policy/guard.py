@@ -132,7 +132,9 @@ def stage_policy_reads(source, relative):
     aliases = {}
     functions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module in {'config.batch_pipeline', 'config.policy'}:
+        if isinstance(node, ast.ImportFrom) and (
+            node.module == 'config.batch_pipeline' or (node.module or '').startswith('config.policy')
+        ):
             aliases.update({item.asname or item.name: item.name for item in node.names})
     out = []
     for node in ast.walk(tree):
@@ -149,7 +151,7 @@ def stage_policy_reads(source, relative):
                 for f in functions
             ):
                 continue  # Standalone queue admission is an explicit resolver edge.
-        if called in SNAPSHOT_GETTERS or called == 'resolve_batch_policy':
+        if called in SNAPSHOT_GETTERS or called in {'resolve_batch_policy', 'resolve_stage_policy'}:
             out.append(f'{relative}:{node.lineno}: {called} must use the recorded policy')
     return out
 

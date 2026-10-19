@@ -54,6 +54,7 @@ _DROP_FIELDS = frozenset(
         'projection_binding',
         'policy',  # metadata, not part of the pre-E1 external behavior trace
         'policy_source',
+        'policy_parts',
         'segment_id',
         'segment_ids',
         'log_tail',
@@ -307,7 +308,10 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
         },
     }
 
-    if any(record.policy and not record.policy.first_summary_enabled for record in result.records):
+    if any(
+        record.first_summary_policy and not record.first_summary_policy.first_summary_enabled
+        for record in result.records
+    ):
         from testing.pipeline_sim.scorer import score
 
         # Expose policy-window grading only when an obligation is outside the
@@ -315,7 +319,11 @@ def trace(config: SimConfig, *, prepare: Callable[[Simulation], None] | None = N
         sample = score(result)
         output['first_summary_policy'] = {
             'recorded_enabled': sorted(
-                {record.policy.first_summary_enabled for record in result.records if record.policy}
+                {
+                    record.first_summary_policy.first_summary_enabled
+                    for record in result.records
+                    if record.first_summary_policy
+                }
             ),
             'checked': sample['first_summary_checked_conversations'],
             'breaches': sample['first_summary_deadline_breaches'],

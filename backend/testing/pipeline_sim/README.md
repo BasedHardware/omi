@@ -54,7 +54,8 @@ These module attributes are patched for the duration of a run and then restored:
 `pump.run_blocking`, `serving.time`, and three `quarantine_recovery` leaves. `SimConfig.policy` accepts
 an immutable `BatchUnitPolicy`; otherwise admission resolves each owner from `DEFAULT_FLAGS` plus
 `SimConfig.flags`, without installing scoped flags in the environment. The recorded policy follows
-each upload through queueing, recovery and first-summary grading. Only excluded worker dispositions
+each upload. `SimConfig.policy_parts` supplies recorded stage parts for replay; otherwise each owner
+resolves once from explicit flags at first handling. First-summary grading uses its obligation stamp. Only excluded worker dispositions
 and process/provider settings retain isolated environment injection. Empty-ASR disposition stays off
 because it needs real WAV bytes. Characterization uses the current recovery-dispatch default of 16
 and leaves current main's existing golden files unchanged.

@@ -33,7 +33,7 @@ from config.summary_guarantee import (
     first_summary_pending,
     preserves_admitted,
 )
-from config.policy import BatchUnitPolicy
+from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
@@ -233,7 +233,7 @@ def mark(
     now: float | None = None,
     mutate: Callable | None = None,
     effects_only: bool = False,
-    policy: BatchUnitPolicy | None = None,
+    snapshot_summary: bool = False,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -244,8 +244,12 @@ def mark(
     if mutate is not None and not owns_runtime():
         raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
+    candidate = None
+    stamp = []
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
+        nonlocal candidate
+        stamp.clear()
         if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
             return old, ({**old, '_wake': False}, True)
         row = dict(old or {})
@@ -261,8 +265,12 @@ def mark(
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
-        if policy is not None and (not old or old.get('dormant')):
-            row['batch_policy'] = policy.to_dict()
+        if snapshot_summary and (not old or old.get('dormant') or row.get('first_summary_policy') is None):
+            if candidate is None:
+                candidate = resolve_stage_policy(uid, 'first_summary')
+            row['first_summary_policy'] = candidate.to_dict()
+            row['first_summary_policy_source'] = 'creation' if not old or old.get('dormant') else 'fallback'
+            stamp.append((row['first_summary_policy_source'], candidate.policy_id))
         row['dormant'] = False
         row['summary_repair'] = False
         row['effects_only'] = effects_only
@@ -272,8 +280,8 @@ def mark(
                 row.get('summary_deadline_at', float('inf')),
                 row['first_pending_at']
                 + (
-                    row['batch_policy']['first_summary_deadline_seconds']
-                    if row.get('batch_policy')
+                    FirstSummaryPolicy.from_dict(row['first_summary_policy']).first_summary_deadline_seconds
+                    if row.get('first_summary_policy') is not None
                     else deadline_seconds()
                 ),
             )
@@ -305,12 +313,20 @@ def mark(
 
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
+    record_summary_stamps(stamp)
     if coalesced:
         COALESCED.inc()
     if row.get('_wake', not coalesced) and valid_dispatch_binding(row.get('dispatch')):
         _enqueue(row)  # Failure leaves the obligation durable for the sweep.
     elif not valid_dispatch_binding(row.get('dispatch')):
         UNBOUND.labels(action='mark').inc()
+
+
+def record_summary_stamps(stamps):
+    from config.policy.telemetry import record_policy_source
+
+    for source, policy_id in stamps:
+        record_policy_source('fallback' if source == 'fallback' else 'stage', policy_id)
 
 
 @contextmanager
@@ -362,13 +378,23 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     if not admit(document_id, now=current, token=task_token):
         return 'priority_wait'
     owner = uuid.uuid4().hex
+    candidate = None
+    stamp = []
 
     def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
+        nonlocal candidate
+        stamp.clear()
         if old is None or old.get('dormant') or old['task_token'] != task_token:
             return old, ('stale', None)
         if old.get('lease_until', 0) > current:
             return old, ('busy', None)
         row = dict(old)
+        if row.get('summary_lane') == 'batch' and row.get('first_summary_policy') is None:
+            if candidate is None:
+                candidate = resolve_stage_policy(row['uid'], 'first_summary')
+            row['first_summary_policy'] = candidate.to_dict()
+            row['first_summary_policy_source'] = 'fallback'
+            stamp.append(('fallback', candidate.policy_id))
         if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
@@ -379,6 +405,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         return row, ('claimed', row)
 
     status, row = _mutate(document_id, claim)
+    record_summary_stamps(stamp)
     if status == 'deferred':
         assert row is not None
         _enqueue(row)
@@ -388,8 +415,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     assert row is not None
     # Exceptions leave a leased, dirty row. Retry/sweep recovers after expiry.
     summary_policy = (
-        row['batch_policy']['first_summary_enabled']
-        if row.get('batch_policy')
+        FirstSummaryPolicy.from_dict(row['first_summary_policy']).first_summary_enabled
+        if row.get('first_summary_policy') is not None
         else summary_enabled(row['uid'], include_admitted_context=False) or preserves_admitted(row)
     )
     summary_seen = False

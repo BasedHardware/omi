@@ -18,8 +18,8 @@ from config.batch_pipeline import (
     empty_asr_disposition_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.batch_pipeline_policy import load_job_policy
-from config.policy import BatchUnitPolicy, kill_switch
+from database.batch_pipeline_policy import load_stage_policy
+from config.policy import RecoveryPolicy, kill_switch
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
@@ -74,9 +74,7 @@ def transcribe(item, binding, audio, *, multilingual=None):
         clean.writeframes(pcm)
     # attempts=2 disables all existing client retry branches. An uncertain call
     # must remain held, never be silently reissued by the recovery dispatcher.
-    use_multilingual = (
-        (binding.policy or BatchUnitPolicy()).speech_empty_multilingual if multilingual is None else multilingual
-    )
+    use_multilingual = RecoveryPolicy().speech_empty_multilingual if multilingual is None else multilingual
     if use_multilingual:
         # Unknown intake language currently selects Parakeet again. Its European
         # language model cannot recover unsupported-language speech by repadding.
@@ -129,7 +127,7 @@ class QuarantineRecovery:
 
     def recover(self, segment_id, owner_id):
         try:
-            job, policy = load_job_policy(self.store, segment_id)
+            job, policy = load_stage_policy(self.store, segment_id, 'recovery')
             if not job or job.get('owner_id') != owner_id:
                 return 'held'
             if not policy.recovery_enabled:
@@ -291,7 +289,7 @@ class QuarantineRecovery:
             return self.recover(segment_id, owner_id)
 
     def _dispatch(self, segment_id, owner_id):
-        existing, policy = load_job_policy(self.store, segment_id)
+        existing, policy = load_stage_policy(self.store, segment_id, 'recovery')
         if not existing or existing.get('owner_id') != owner_id:
             return 'held'
         if not policy.recovery_enabled:
@@ -342,7 +340,7 @@ class QuarantineRecovery:
         for segment_id, owner_id in candidates[:budget]:
             self._candidate_after = segment_id
             try:
-                _, policy = load_job_policy(self.store, segment_id)
+                _, policy = load_stage_policy(self.store, segment_id, 'recovery')
                 task = (
                     kill_switch('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', policy_id=policy.policy_id)
                     if policy

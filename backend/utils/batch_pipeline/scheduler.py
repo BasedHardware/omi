@@ -10,7 +10,7 @@ from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from config.batch_pipeline import scheduler_control_key
 from config.policy import resolve_batch_policy
-from database.batch_pipeline_policy import policy_in_transaction
+from database.batch_pipeline_policy import stage_in_transaction
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -69,6 +69,7 @@ def _prefer_merge_head(
     now: float,
     max_seconds: float,
     shared_gpu: bool,
+    candidates=None,
 ) -> dict:
     """Promote an indexed capture head with O(1) queries, independent of FIFO depth.
 
@@ -106,7 +107,7 @@ def _prefer_merge_head(
             )
     except BatchPrivacyBlocked:
         return job
-    if not policy_in_transaction(tx, head, observations=observations).head_priority:
+    if not stage_in_transaction(tx, head, 'scheduler', observations=observations, candidates=candidates).head_priority:
         return job
     previous['next'] = head['next']
     tx.put('jobs', previous['segment_id'], previous)
@@ -250,6 +251,7 @@ class Scheduler:
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id):
         token = uuid.uuid4().hex
+        candidates = {}
 
         def commit(tx):
             observations = []
@@ -283,7 +285,9 @@ class Scheduler:
                         blocked.add(queue_key)
                     else:
                         privacy_checked_segment = job['segment_id']
-                        policy = policy_in_transaction(tx, job, observations=observations)
+                        policy = stage_in_transaction(
+                            tx, job, 'scheduler', observations=observations, candidates=candidates
+                        )
                         if policy.head_priority:
                             job = _prefer_merge_head(
                                 tx,
@@ -294,6 +298,7 @@ class Scheduler:
                                 now=now,
                                 max_seconds=max_seconds,
                                 shared_gpu=bool(gpu_key),
+                                candidates=candidates,
                             )
                         job.setdefault('unit_kind', 'conversation')
                         try:
@@ -303,7 +308,7 @@ class Scheduler:
                                     (job['conversation_id'],) if job.get('conversation_id') else (),
                                     job.get('privacy_generation'),
                                 )
-                            policy = policy_in_transaction(tx, job)
+                            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates)
                             allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (
                                 not gpu_key or policy.shared_live
                             )
@@ -377,12 +382,12 @@ class Scheduler:
         from config.policy.telemetry import record_policy_source
 
         for event, value in observations:
-            if event == 'policy_fallback':
-                record_policy_source('fallback', value)
+            if event in {'policy_fallback', 'policy_stage'}:
+                record_policy_source('fallback' if event == 'policy_fallback' else 'stage', value)
         # Only committed attempts emit telemetry; Firestore may retry callbacks.
         if self.metrics:
             for event, age in observations:
-                if event == 'policy_fallback':
+                if event in {'policy_fallback', 'policy_stage'}:
                     continue
                 try:
                     self.metrics.record_head(event, priority, age=age)
@@ -447,6 +452,8 @@ class Scheduler:
         if padded_retry not in {None, 'empty', 'skipped_oversize'} or (padded_retry_empty and padded_retry != 'empty'):
             raise ValueError('invalid padded retry evidence')
 
+        candidates = {}
+
         def commit(tx):
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
@@ -454,7 +461,7 @@ class Scheduler:
             if (
                 quarantine
                 or worker_failure is not None
-                or job['attempt'] >= policy_in_transaction(tx, job).max_attempts
+                or job['attempt'] >= stage_in_transaction(tx, job, 'scheduler', candidates=candidates).max_attempts
             ):
                 # Serialize removal from the ordered pending set against merge
                 # and admission. No success/silence result or cursor is invented.

@@ -29,9 +29,15 @@ def _counter() -> Counter:
 
 
 def record_policy_source(source: str, policy_id: str, *, count: int = 1):
-    if source not in {'admission', 'fallback'}:
+    if source not in {'admission', 'fallback', 'stage'}:
         raise ValueError('bounded policy source required')
     try:
+        if source == 'fallback':
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='sync_dispatch', from_mode='none', to_mode='batch', reason='other', outcome='recovered'
+            )
         _counter().labels(policy_source=source).inc(count)
         logger.info('event=batch_unit_policy policy_source=%s policy_id=%s count=%d', source, policy_id, count)
     except Exception:

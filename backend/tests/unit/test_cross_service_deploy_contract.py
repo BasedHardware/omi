@@ -256,9 +256,10 @@ def test_recovery_task_without_audience_fails_like_22149(results: Results) -> No
     ), found
 
 
-def test_recovery_task_to_host_with_recovery_off_fails_like_22149(results: Results) -> None:
+def test_recovery_task_to_host_without_recovery_audience_fails_like_22149(results: Results) -> None:
     messages = [v.message for v in results.mutations['recovery_to_sync'] if v.invariant == 'task-edge']
-    assert any('BATCH_PIPELINE_RECOVERY_MODE' in m and 'cloud_run/backend-sync' in m for m in messages), messages
+    # A recorded on-policy drains even after the receiver's mode changes. The
+    # receiving route still must verify the dispatcher's audience and identity.
     assert any('verifies BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE' in m for m in messages), messages
 
 

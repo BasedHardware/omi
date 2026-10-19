@@ -35,7 +35,9 @@ import random
 from dataclasses import dataclass, field
 from unittest.mock import patch
 
-from config.policy import BatchUnitPolicy, resolve_batch_policy
+from config.policy import BatchUnitPolicy, FirstSummaryPolicy, resolve_batch_policy, resolve_stage_policy
+from config.policy.stages import STAGE_TYPES
+from database import batch_pipeline_policy as policy_store
 from config.policy.batch import SNAPSHOT_ENV_KEYS
 from types import SimpleNamespace
 from typing import Any
@@ -164,6 +166,7 @@ class SimConfig:
     purge_on_fence: bool = True  # production purges synchronously after the tombstone / privacy advance
     flags: dict[str, str] = field(default_factory=dict)
     policy: BatchUnitPolicy | None = None
+    policy_parts: dict[str, dict] = field(default_factory=dict)  # Persisted owner parts for replay.
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
 
     def __post_init__(self):
@@ -175,6 +178,7 @@ class SimConfig:
 class UploadRecord:
     spec: UploadSpec
     policy: BatchUnitPolicy | None = None
+    first_summary_policy: FirstSummaryPolicy | None = None
     status: str = 'pending'  # admitted | rejected_privacy | deduplicated | rejected_other
     accepted_at: float | None = None
     job_id: str | None = None
@@ -344,6 +348,14 @@ class Simulation:
         source = upload.duplicate_of or upload.upload_id
         return 'sim-conv-' + hashlib.sha256(source.encode()).hexdigest()[:24]
 
+    def _stage_policy(self, uid, stage):
+        raw = self.config.policy_parts.get(stage)
+        return (
+            STAGE_TYPES[stage].from_dict(raw)
+            if raw is not None
+            else resolve_stage_policy(uid, stage, flags={**DEFAULT_FLAGS, **self.config.flags})
+        )
+
     # --------------------------------------------------------------- patching
     @contextlib.contextmanager
     def _patched(self):
@@ -357,6 +369,7 @@ class Simulation:
         }
         env_patch = patch.dict('os.environ', outside_scope)
         patches = [
+            (policy_store, 'resolve_stage_policy', self._stage_policy),
             (pump_module, 'time', self.clock.module()),
             (pump_module, 'run_blocking', self._run_blocking),
             (serving_module, 'time', self.clock.module()),
@@ -703,12 +716,21 @@ class Simulation:
 
     # ---------------------------------------------------------- first summary
     async def _start_summary(self, record: UploadRecord) -> None:
-        if record.policy is None:
-            record.policy = self.config.policy or resolve_batch_policy(
-                record.spec.owner, flags={**DEFAULT_FLAGS, **self.config.flags}
-            )
+        if record.first_summary_policy is None:
+            record.first_summary_policy = self._stage_policy(record.spec.owner, 'first_summary')
         if record.summary_pending_at is None:
             record.summary_pending_at = self.clock.now
+            for sid in record.segment_ids:
+                self.store.mutate(
+                    'jobs',
+                    sid,
+                    lambda row: row.update(
+                        policy_parts={
+                            **row.get('policy_parts', {}),
+                            'first_summary': record.first_summary_policy.to_dict(),
+                        }
+                    ),
+                )
         record.summary_dispatches += 1
         record.summary_inflight = True
         mode = self.config.summary_dispatch

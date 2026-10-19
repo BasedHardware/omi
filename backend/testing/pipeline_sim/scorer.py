@@ -210,12 +210,14 @@ def _first_summary(result) -> dict[str, Any]:
         if (
             record.summary_pending_at is None
             or record.excluded
-            or (record.policy and not record.policy.first_summary_enabled)
+            or (record.first_summary_policy and not record.first_summary_policy.first_summary_enabled)
         ):
             continue
         checked += 1
         due = record.summary_pending_at + (
-            record.policy.first_summary_deadline_seconds if record.policy else FIRST_SUMMARY_DEADLINE_SECONDS
+            record.first_summary_policy.first_summary_deadline_seconds
+            if record.first_summary_policy
+            else FIRST_SUMMARY_DEADLINE_SECONDS
         )
         end = record.summary_completed_at if record.summary_completed_at is not None else now
         overdue = max(0.0, end - due)

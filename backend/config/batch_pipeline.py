@@ -86,9 +86,9 @@ def record_capture_eligible(owner_id: str, capture: dict, *, policy=None) -> boo
 
 
 def shared_live_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').shared_live
+    return resolve_stage_policy('', 'scheduler').shared_live
 
 
 SCHEDULER_SHARDS = 64
@@ -100,23 +100,23 @@ def scheduler_control_key(hashed_owner: str) -> str:
 
 
 def max_worker_attempts() -> int:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').max_attempts
+    return resolve_stage_policy('', 'scheduler').max_attempts
 
 
 def recovery_owners() -> tuple[str, ...]:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    if resolve_batch_policy('').recovery_mode != 'on':
+    if resolve_stage_policy('', 'recovery').recovery_mode != 'on':
         return ()
     return rollout_cohort_members('batch-pipeline-recovery')
 
 
 def authoritative_labels_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').authoritative_labels
+    return resolve_stage_policy('', 'projection').authoritative_labels
 
 
 def empty_asr_recovery_enabled() -> bool:
@@ -124,21 +124,21 @@ def empty_asr_recovery_enabled() -> bool:
 
 
 def require_live_target_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').require_live_target
+    return resolve_stage_policy('', 'projection').require_live_target
 
 
 def recover_all_admitted() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').recovery_all_admitted
+    return resolve_stage_policy('', 'recovery').recovery_all_admitted
 
 
 def recovery_enabled_for(owner_id: str) -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy(owner_id).recovery_enabled
+    return resolve_stage_policy(owner_id, 'recovery').recovery_enabled
 
 
 def empty_asr_disposition_enabled() -> bool:
@@ -147,21 +147,21 @@ def empty_asr_disposition_enabled() -> bool:
 
 
 def projection_contention_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').projection_contention
+    return resolve_stage_policy('', 'projection').projection_contention
 
 
 def speech_empty_multilingual_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').speech_empty_multilingual
+    return resolve_stage_policy('', 'recovery').speech_empty_multilingual
 
 
 def terminal_empty_disposition_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').terminal_empty_disposition
+    return resolve_stage_policy('', 'recovery').terminal_empty_disposition
 
 
 def read_only_metrics_enabled() -> bool:
@@ -173,9 +173,9 @@ def read_only_metrics_enabled() -> bool:
 
 
 def projection_timing_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').projection_timing
+    return resolve_stage_policy('', 'projection').projection_timing
 
 
 def worker_silence_disposition_enabled() -> bool:
@@ -189,15 +189,15 @@ def worker_validation_disposition_enabled() -> bool:
 
 
 def head_priority_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').head_priority
+    return resolve_stage_policy('', 'scheduler').head_priority
 
 
 def async_projection_enabled() -> bool:
-    from config.policy import resolve_batch_policy
+    from config.policy import resolve_stage_policy
 
-    return resolve_batch_policy('').async_projection
+    return resolve_stage_policy('', 'projection').async_projection
 
 
 def recovery_tasks_enabled() -> bool:

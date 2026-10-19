@@ -538,12 +538,14 @@ content/client completion on the deployed release before expanding admission.
 
 ## Per-unit policy snapshots
 
-E1 resolves batch admission, projection, scheduler and recovery decisions once and
-records an immutable policy on the intake binding and jobs. Rollout changes affect
-new admissions; accepted work drains using its recorded policy. The live stop
-levers remain recovery task dispatch and projection pagination. Privacy/deletion
-fences and paid-intent fencing always apply. Old rows acquire one durable fallback
-snapshot and record `policy_source=fallback` with bounded telemetry.
+E1 records admission decisions on the immutable binding and job. Projection,
+scheduler and recovery owners each stamp their own part on first handling,
+using a first-writer-wins transaction. The enrichment owner stamps first-summary
+policy when creating the obligation. Each part carries its source role and hash;
+subsequent handling uses that part across env changes and restarts. Live recovery
+task and pagination switches, privacy/deletion fences and paid-intent fencing
+remain current. Pre-E1 admission rows acquire one recorded fallback with bounded
+telemetry. No admission process substitutes its env for a serving role's values.
 
 The [policy contract](../config/policy/README.md) owns the read map, unchanged
 legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
